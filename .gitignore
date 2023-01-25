@@ -128,3 +128,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 .vscode/
+
+
+# Funcx Endpoint
+funcx_launch/funcx-endpoint
+funcx_launch/uids.json
