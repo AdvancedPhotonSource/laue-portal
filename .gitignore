@@ -133,3 +133,4 @@ dmypy.json
 # Funcx Endpoint
 funcx_launch/funcx-endpoint
 funcx_launch/uids.json
+uids.json

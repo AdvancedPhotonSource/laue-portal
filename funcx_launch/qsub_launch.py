@@ -4,7 +4,7 @@ import json
 
 
 def main():
-    with open('uids.json') as uuids_f:
+    with open('../uids.json') as uuids_f:
         uuids = json.load(uuids_f)
 
     with FuncXExecutor(endpoint_id=uuids['endpoint']) as fxe:

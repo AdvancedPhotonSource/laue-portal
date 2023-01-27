@@ -16,7 +16,7 @@ config = Config(
     ]
 )
 
-with open('uids.json') as uuids_f:
+with open('../uids.json') as uuids_f:
     uuids = json.load(uuids_f)
 
 # For now, visible_to must be a list of URNs for globus auth users or groups, e.g.: 
