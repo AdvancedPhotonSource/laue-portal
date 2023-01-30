@@ -1,15 +1,4 @@
-#!/usr/bin/env python
-
-##Basic Python import's
-import argparse
-from pprint import pprint
-import os
-
-##Base Gladier imports
-from gladier import GladierBaseClient, generate_flow_definition
-
 ##Import tools that will be used on the flow definition
-from tools.simple_transfer import SimpleTransfer
 from gladier import GladierBaseTool
 
 
@@ -30,11 +19,11 @@ class UplinkTransfer(GladierBaseTool):
                         {
                             'source_path.$': '$.input.simple_transfer_source_path',
                             'destination_path.$': '$.input.simple_transfer_destination_path',
-                            'recursive.$': '$.input.simple_transfer_recursive',
+                            #'recursive.$': '$.input.simple_transfer_recursive',
                         }
                     ]
                 },
-                'ResultPath': '$.SimpleTransfer',
+                'ResultPath': '$.UplinkTransfer',
                 'WaitTime': 600,
                 'End': True
             },
