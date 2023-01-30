@@ -1,12 +1,17 @@
 NUM_NODES=2
 RANKS_PER_NODE=32
-START_IM=0
+INPUT_DIR=$1
+OUTPUT_DIR=$2
+START_IM=$3
 PROJ_NAME=laue_funcx_launch
 
-AFFINITY_PATH=../../laue-parallel/runscripts/set_gpu_affinity.sh
-CONFIG_PATH=../../laue-parallel/configs/AL30/config-64.yml
+AFFINITY_PATH=../runscripts/set_gpu_affinity.sh
+CONFIG_PATH=../configs/AL30/config_gladier.yml
 PYTHONPATH=/eagle/projects/APSDataAnalysis/mprince/lau_env_polaris/bin/python
+CWD=/eagle/APSDataAnalysis/mprince/lau/dev/laue-parallel/logs_gladier
 
+
+cd ${CWD}
 
 echo "
 cd \${PBS_O_WORKDIR}
@@ -25,6 +30,8 @@ mpiexec -n \${NTOTRANKS} --ppn \${NRANKS_PER_NODE} --depth=\${NDEPTH} --cpu-bind
     ${PYTHONPATH} \\
     ../laue_parallel.py \\
     ${CONFIG_PATH} \\
+    --override_input ${INPUT_DIR} \\
+    --override_output ${OUTPUT_DIR} \\
     --start_im ${START_IM} \\
     --mpi_recon
 
@@ -33,6 +40,7 @@ mpiexec -n \${NTOTRANKS} --ppn \${NRANKS_PER_NODE} --depth=\${NDEPTH} --cpu-bind
     ${PYTHONPATH} \\
     ../recon_parallel.py \\
     ${CONFIG_PATH} \\
+    --override_dir ${OUTPUT_DIR} \\
     --start_im ${START_IM} \\
 " | \
 qsub -A APSDataAnalysis \
