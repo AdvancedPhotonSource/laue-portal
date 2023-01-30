@@ -13,13 +13,13 @@ class UplinkTransfer(GladierBaseTool):
                 'Type': 'Action',
                 'ActionUrl': 'https://actions.automate.globus.org/transfer/transfer',
                 'Parameters': {
-                    'source_endpoint_id.$': '$.input.simple_transfer_source_endpoint_id',
-                    'destination_endpoint_id.$': '$.input.simple_transfer_destination_endpoint_id',
+                    'source_endpoint_id.$': '$.input.uplink_source_endpoint_id',
+                    'destination_endpoint_id.$': '$.input.uplink_destination_endpoint_id',
                     'transfer_items': [
                         {
-                            'source_path.$': '$.input.simple_transfer_source_path',
-                            'destination_path.$': '$.input.simple_transfer_destination_path',
-                            #'recursive.$': '$.input.simple_transfer_recursive',
+                            'source_path.$': '$.input.uplink_source_path',
+                            'destination_path.$': '$.input.uplink_destination_path',
+                            'recursive.$': '$.input.uplink_recursive',
                         }
                     ]
                 },
@@ -31,12 +31,12 @@ class UplinkTransfer(GladierBaseTool):
     }
 
     flow_input = {
-        'simple_transfer_sync_level': 'checksum',
-        'simple_transfer_recursive': True,
+        'uplink_sync_level': 'checksum',
+        'uplink_recursive': True,
     }
     required_input = [
-        'simple_transfer_source_path',
-        'simple_transfer_destination_path',
-        'simple_transfer_source_endpoint_id',
-        'simple_transfer_destination_endpoint_id',
+        'uplink_source_path',
+        'uplink_destination_path',
+        'uplink_source_endpoint_id',
+        'uplink_destination_endpoint_id',
     ]

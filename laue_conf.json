@@ -1,7 +1,7 @@
 {
     "voyager": {
         "staging": "/gdata/dm/sharing/cold/processed/polaris_reconstruction/gladier_staging/",
-        "uuid": "9c9cb97e-de86-11e6-9d15-22000a1e3b52"
+        "uuid": "32dff7ed-bbb2-463f-bd76-83710a08b996"
     },
     "eagle": {
         "staging": "/APSDataAnalysis/mprince/lau/gladier_staging/",
