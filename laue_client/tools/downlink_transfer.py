@@ -18,7 +18,7 @@ class DownlinkTransfer(GladierBaseTool):
                         {
                             'source_path.$': '$.input.downlink_source_path',
                             'destination_path.$': '$.input.downlink_destination_path',
-                            #'recursive.$': '$.input.downlink_recursive',
+                            'recursive.$': '$.input.downlink_recursive',
                         }
                     ]
                 },

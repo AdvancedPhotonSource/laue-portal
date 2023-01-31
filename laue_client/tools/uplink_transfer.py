@@ -19,7 +19,7 @@ class UplinkTransfer(GladierBaseTool):
                         {
                             'source_path.$': '$.input.uplink_source_path',
                             'destination_path.$': '$.input.uplink_destination_path',
-                            'recursive.$': '$.input.uplink_recursive',
+                            #'recursive.$': '$.input.uplink_recursive',
                         }
                     ]
                 },

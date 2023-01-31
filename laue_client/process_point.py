@@ -44,36 +44,32 @@ if __name__ == '__main__':
 
 
     ## Flow inputs necessary for each tool on the flow definition.
-    up_src_path = os.path.join(conf['voyager']['staging'], args.point_path)
-    up_dest_path = os.path.join(conf['eagle']['staging'], args.point_path)
-    down_fp = f'im_{args.im_num}_r0.hdf5' # TEMP
-    down_src_path = os.path.join('results', args.point_path)
-    down_dest_path = os.path.join(conf['voyager']['staging'], 'results', args.point_path) 
+    results_folder = 'results'
+    point_folder = args.point_path.split('.')[0]
     flow_input = {
         'input': {
             # To Eagle
             'uplink_source_endpoint_id': conf['voyager']['uuid'],
-            'uplink_source_path': up_src_path, 
+            'uplink_source_path': os.path.join(conf['voyager']['staging'], args.point_path), 
             'uplink_destination_endpoint_id': conf['eagle']['uuid'],
-            'uplink_destination_path': up_dest_path,
+            'uplink_destination_path': os.path.join(conf['eagle']['staging'], args.point_path),
 
             # QSub Launch
-            'im_dir': os.path.join('/eagle', up_dest_path[1:]),
-            'out_dir': os.path.join('/eagle', down_src_path),
+            'im_dir': os.path.join(conf['eagle']['absolute'], args.point_path),
+            'out_dir': os.path.join(conf['eagle']['absolute'], results_folder, point_folder),
             'im_num': args.im_num,
             'funcx_endpoint_compute': uids['endpoint'], 
 
             # From Eagle
             'downlink_source_endpoint_id': conf['eagle']['uuid'],
-            'downlink_source_path': down_src_path,
+            'downlink_source_path': os.path.join(conf['eagle']['staging'], results_folder, point_folder),
             'downlink_destination_endpoint_id': conf['voyager']['uuid'],
-            'downlink_destination_path': down_dest_path,
+            'downlink_destination_path': os.path.join(conf['voyager']['staging'], results_folder),
         }
     }
     print('Created payload.')
     pprint(flow_input)
     print('')
-
     ##Label for the current run (This is the label that will be presented on the globus webApp)
     client_run_label = 'Laue Cold Processing'
 
