@@ -1,0 +1,76 @@
+ver: 1.0
+
+file:
+    path: '/eagle/APSDataAnalysis/mprince/lau/data/al_full_stacked/im_0002.h5'
+    output: '../outputs/stacked'
+    range: [0, 401, 1]
+    threshold: 0 # [readout values]
+    frame: [0, 2048, 0, 2048] # [pixels]
+    ext: 'h5'
+    stacked: False
+    h5:
+        key: 'data'
+
+comp:
+    server: 'acc'
+    workers: 1
+    scanstart: 1
+    batch_size_cpu: 8
+    batch_size_gpu: 3000
+    scannumber: 1
+    functionid: 'd8461388-9442-4008-a5f1-2cfa112f6923'
+
+geo:
+    mask: 
+        path: '/eagle/APSDataAnalysis/mprince/lau/data/geo/code-debruijn-2-8-000.npy'
+        bitsizes: [15, 7.5] # [mu]
+        thickness: 4.6 # [mu]
+        resolution: 0.5
+        smoothness: 0 # [mu]
+        alpha: 0 
+        widening: 1.7 # [mu]
+        pad: 150
+        stretch: 1.0
+
+        focus:
+            cenx: -0.97533203
+            dist: 0.61900000
+            cenz: -0.17089844
+            anglex: -0.06152344
+            angley: -0.68076172
+            anglez: -1.28115234
+
+        calibrate: 
+            dist: [0.61, 0.63, 0.001] # [mm] 0.619
+
+    scanner:
+        angle: 0
+        step: 0.5 # [mu]
+        rot: [0.0045, -0.00684, -3.375e-5]
+        axis: [1, 0, 0]
+
+    detector: 
+        shape: [2048, 2048] # [pixels]
+        size: [409.6, 409.6] # [mm]
+        rot: [-1.20139958, -1.21416739, -1.21878591] # [radian]
+        pos: [28.871, 2.786, 513.140] # [mm]
+
+    source: 
+        offset: 0
+        grid: [-1.25, -0.85, 0.001] # [mm]
+
+algo:
+    iter: 1
+    pos: 
+        method: 'lsqr' 
+        regpar: 0
+        init: 'spline'
+
+    sig: 
+        method: 'splines' 
+        order: 5
+        scale: 1
+        init:
+            maxsize: 128 
+            avgsize: 16
+            atol: 4

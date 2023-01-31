@@ -1,12 +1,12 @@
-NUM_NODES=2
+NUM_NODES=10
 RANKS_PER_NODE=32
 INPUT_DIR=$1
 OUTPUT_DIR=$2
 START_IM=$3
-PROJ_NAME=laue_funcx_launch
+PROJ_NAME=laue_realtime
 
 AFFINITY_PATH=../runscripts/set_gpu_affinity.sh
-CONFIG_PATH=../configs/AL30/config_gladier.yml
+CONFIG_PATH=/eagle/APSDataAnalysis/mprince/lau/dev/laue-gladier/funcx_launch/launch_scripts/config_gladier_stack.yml
 PYTHONPATH=/eagle/projects/APSDataAnalysis/mprince/lau_env_polaris/bin/python
 CWD=/eagle/APSDataAnalysis/mprince/lau/dev/laue-parallel/logs_gladier
 
@@ -33,7 +33,6 @@ mpiexec -n \${NTOTRANKS} --ppn \${NRANKS_PER_NODE} --depth=\${NDEPTH} --cpu-bind
     --override_input ${INPUT_DIR} \\
     --override_output ${OUTPUT_DIR} \\
     --start_im ${START_IM} \\
-    --mpi_recon
 
 mpiexec -n \${NTOTRANKS} --ppn \${NRANKS_PER_NODE} --depth=\${NDEPTH} --cpu-bind depth --env NNODES=\${NNODES}  --env OMP_NUM_THREADS=\${NTHREADS} -env OMP_PLACES=threads \\
     ${AFFINITY_PATH} \\
@@ -44,9 +43,9 @@ mpiexec -n \${NTOTRANKS} --ppn \${NRANKS_PER_NODE} --depth=\${NDEPTH} --cpu-bind
     --start_im ${START_IM} \\
 " | \
 qsub -A APSDataAnalysis \
--q debug \
+-q preemptable \
 -l select=${NUM_NODES}:system=polaris \
--l walltime=0:30:00 \
+-l walltime=0:40:00 \
 -l filesystems=home:eagle \
 -l place=scatter \
 -N ${PROJ_NAME} \
