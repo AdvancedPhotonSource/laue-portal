@@ -2,7 +2,7 @@ NUM_NODES=10
 RANKS_PER_NODE=32
 INPUT_DIR=$1
 OUTPUT_DIR=$2
-START_IM=$3
+START_IM=0
 PROJ_NAME=laue_realtime
 
 AFFINITY_PATH=../runscripts/set_gpu_affinity.sh
