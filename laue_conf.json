@@ -1,5 +1,6 @@
 {
     "voyager": {
+        "dm_experiment": "/gdata/dm/XMD",
         "staging": "/gdata/dm/sharing/cold/processed/polaris_reconstruction/gladier_staging/",
         "uuid": "9c9cb97e-de86-11e6-9d15-22000a1e3b52"
     },
