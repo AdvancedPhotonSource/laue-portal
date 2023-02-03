@@ -24,8 +24,8 @@ class LaueClient(GladierBaseClient):
 ##  Arguments for the execution of this file as a stand-alone client
 def arg_parse():
     parser = argparse.ArgumentParser()
+    parser.add_argument('experiment_name', help='Unique point ID')
     parser.add_argument('point_path', help='Unique point ID')
-    parser.add_argument('im_num', help='Temp image number to process')
     return parser.parse_args()
 
 ## Main execution of this "file" as a Standalone client
@@ -43,21 +43,22 @@ if __name__ == '__main__':
     exampleClient = LaueClient()
 
 
+    point_file = os.path.basename(args.point_path)
+
     ## Flow inputs necessary for each tool on the flow definition.
     results_folder = 'results'
-    point_folder = args.point_path.split('.')[0]
+    point_folder = point_file.split('.')[0]
     flow_input = {
         'input': {
             # To Eagle
             'uplink_source_endpoint_id': conf['voyager']['uuid'],
-            'uplink_source_path': os.path.join(conf['voyager']['staging'], args.point_path), 
+            'uplink_source_path': os.path.join(conf['voyager']['dm_experiment'], args.experiment_name, point_file), 
             'uplink_destination_endpoint_id': conf['eagle']['uuid'],
-            'uplink_destination_path': os.path.join(conf['eagle']['staging'], args.point_path),
+            'uplink_destination_path': os.path.join(conf['eagle']['staging'], point_file),
 
             # QSub Launch
-            'im_dir': os.path.join(conf['eagle']['absolute'], args.point_path),
+            'im_dir': os.path.join(conf['eagle']['absolute'], point_file),
             'out_dir': os.path.join(conf['eagle']['absolute'], results_folder, point_folder),
-            'im_num': args.im_num,
             'funcx_endpoint_compute': uids['endpoint'], 
 
             # From Eagle
