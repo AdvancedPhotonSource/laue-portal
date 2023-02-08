@@ -33,14 +33,7 @@ mpiexec -n \${NTOTRANKS} --ppn \${NRANKS_PER_NODE} --depth=\${NDEPTH} --cpu-bind
     --override_input ${INPUT_DIR} \\
     --override_output ${OUTPUT_DIR} \\
     --start_im ${START_IM} \\
-
-mpiexec -n \${NTOTRANKS} --ppn 4 --depth=\${NDEPTH} --cpu-bind depth --env NNODES=\${NNODES}  --env OMP_NUM_THREADS=\${NTHREADS} -env OMP_PLACES=threads \\
-    ${AFFINITY_PATH} \\
-    ${PYTHONPATH} \\
-    ../recon_parallel.py \\
-    ${CONFIG_PATH} \\
-    --override_dir ${OUTPUT_DIR} \\
-    --start_im ${START_IM} \\
+    --prod_output
 " | \
 qsub -A APSDataAnalysis \
 -q preemptable \
