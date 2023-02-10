@@ -3,7 +3,7 @@ RANKS_PER_NODE=32
 INPUT_DIR=$1
 OUTPUT_DIR=$2
 START_IM=0
-PROJ_NAME=laue_realtime
+PROJ_NAME=laue_aps_realtime
 
 AFFINITY_PATH=../runscripts/set_gpu_affinity.sh
 CONFIG_PATH=/eagle/APSDataAnalysis/mprince/lau/dev/laue-gladier/funcx_launch/launch_scripts/config_gladier_stack.yml
@@ -36,7 +36,7 @@ mpiexec -n \${NTOTRANKS} --ppn \${NRANKS_PER_NODE} --depth=\${NDEPTH} --cpu-bind
     --prod_output
 " | \
 qsub -A APSDataAnalysis \
--q preemptable \
+-q demand \
 -l select=${NUM_NODES}:system=polaris \
 -l walltime=0:15:00 \
 -l filesystems=home:eagle \

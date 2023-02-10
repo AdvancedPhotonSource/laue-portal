@@ -40,7 +40,9 @@ for file in files:
 
     has_failure = 0
 
-    if data['timestamp'] != "" and 'Jobs' in data:
+    if data['timestamp'] != "": 
+        if 'Jobs' not in data:
+            data['Jobs'] = {}
         print(file)
         for started_job in started_jobs:
             if started_job not in data['Jobs']:
@@ -65,6 +67,7 @@ for file in files:
         num_jobs_finished.append(cur_jobs_finished)
         timestamps.append(int(data['timestamp']))
 
+
     
 failures = np.asarray(failures)
 failures *= np.max(num_jobs_started)
@@ -76,7 +79,7 @@ plt.bar(timestamps, failures, label='failures', width=50, color='red')
 plt.fill_between(timestamps, num_jobs_started, 0)
 plt.fill_between(timestamps, num_jobs_finished, 0)
 plt.legend(loc='upper left')
-plt.title('11 Node Run')
+plt.title('10 Node Config (x3209c0s25b1n0 Removed)')
 plt.xlabel('Unix Timestamp')
 plt.ylabel('Jobs')
 plt.savefig('test.png')
