@@ -65,7 +65,7 @@ if __name__ == '__main__':
             'downlink_source_endpoint_id': conf['eagle']['uuid'],
             'downlink_source_path': os.path.join(conf['eagle']['staging'], results_folder, point_folder),
             'downlink_destination_endpoint_id': conf['voyager']['uuid'],
-            'downlink_destination_path': os.path.join(conf['voyager']['staging'], results_folder),
+            'downlink_destination_path': os.path.join(conf['voyager']['staging'], results_folder, point_folder),
         }
     }
     print('Created payload.')
