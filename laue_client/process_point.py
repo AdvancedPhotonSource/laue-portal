@@ -2,6 +2,7 @@ import argparse
 from pprint import pprint
 import json
 import os
+import time
 
 ##Base Gladier imports
 from gladier import GladierBaseClient, generate_flow_definition
@@ -27,6 +28,9 @@ def arg_parse():
     parser.add_argument('experiment_name', help='Unique point ID')
     parser.add_argument('point_path', help='Unique point ID')
     return parser.parse_args()
+
+def wait_callback(*args, **kwargs):
+    time.sleep(60)
 
 ## Main execution of this "file" as a Standalone client
 if __name__ == '__main__':
@@ -76,6 +80,9 @@ if __name__ == '__main__':
 
     #Flow execution
     flow_run = exampleClient.run_flow(flow_input=flow_input, label=client_run_label)
+
+    # Wait and don't overload query limit
+    exampleClient.progress(flow_run['action_id'], callback=wait_callback)
 
     print('Run started with ID: ' + flow_run['action_id'])
     print('https://app.globus.org/runs/' + flow_run['action_id'])
