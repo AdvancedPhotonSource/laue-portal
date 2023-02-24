@@ -2,7 +2,9 @@ from gladier import GladierBaseTool, generate_flow_definition
 
 def qsub_launch(**data) -> int:
     import subprocess
-    proc_data = subprocess.call(['/usr/bin/bash', 'funcx_launch/launch_scripts/gladier_preempt.sh', data['im_dir'], data['out_dir']]) 
+    import shutil
+    proc_data = subprocess.call(['/usr/bin/bash', 'funcx_launch/launch_scripts/gladier_demand.sh', data['im_dir'], data['out_dir']]) 
+    shutil.copy(data['im_dir'], data['out_dir'])
     return proc_data
 
 @generate_flow_definition(modifiers={

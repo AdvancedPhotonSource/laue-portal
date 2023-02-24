@@ -12,8 +12,8 @@ from tools.uplink_transfer import UplinkTransfer
 from tools.run_laue import QSubLaunch
 from tools.downlink_transfer import DownlinkTransfer
 
-##Generate flow based on the collection of `gladier_tools` 
-# In this case `SimpleTransfer` was defined and imported from tools.uplink 
+##Generate flow based on the collection of `gladier_tools`
+# In this case `SimpleTransfer` was defined and imported from tools.uplink
 @generate_flow_definition
 class LaueClient(GladierBaseClient):
     gladier_tools = [
@@ -50,26 +50,26 @@ if __name__ == '__main__':
     point_file = os.path.basename(args.point_path)
 
     ## Flow inputs necessary for each tool on the flow definition.
-    results_folder = 'results'
+    results_folder = f'results/{args.experiment_name}'
     point_folder = point_file.split('.')[0]
     flow_input = {
         'input': {
             # To Eagle
             'uplink_source_endpoint_id': conf['voyager']['uuid'],
-            'uplink_source_path': os.path.join(conf['voyager']['dm_experiment'], args.experiment_name, point_file), 
+            'uplink_source_path': os.path.join(conf['voyager']['dm_experiment'], args.experiment_name, point_file),
             'uplink_destination_endpoint_id': conf['eagle']['uuid'],
             'uplink_destination_path': os.path.join(conf['eagle']['staging'], point_file),
 
             # QSub Launch
             'im_dir': os.path.join(conf['eagle']['absolute'], point_file),
             'out_dir': os.path.join(conf['eagle']['absolute'], results_folder, point_folder),
-            'funcx_endpoint_compute': uids['endpoint'], 
+            'funcx_endpoint_compute': uids['endpoint'],
 
             # From Eagle
             'downlink_source_endpoint_id': conf['eagle']['uuid'],
             'downlink_source_path': os.path.join(conf['eagle']['staging'], results_folder, point_folder),
-            'downlink_destination_endpoint_id': conf['voyager']['uuid'],
-            'downlink_destination_path': os.path.join(conf['voyager']['staging'], results_folder, point_folder),
+            'downlink_destination_endpoint_id': conf['clutch']['uuid'],
+            'downlink_destination_path': os.path.join(conf['clutch']['staging'], results_folder, point_folder),
         }
     }
     print('Created payload.')
@@ -86,4 +86,3 @@ if __name__ == '__main__':
 
     print('Run started with ID: ' + flow_run['action_id'])
     print('https://app.globus.org/runs/' + flow_run['action_id'])
-    

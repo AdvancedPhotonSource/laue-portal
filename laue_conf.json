@@ -8,5 +8,10 @@
         "staging": "/",
         "absolute": "/eagle/APSDataAnalysis/LAUE",
         "uuid": "63cf5212-df43-4e0d-a591-168908132cbb"
+    },
+    "clutch": {
+        "staging": "/data/laue34",
+        "absolute": "/data/laue34",
+        "uuid": "b0e921df-6d04-11e5-ba46-22000b92c6ec"
     }
 }
