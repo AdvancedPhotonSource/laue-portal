@@ -82,7 +82,7 @@ if __name__ == '__main__':
     flow_run = exampleClient.run_flow(flow_input=flow_input, label=client_run_label)
 
     # Wait and don't overload query limit
-    exampleClient.progress(flow_run['action_id'], callback=wait_callback)
+    #exampleClient.progress(flow_run['action_id'], callback=wait_callback)
 
     print('Run started with ID: ' + flow_run['action_id'])
     print('https://app.globus.org/runs/' + flow_run['action_id'])

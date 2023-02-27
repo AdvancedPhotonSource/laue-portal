@@ -8,7 +8,7 @@ def qsub_launch(**data) -> int:
     return proc_data
 
 @generate_flow_definition(modifiers={
-    qsub_launch: {'WaitTime': 7200,
+    qsub_launch: {'WaitTime': 1000000,
                       'ExceptionOnActionFailure': True}
 })
 class QSubLaunch(GladierBaseTool):
