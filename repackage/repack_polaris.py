@@ -4,11 +4,11 @@ import json
 import argparse
 from mpi4py import MPI
 import numpy as np
+import traceback
 
 RESULTS_PATH = '/eagle/APSDataAnalysis/LAUE/results'
 REPACKS_PATH = '/eagle/APSDataAnalysis/LAUE/repacks'
 PTREPACK_PATH = '/eagle/APSDataAnalysis/mprince/lau_env_polaris/bin/ptrepack'
-COMPLETED_FILES_FP = 'completed.json'
 WIN_SIZE = 4
 
 def parse_args():
@@ -75,15 +75,22 @@ def process_experiment(experiment_name):
     queue_win, repack_idx = allocate_window(rank, comm)
 
     while repack_idx < len(filtered_files):
-        clr.repackage_files(f'{filtered_files[repack_idx]}.h5', 
-                            experiment_name, 
-                            RESULTS_PATH,
-                            REPACKS_PATH,
-                            PTREPACK_PATH)
+        try:
+            clr.repackage_files(f'{filtered_files[repack_idx]}.h5', 
+                                experiment_name, 
+                                RESULTS_PATH,
+                                REPACKS_PATH,
+                                PTREPACK_PATH)
+        except Exception as e:
+            with open('err_recon.log', 'a+') as err_f:
+                err_f.write(f'{filtered_files[repack_idx]}\n')
+                err_f.write(str(e) + '\n') # MPI term output can break.
+                err_f.write('Traceback: \n')
+                err_f.write(traceback.format_exc())
+
         repack_idx = get_next_idx(queue_win)
-        print(f'{rank}, {repack_idx}')
-        return
-    
+        print(f'{rank}, {repack_idx}, {len(filtered_files)}')
+
 if __name__ == '__main__':
     args = parse_args()
     process_experiment(args.exp_name)
