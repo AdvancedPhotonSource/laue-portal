@@ -3,7 +3,9 @@ RANKS_PER_NODE=32
 INPUT_DIR=$1
 OUTPUT_DIR=$2
 START_IM=0
-PROJ_NAME=laue_realtime
+
+BASENAME=$(/usr/bin/basename ${INPUT_DIR})
+PROJ_NAME=laue_aps_${INPUT_DIR}
 
 AFFINITY_PATH=../runscripts/set_gpu_affinity.sh
 CONFIG_PATH=/eagle/APSDataAnalysis/mprince/lau/dev/laue-gladier/funcx_launch/launch_scripts/config_gladier_stack.yml
