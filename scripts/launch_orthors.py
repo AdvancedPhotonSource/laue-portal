@@ -20,12 +20,15 @@ prev_im = None
 for im in images:
     if im in completed_ims:
         continue
+    im = f'consgeo_{im}'
     print(f'Launching {im}')
     call = [
         '/usr/bin/bash',
         '/clhome/EPIX34ID/dev/src/laue-gladier/repackage/orthros_queue.sh',
         'Feb23_COLD_ALCF_Demo',
-        os.path.join(f'/clhome/EPIX34ID/dev/src/experiment_staging', im)
+        os.path.join(f'/clhome/EPIX34ID/dev/src/experiment_staging', im),
+        '-N',
+        im
     ]
 
     subprocess.call(call) 

@@ -51,6 +51,7 @@ if __name__ == '__main__':
 
     ## Flow inputs necessary for each tool on the flow definition.
     results_folder = f'results/{args.experiment_name}'
+    scan_folder = f'scans/{args.experiment_name}'
     point_folder = point_file.split('.')[0]
     flow_input = {
         'input': {
@@ -58,10 +59,10 @@ if __name__ == '__main__':
             'uplink_source_endpoint_id': conf['voyager']['uuid'],
             'uplink_source_path': os.path.join(conf['voyager']['dm_experiment'], args.experiment_name, point_file),
             'uplink_destination_endpoint_id': conf['eagle']['uuid'],
-            'uplink_destination_path': os.path.join(conf['eagle']['staging'], point_file),
+            'uplink_destination_path': os.path.join(conf['eagle']['staging'], scan_folder, point_file),
 
             # QSub Launch
-            'im_dir': os.path.join(conf['eagle']['absolute'], point_file),
+            'im_dir': os.path.join(conf['eagle']['absolute'], scan_folder, point_file),
             'out_dir': os.path.join(conf['eagle']['absolute'], results_folder, point_folder),
             'funcx_endpoint_compute': uids['endpoint'],
 
