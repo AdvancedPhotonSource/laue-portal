@@ -7,6 +7,8 @@ import shutil
 import argparse
 from functools import partial
 from subprocess import call
+import yaml
+import glob
 
 PTREPACK_PATH = '/APSshare/epd/rh6-x86_64/bin/ptrepack'
 DATA_PATH = '/data/laue34/results'
@@ -49,13 +51,13 @@ def process_chunk(args):
     f.close()
 
 def write_to_hd5(args):
-    data, ind, attr_file, new_dir, scannumber = args
-    depth = np.array([scannumber]).astype(int)
+    data, ind, attr_file, new_dir, scannumber, depth = args
+    depth = np.array([depth])
     fn = new_dir + '/out_' + scannumber + '_' + str(ind) + '.h5'
     shutil.copyfile(attr_file, fn)
     f = h5py.File(fn, "r+")
-    f.create_dataset('entry1/data/data', data=data)
-    f.create_dataset('entry1/depth', data=depth)
+    f.create_dataset('entry1/data/data', data=data, dtype='float32')
+    f.create_dataset('entry1/depth', data=depth, dtype='float32')
     f.close()
 
 def repackage_files(file_path, exp_name, data_path, out_path, ptrepack_path):
@@ -99,8 +101,16 @@ def repackage_files(file_path, exp_name, data_path, out_path, ptrepack_path):
 
     list(map(process_chunk, data_files_load))
 
+    config_fp = glob.glob(os.path.join(parent_dir, '*.yml'))[0]
 
-    iterable = [(lau_set[:, :, i], i, attr_file, new_dir, scannumber) for i in range(stack)]
+    with open(config_fp, 'r') as conf_f:
+        config = yaml.safe_load(conf_f)
+    
+    start_depth = config['geo']['source']['grid'][0] * 1000 # mm -> um
+    step = config['geo']['source']['grid'][2] * 1000
+
+
+    iterable = [(lau_set[:, :, i], i, attr_file, new_dir, scannumber, (start_depth + (step * i))) for i in range(stack)]
 
     list(map(write_to_hd5, iterable))
 
