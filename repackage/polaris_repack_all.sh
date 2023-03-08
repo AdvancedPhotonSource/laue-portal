@@ -1,7 +1,7 @@
 NUM_NODES=1
-RANKS_PER_NODE=16
+RANKS_PER_NODE=10
 PROJ_NAME=laue-repack
-QUEUE=preemptable
+QUEUE=debug
 
 PYTHONPATH=/eagle/projects/APSDataAnalysis/mprince/lau_env_polaris/bin/python
 CWD=/eagle/APSDataAnalysis/mprince/lau/dev/laue-gladier
@@ -29,7 +29,7 @@ mpiexec -n \${NTOTRANKS} --ppn \${NRANKS_PER_NODE} --depth=\${NDEPTH} --cpu-bind
 qsub -A APSDataAnalysis \
 -q ${QUEUE} \
 -l select=${NUM_NODES}:system=polaris \
--l walltime=12:00:00 \
+-l walltime=0:30:00 \
 -l filesystems=home:eagle \
 -l place=scatter \
 -N ${PROJ_NAME} \

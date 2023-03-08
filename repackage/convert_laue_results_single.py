@@ -60,6 +60,33 @@ def write_to_hd5(args):
     f.create_dataset('entry1/depth', data=depth, dtype='float32')
     f.close()
 
+
+def apply_mask(data, parent_dir, threshold):
+    mask = np.zeros((2048,2048), dtype='bool')
+    mask[68:200,380:543] = 1
+    mask[100:400,1100:1300] = 1
+    mask[625:750,243:395] = 1
+    mask[650:850,415:770] = 1
+    mask[800:960,1300:1550] = 1
+    mask[1166:1280,50:184] = 1
+    mask[1275:1369,800:950] = 1
+    mask[1370:1500,700:875] = 1
+    mask[1383:1436,1740:1853] = 1
+    mask[1460:1600,1787:1980] = 1
+    mask[1501:1700,533:733] = 1
+    mask[1863:1993,310:455] = 1
+    mask[1925:2022,1236:1376] = 1
+
+    base_h5 = glob.glob(os.path.join(parent_dir, '*.h5'))[0]
+    with h5py.File(base_h5, 'r') as h5_f:
+        base_data = np.asarray(h5_f['/entry1/data/data'])
+    thresh_mask = np.any((base_data >= threshold), axis=0)
+
+    mask = mask & thresh_mask
+    
+    return data * mask.astype('float')
+
+
 def repackage_files(file_path, exp_name, data_path, out_path, ptrepack_path):
     start = time.time()
 
@@ -102,17 +129,22 @@ def repackage_files(file_path, exp_name, data_path, out_path, ptrepack_path):
     list(map(process_chunk, data_files_load))
 
     config_fp = glob.glob(os.path.join(parent_dir, '*.yml'))[0]
-
     with open(config_fp, 'r') as conf_f:
         config = yaml.safe_load(conf_f)
     
     start_depth = config['geo']['source']['grid'][0] * 1000 # mm -> um
     step = config['geo']['source']['grid'][2] * 1000
 
+    lau_set = np.moveaxis(lau_set, 2, 0)
+    lau_set = apply_mask(lau_set, parent_dir, 10.0)
 
-    iterable = [(lau_set[:, :, i], i, attr_file, new_dir, scannumber, (start_depth + (step * i))) for i in range(stack)]
+    output_params = []
+    for i in range(stack):
+        depth = start_depth + (step * i)
+        if depth >= -100.0 and depth <= 100.0:
+            output_params.append((lau_set[i, :, :], len(output_params), attr_file, new_dir, scannumber, depth))
 
-    list(map(write_to_hd5, iterable))
+    list(map(write_to_hd5, output_params))
 
     os.remove(attr_file)
     stop = time.time()
