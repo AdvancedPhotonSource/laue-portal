@@ -23,7 +23,7 @@ NTOTRANKS=\$(( NNODES * NRANKS_PER_NODE ))
 echo \"NUM_OF_NODES= \${NNODES} TOTAL_NUM_RANKS= \${NTOTRANKS} RANKS_PER_NODE= \${NRANKS_PER_NODE} THREADS_PER_RANK= \${NTHREADS}\"
 
 mpiexec -n \${NTOTRANKS} --ppn \${NRANKS_PER_NODE} --depth=\${NDEPTH} --cpu-bind depth --env NNODES=\${NNODES}  --env OMP_NUM_THREADS=\${NTHREADS} -env OMP_PLACES=threads \\
-    ${PYTHONPATH} ${SCRIPT_PATH} $1 
+    ${PYTHONPATH} ${SCRIPT_PATH} $@ 
 
 " | \
 qsub -A APSDataAnalysis \

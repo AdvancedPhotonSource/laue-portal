@@ -43,7 +43,7 @@ for file in files:
     if data['timestamp'] != "": 
         if 'Jobs' not in data:
             continue
-        print(file)
+        #print(file)
         jobs_finished = 0
         for started_job in started_jobs:
             if started_job not in data['Jobs']:
@@ -73,7 +73,7 @@ for file in files:
         num_jobs_started.append(cur_jobs_started) 
         num_jobs_finished.append(cur_jobs_finished)
         num_jobs_running.append(cur_jobs_finished + running_jobs)
-        print(len(data['Jobs'].keys()))
+        #print(len(data['Jobs'].keys()))
         timestamps.append(int(data['timestamp']))
 
 
@@ -81,7 +81,7 @@ for file in files:
 failures = np.asarray(failures)
 failures *= np.max(num_jobs_started)
 
-
+plt.figure(figsize=(5,5))
 plt.plot(timestamps, num_jobs_started, label='jobs queued')
 plt.plot(timestamps, num_jobs_running, label='jobs running')
 plt.plot(timestamps, num_jobs_finished, label='jobs finished')
@@ -90,10 +90,11 @@ plt.fill_between(timestamps, num_jobs_started, 0)
 plt.fill_between(timestamps, num_jobs_running, num_jobs_finished)
 plt.fill_between(timestamps, num_jobs_finished, 0)
 plt.legend(loc='upper left')
-plt.title('10 Node Config (x3209c0s25b1n0 Removed)')
+plt.title('Laue Processing Test (50 Nodes)')
 plt.xlabel('Unix Timestamp')
 plt.ylabel('Jobs')
-plt.savefig('test.png')
+plt.tight_layout()
+plt.savefig('test.png', dpi=300)
 
 print(cur_jobs_finished)
 print(failure_count)
