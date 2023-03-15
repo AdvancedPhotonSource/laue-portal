@@ -76,25 +76,25 @@ def apply_mask(data, parent_dir, threshold):
     return data * mask
 
 
-def repackage_files(file_path, exp_name, data_path, out_path, ptrepack_path):
+def repackage_files(file_path, data_path, out_path, ptrepack_path):
     start = time.time()
 
     point_file = os.path.basename(file_path)
     point_name = point_file.split('.')[0]
 
-    data_dir = os.path.join(data_path, exp_name, point_name, 'proc_results')
+    data_dir = os.path.join(data_path, point_name, 'proc_results')
     data_files = os.listdir(data_dir)
 
     # create directory where results will go
-    new_dir = os.path.join(out_path, exp_name, point_name)
+    new_dir = os.path.join(out_path, point_name)
     if not os.path.isdir(new_dir):
         os.makedirs(new_dir)
-    attr_file = os.path.join(data_path, exp_name, point_name, point_file)
+    attr_file = os.path.join(data_path, point_name, point_file)
 
     if not os.path.isfile(attr_file):
         raise ValueError("ATTR_FILE does not exist")
 
-    copy_attr_file = os.path.join(out_path, exp_name, point_name, point_file)
+    copy_attr_file = os.path.join(out_path, point_name, point_file)
     shutil.copy(attr_file, copy_attr_file)
     attr_file = copy_attr_file
     compress_remove_ds(attr_file, new_dir, ptrepack_path)
