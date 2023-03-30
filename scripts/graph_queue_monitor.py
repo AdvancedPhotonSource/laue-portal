@@ -3,6 +3,9 @@ import os
 import numpy as np
 import argparse
 import json
+from datetime import datetime
+import matplotlib.dates as mdates
+
 
 """
 Reads qstat outputs from a queue and graphs the jobs started and completed over time.
@@ -81,19 +84,27 @@ for file in files:
 failures = np.asarray(failures)
 failures *= np.max(num_jobs_started)
 
+datetimes = []
+for time in timestamps: 
+    dt_object = datetime.fromtimestamp(time)
+    datetimes.append(dt_object)
+
+
 plt.figure(figsize=(5,5))
-plt.plot(timestamps, num_jobs_started, label='jobs queued')
-plt.plot(timestamps, num_jobs_running, label='jobs running')
-plt.plot(timestamps, num_jobs_finished, label='jobs finished')
+plt.plot(datetimes, num_jobs_started, label='jobs queued')
+plt.plot(datetimes, num_jobs_running, label='jobs running')
+plt.plot(datetimes, num_jobs_finished, label='jobs finished')
 #plt.bar(timestamps, failures, label='failures', width=50, color='red')
-plt.fill_between(timestamps, num_jobs_started, 0)
-plt.fill_between(timestamps, num_jobs_running, num_jobs_finished)
-plt.fill_between(timestamps, num_jobs_finished, 0)
+plt.fill_between(datetimes, num_jobs_started, 0)
+plt.fill_between(datetimes, num_jobs_running, num_jobs_finished)
+plt.fill_between(datetimes, num_jobs_finished, 0)
 plt.legend(loc='upper left')
 plt.title('Laue Processing Test (50 Nodes)')
-plt.xlabel('Unix Timestamp')
+plt.xlabel('Time')
 plt.ylabel('Jobs')
 plt.tight_layout()
+xformatter = mdates.DateFormatter('%H:%M')
+plt.gcf().axes[0].xaxis.set_major_formatter(xformatter)
 plt.savefig('test.png', dpi=300)
 
 print(cur_jobs_finished)

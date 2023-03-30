@@ -125,7 +125,8 @@ def repackage_files(file_path, data_path, out_path, ptrepack_path):
     step = config['geo']['source']['grid'][2] * 1000
 
     lau_set = np.moveaxis(lau_set, 2, 0)
-    lau_set = apply_mask(lau_set, parent_dir, 10.0)
+    thresh = 25.0
+    lau_set = apply_mask(lau_set, parent_dir, thresh)
 
     output_params = []
     for i in range(stack):

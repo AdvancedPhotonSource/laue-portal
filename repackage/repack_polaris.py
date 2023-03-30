@@ -81,7 +81,7 @@ def process_experiment(results_path, repacks_path):
         try:
             clr.repackage_files(f'{filtered_files[repack_idx]}.h5', 
                                 results_path,
-                                repack_idx,
+                                repacks_path,
                                 PTREPACK_PATH)
         except Exception as e:
             with open('err_recon.log', 'a+') as err_f:
