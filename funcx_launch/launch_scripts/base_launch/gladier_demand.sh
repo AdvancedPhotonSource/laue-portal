@@ -1,12 +1,16 @@
-NUM_NODES=1
-RANKS_PER_NODE=10
-PROJ_NAME=laue-repack
-QUEUE=preemptable
-WALLTIME=05:00:00
+NUM_NODES=10
+RANKS_PER_NODE=32
+INPUT_DIR=$1
+OUTPUT_DIR=$2
+START_IM=0
 
+BASENAME=$(/usr/bin/basename ${INPUT_DIR})
+PROJ_NAME=laue_aps_${INPUT_DIR}
+
+AFFINITY_PATH=../runscripts/set_gpu_affinity.sh
+CONFIG_PATH=/eagle/APSDataAnalysis/mprince/maglau/dev/laue-gladier/funcx_launch/launch_scripts/config_gladier_stack.yml
 PYTHONPATH=/eagle/projects/APSDataAnalysis/mprince/lau_env_polaris/bin/python
-CWD=/eagle/APSDataAnalysis/mprince/lau/dev/laue-gladier
-SCRIPT_PATH=/eagle/APSDataAnalysis/mprince/lau/dev/laue-gladier/repackage/repack_polaris.py
+CWD=/eagle/APSDataAnalysis/mprince/lau/dev/laue-parallel/logs_gladier
 
 
 cd ${CWD}
@@ -24,13 +28,20 @@ NTOTRANKS=\$(( NNODES * NRANKS_PER_NODE ))
 echo \"NUM_OF_NODES= \${NNODES} TOTAL_NUM_RANKS= \${NTOTRANKS} RANKS_PER_NODE= \${NRANKS_PER_NODE} THREADS_PER_RANK= \${NTHREADS}\"
 
 mpiexec -n \${NTOTRANKS} --ppn \${NRANKS_PER_NODE} --depth=\${NDEPTH} --cpu-bind depth --env NNODES=\${NNODES}  --env OMP_NUM_THREADS=\${NTHREADS} -env OMP_PLACES=threads \\
-    ${PYTHONPATH} ${SCRIPT_PATH} $@ 
-
+    ${AFFINITY_PATH} \\
+    ${PYTHONPATH} \\
+    ../laue_parallel.py \\
+    ${CONFIG_PATH} \\
+    --override_input ${INPUT_DIR} \\
+    --override_output ${OUTPUT_DIR} \\
+    --start_im ${START_IM} \\
+    --prod_output
 " | \
 qsub -A APSDataAnalysis \
--q ${QUEUE} \
+-q demand \
 -l select=${NUM_NODES}:system=polaris \
--l walltime=${WALLTIME} \
+-l walltime=0:15:00 \
 -l filesystems=home:eagle \
 -l place=scatter \
 -N ${PROJ_NAME} \
+-W block=true 

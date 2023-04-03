@@ -1,4 +1,4 @@
-NUM_NODES=10
+NUM_NODES=5
 RANKS_PER_NODE=32
 INPUT_DIR=$1
 OUTPUT_DIR=$2
@@ -7,16 +7,19 @@ START_IM=0
 BASENAME=$(/usr/bin/basename ${INPUT_DIR})
 PROJ_NAME=laue_aps_${INPUT_DIR}
 
-AFFINITY_PATH=../runscripts/set_gpu_affinity.sh
-CONFIG_PATH=/eagle/APSDataAnalysis/mprince/maglau/dev/laue-gladier/funcx_launch/launch_scripts/config_gladier_stack.yml
-PYTHONPATH=/eagle/projects/APSDataAnalysis/mprince/lau_env_polaris/bin/python
-CWD=/eagle/APSDataAnalysis/mprince/lau/dev/laue-parallel/logs_gladier
+AFFINITY_PATH=../runscripts/set_soft_affinity.sh
+CONFIG_PATH=/home/aps34ide/laue_src/laue-gladier/funcx_launch/launch_scripts/launch_scripts/config_gladier_debug.yml
+CONDA_PATH=/home/aps34ide/laue_env
+CWD=/home/aps34ide/laue_src/laue-parallel/logs_gladier
 
 
 cd ${CWD}
 
 echo "
 cd \${PBS_O_WORKDIR}
+
+module load conda
+conda activate ${CONDA_PATH}
 
 # MPI and OpenMP settings
 NNODES=\`wc -l < \$PBS_NODEFILE\`
@@ -29,18 +32,20 @@ echo \"NUM_OF_NODES= \${NNODES} TOTAL_NUM_RANKS= \${NTOTRANKS} RANKS_PER_NODE= \
 
 mpiexec -n \${NTOTRANKS} --ppn \${NRANKS_PER_NODE} --depth=\${NDEPTH} --cpu-bind depth --env NNODES=\${NNODES}  --env OMP_NUM_THREADS=\${NTHREADS} -env OMP_PLACES=threads \\
     ${AFFINITY_PATH} \\
-    ${PYTHONPATH} \\
+    python \\
     ../laue_parallel.py \\
     ${CONFIG_PATH} \\
     --override_input ${INPUT_DIR} \\
     --override_output ${OUTPUT_DIR} \\
     --start_im ${START_IM} \\
+    --no_load_balance \\
     --prod_output
+
 " | \
-qsub -A APSDataAnalysis \
+qsub -A 9169 \
 -q demand \
 -l select=${NUM_NODES}:system=polaris \
--l walltime=0:15:00 \
+-l walltime=0:20:00 \
 -l filesystems=home:eagle \
 -l place=scatter \
 -N ${PROJ_NAME} \

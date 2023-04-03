@@ -1,3 +1,9 @@
+"""
+Script to repackage laue-parallel data to the data format used by the 
+indexing program. For parallelization, maintains a memory window
+on rank 0 and pulls from the window when ready for next data point. 
+"""
+
 import convert_laue_results_single as clr
 import os
 import json
@@ -6,14 +12,13 @@ from mpi4py import MPI
 import numpy as np
 import traceback
 
-RESULTS_PATH = '/eagle/APSDataAnalysis/LAUE/results'
-REPACKS_PATH = '/eagle/APSDataAnalysis/LAUE/repacks'
 PTREPACK_PATH = '/eagle/APSDataAnalysis/mprince/lau_env_polaris/bin/ptrepack'
 WIN_SIZE = 4
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('exp_name', help='experiment folder to look for')
+    parser.add_argument('input_dir', help='input folder to read points from')
+    parser.add_argument('output_dir', help='output folder to place repackaged data')
     return parser.parse_args()
 
 
@@ -49,9 +54,7 @@ def get_next_idx(queue_win):
     return next_idx
 
 
-def process_experiment(experiment_name):
-    results_path = os.path.join(RESULTS_PATH, experiment_name)
-    repacks_path = os.path.join(REPACKS_PATH, experiment_name)
+def process_experiment(results_path, repacks_path):
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -77,9 +80,8 @@ def process_experiment(experiment_name):
     while repack_idx < len(filtered_files):
         try:
             clr.repackage_files(f'{filtered_files[repack_idx]}.h5', 
-                                experiment_name, 
-                                RESULTS_PATH,
-                                REPACKS_PATH,
+                                results_path,
+                                repacks_path,
                                 PTREPACK_PATH)
         except Exception as e:
             with open('err_recon.log', 'a+') as err_f:
@@ -90,7 +92,8 @@ def process_experiment(experiment_name):
 
         repack_idx = get_next_idx(queue_win)
         print(f'{rank}, {repack_idx}, {len(filtered_files)}')
+    comm.Barrier()
 
 if __name__ == '__main__':
     args = parse_args()
-    process_experiment(args.exp_name)
+    process_experiment(args.input_dir, args.output_dir)
