@@ -56,7 +56,7 @@ def write_to_hd5(args):
     depth = np.array([depth])
     fn = new_dir + '/out_' + scannumber + '_' + str(ind) + '.h5'
     shutil.copyfile(attr_file, fn)
-    f = h5py.File(fn, "r+")
+    f = h5py.File(fn, "w")
     f.create_dataset('entry1/data/data', data=data, dtype='float32')
     f.create_dataset('entry1/depth', data=depth, dtype='float32')
     f.close()
@@ -94,7 +94,7 @@ def repackage_files(file_path, data_path, out_path, ptrepack_path):
     if not os.path.isfile(attr_file):
         raise ValueError("ATTR_FILE does not exist")
 
-    copy_attr_file = os.path.join(out_path, point_name, point_file)
+    copy_attr_file = os.path.join(out_path, point_file)
     shutil.copy(attr_file, copy_attr_file)
     attr_file = copy_attr_file
     in_path = os.path.join(data_path, point_name)
@@ -126,7 +126,7 @@ def repackage_files(file_path, data_path, out_path, ptrepack_path):
     step = config['geo']['source']['grid'][2] * 1000
 
     lau_set = np.moveaxis(lau_set, 2, 0)
-    thresh = 25.0
+    thresh = 15.0
     lau_set = apply_mask(lau_set, parent_dir, thresh)
 
     output_params = []
