@@ -12,13 +12,14 @@ from mpi4py import MPI
 import numpy as np
 import traceback
 
-PTREPACK_PATH = '/eagle/APSDataAnalysis/mprince/lau_env_polaris/bin/ptrepack'
+PTREPACK_PATH = '/home/aps34ide/laue_env/bin/ptrepack'
 WIN_SIZE = 4
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('input_dir', help='input folder to read points from')
     parser.add_argument('output_dir', help='output folder to place repackaged data')
+    parser.add_argument('--p', nargs='*', help='specify specific points to repack')
     return parser.parse_args()
 
 
@@ -54,7 +55,7 @@ def get_next_idx(queue_win):
     return next_idx
 
 
-def process_experiment(results_path, repacks_path):
+def process_experiment(results_path, repacks_path, points):
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -66,12 +67,15 @@ def process_experiment(results_path, repacks_path):
         
     files = list(os.listdir(results_path))
 
-    filtered_files = []
-    for file in files:
-        # Check for bad files
-        if (not file.endswith('_debug')
-            and os.path.isdir(os.path.join(results_path, file))):
-            filtered_files.append(file)
+    if points is not None and len(points) > 0:
+        filtered_files = points
+    else:
+        filtered_files = []
+        for file in files:
+            # Check for bad files
+            if (not file.endswith('_debug')
+                and os.path.isdir(os.path.join(results_path, file))):
+                filtered_files.append(file)
             
     filtered_files = sorted(filtered_files)
 
@@ -96,4 +100,4 @@ def process_experiment(results_path, repacks_path):
 
 if __name__ == '__main__':
     args = parse_args()
-    process_experiment(args.input_dir, args.output_dir)
+    process_experiment(args.input_dir, args.output_dir, args.p)

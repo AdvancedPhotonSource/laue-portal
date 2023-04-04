@@ -5,10 +5,10 @@ OUTPUT_DIR=$2
 START_IM=0
 
 BASENAME=$(/usr/bin/basename ${INPUT_DIR})
-PROJ_NAME=laue_aps_${INPUT_DIR}
+PROJ_NAME=laue_${BASENAME}
 
 AFFINITY_PATH=../runscripts/set_soft_affinity.sh
-CONFIG_PATH=/home/aps34ide/laue_src/laue-gladier/funcx_launch/launch_scripts/launch_scripts/config_gladier_debug.yml
+CONFIG_PATH=/home/aps34ide/laue_src/laue-gladier/funcx_launch/launch_scripts/config_gladier.yml
 CONDA_PATH=/home/aps34ide/laue_env
 CWD=/home/aps34ide/laue_src/laue-parallel/logs_gladier
 

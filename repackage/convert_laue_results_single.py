@@ -131,7 +131,7 @@ def repackage_files(file_path, data_path, out_path, ptrepack_path):
     output_params = []
     for i in range(stack):
         depth = start_depth + (step * i)
-        if depth >= -100.0 and depth <= 100.0:
+        if depth >= -300.0 and depth <= 300.0:
             output_params.append((lau_set[i, :, :], len(output_params), attr_file, new_dir, scannumber, depth))
 
     list(map(write_to_hd5, output_params))
