@@ -86,7 +86,7 @@ def repackage_files(file_path, data_path, out_path, ptrepack_path):
     data_files = os.listdir(data_dir)
 
     # create directory where results will go
-    new_dir = os.path.join(out_path, point_name)
+    new_dir = os.path.join(out_path)
     if not os.path.isdir(new_dir):
         os.makedirs(new_dir)
     attr_file = os.path.join(data_path, point_name, point_file)
@@ -97,7 +97,8 @@ def repackage_files(file_path, data_path, out_path, ptrepack_path):
     copy_attr_file = os.path.join(out_path, point_name, point_file)
     shutil.copy(attr_file, copy_attr_file)
     attr_file = copy_attr_file
-    compress_remove_ds(attr_file, new_dir, ptrepack_path)
+    in_path = os.path.join(data_path, point_name)
+    compress_remove_ds(attr_file, in_path, ptrepack_path)
 
     data_files = [data_dir + '/' + fn for fn in data_files]
     # get shapes from the last file
