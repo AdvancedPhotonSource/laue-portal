@@ -4,9 +4,9 @@ import os
 import json
 import shutil
 
-DELAY = 72
+DELAY = 45
 
-base_dir = '/data34b/Run2023-1/Sheyfer223_CodedAperture/Ni2_mask'
+base_dir = '/data34a/Run2023-1/Sheyfer323_NiWireMask/Ni2_50mN_mask'
 staging_dir = '/clhome/EPIX34ID/dev/src/experiment_staging'
 
 images = os.listdir(base_dir)
@@ -16,16 +16,16 @@ completed_fp = '/clhome/EPIX34ID/dev/src/completed_ims.json'
 with open(completed_fp, 'r') as comp_f:
    completed_ims = json.load(comp_f)
 
-prev_im = None
+prev_ims = [] 
 for im in images:
     if im in completed_ims:
         continue
     print(f'copying: {im}')
     
-    if prev_im is not None:
-        os.remove(prev_im)
-    prev_im = os.path.join(staging_dir, f'consgeo_{im}')
-    shutil.copy(os.path.join(base_dir, im), os.path.join(staging_dir, f'consgeo_{im}'))
+    if len(prev_ims) > 5:
+        os.remove(prev_ims.pop(0))
+    prev_ims.append(os.path.join(staging_dir, f'{im}'))
+    shutil.copy(os.path.join(base_dir, im), os.path.join(staging_dir, f'{im}'))
     
     completed_ims[im] = True
 

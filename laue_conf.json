@@ -9,6 +9,11 @@
         "absolute": "/eagle/APSDataAnalysis/LAUE",
         "uuid": "63cf5212-df43-4e0d-a591-168908132cbb"
     },
+    "eagle_34ide": {
+        "staging": "/",
+        "absolute": "/eagle/APSDataProcessing/aps34ide/",
+        "uuid": "fd5a47b6-5fb0-4d85-b5eb-81ae993b1291"
+    },
     "clutch": {
         "staging": "/data/laue34",
         "absolute": "/data/laue34",

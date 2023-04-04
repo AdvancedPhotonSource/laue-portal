@@ -1,5 +1,5 @@
 import numpy as np
-
+  
 def Ni_10mN():
     mask3 = np.zeros((2048,2048), dtype='bool')
     mask3[600:1200,1150:1680] = 1
