@@ -19,7 +19,7 @@ class LaueClient(GladierBaseClient):
     gladier_tools = [
         UplinkTransfer,
         QSubLaunch,
-        DownlinkTransfer
+        #DownlinkTransfer
     ]
 
 ##  Arguments for the execution of this file as a stand-alone client
