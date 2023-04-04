@@ -58,17 +58,17 @@ if __name__ == '__main__':
             # To Eagle
             'uplink_source_endpoint_id': conf['voyager']['uuid'],
             'uplink_source_path': os.path.join(conf['voyager']['dm_experiment'], args.experiment_name, point_file),
-            'uplink_destination_endpoint_id': conf['eagle']['uuid'],
-            'uplink_destination_path': os.path.join(conf['eagle']['staging'], scan_folder, point_file),
+            'uplink_destination_endpoint_id': conf['eagle_34ide']['uuid'],
+            'uplink_destination_path': os.path.join(conf['eagle_34ide']['staging'], scan_folder, point_file),
 
             # QSub Launch
-            'im_dir': os.path.join(conf['eagle']['absolute'], scan_folder, point_file),
-            'out_dir': os.path.join(conf['eagle']['absolute'], results_folder, point_folder),
+            'im_dir': os.path.join(conf['eagle_34ide']['absolute'], scan_folder, point_file),
+            'out_dir': os.path.join(conf['eagle_34ide']['absolute'], results_folder, point_folder),
             'funcx_endpoint_compute': uids['endpoint'],
 
             # From Eagle
-            'downlink_source_endpoint_id': conf['eagle']['uuid'],
-            'downlink_source_path': os.path.join(conf['eagle']['staging'], results_folder, point_folder),
+            'downlink_source_endpoint_id': conf['eagle_34ide']['uuid'],
+            'downlink_source_path': os.path.join(conf['eagle_34ide']['staging'], results_folder, point_folder),
             'downlink_destination_endpoint_id': conf['clutch']['uuid'],
             'downlink_destination_path': os.path.join(conf['clutch']['staging'], results_folder, point_folder),
         }

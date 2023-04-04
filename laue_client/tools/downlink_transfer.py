@@ -5,9 +5,9 @@ from gladier import GladierBaseTool
 class DownlinkTransfer(GladierBaseTool):
     flow_definition = {
         'Comment': 'Transfer laue result data to APS systems',
-        'StartAt': 'downlinkTransfer',
+        'StartAt': 'DownlinkTransfer',
         'States': {
-            'downlinkTransfer': {
+            'DownlinkTransfer': {
                 'Comment': 'Transfer laue data to ALCF systems',
                 'Type': 'Action',
                 'ActionUrl': 'https://actions.automate.globus.org/transfer/transfer',
