@@ -26,21 +26,21 @@ geo:
         path: '/home/aps34ide/laue_src/laue-parallel/masks/code-debruijn-2-8-000.npy'
         reversed: False
         bitsizes: [15, 7.5] # [mu]
-        thickness: 4.06298828 # [mu]
+        thickness: 3.73901367 # [mu]
         resolution: 0.5
         smoothness: 0 # [mu]
-        alpha: 0 
+        alpha: 0
         widening: 0 # [mu]
         pad: 150
         stretch: 1.0
 
         focus:
-            cenx: 0.526513672
-            dist: 1.88916016
-            anglez: 45.2
-            angley: 0.294921875
-            anglex: 0.029296875
-            cenz: 1.90820312
+            cenx: 0.525634766
+            dist: 1.90576172
+            anglez: 44.2087891
+            angley: -0.0683593750
+            anglex: -0.0136718750
+            cenz: -0.623046875
             cons: 100.0
 
         calibrate: 

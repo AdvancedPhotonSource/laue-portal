@@ -1,4 +1,4 @@
-NUM_NODES=5
+NUM_NODES=1
 RANKS_PER_NODE=32
 INPUT_DIR=$1
 OUTPUT_DIR=$2
@@ -45,7 +45,7 @@ mpiexec -n \${NTOTRANKS} --ppn \${NRANKS_PER_NODE} --depth=\${NDEPTH} --cpu-bind
 qsub -A 9169 \
 -q demand \
 -l select=${NUM_NODES}:system=polaris \
--l walltime=0:20:00 \
+-l walltime=01:00:00 \
 -l filesystems=home:eagle \
 -l place=scatter \
 -N ${PROJ_NAME} \
