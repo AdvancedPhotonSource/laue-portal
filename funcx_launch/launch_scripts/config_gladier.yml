@@ -4,7 +4,7 @@ ver: 1.0
 file:
     path: '/Users/dgursoy/Data/Dina/Si10Norcada90_wireHstep'
     output: 'tmp/recon-Si10Norcada90_wireHstep'
-    range: [0, 401, 1]
+    range: [50, 1001, 1]
     threshold: 0 # [readout values]
     frame: [0, 2048, 0, 2048] # [pixels] 
     ext: 'h5'
@@ -38,10 +38,9 @@ geo:
             cenx: 0.525634766
             dist: 1.90576172
             anglez: 44.2087891
-            angley: -0.0683593750
-            anglex: -0.0136718750
-            cenz: -0.623046875
-            cons: 100.0
+            angley: -0.068359375
+            anglex: -0.623046875
+            cenz: 1.90820312
 
         calibrate: 
             dist: [1.5, 3.0, 0.1] # [mm] 0.619

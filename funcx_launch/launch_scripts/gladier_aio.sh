@@ -7,7 +7,7 @@ START_IM=0
 
 BASENAME=$(/usr/bin/basename ${INPUT_DIR})
 POINT_NAME=$(/usr/bin/basename ${INPUT_DIR} .h5)
-PROJ_NAME=laue_test_${POINT_NAME}
+PROJ_NAME=laue_${POINT_NAME}
 
 AFFINITY_PATH=../runscripts/set_soft_affinity.sh
 CONFIG_PATH=/home/aps34ide/laue_src/laue-gladier/funcx_launch/launch_scripts/config_gladier.yml
@@ -51,7 +51,7 @@ mpiexec -n 1 --ppn 1 --depth=\${NDEPTH} --cpu-bind depth --env NNODES=\${NNODES}
 
 " | \
 qsub -A 9169 \
--q debug \
+-q demand \
 -l select=${NUM_NODES}:system=polaris \
 -l walltime=01:00:00 \
 -l filesystems=home:eagle \
