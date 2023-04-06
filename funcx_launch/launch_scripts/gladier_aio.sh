@@ -47,7 +47,7 @@ mpiexec -n \${NTOTRANKS} --ppn \${NRANKS_PER_NODE} --depth=\${NDEPTH} --cpu-bind
 
 
 mpiexec -n 1 --ppn 1 --depth=\${NDEPTH} --cpu-bind depth --env NNODES=\${NNODES}  --env OMP_NUM_THREADS=\${NTHREADS} -env OMP_PLACES=threads \\
-    python ${REPACK_SCRIPT} ${REPACK_INPUT} ${REPACK_DIR} --p ${POINT_NAME}
+    python ${REPACK_SCRIPT} ${REPACK_INPUT} ${REPACK_DIR} --s --p ${POINT_NAME}
 
 " | \
 qsub -A 9169 \
