@@ -2,6 +2,7 @@ NUM_NODES=1
 RANKS_PER_NODE=32
 INPUT_DIR=$1
 OUTPUT_DIR=$2
+REPACK_DIR=$3
 START_IM=0
 
 BASENAME=$(/usr/bin/basename ${INPUT_DIR})
@@ -15,7 +16,6 @@ CWD=/home/aps34ide/laue_src/laue-parallel/logs_gladier
 
 REPACK_SCRIPT=/home/aps34ide/laue_src/laue-gladier/repackage/repack_polaris.py
 REPACK_INPUT="$(/usr/bin/dirname "${OUTPUT_DIR}")"
-REPACK_DIR=/eagle/APSDataProcessing/aps34ide/repacks/aio_out
 
 cd ${CWD}
 

@@ -19,7 +19,7 @@ class LaueClient(GladierBaseClient):
     gladier_tools = [
         UplinkTransfer,
         QSubLaunch,
-        #DownlinkTransfer
+        DownlinkTransfer
     ]
 
 ##  Arguments for the execution of this file as a stand-alone client
@@ -34,6 +34,7 @@ def wait_callback(*args, **kwargs):
 
 ## Main execution of this "file" as a Standalone client
 if __name__ == '__main__':
+    out_exp_name = 'test_exp'
 
     args = arg_parse()
 
@@ -50,8 +51,9 @@ if __name__ == '__main__':
     point_file = os.path.basename(args.point_path)
 
     ## Flow inputs necessary for each tool on the flow definition.
-    results_folder = f'results/{args.experiment_name}'
-    scan_folder = f'scans/{args.experiment_name}'
+    results_folder = f'results/{out_exp_name}'
+    scan_folder = f'scans/{out_exp_name}'
+    repacks_folder = f'repacks/{out_exp_name}'
     point_folder = point_file.split('.')[0]
     flow_input = {
         'input': {
@@ -64,13 +66,14 @@ if __name__ == '__main__':
             # QSub Launch
             'im_dir': os.path.join(conf['eagle_34ide']['absolute'], scan_folder, point_file),
             'out_dir': os.path.join(conf['eagle_34ide']['absolute'], results_folder, point_folder),
+            'repack_dir': os.path.join(conf['eagle_34ide']['absolute'], repacks_folder, point_folder),
             'funcx_endpoint_compute': uids['endpoint'],
 
             # From Eagle
             'downlink_source_endpoint_id': conf['eagle_34ide']['uuid'],
-            'downlink_source_path': os.path.join(conf['eagle_34ide']['staging'], results_folder, point_folder),
+            'downlink_source_path': os.path.join(conf['eagle_34ide']['staging'], repacks_folder, point_folder),
             'downlink_destination_endpoint_id': conf['clutch']['uuid'],
-            'downlink_destination_path': os.path.join(conf['clutch']['staging'], results_folder, point_folder),
+            'downlink_destination_path': os.path.join(conf['clutch']['staging'], repacks_folder, point_folder),
         }
     }
     print('Created payload.')
