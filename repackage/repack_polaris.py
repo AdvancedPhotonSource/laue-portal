@@ -12,8 +12,8 @@ from mpi4py import MPI
 import numpy as np
 import traceback
 
-#PTREPACK_PATH = '/home/aps34ide/laue_env/bin/ptrepack'
-PTREPACK_PATH = '/eagle/APSDataAnalysis/mprince/lau_env_polaris/bin/ptrepack'
+PTREPACK_PATH = '/home/aps34ide/laue_env/bin/ptrepack'
+#PTREPACK_PATH = '/eagle/APSDataAnalysis/mprince/lau_env_polaris/bin/ptrepack'
 WIN_SIZE = 4
 
 def parse_args():
