@@ -12,13 +12,15 @@ from mpi4py import MPI
 import numpy as np
 import traceback
 
-PTREPACK_PATH = '/home/aps34ide/laue_env/bin/ptrepack'
+#PTREPACK_PATH = '/home/aps34ide/laue_env/bin/ptrepack'
+PTREPACK_PATH = '/eagle/APSDataAnalysis/mprince/lau_env_polaris/bin/ptrepack'
 WIN_SIZE = 4
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('input_dir', help='input folder to read points from')
     parser.add_argument('output_dir', help='output folder to place repackaged data')
+    parser.add_argument('--s', action='store_true', help='toggle folder or aggregated output')
     parser.add_argument('--p', nargs='*', help='specify specific points to repack')
     return parser.parse_args()
 
@@ -55,7 +57,7 @@ def get_next_idx(queue_win):
     return next_idx
 
 
-def process_experiment(results_path, repacks_path, points):
+def process_experiment(results_path, repacks_path, points, is_single_file):
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -86,9 +88,10 @@ def process_experiment(results_path, repacks_path, points):
             clr.repackage_files(f'{filtered_files[repack_idx]}.h5', 
                                 results_path,
                                 repacks_path,
-                                PTREPACK_PATH)
+                                PTREPACK_PATH, 
+                                is_single_file)
         except Exception as e:
-            with open('err_recon.log', 'a+') as err_f:
+            with open('err_repack.log', 'a+') as err_f:
                 err_f.write(f'{filtered_files[repack_idx]}\n')
                 err_f.write(str(e) + '\n') # MPI term output can break.
                 err_f.write('Traceback: \n')
@@ -100,4 +103,4 @@ def process_experiment(results_path, repacks_path, points):
 
 if __name__ == '__main__':
     args = parse_args()
-    process_experiment(args.input_dir, args.output_dir, args.p)
+    process_experiment(args.input_dir, args.output_dir, args.p, args.s)

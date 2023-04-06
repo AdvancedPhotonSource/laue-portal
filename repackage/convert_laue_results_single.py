@@ -76,7 +76,7 @@ def apply_mask(data, parent_dir, threshold):
     return data * mask
 
 
-def repackage_files(file_path, data_path, out_path, ptrepack_path):
+def repackage_files(file_path, data_path, out_path, ptrepack_path, is_single_folder):
     start = time.time()
 
     point_file = os.path.basename(file_path)
@@ -86,7 +86,10 @@ def repackage_files(file_path, data_path, out_path, ptrepack_path):
     data_files = os.listdir(data_dir)
 
     # create directory where results will go
-    new_dir = os.path.join(out_path)
+    if is_single_folder:
+        new_dir = os.path.join(out_path)
+    else:
+        new_dir = os.path.join(out_path, point_name)
     if not os.path.isdir(new_dir):
         os.makedirs(new_dir)
     attr_file = os.path.join(data_path, point_name, point_file)
