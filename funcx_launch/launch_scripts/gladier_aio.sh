@@ -20,6 +20,7 @@ REPACK_INPUT="$(/usr/bin/dirname "${OUTPUT_DIR}")"
 
 INDEX_SCRIPT=/home/aps34ide/laue_src/laue-tools/pipeline/pyLaueGo.py
 INDEX_INPUT="$(/usr/bin/dirname "${OUTPUT_DIR}")"
+INDEX_CONFIG=/eagle/APSDataProcessing/aps34ide/config/defaults_34ide.yml
 
 cd ${CWD}
 
@@ -54,7 +55,7 @@ mpiexec -n 1 --ppn 1 --depth=\${NDEPTH} --cpu-bind depth --env NNODES=\${NNODES}
     python ${REPACK_SCRIPT} ${REPACK_INPUT} ${REPACK_DIR} --s --p ${POINT_NAME}
 
 mpiexec -n 1 --ppn 1 --depth=\${NDEPTH} --cpu-bind depth --env NNODES=\${NNODES}  --env OMP_NUM_THREADS=\${NTHREADS} -env OMP_PLACES=threads \\
-    python ${INDEX_SCRIPT} --filefolder ${REPACK_DIR} --outputFolder ${INDEX_DIR}
+    python ${INDEX_SCRIPT} --configFile ${INDEX_CONFIG} --filefolder ${REPACK_DIR} --outputFolder ${INDEX_DIR}
 
 " | \
 qsub -A 9169 \
