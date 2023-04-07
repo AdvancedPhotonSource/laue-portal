@@ -3,6 +3,7 @@ RANKS_PER_NODE=32
 INPUT_DIR=$1
 OUTPUT_DIR=$2
 REPACK_DIR=$3
+INDEX_DIR=$4
 START_IM=0
 
 BASENAME=$(/usr/bin/basename ${INPUT_DIR})
@@ -16,6 +17,9 @@ CWD=/home/aps34ide/laue_src/laue-parallel/logs_gladier
 
 REPACK_SCRIPT=/home/aps34ide/laue_src/laue-gladier/repackage/repack_polaris.py
 REPACK_INPUT="$(/usr/bin/dirname "${OUTPUT_DIR}")"
+
+INDEX_SCRIPT=/home/aps34ide/laue_src/laue-tools/pipeline/pyLaueGo.py
+INDEX_INPUT="$(/usr/bin/dirname "${OUTPUT_DIR}")"
 
 cd ${CWD}
 
@@ -48,6 +52,9 @@ mpiexec -n \${NTOTRANKS} --ppn \${NRANKS_PER_NODE} --depth=\${NDEPTH} --cpu-bind
 
 mpiexec -n 1 --ppn 1 --depth=\${NDEPTH} --cpu-bind depth --env NNODES=\${NNODES}  --env OMP_NUM_THREADS=\${NTHREADS} -env OMP_PLACES=threads \\
     python ${REPACK_SCRIPT} ${REPACK_INPUT} ${REPACK_DIR} --s --p ${POINT_NAME}
+
+mpiexec -n 1 --ppn 1 --depth=\${NDEPTH} --cpu-bind depth --env NNODES=\${NNODES}  --env OMP_NUM_THREADS=\${NTHREADS} -env OMP_PLACES=threads \\
+    python ${INDEX_SCRIPT} --filefolder ${REPACK_DIR} --outputFolder ${INDEX_DIR}
 
 " | \
 qsub -A 9169 \

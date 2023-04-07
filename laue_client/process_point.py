@@ -34,7 +34,7 @@ def wait_callback(*args, **kwargs):
 
 ## Main execution of this "file" as a Standalone client
 if __name__ == '__main__':
-    out_exp_name = 'test_exp'
+    scan_name = 'test_exp'
 
     args = arg_parse()
 
@@ -51,9 +51,10 @@ if __name__ == '__main__':
     point_file = os.path.basename(args.point_path)
 
     ## Flow inputs necessary for each tool on the flow definition.
-    results_folder = f'results/{out_exp_name}'
-    scan_folder = f'scans/{out_exp_name}'
-    repacks_folder = f'repacks/{out_exp_name}'
+    results_folder = f'{args.experiment_name}/results/{scan_name}'
+    scan_folder = f'{args.experiment_name}/scans/{scan_name}'
+    repacks_folder = f'{args.experiment_name}/repacks/{scan_name}'
+    index_folder = f'{args.experiment_name}/indexes/{scan_name}'
     point_folder = point_file.split('.')[0]
     flow_input = {
         'input': {
@@ -67,6 +68,7 @@ if __name__ == '__main__':
             'im_dir': os.path.join(conf['eagle_34ide']['absolute'], scan_folder, point_file),
             'out_dir': os.path.join(conf['eagle_34ide']['absolute'], results_folder, point_folder),
             'repack_dir': os.path.join(conf['eagle_34ide']['absolute'], repacks_folder, point_folder),
+            'index_dir': os.path.join(conf['eagle_34ide']['absolute'], repacks_folder, index_folder),
             'funcx_endpoint_compute': uids['endpoint'],
 
             # From Eagle
