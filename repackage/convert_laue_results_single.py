@@ -56,7 +56,7 @@ def write_to_hd5(args):
     depth = np.array([depth])
     fn = new_dir + '/out_' + scannumber + '_' + str(ind) + '.h5'
     shutil.copyfile(attr_file, fn)
-    f = h5py.File(fn, "w")
+    f = h5py.File(fn, "r+")
     f.create_dataset('entry1/data/data', data=data, dtype='float32')
     f.create_dataset('entry1/depth', data=depth, dtype='float32')
     f.close()
@@ -101,7 +101,7 @@ def repackage_files(file_path, data_path, out_path, ptrepack_path, is_single_fol
     shutil.copy(attr_file, copy_attr_file)
     attr_file = copy_attr_file
     in_path = os.path.join(data_path, point_name)
-    compress_remove_ds(attr_file, in_path, ptrepack_path)
+    compress_remove_ds(attr_file, out_path, ptrepack_path)
 
     data_files = [data_dir + '/' + fn for fn in data_files]
     # get shapes from the last file

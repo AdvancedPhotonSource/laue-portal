@@ -27,6 +27,8 @@ cd ${CWD}
 echo "
 cd \${PBS_O_WORKDIR}
 
+module load gsl
+module load cray-hdf5
 module load conda
 conda activate ${CONDA_PATH}
 
@@ -53,6 +55,12 @@ mpiexec -n \${NTOTRANKS} --ppn \${NRANKS_PER_NODE} --depth=\${NDEPTH} --cpu-bind
 
 mpiexec -n 1 --ppn 1 --depth=\${NDEPTH} --cpu-bind depth --env NNODES=\${NNODES}  --env OMP_NUM_THREADS=\${NTHREADS} -env OMP_PLACES=threads \\
     python ${REPACK_SCRIPT} ${REPACK_INPUT} ${REPACK_DIR} --s --p ${POINT_NAME}
+
+
+echo ${INDEX_DIR}
+mkdir -p ${INDEX_DIR}/p2q
+mkdir -p ${INDEX_DIR}/index
+mkdir -p ${INDEX_DIR}/peaks
 
 mpiexec -n 1 --ppn 1 --depth=\${NDEPTH} --cpu-bind depth --env NNODES=\${NNODES}  --env OMP_NUM_THREADS=\${NTHREADS} -env OMP_PLACES=threads \\
     python ${INDEX_SCRIPT} --configFile ${INDEX_CONFIG} --filefolder ${REPACK_DIR} --outputFolder ${INDEX_DIR}
