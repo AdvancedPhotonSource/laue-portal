@@ -62,7 +62,7 @@ mkdir -p ${INDEX_DIR}/p2q
 mkdir -p ${INDEX_DIR}/index
 mkdir -p ${INDEX_DIR}/peaks
 
-mpiexec -n 1 --ppn 1 --depth=\${NDEPTH} --cpu-bind depth --env NNODES=\${NNODES}  --env OMP_NUM_THREADS=\${NTHREADS} -env OMP_PLACES=threads \\
+mpiexec -n 32 --ppn 32 --depth=\${NDEPTH} --cpu-bind depth --env NNODES=\${NNODES}  --env OMP_NUM_THREADS=\${NTHREADS} -env OMP_PLACES=threads \\
     python ${INDEX_SCRIPT} --configFile ${INDEX_CONFIG} --filefolder ${REPACK_DIR} --outputFolder ${INDEX_DIR}
 
 " | \
