@@ -19,12 +19,17 @@ export default function RootLayout({
   return (
     <html lang="en" data-theme="light">
       <body className={inter.className}>
-        <div className="drawer lg:drawer-open">
-          <input id="my-drawer-2" type="checkbox" className="drawer-toggle" />
-          <div className="drawer-content flex flex-col items-center justify-center">
-            <Navbar />
-            {children}
-            <label htmlFor="my-drawer-2" className="btn btn-primary drawer-button lg:hidden">Open drawer</label>
+        <Navbar />
+        <div className="drawer drawer-open">
+          <input id="my-drawer" type="checkbox" className="drawer-toggle" /> {/* Invisible control button */}
+          <div className="drawer-content flex flex-col bg-base-200">
+            <div className="p-5">
+              <div className="card bg-base-100 shadow-xl">
+                <div className="card-body">
+                  {children}
+                </div>
+              </div>
+            </div>
           </div>
           <Sidebar />
         </div>
