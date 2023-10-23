@@ -1,10 +1,8 @@
 import Image from 'next/image'
-import Navbar from './components/navbar'
 
 export default function Home() {
   return (
     <main className="">
-      <Navbar />  
       <div className="overflow-x-auto">
         <table className="table table-xs">
           {/* head */}
