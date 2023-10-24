@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import Navbar from './components/navbar'
-import Sidebar from './containers/sidebar'
+import Sidebar from './components/sidebar'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -19,19 +19,17 @@ export default function RootLayout({
   return (
     <html lang="en" data-theme="light">
       <body className={inter.className}>
-        <Navbar />
-        <div className="drawer drawer-open">
-          <input id="my-drawer" type="checkbox" className="drawer-toggle" /> {/* Invisible control button */}
-          <div className="drawer-content flex flex-col bg-base-200">
-            <div className="p-5">
-              <div className="card bg-base-100 shadow-xl">
-                <div className="card-body">
-                  {children}
-                </div>
+        <div>
+          <div className="drawer drawer-open flex-col h-full overflow-hidden">
+            <input id="my-drawer" type="checkbox" className="drawer-toggle" /> {/* Invisible control button */}
+            <div className="drawer-content bg-base-200">
+              <Navbar />
+              <div className="p-5 mt-1 flex-1 overflow-auto h-0 min-h-[90%]">
+                {children}
               </div>
             </div>
+            <Sidebar />
           </div>
-          <Sidebar />
         </div>
       </body>
     </html>

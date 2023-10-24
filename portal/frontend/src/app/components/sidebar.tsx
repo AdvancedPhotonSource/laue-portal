@@ -10,8 +10,14 @@ export default function Sidebar() {
   const nonActiveStyle = "";
   return (
     <div className="drawer-side">
+    <div>
+        <div className="navbar bg-base-100 flex-col">
+            <div className="flex-1">
+                <a className="btn btn-ghost normal-case text-xl" href="/">Laue Portal</a>
+            </div>
+        </div>
       <label htmlFor="my-drawer-2" aria-label="close sidebar" className="drawer-overlay"></label>
-      <ul className="menu w-80 min-h-full text-base-content">
+      <ul className="menu text-base-content">
         {/* Sidebar content here */}
         <li>
           <Link href="/scans" className={currentRoute === '/scans' ? activeStyle : nonActiveStyle}>
@@ -38,6 +44,7 @@ export default function Sidebar() {
           </Link>
         </li>
       </ul>
+    </div>
     </div>
   )
 }
