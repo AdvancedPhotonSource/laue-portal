@@ -20,11 +20,11 @@ export default function RootLayout({
     <html lang="en" data-theme="light">
       <body className={inter.className}>
         <div>
-          <div className="drawer drawer-open flex-col h-full overflow-hidden">
+          <div className="drawer drawer-open flex-col h-full w-full overflow-hidden">
             <input id="my-drawer" type="checkbox" className="drawer-toggle" /> {/* Invisible control button */}
             <div className="drawer-content bg-base-200">
               <Navbar />
-              <div className="p-5 mt-1 flex-1 overflow-auto h-0 min-h-[90%]">
+              <div className="p-5 mt-1 flex-1 overflow-auto h-0 min-h-[90%] w-0 min-w-[100%]">
                 {children}
               </div>
             </div>

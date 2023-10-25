@@ -22,39 +22,41 @@ export default function Scans() {
 
 
   return (
-    <div className="card bg-base-100 shadow-xl">
+    <div className="card bg-base-100 shadow-xl h-0 min-h-[100%]">
       <div className="card-body">
-        <div className="flow-root">
+        <div className="">
           <h1 className="card-title float-left">Scans</h1>
           <input type="text" placeholder="Search" className="input input-sm input-bordered float-right" />
         </div>
         <div className="divider"></div>
-        <table className="table table-zebra">
-          <thead>
-            <tr>
+        <div className="overflow-scroll h-0 min-h-[90%]">
+          <table className="table table-xs table-zebra">
+            <thead>
+              <tr>
+                {
+                  scans.headers?.map((header, key) =>
+                    <th className="max-w-[25rem]" key={key}>{header}</th>
+                  )
+                }
+              </tr>
+            </thead>
+            <tbody>
               {
-                scans.headers?.map((header, key) =>
-                  <th key={key}>{header}</th>
+                scans.data?.map((scan, key) =>
+                  <tr key={key}>
+                    {
+                      scans.headers?.map((header, key) =>
+                        <td key={key}>{scan[header]}</td>
+                      )
+                    }
+
+                  </tr>
                 )
               }
-            </tr>
-          </thead>
-          <tbody>
-            {
-              scans.data?.map((scan, key) =>
-                <tr key={key}>
-                  {
-                    scans.headers?.map((header, key) =>
-                      <td key={key}>{scan[header]}</td>
-                    )
-                  }
 
-                </tr>
-              )
-            }
-
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )

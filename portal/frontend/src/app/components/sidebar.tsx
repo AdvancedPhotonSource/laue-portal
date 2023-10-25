@@ -11,7 +11,7 @@ export default function Sidebar() {
   return (
     <div className="drawer-side">
     <div>
-        <div className="navbar bg-base-100 flex-col">
+        <div className="navbar bg-base-100 flex-col w-64">
             <div className="flex-1">
                 <a className="btn btn-ghost normal-case text-xl" href="/">Laue Portal</a>
             </div>
