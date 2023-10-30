@@ -9,8 +9,7 @@ export default function Scans() {
   useEffect(() => {
     const fetchata = async () => {
 
-      const response = await fetch(
-        'api/sample_scans');
+      const response = await fetch('api/sample_scans');
       const data = await response.json();
       
       setScans(data)

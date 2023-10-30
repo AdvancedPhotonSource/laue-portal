@@ -1,4 +1,8 @@
-export default function ParamField({size, fieldName}) {
+import React, {useState} from 'react'
+
+export default function ParamField({size, fieldName, defaultValue}) {
+  const [value, setValue] = useState(defaultValue)
+
   let width;
 
   // Workaround for tailwind. Needs to see whole custom names
@@ -15,7 +19,10 @@ export default function ParamField({size, fieldName}) {
       <label className="label">
         <span className="label-text">{fieldName}</span>
       </label>
-      <input type="text join-item" className={`input input-bordered w-full`} />
+      <input type="text" 
+             className={`input input-bordered w-full`} 
+             defaultValue={defaultValue}
+             />
   </div>
   )
 }
