@@ -1,75 +1,165 @@
+import FieldCkbx from "./checkbox";
+import CollapseCard from "./collapse_card";
+import FieldRow from "./field_row";
 import ParamField from "./param_field";
-import ParamField2 from "./param_field_2";
+
+const FIELD_SIZE = 500
+const FIELD_SIZE_SM = 50
+
 
 export default function Reconstruct() {
+
+
+
     return (
         <div className="space-y-4">
             <div className="card bg-base-100 shadow-xl">
                 <div className="card-body">
-                    <ParamField2 size={0.5} fieldName={"Dataset"} />
-                    <ParamField2 size={0.5} fieldName={"Input Layers"} />
-                    <ParamField2 size={0.5} fieldName={"Threshold"} />
-                    <ParamField2 size={0.5} fieldName={"Pixel Range"} />
-                    <ParamField2 size={0.5} fieldName={"Reconstruction Name"} />
-                    <ParamField2 size={0.5} fieldName={"Depth Range"} />
-                </div>
-            </div>
-            <div className="collapse shadow-xl bg-base-100 collapse-plus">
-                <input type="checkbox" />
-                <div className="collapse-title text-xl font-medium bg-100 ">
-                    Calibration
-                </div>
-                <div className="collapse-content">
-                    <div className="flex flex-row gap-x-5">
-                        <ParamField2 size={0.5} fieldName={"cenx"} />
-                        <ParamField2 size={0.5} fieldName={"dist"} />
-                        <ParamField2 size={0.5} fieldName={"cenz"} />
-                    </div>
-                    <div className="flex flex-row gap-x-5">
-                        <ParamField2 size={0.5} fieldName={"anglex"} />
-                        <ParamField2 size={0.5} fieldName={"angley"} />
-                        <ParamField2 size={0.5} fieldName={"anglez"} />
-                    </div>
-                    <ParamField2 size={0.5} fieldName={"shift"} />
+                    <FieldRow>
+                        <ParamField size='lg' fieldName={"Dataset"} />
+                        <ParamField size='lg' fieldName={"Input Layers"} />
+                        <ParamField size='lg' fieldName={"Depth Range"} />
+                    </FieldRow>
+                    <FieldRow>
+                        <ParamField size='lg' fieldName={"Threshold"} />
+                        <ParamField size='lg' fieldName={"Pixel Range"} />
+                    </FieldRow>
+
+                    <FieldRow>
+                        <ParamField size={'sm'} fieldName={"Depth Start"} />
+                        <ParamField size={'sm'} fieldName={"Depth End"} />
+                        <ParamField size={'sm'} fieldName={"Resolution"} />
+                    </FieldRow>
+                    <FieldRow>
+                        <ParamField size={'lg'} fieldName={"Reconstruction Name"} />
+                        <button className={`btn btn-primary mt-auto w-[${'lg'}px]`}>Reconstruct</button>
+                    </FieldRow>
                 </div>
             </div>
 
-            <div className="collapse shadow-xl bg-base-100 collapse-plus">
-                <input type="checkbox" />
-                <div className="collapse-title text-xl font-medium bg-100 ">
-                    Mask
-                </div>
-                <div className="collapse-content">
-                    <div className="">
-                        <ParamField2 size={0.5} fieldName={"mask"} />
-                        <ParamField2 size={0.5} fieldName={"reversed"} />
-                        <ParamField2 size={0.5} fieldName={"bitsizes"} />
-                        <ParamField2 size={0.5} fieldName={"thickness"} />
-                        <ParamField2 size={0.5} fieldName={"resolution"} />
-                        <ParamField2 size={0.5} fieldName={"smoothness"} />
-                    </div>
-                </div>
-            </div>
+            <CollapseCard title='Calibration'>
+                <FieldRow>
+                    <ParamField size={'md'} fieldName={"Cenx"} />
+                    <ParamField size={'md'} fieldName={"Dist"} />
+                    <ParamField size={'md'} fieldName={"Cenz"} />
+                </FieldRow>
+                <FieldRow>
+                    <ParamField size={'md'} fieldName={"AngleX"} />
+                    <ParamField size={'md'} fieldName={"AngleY"} />
+                    <ParamField size={'md'} fieldName={"AngleZ"} />
+                </FieldRow>
+                <FieldRow>
+                    <ParamField size={'md'} fieldName={"Shift"} />
+                </FieldRow>
+            </CollapseCard>
 
-            <div className="collapse shadow-xl bg-base-100 collapse-plus">
-                <input type="checkbox" />
-                <div className="collapse-title text-xl font-medium bg-100 ">
-                    Motor Path
-                </div>
-                <div className="collapse-content">
-                    <p>hello</p>
-                </div>
-            </div>
+            <CollapseCard title="Mask">
+                <FieldRow>
+                    <ParamField size={'lg'} fieldName={"Mask"} />
+                    <FieldCkbx label={'Reversed'} />
+                </FieldRow>
+                <FieldRow>
+                    <ParamField size={'sm'} fieldName={"BitSize 0"} />
+                    <ParamField size={'sm'} fieldName={"BitSize 1"} />
+                </FieldRow>
+                <FieldRow>
+                    <ParamField size={'lg'} fieldName={"Thickness"} />
+                    <ParamField size={'lg'} fieldName={"Resolution"} />
+                    <ParamField size={'lg'} fieldName={"Smoothness"} />
+                </FieldRow>
+                <FieldRow>
+                    <ParamField size={'lg'} fieldName={"Widening"} />
+                    <ParamField size={'lg'} fieldName={"Pad"} />
+                    <ParamField size={'lg'} fieldName={"Stretch"} />
+                </FieldRow>
+            </CollapseCard>
 
-            <div className="collapse shadow-xl bg-base-100 collapse-plus">
-                <input type="checkbox" />
-                <div className="collapse-title text-xl font-medium bg-100 ">
-                    Detector
-                </div>
-                <div className="collapse-content">
-                    <p>hello</p>
-                </div>
-            </div>
+            <CollapseCard title="Motor Path">
+                <FieldRow>
+                    <ParamField size={'lg'} fieldName={"Step Size"} />
+                </FieldRow>
+
+                <FieldRow>
+                    <ParamField size={'sm'} fieldName={"Rot A"} />
+                    <ParamField size={'sm'} fieldName={"Rot B"} />
+                    <ParamField size={'sm'} fieldName={"Rot C"} />
+                </FieldRow>
+
+                <FieldRow>
+                    <ParamField size={'sm'} fieldName={"Ax X"} />
+                    <ParamField size={'sm'} fieldName={"Ax Y"} />
+                    <ParamField size={'sm'} fieldName={"Ax Z"} />
+                </FieldRow>
+            </CollapseCard>
+
+            <CollapseCard title="Detector">
+                <FieldRow>
+                    <ParamField size={'sm'} fieldName={"Pixels X"} />
+                    <ParamField size={'sm'} fieldName={"Pixels Y"} />
+                </FieldRow>
+
+                <FieldRow>
+                    <ParamField size={'sm'} fieldName={"Size X (mm)"} />
+                    <ParamField size={'sm'} fieldName={"Size Y (mm)"} />
+                </FieldRow>
+
+                <FieldRow>
+                    <ParamField size={'sm'} fieldName={"Rot A"} />
+                    <ParamField size={'sm'} fieldName={"Rot B"} />
+                    <ParamField size={'sm'} fieldName={"Rot C"} />
+                </FieldRow>
+
+                <FieldRow>
+                    <ParamField size={'sm'} fieldName={"Pos X"} />
+                    <ParamField size={'sm'} fieldName={"Pos Y"} />
+                    <ParamField size={'sm'} fieldName={"Pos Z"} />
+                </FieldRow>
+            </CollapseCard>
+            <CollapseCard title="Algorithm Parameters">
+                <FieldRow>
+                    <ParamField size={'sm'} fieldName={"iters"} />
+                </FieldRow>
+
+                <FieldRow>
+                    <ParamField size={'sm'} fieldName={"pos method"} />
+                    <ParamField size={'sm'} fieldName={"pos regpar"} />
+                    <ParamField size={'sm'} fieldName={"pos init"} />
+                </FieldRow>
+
+                <div className="divider"></div>
+                <FieldRow>
+                    <FieldCkbx label={"Enable Sigrecon"} />
+                </FieldRow>
+
+                <FieldRow>
+                    <ParamField size={'sm'} fieldName={"sig method"} />
+                    <ParamField size={'sm'} fieldName={"sig order"} />
+                    <ParamField size={'sm'} fieldName={"sig scale"} />
+                </FieldRow>
+
+                <FieldRow>
+                    <ParamField size={'sm'} fieldName={"sig maxsize"} />
+                    <ParamField size={'sm'} fieldName={"sig avgsize"} />
+                    <ParamField size={'sm'} fieldName={"sig atol"} />
+                </FieldRow>
+
+                <div className="divider"></div>
+                <FieldRow>
+                    <FieldCkbx label="Enable Enerecon"></FieldCkbx>
+                    <FieldCkbx label="Exact Enerecon"></FieldCkbx>
+                </FieldRow>
+
+                <FieldRow>
+                    <ParamField size={'sm'} fieldName={"ene method"} />
+                </FieldRow>
+            
+                <FieldRow>
+                    <ParamField size={'sm'} fieldName={"ene min"} />
+                    <ParamField size={'sm'} fieldName={"ene max"} />
+                    <ParamField size={'sm'} fieldName={"ene step"} />
+                </FieldRow>
+            </CollapseCard>
+
 
         </div>
     )
