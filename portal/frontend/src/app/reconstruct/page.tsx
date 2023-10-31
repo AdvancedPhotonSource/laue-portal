@@ -14,7 +14,7 @@ const FIELD_SIZE_SM = 50
 
 
 export default function Reconstruct() {
-    const [params, setParams] = useState([])
+        const [params, setParams] = useState([])
 
     useEffect(() => {
         const fetchData = async () => {
@@ -153,7 +153,7 @@ export default function Reconstruct() {
 
                 <div className="divider"></div>
                 <FieldRow>
-                    <FieldCkbx label={"Enable Sigrecon"} defaultValue={params?.algo?.iter}/>
+                    <FieldCkbx label={"Enable Sigrecon"} defaultChecked={params?.algo?.sig}/>
                 </FieldRow>
 
                 <FieldRow>

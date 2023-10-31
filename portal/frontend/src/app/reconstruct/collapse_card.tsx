@@ -1,4 +1,4 @@
-export default function CollapseCard({ title, children }) {
+export default function CollapseCard({ title, children }: {title: string, children: any} ) {
     return (
         <div className="collapse shadow-xl bg-base-100 collapse-plus">
             <input type="checkbox" />

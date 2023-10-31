@@ -1,6 +1,6 @@
 import React, {useState} from 'react'
 
-export default function ParamField({size, fieldName, defaultValue}) {
+export default function ParamField({size, fieldName, defaultValue}: {size: string, fieldName: string, defaultValue: string}) {
   const [value, setValue] = useState(defaultValue)
 
   let width;

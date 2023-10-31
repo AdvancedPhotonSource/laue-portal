@@ -1,4 +1,4 @@
-export default function FieldCkbx({label, defaultChecked}) {
+export default function FieldCkbx({label, defaultChecked}: {label: string, defaultChecked: boolean}) {
     return (
         <div className="form-control">
             <label className="label cursor-pointer space-x-2">
