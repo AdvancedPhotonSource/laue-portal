@@ -24,7 +24,7 @@ export default function Scans() {
     <div className="card bg-base-100 shadow-xl h-0 min-h-[100%]">
       <div className="card-body">
         <div className="">
-          <h1 className="card-title float-left">Scans</h1>
+          <h1 className="card-title float-left">Results</h1>
           <input type="text" placeholder="Search" className="input input-sm input-bordered float-right" />
         </div>
         <div className="divider"></div>
@@ -32,7 +32,6 @@ export default function Scans() {
           <table className="table table-xs table-zebra">
             <thead>
               <tr>
-                <th className="max-w-[25rem]" >Recon</th>
                 {
                   scans.headers?.map((header, key) =>
                     <th className="max-w-[25rem]" key={key}>{header}</th>
@@ -44,13 +43,6 @@ export default function Scans() {
               {
                 scans.data?.map((scan, key) =>
                   <tr key={key}>
-                    <td>
-                      <a href={`/reconstruct?scan=${scan['#']}`} >
-                        <button className="btn btn-square btn-neutral btn-sm">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                        </button>
-                      </a>
-                    </td>
                     {
                       scans.headers?.map((header, key) =>
                         <td key={key}>{scan[header]}</td>

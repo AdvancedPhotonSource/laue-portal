@@ -57,7 +57,7 @@ export default function Reconstruct() {
                     </FieldRow>
                     <FieldRow>
                         <ParamField size={'lg'} fieldName={"Reconstruction Name"} />
-                        <button className={`btn btn-primary mt-auto w-[${'lg'}px]`}>Reconstruct</button>
+                        <button className={`btn btn-neutral mt-auto w-[${'lg'}px]`}>Reconstruct</button>
                     </FieldRow>
                 </div>
             </div>
