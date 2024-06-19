@@ -4,7 +4,7 @@ import os
 import json
 import shutil
 
-DELAY = 0
+DELAY = 45
 
 base_dir = '/data34a/Run2023-1/Sheyfer323_NiWireMask/Ni2_50mN_mask'
 staging_dir = '/clhome/EPIX34ID/dev/src/experiment_staging'
@@ -20,7 +20,7 @@ else:
         completed_ims = json.load(comp_f)
 
 prev_ims = [] 
-for i in range(25):
+for i in range(50):
     im = images[i]
     if im in completed_ims:
         continue
