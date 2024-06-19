@@ -20,7 +20,7 @@ else:
         completed_ims = json.load(comp_f)
 
 prev_ims = [] 
-for i in range(25):
+for i in range(50):
     im = images[i]
     if im in completed_ims:
         continue
