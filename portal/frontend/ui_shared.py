@@ -13,15 +13,10 @@ def update_active_links(pathname):
 """
 navbar = dbc.NavbarSimple(
     children=[
-        dbc.NavItem(dbc.NavLink("Data Import", href="/")),
-        dbc.NavItem(dbc.NavLink("Alignment", href="/alignment")),
-        dbc.NavItem(dbc.NavLink("Reconstruction", href="/reconstruction")),
-        dbc.NavItem(dbc.NavLink("Visualization", href="#")),
-        dbc.Button('Export', id='export-params', color='info', className='mr-1'),
-        dbc.Button('Import', id='import-params', color='info', className='ml-1'),
-
+        dbc.NavItem(dbc.NavLink("Reconstructions", href="/")),
+        dbc.NavItem(dbc.NavLink("New Reconstruction", href="/new-recon")),
     ],
-    brand="Magnetic Tomo Reconstruction",
+    brand="Coded Apeture Laue",
     brand_href="/",
     color="primary",
     className="navbar-expand-lg",
