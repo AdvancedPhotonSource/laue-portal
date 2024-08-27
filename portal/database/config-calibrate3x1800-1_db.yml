@@ -1,0 +1,86 @@
+ver: 1.0
+
+file:
+    path: '/Users/mrdiamond/Documents/laue_local/Si_Norcada_90_calib3'
+    output: '/Users/mrdiamond/Documents/laue_local/laue-code/outputs/norcada/recon_17'
+    range: [0, 541, 1]
+    threshold: 20
+    frame: [0, 2048, 0, 2048]
+    offset: [0, 0]
+    ext: 'h5'
+    stacked: 'True'
+
+    h5:
+        key: '/entry1/data/data'
+
+comp:
+    server: 'local'
+    workers: 8
+    functionid: 'd8461388-9442-4008-a5f1-2cfa112f6923'
+
+geo:
+
+    mask:
+        path: 'masks/code-debruijn-2-8-000.npy'
+        reversed: 'False'
+        bitsizes: [15, 7.5]
+        thickness: 3.7
+        resolution: 0.5
+        smoothness: 0
+        alpha: 0
+        widening: 0
+        pad: 300
+        stretch: 1.0
+        shift: 0.21
+
+        focus:
+            cenx: 0.44223633
+            dist: 1.60844727
+            anglez: 43.84902344
+            angley: -0.47070312
+            anglex: 0.09179688
+            cenz: 0.75195312
+
+        cal:
+            id: 1
+            path: 'calibrate3_maskx1800'
+
+    scanner:
+        step: 0.5
+        rot: [0.0045, -0.00684, -3.375e-05]
+        axis: [0.70710678118, 0.70710678118, 0]
+
+    detector:
+        shape: [2048, 2048]
+        size: [409.6, 409.6]
+        rot: [-1.20161887, -1.21404493, -1.21852276]
+        pos: [28.828, 2.715, 512.993]
+
+    source:
+        offset: 0
+        grid: [-0.2, 0.2, 0.001]
+
+algo:
+    iter: 1
+
+    pos:
+        method: 'lsqr'
+        regpar: 0
+        init: 'spline'
+
+    sig:
+        recon: 'True'
+        method: 'splines'
+        order: 5
+        scale: 1
+
+        init:
+            maxsize: 64
+            avgsize: 10
+            atol: 4
+
+    ene:
+        recon: 'True'
+        exact: 'True'
+        method: 'lsqr'
+        range: [5, 30, 1]
