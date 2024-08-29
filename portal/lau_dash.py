@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import numpy as np
 from dataclasses import dataclass
-import ui_shared
+import portal.ui_shared as ui_shared
 import pandas as pd
 
 # Assume images are numpy arrays
@@ -20,35 +20,6 @@ app.layout = html.Div([
     html.Div(id='page-content')
 ])
 
-demo_data = pd.read_csv('demo.csv')
-
-"""
-cols = []
-demo_data = []
-with open('demo.csv', mode ='r') as file:    
-    csvFile = csv.reader(file)
-    data_cols = next(csvFile)
-    for i, col in enumerate(data_cols):
-        cols.append({"name": col, "id": i})
-    for line in csvFile:
-        row = {}
-        for i, value in enumerate(line):
-                if i < len(data_cols):
-                    row[data_cols[i]] = value
-        demo_data.append(row)
-
-print(cols)
-#print(data)
-
-"""
-columns = []
-for col in demo_data.columns:
-    col_options = {"name": col, "id": col, "deletable": True}
-    for value in demo_data[col]:
-        if not (isinstance(value, str)):
-            col_options["type"] = "numeric"
-    columns.append(col_options)
-
 
 # Add a Plotly graph and a slider to the application layout
 recon_catalog_layout = dbc.Container(
@@ -58,8 +29,6 @@ recon_catalog_layout = dbc.Container(
             [
                 dash_table.DataTable(
                     id='recon-table',
-                    columns=columns,
-                    data=demo_data.to_dict('records'),
                     filter_action="native",
                     sort_action="native",
                     sort_mode="multi",

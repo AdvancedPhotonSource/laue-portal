@@ -1,4 +1,4 @@
-import db_schema
+import laue_portal.database.db_schema as db_schema
 import sqlalchemy
 import argparse
 """
