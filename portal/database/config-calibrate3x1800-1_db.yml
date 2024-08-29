@@ -8,7 +8,7 @@ file:
     frame: [0, 2048, 0, 2048]
     offset: [0, 0]
     ext: 'h5'
-    stacked: 'True'
+    stacked: True
 
     h5:
         key: '/entry1/data/data'
@@ -22,7 +22,7 @@ geo:
 
     mask:
         path: 'masks/code-debruijn-2-8-000.npy'
-        reversed: 'False'
+        reversed: False
         bitsizes: [15, 7.5]
         thickness: 3.7
         resolution: 0.5
@@ -69,7 +69,7 @@ algo:
         init: 'spline'
 
     sig:
-        recon: 'True'
+        recon: True
         method: 'splines'
         order: 5
         scale: 1
@@ -80,7 +80,7 @@ algo:
             atol: 4
 
     ene:
-        recon: 'True'
-        exact: 'True'
+        recon: True
+        exact: True
         method: 'lsqr'
         range: [5, 30, 1]
