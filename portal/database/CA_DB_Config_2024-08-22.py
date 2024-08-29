@@ -37,6 +37,15 @@ params_tables_fields_files = [Path(f).with_suffix('.csv') for f in
                               'recon',
                              ]]
 
+params_tables_fields = []
+for file in params_tables_fields_files:
+    with open(file,'r') as f:
+        csvFile = csv.reader(f, delimiter='\t')
+        for i,line in enumerate(csvFile):
+            if i == 0:
+                params_tables_fields.append(line)
+            else:
+                pass
 
 metadata_fields = [
   'Dataset ID',
