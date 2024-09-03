@@ -134,3 +134,9 @@ dmypy.json
 funcx_launch/funcx-endpoint
 funcx_launch/uids.json
 uids.json
+
+# Sandbox scripts
+sandbox.ipynb
+
+# Databases
+*.db
