@@ -1,1 +1,1 @@
-db_file = 'database/CA_params.db'
+db_file = 'CA_params.db'

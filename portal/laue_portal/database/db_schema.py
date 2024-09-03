@@ -165,7 +165,7 @@ class Recon(Base):
     algo_ene_range: Mapped[list[int]] = mapped_column(JSON)
 
     def __repr__(self) -> str:
-        pass # TODO: Consider implemeting for debugging
+        return f'Recon {self.recon_id}' # TODO: Consider implemeting for debugging
 
 # NOTE: Not Implemented
 MASK_FOCUT_TABLE = [

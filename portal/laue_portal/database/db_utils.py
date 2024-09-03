@@ -1,4 +1,4 @@
-import database.db_schema as db_schema
+import laue_portal.database.db_schema as db_schema
 import config
 import yaml
 import sqlalchemy
