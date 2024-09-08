@@ -7,6 +7,7 @@ import base64
 import yaml
 import laue_portal.database.db_utils as db_utils
 import datetime
+import laue_portal.database.db_schema as db_schema
 
 dash.register_page(__name__)
 
@@ -129,6 +130,30 @@ def upload_config(contents):
     State('pixels_y', 'value'),
     State('size_x', 'value'),
     State('size_y', 'value'),
+    State('det_rot_a', 'value'),
+    State('det_rot_b', 'value'),
+    State('det_rot_c', 'value'),
+    State('det_pos_x', 'value'),
+    State('det_pos_y', 'value'),
+    State('det_pos_z', 'value'),
+
+    State('iters', 'value'),
+    State('pos_method', 'value'),
+    State('pos_regpar', 'value'),
+    State('pos_init', 'value'),
+    State('recon_sig', 'value'),
+    State('sig_method', 'value'),
+    State('sig_order', 'value'),
+    State('sig_scale', 'value'),
+    State('sig_maxsize', 'value'),
+    State('sig_avgsize', 'value'),
+    State('sig_atol', 'value'),
+    State('recon_ene', 'value'),
+    State('exact_ene', 'value'),
+    State('ene_method', 'value'),
+    State('ene_min', 'value'),
+    State('ene_max', 'value'),
+    State('ene_step', 'value'),
 
     prevent_initial_call=True,
 )
@@ -154,7 +179,7 @@ def submit_config(n,
     shift,
 
     mask_path,
-    reversed,
+    mask_reversed,
     bitsize_0,
     bitsize_1,
     thickness,
@@ -174,6 +199,105 @@ def submit_config(n,
     pixels_y,
     size_x,
     size_y,
+    det_rot_a,
+    det_rot_b,
+    det_rot_c,
+    det_pos_x,
+    det_pos_y,
+    det_pos_z,
+
+    iters,
+    pos_method,
+    pos_regpar,
+    pos_init,
+    recon_sig,
+    sig_method,
+    sig_order,
+    sig_scale,
+    sig_maxsize,
+    sig_avgsize,
+    sig_atol,
+    recon_ene,
+    exact_ene,
+    ene_method,
+    ene_min,
+    ene_max,
+    ene_step,
     
 ):
+    # TODO: Input validation and reponse
+    
+    recon = db_schema.Recon(
+        date=datetime.datetime.now(),
+        commit_id='TEST',
+        calib_id='TEST',
+        runtime='TEST',
+        computer_name='TEST',
+        dataset_id=0,
+        notes='TODO', 
+
+        file_path='TODO',
+        file_output='TODO',
+        file_stacked=True,
+        file_range=[frame_start, frame_end],
+        file_threshold=0,
+        file_frame=[x_start, x_end, y_start, y_end],
+        file_offset=0, #TODO
+        file_ext='TODO',
+        file_h5_key='TODO',
+        
+        comp_server='TODO',
+        comp_workers=0,
+        comp_usegpu=True,
+        comp_batch_size=0,
+        
+        geo_mask_path=mask_path,
+        geo_mask_reversed=mask_reversed,
+        geo_mask_bitsizes=[bitsize_0, bitsize_1],
+        geo_mask_thickness=thickness,
+        geo_mask_resolution=resolution,
+        geo_mask_smoothness=0,
+        geo_mask_alpha=0,
+        geo_mask_widening=widening,
+        geo_mask_pad=pad,
+        geo_mask_stretch=stretch,
+        geo_mask_shift=shift,
+
+        geo_mask_focus_cenx=cenx,
+        geo_mask_focus_dist=ceny, 
+        geo_mask_focus_anglez=anglez,
+        geo_mask_focus_angley=angley,
+        geo_mask_focus_anglex=anglex,
+        geo_mask_focus_cenz=cenz,
+
+        geo_mask_cal_id=0,
+        geo_mask_cal_path='TODO',
+
+        geo_scanner_step=step,
+        geo_scanner_rot=[mot_rot_a, mot_rot_b, mot_rot_c],
+        geo_scanner_axis=[mot_axis_x, mot_axis_y, mot_axis_z],
+
+        geo_detector_shape=[pixels_x, pixels_y],
+        geo_detector_size=[size_x, size_y],
+        geo_detector_rot=[det_rot_a, det_rot_b, det_rot_c],
+        geo_detector_pos=[det_pos_x, det_pos_y, det_pos_z],
+
+        algo_iter=iters,
+        algo_pos_method=pos_method,
+        algo_pos_regpar=pos_regpar,
+        algo_pos_init=pos_init,
+        algo_sig_recon=recon_sig,
+        algo_sig_method=sig_method,
+        algo_sig_order=sig_order,
+        algo_sig_scale=sig_scale,
+        algo_sig_init_maxsize=sig_maxsize,
+        algo_sig_init_avgsize=sig_avgsize,
+        algo_sig_init_atol=sig_atol,
+        algo_sig_recon_ene=recon_ene,
+        algo_sig_exact_ene=exact_ene,
+        algo_sig_ene_method=ene_method,
+        algo_sig_ene_range=[ene_min, ene_max, ene_step],
+    )
+    
+    
     print('Parsed')
