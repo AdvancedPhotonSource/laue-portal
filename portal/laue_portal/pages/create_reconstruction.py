@@ -8,6 +8,7 @@ import yaml
 import laue_portal.database.db_utils as db_utils
 import datetime
 import laue_portal.database.db_schema as db_schema
+from sqlalchemy.orm import Session
 
 dash.register_page(__name__)
 
@@ -136,6 +137,7 @@ def upload_config(contents):
     State('det_pos_x', 'value'),
     State('det_pos_y', 'value'),
     State('det_pos_z', 'value'),
+    State('source_offset', 'value'),
 
     State('iters', 'value'),
     State('pos_method', 'value'),
@@ -205,6 +207,7 @@ def submit_config(n,
     det_pos_x,
     det_pos_y,
     det_pos_z,
+    source_offset,
 
     iters,
     pos_method,
@@ -281,6 +284,8 @@ def submit_config(n,
         geo_detector_size=[size_x, size_y],
         geo_detector_rot=[det_rot_a, det_rot_b, det_rot_c],
         geo_detector_pos=[det_pos_x, det_pos_y, det_pos_z],
+        geo_source_offset=source_offset,
+        geo_source_grid=[depth_start, depth_end, depth_step],
 
         algo_iter=iters,
         algo_pos_method=pos_method,
@@ -293,11 +298,16 @@ def submit_config(n,
         algo_sig_init_maxsize=sig_maxsize,
         algo_sig_init_avgsize=sig_avgsize,
         algo_sig_init_atol=sig_atol,
-        algo_sig_recon_ene=recon_ene,
-        algo_sig_exact_ene=exact_ene,
-        algo_sig_ene_method=ene_method,
-        algo_sig_ene_range=[ene_min, ene_max, ene_step],
+        algo_ene_recon=recon_ene,
+        algo_ene_exact=exact_ene,
+        algo_ene_method=ene_method,
+        algo_ene_range=[ene_min, ene_max, ene_step],
     )
+
+    with Session(db_utils.ENGINE) as session:
+        session.add(recon)
+        session.commit()
     
-    
-    print('Parsed')
+    set_props("alert-submit", {'is_open': True, 
+                                'children': 'Config Added to Database',
+                                'color': 'success'})

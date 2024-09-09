@@ -211,6 +211,11 @@ recon_form = dbc.Row(
                                         _recon_field("Pos Z", 'det_pos_z', size='sm'),
                                     ]
                                 ),
+                                _recon_stack(
+                                    [
+                                        _recon_field("Offest", 'source_offset', size='sm'),
+                                    ]
+                                )
                             ],
                             title="Detector",
                         ),
@@ -326,6 +331,8 @@ def set_form_props(recon, read_only=False):
     set_props("det_pos_x", {'value':recon.geo_detector_pos[0], 'readonly':read_only})
     set_props("det_pos_y", {'value':recon.geo_detector_pos[1], 'readonly':read_only})
     set_props("det_pos_z", {'value':recon.geo_detector_pos[2], 'readonly':read_only})
+    set_props("source_offset", {'value':recon.geo_source_offset, 'readonly':read_only})
+
     set_props('iters', {'value':recon.algo_iter, 'readonly':read_only})
     set_props("pos_method", {'value':recon.algo_pos_method, 'readonly':read_only})
     set_props("pos_regpar", {'value':recon.algo_pos_regpar, 'readonly':read_only})

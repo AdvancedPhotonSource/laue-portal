@@ -45,6 +45,8 @@ layout = html.Div([
             [
                 dbc.ModalHeader(dbc.ModalTitle("Header"), id="modal-results-header"),
                 dbc.ModalBody(html.H1("TODO: Results Display")),
+                dbc.ModalBody(html.H1("TODO2: Results Display")),
+                # Define Plotly Charts for Results Display
             ],
             id="modal-results",
             size="xl",
@@ -158,6 +160,10 @@ def cell_clicked(active_cell):
     elif col == 6:
         set_props("modal-results", {'is_open':True})
         set_props("modal-results-header", {'children':dbc.ModalTitle(f"Results for Recon {row_id}")})
+
+        # Load sample data here
+        # Graph the data
+        # Ouptput to display
          
     print(f"Row {row} and Column {col} was clicked")
     
