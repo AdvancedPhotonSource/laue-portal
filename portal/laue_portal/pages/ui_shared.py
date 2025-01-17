@@ -18,7 +18,7 @@ navbar = dbc.NavbarSimple(
         dbc.NavItem(dbc.NavLink("New Reconstruction", href="/create-reconstruction")),
         dbc.NavItem(dbc.NavLink("Run Monitor", href="/runs")),
     ],
-    brand="Coded Apeture Laue",
+    brand="Coded Aperture Laue",
     brand_href="/",
     color="primary",
     className="navbar-expand-lg",

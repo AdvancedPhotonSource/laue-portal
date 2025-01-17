@@ -168,7 +168,7 @@ class Recon(Base):
         return f'Recon {self.recon_id}' # TODO: Consider implemeting for debugging
 
 # NOTE: Not Implemented
-MASK_FOCUT_TABLE = [
+MASK_FOCUS_TABLE = [
                     'cenx (Z)',
                     'dist (Y)',
                     'anglez (angleX)',

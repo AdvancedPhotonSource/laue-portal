@@ -3,7 +3,7 @@ import sqlalchemy
 import argparse
 """
 Contains the functions to create a new database file. 
-When run as a standalone file, creats a file with the name provided as an argument.
+When run as a standalone file, creates a file with the name provided as an argument.
 """
 
 
