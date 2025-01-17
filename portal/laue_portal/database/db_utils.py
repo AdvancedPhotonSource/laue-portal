@@ -18,7 +18,7 @@ def import_recon_row(recon_object):
     the base data of the file
     """
 
-    # Optinal Params
+    # Optional Params
     use_gpu = recon_object['comp']['use_gpu'] if 'use_gpu' in recon_object['comp'] else False
     batch_size = recon_object['comp']['batch_size'] if 'batch_size' in recon_object['comp'] else 1
 
@@ -93,3 +93,27 @@ def import_recon_row(recon_object):
         algo_ene_range=recon_object['algo']['ene']['range'],
     )
     return recon_row
+
+def export_config(recon_object):
+    yml_obj = {
+
+    'file':{
+            'path':recon_object.file_path,
+            'output':,
+            'range':,
+            '':,
+            '':,
+            '':,
+            '':,
+            '':,
+
+
+
+    },
+
+
+
+    }
+
+    return yml_obj
+yml.dump
