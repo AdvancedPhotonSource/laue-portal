@@ -18,7 +18,7 @@ def import_recon_row(recon_object):
     the base data of the file
     """
 
-    # Optinal Params
+    # Optional Params
     use_gpu = recon_object['comp']['use_gpu'] if 'use_gpu' in recon_object['comp'] else False
     batch_size = recon_object['comp']['batch_size'] if 'batch_size' in recon_object['comp'] else 1
 
