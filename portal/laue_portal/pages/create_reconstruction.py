@@ -102,6 +102,12 @@ def upload_config(contents):
     State('depth_end', 'value'),
     State('depth_step', 'value'),
     State('recon_name', 'value'),
+    
+    State('file_path', 'value'),
+    State('file_output', 'value'),
+    State('data_stacked', 'value'),
+    State('h5_key', 'value'),
+    State('file_offset', 'value'),
 
     State('cenx', 'value'),
     State('ceny', 'value'),
@@ -173,6 +179,12 @@ def submit_config(n,
     depth_step,
     recon_name,
 
+    file_path,
+    file_output,
+    data_stacked,
+    h5_key,
+    file_offset,
+
     cenx,
     ceny,
     cenz,
@@ -240,15 +252,15 @@ def submit_config(n,
         dataset_id=0,
         notes='TODO', 
 
-        file_path='laue_portal/tests/datasets/Si_MaskZ_step', #'TODO',
-        file_output='',#'TODO',
-        file_stacked=True,
+        file_path=file_path,
+        file_output=file_output,
+        file_stacked=data_stacked,
         file_range=[frame_start, frame_end],
         file_threshold=0,
         file_frame=[x_start, x_end, y_start, y_end],
-        file_offset=0, #TODO
+        file_offset=file_offset,
         file_ext='h5', #'TODO',
-        file_h5_key='/entry1/data/data', #'TODO',
+        file_h5_key=h5_key,
         
         comp_server='TODO',
         comp_workers=0,
@@ -307,111 +319,7 @@ def submit_config(n,
 
     with Session(db_utils.ENGINE) as session:
         session.add(recon)
-
-        config_dict = {
-        'file':
-            {
-            'path':recon.file_path,
-            'output':recon.file_output,
-            'range':recon.file_range+[1], #temp
-            'threshold':recon.file_threshold,
-            'frame':recon.file_frame,
-            'offset':recon.file_offset, #temp
-            'ext':recon.file_ext,
-            'stacked':recon.file_stacked,
-            'h5':
-                {
-                'key':recon.file_h5_key,
-                },
-            },
-        'comp':
-            {
-            'server':recon.comp_server,
-            'workers':recon.comp_workers,
-            'functionid':'d8461388-9442-4008-a5f1-2cfa112f6923', #temp
-            'usegpu':recon.comp_usegpu,
-            'batch_size':recon.comp_batch_size,
-            },
-        'geo':
-            {
-            'mask':
-                {
-                'path':recon.geo_mask_path,
-                'reversed':recon.geo_mask_reversed,
-                'bitsizes':recon.geo_mask_bitsizes,
-                'thickness':recon.geo_mask_thickness,
-                'resolution':recon.geo_mask_resolution,
-                'smoothness':recon.geo_mask_smoothness,
-                'alpha':recon.geo_mask_alpha,
-                'widening':recon.geo_mask_widening,
-                'pad':recon.geo_mask_pad,
-                'stretch':recon.geo_mask_stretch,
-                'shift':recon.geo_mask_shift,
-                'focus':
-                    {
-                    'cenx':recon.geo_mask_focus_cenx,
-                    'dist':recon.geo_mask_focus_dist,
-                    'anglez':recon.geo_mask_focus_anglez,
-                    'angley':recon.geo_mask_focus_angley,
-                    'anglex':recon.geo_mask_focus_anglex,
-                    'cenz':recon.geo_mask_focus_cenz,
-                    },
-                'cal':
-                    {
-                    'id':recon.geo_mask_cal_id,
-                    'path':recon.geo_mask_cal_path,
-                    },
-                },
-            'scanner':
-                {
-                'step':recon.geo_scanner_step,
-                'rot':recon.geo_scanner_rot,
-                'axis':recon.geo_scanner_axis,
-                },
-            'detector':
-                {
-                'shape':recon.geo_detector_shape,
-                'size':recon.geo_detector_size,
-                'rot':recon.geo_detector_rot,
-                'pos':recon.geo_detector_pos,
-                },
-            'source':
-                {
-                'offset':recon.geo_source_offset,
-                'grid':recon.geo_source_grid,
-                },
-            },
-        'algo':
-            {
-            'iter':recon.algo_iter,
-            'pos':
-                {
-                'method':recon.algo_pos_method,
-                'regpar':recon.algo_pos_regpar,
-                'init':recon.algo_pos_init,
-                },
-            'sig':
-                {
-                'recon':recon.algo_sig_recon,
-                'method':recon.algo_sig_method,
-                'order':recon.algo_sig_order,
-                'scale':recon.algo_sig_scale,
-                'init':
-                    {
-                    'maxsize':recon.algo_sig_init_maxsize,
-                    'avgsize':recon.algo_sig_init_avgsize,
-                    'atol':recon.algo_sig_init_atol,
-                    },
-                },
-            'ene':
-                {
-                'recon':recon.algo_ene_recon,
-                'exact':recon.algo_ene_exact,
-                'method':recon.algo_ene_method,
-                'range':recon.algo_ene_range,
-                },
-            }
-        }
+        config_dict = db_utils.create_config_obj(recon)
 
         session.commit()
     
