@@ -10,7 +10,7 @@ import logging
 import cold
 import laue_portal.recon.calib_indices as calib_indices
 
-resolve_data = False #True #False
+resolve_data = True #True #False
 
 def make_pixels_df(idx_file,grain_file=None,grain_idx=0):
     #idx_file = 'laue_portal/recon/peaklist.txt'
@@ -92,6 +92,14 @@ def saveh5img(path, name, vals, inds, shape, frame=None, swap=False):
 
     logging.info(f"Saved: {name} in + {path}.h5") #logging.info("Saved: " + str(path) + ".tiff")
 
+def saveh5basic(path, name, vals):
+
+    with h5py.File(path+'.h5', 'a') as f:
+        if name not in f.keys():
+            f.create_dataset(name, data=vals)
+
+    logging.info(f"Saved: {name} in + {path}.h5")
+
 def define_vars(config_dict, indices_selection='CALIB_3_X1800'):
     # Load metadata
     file, comp, geo, algo = config_dict['file'], config_dict['comp'], config_dict['geo'], config_dict['algo'] #cold.config(path)
@@ -145,7 +153,10 @@ def run_recon(config_dict, indices_selection='CALIB_3_X1800', debug=False):
         dat = np.load(dat_file)
     else:
         #dat, ind = cold.load(file, collapsed=True, index=indices)
+        t0_load = time.time()
         dat, ind = cold.load(file, collapsed=True, index=ind)
+        t1_load = time.time()
+        print(f'load {t1_load-t0_load}')
 
         # Save data
         np.save(ind_file, ind)
@@ -169,6 +180,7 @@ def run_recon(config_dict, indices_selection='CALIB_3_X1800', debug=False):
         t1 = time.time()
         dep, lau = cold.resolve(dat, ind, pos, sig, geo, comp)
         t2 = time.time()
+        print(f'decode {t1-t0}', f'resolve {t2-t1}')
 
         # Save data
         np.save(pos_file, pos)
@@ -188,11 +200,18 @@ def run_recon(config_dict, indices_selection='CALIB_3_X1800', debug=False):
     # cold.saveimg(str(output_dir / ('lau' + name_append)), lau, ind, shape_, frame_)
     # # cold.saveimg(file['output'] + '/lau' + str(len(ind)), lau, ind, (file['frame'][1], file['frame'][3]), file['frame'], swap=True)
 
-    # HDF5 save
-    h5path = str(output_dir / ('results' + name_append))
-    saveh5img(h5path, 'ene', ene, ind, shape_, frame_)
-    saveh5img(h5path, 'pos', pos, ind, shape_, frame_)
-    saveh5img(h5path, 'lau', lau, ind, shape_, frame_)
+    # # HDF5 save
+    # h5path_ = str(output_dir / ('img' + 'results' + name_append))
+    # saveh5img(h5path_, 'ene', ene, ind, shape_, frame_)
+    # saveh5img(h5path_, 'pos', pos, ind, shape_, frame_)
+    # saveh5img(h5path_, 'lau', lau, ind, shape_, frame_)
+
+    h5path = str(output_dir / 'results') #('basic' + 'results' + name_append))
+    saveh5basic(h5path, 'ind', ind)
+    saveh5basic(h5path, 'ene', ene)
+    saveh5basic(h5path, 'pos', pos)
+    saveh5basic(h5path, 'sig', sig)
+    saveh5basic(h5path, 'lau', lau)
 
     # # Save a copy of the config file in the output directory
     # config_path = Path(path)
@@ -209,6 +228,7 @@ def run_recon(config_dict, indices_selection='CALIB_3_X1800', debug=False):
 
 def run_analysis(config_dict):
     ###temp
+    config_dict['comp']['server'] = 'local'
     config_dict['comp']['workers'] = 8
     config_dict['algo']['sig']['init']['avgsize'] = 10
     ###

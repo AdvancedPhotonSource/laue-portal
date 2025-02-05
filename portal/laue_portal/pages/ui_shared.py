@@ -172,7 +172,7 @@ recon_form = dbc.Row(
                                 ),
                                 _recon_stack(
                                     [
-                                        _recon_field("Wideing", 'widening', size='sm'),
+                                        _recon_field("Widening", 'widening', size='sm'),
                                         _recon_field("Pad", 'pad', size='sm'),
                                         _recon_field("Stretch", 'stretch', size='sm'),
                                     ]
