@@ -9,6 +9,7 @@ import laue_portal.database.db_utils as db_utils
 import datetime
 import laue_portal.database.db_schema as db_schema
 from sqlalchemy.orm import Session
+import laue_portal.recon.analysis_recon as analysis_recon
 
 dash.register_page(__name__)
 
@@ -101,6 +102,12 @@ def upload_config(contents):
     State('depth_end', 'value'),
     State('depth_step', 'value'),
     State('recon_name', 'value'),
+    
+    State('file_path', 'value'),
+    State('file_output', 'value'),
+    State('data_stacked', 'value'),
+    State('h5_key', 'value'),
+    State('file_offset', 'value'),
 
     State('cenx', 'value'),
     State('ceny', 'value'),
@@ -172,6 +179,12 @@ def submit_config(n,
     depth_step,
     recon_name,
 
+    file_path,
+    file_output,
+    data_stacked,
+    h5_key,
+    file_offset,
+
     cenx,
     ceny,
     cenz,
@@ -239,15 +252,15 @@ def submit_config(n,
         dataset_id=0,
         notes='TODO', 
 
-        file_path='TODO',
-        file_output='TODO',
-        file_stacked=True,
+        file_path=file_path,
+        file_output=file_output,
+        file_stacked=data_stacked,
         file_range=[frame_start, frame_end],
         file_threshold=0,
         file_frame=[x_start, x_end, y_start, y_end],
-        file_offset=0, #TODO
-        file_ext='TODO',
-        file_h5_key='TODO',
+        file_offset=file_offset,
+        file_ext='h5', #'TODO',
+        file_h5_key=h5_key,
         
         comp_server='TODO',
         comp_workers=0,
@@ -306,8 +319,12 @@ def submit_config(n,
 
     with Session(db_utils.ENGINE) as session:
         session.add(recon)
+        config_dict = db_utils.create_config_obj(recon)
+
         session.commit()
     
     set_props("alert-submit", {'is_open': True, 
                                 'children': 'Config Added to Database',
                                 'color': 'success'})
+
+    analysis_recon.run_analysis(config_dict)

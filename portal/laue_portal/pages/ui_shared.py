@@ -107,6 +107,28 @@ recon_form = dbc.Row(
                             [
                                 _recon_stack(
                                     [
+                                        _recon_field("File Path", 'file_path', size='lg')
+                                    ]
+                                ),
+                                _recon_stack(
+                                    [
+                                        _recon_field('File Output', 'file_output', size='lg')
+                                    ]
+                                ),
+                                _recon_stack(
+                                    [
+                                        _recon_ckbx("Data Stacked", 'data_stacked', size='sm'),
+                                        _recon_field("H5_key", 'h5_key', size='sm'),
+                                        _recon_field("File Offset", 'file_offset', size='sm'),
+                                    ]
+                                )
+                            ],
+                            title="File Parameters",
+                        ),
+                        dbc.AccordionItem(
+                            [
+                                _recon_stack(
+                                    [
                                         _recon_field("CenX", 'cenx', size='sm'),
                                         _recon_field("CenY", 'ceny', size='sm'),
                                         _recon_field("CenZ", 'cenz', size='sm'),
@@ -150,7 +172,7 @@ recon_form = dbc.Row(
                                 ),
                                 _recon_stack(
                                     [
-                                        _recon_field("Wideing", 'widening', size='sm'),
+                                        _recon_field("Widening", 'widening', size='sm'),
                                         _recon_field("Pad", 'pad', size='sm'),
                                         _recon_field("Stretch", 'stretch', size='sm'),
                                     ]
@@ -296,6 +318,13 @@ def set_form_props(recon, read_only=False):
     set_props("depth_end", {'value':recon.geo_source_grid[1], 'readonly':read_only})
     set_props("depth_step", {'value':recon.geo_source_grid[2], 'readonly':read_only})
     set_props("recon_name", {'value':recon.notes, 'readonly':read_only})
+
+    set_props("file_path", {'value':recon.file_path, 'readonly':read_only})
+    set_props("file_output", {'value':recon.file_output, 'readonly':read_only})
+    set_props("data_stacked", {'value':recon.file_stacked, 'readonly':read_only})
+    set_props("h5_key", {'value':recon.file_h5_key, 'readonly':read_only})
+    set_props("file_offset", {'value':recon.file_offset, 'readonly':read_only})
+
     #TODO: Coloring based on connnection to config table
     set_props("cenx", {'value':recon.geo_mask_focus_cenx, 'readonly':read_only})
     set_props("ceny", {'value':recon.geo_mask_focus_cenz, 'readonly':read_only})

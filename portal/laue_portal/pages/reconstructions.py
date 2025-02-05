@@ -17,11 +17,6 @@ import plotly.express as px
 from pathlib import Path
 import h5py
 
-H5_DEMO = False
-if H5_DEMO:
-    files = [(Path('../results')/f).with_suffix('.h5') for f in
-            ['results6_by13_start0','results30_by1_start0','results30_by3_start0']]
-
 dash.register_page(__name__, path='/')
 
 layout = html.Div([
@@ -74,6 +69,9 @@ layout = html.Div([
             id="modal-results",
             size="xl",
             is_open=False,
+        ),
+        dcc.Store(
+            id="results-path",
         ),
     ],
 )
@@ -133,20 +131,19 @@ def upload_config(contents):
 
 
 @dash.callback(Output('my-graph-example', 'figure'),
+               Input('results-path','value'),
                Input('pixels','value'))
-def set_lineout_graph(pixel_index):
-    if H5_DEMO:
-        if pixel_index is None: return dash.no_update
-        
-        pixel_index = [int(i) for i in pixel_index.split(',')]
-        lau = loahdh5(files[0],'lau')
-        print(pixel_index[:],pixel_index[0],pixel_index[1],)
-        lau_lineout = lau[*pixel_index,:]
-        fig = px.line(lau_lineout)
+def set_lineout_graph(path,pixel_index):
+    if pixel_index is None: return dash.no_update
+    
+    pixel_index = np.array([int(i) for i in pixel_index.split(',')])
+    ind = loahdh5(path,'ind')
+    lau = loahdh5(path,'lau')
+    lau_lineout = lau[np.where(ind==pixel_index)[0][0]] # lau[*pixel_index,:]
+    print(lau_lineout)
+    fig = px.line(lau_lineout)
 
-        return fig
-    else:
-        return dash.no_update
+    return fig
      
 
 
@@ -197,16 +194,17 @@ def cell_clicked(active_cell):
 
     
     elif col == 6:
+        with Session(db_utils.ENGINE) as session:
+            recon = session.query(db_schema.Recon).filter(db_schema.Recon.recon_id == row_id).first()
+
         set_props("modal-results", {'is_open':True})
         set_props("modal-results-header", {'children':dbc.ModalTitle(f"Results for Recon {row_id}")})
+        file_output = recon.file_output
+        set_props("results-path", {"value":file_output})
 
-        if H5_DEMO:
-            lau = loahdh5(files[0],'lau')
-            lau_mean = np.sum(lau,axis=2)
-            ind = [(ix,iy) for ix,iy in zip(*np.where(lau_mean!=0))]
-
-            pixel_selections = [{"label": f"{i}", "value": i} for i in ind]
-            set_props("pixels",{'options':pixel_selections})
+        ind = loahdh5(file_output,'ind')
+        pixel_selections = [{"label": f"{i}", "value": i} for i in ind]
+        set_props("pixels",{'options':pixel_selections})
 
         #fig2 = px.imshow(lau_mean, color_continuous_scale='gray')#, binary_string=True)
 
@@ -222,8 +220,9 @@ Helper Functions
 =======================
 """
 
-def loahdh5(file, key):
-    f = h5py.File(file, 'r')
+def loahdh5(path, key, results_filename = "results.h5"):
+    results_file = Path(path)/results_filename
+    f = h5py.File(results_file, 'r')
     value = f[key][:]
     #logging.info("Loaded: " + str(file))
     return value
