@@ -59,11 +59,11 @@ layout = html.Div([
                         style={'display': 'inline-block'},
                         id='my-graph-example'
                     ),
-                    # dcc.Graph(
-                    #     #style={'height': 300},
-                    #     style={'display': 'inline-block', 'height': 300},
-                    #     id='my-graph-example2'
-                    # )
+                    dcc.Graph(
+                        #style={'height': 300},
+                        style={'display': 'inline-block', 'height': 300},
+                        id='my-graph-example2'
+                    )
                 ])
             ],
             id="modal-results",
@@ -134,6 +134,7 @@ def upload_config(contents):
                Input('results-path','value'),
                Input('pixels','value'))
 def set_lineout_graph(path,pixel_index):
+    if path is None: return dash.no_update
     if pixel_index is None: return dash.no_update
     
     pixel_index = np.array([int(i) for i in pixel_index.split(',')])
@@ -144,7 +145,16 @@ def set_lineout_graph(path,pixel_index):
     fig = px.line(lau_lineout)
 
     return fig
-     
+
+@dash.callback(Output('my-graph-example2', 'figure'),
+               Input('results-path','value'))
+def set_image_graph(path):
+    if path is None: return dash.no_update
+
+    summed_lau = loadnpy(path)
+    fig = px.imshow(summed_lau, color_continuous_scale='gray')#, binary_string=True)
+
+    return fig     
 
 
 VISIBLE_COLS = [
@@ -206,8 +216,6 @@ def cell_clicked(active_cell):
         pixel_selections = [{"label": f"{i}", "value": i} for i in ind]
         set_props("pixels",{'options':pixel_selections})
 
-        #fig2 = px.imshow(lau_mean, color_continuous_scale='gray')#, binary_string=True)
-
         #set_props("my-graph-example",{'figure':fig1})
         #set_props("my-graph-example2",{'figure':fig2})
 
@@ -225,4 +233,11 @@ def loahdh5(path, key, results_filename = "results.h5"):
     f = h5py.File(results_file, 'r')
     value = f[key][:]
     #logging.info("Loaded: " + str(file))
+    return value
+
+def loadnpy(path, results_filename = 'img' + 'results' + '.npy'):
+    results_file = Path(path)/results_filename
+    value = np.zeros((2**11,2**11))
+    if results_file.exists():
+        value = np.load(results_file)
     return value
