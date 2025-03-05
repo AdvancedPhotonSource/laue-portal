@@ -49,7 +49,7 @@ layout = html.Div([
         dbc.Modal(
             [
                 dbc.ModalHeader(dbc.ModalTitle("Header"), id="modal-results-header"),
-                dbc.ModalBody(html.H1("TODO: Results Display")),
+                #dbc.ModalBody(html.H1("TODO: Results Display")),
                 html.Div(children=[
                     dbc.Select(
                         placeholder="Select Detector Pixel",
@@ -58,23 +58,23 @@ layout = html.Div([
                     dcc.Graph(
                         #style={'height': 300},
                         style={'display': 'inline-block'},
-                        id="my-graph-example"
+                        id="lineout-graph"
                     ),
                     dcc.Graph(
                         #style={'height': 300},
                         style={'display': 'inline-block', 'height': 300},
-                        id="my-graph-example2"
+                        id="detector-graph"
                     ),
                     dcc.Store(id='zoom_info'),
                     dbc.Alert(
-                        "This pixel does not contain data.",
+                        "No data found here",
                         is_open=False,
                         duration=1200,
                         color="warning",
                         id="alert-auto-no-data",
                     ),
                     dbc.Alert(
-                        "Updating reconstruction plot",
+                        "Updating depth-profile plot",
                         is_open=False,
                         duration=1200,
                         color="success",
@@ -84,10 +84,7 @@ layout = html.Div([
                         id="results-path",
                     ),
                     dcc.Store(
-                        id="listed-pixels", 
-                    ),
-                    dcc.Store(
-                        id="listed-lau", 
+                        id="listed-pixels",
                     ),
                     dcc.Store(
                         id="integrated-lau",
@@ -155,20 +152,67 @@ def upload_config(contents):
     return cols, recons
 
 
-@dash.callback(Output('my-graph-example', 'figure'),
+@dash.callback(Output('lineout-graph', 'figure', allow_duplicate=True),
+               Output('detector-graph', 'clickData'),
+               Input('results-path', 'value'),
                Input('listed-pixels', 'value'),
-               Input('listed-lau', 'value'),
-               Input('pixels', 'value')
+               Input('pixels', 'value'),
+               prevent_initial_call=True,
 )
-def set_lineout_graph(ind,lau,pixel_index):
+def set_lineout_graph_from_dropdown(file_output, ind, pixel_index):
+    if file_output is None: return dash.no_update
     if ind is None: return dash.no_update
-    if lau is None: return dash.no_update
     if pixel_index is None: return dash.no_update
-
+    print("set_lineout_graph_from_dropdown")
     if isinstance(pixel_index, str): 
         pixel_index = [int(i) for i in pixel_index.split(',')]
     
     p_y, p_x = pixel_index
+
+    lau = loahdh5(file_output,'lau')
+    lau_lineout = lau[np.where(ind==np.array(pixel_index))[0][0]] # lau[*pixel_index,:]
+    
+    fig = px.line(lau_lineout)
+
+    fig.update_layout(
+        title={'text':f'Intensity vs. Depth: {p_x}, {p_y}',
+               'x':0.5,
+               'xanchor':'center'}
+    )
+
+    clickData = None #Reset clickData
+ 
+    return fig, clickData
+
+
+@dash.callback(Output('lineout-graph', 'figure'),
+               Input('results-path', 'value'),
+               Input('listed-pixels', 'value'),
+               Input('detector-graph', 'clickData'),
+)
+def set_lineout_graph_from_click(file_output, ind, clickData):
+    if not clickData:
+        raise dash.exceptions.PreventUpdate
+    if file_output is None: return dash.no_update
+    if ind is None: return dash.no_update
+    print("set_lineout_graph_from_click")
+
+    #Graph click
+    #print(f'previous {pixel_index}')
+    clicked_pixel_index = [clickData["points"][0][k] for k in ["y", "x"]]
+    if clicked_pixel_index not in ind:
+        raise dash.exceptions.PreventUpdate
+        print(f'no ind {clicked_pixel_index}')
+        #alert_0 = True
+    else:
+        print(f'ind {clicked_pixel_index}')
+        pixel_index = clicked_pixel_index
+        #alert_1 = True
+    #
+    
+    p_y, p_x = pixel_index
+
+    lau = loahdh5(file_output,'lau')
     lau_lineout = lau[np.where(ind==np.array(pixel_index))[0][0]] # lau[*pixel_index,:]
     
     fig = px.line(lau_lineout)
@@ -182,9 +226,134 @@ def set_lineout_graph(ind,lau,pixel_index):
     return fig
 
 
+@dash.callback(Output('detector-graph', 'figure', allow_duplicate=True),
+               Input('integrated-lau', 'value'),
+               Input('pixels', 'value'),
+               prevent_initial_call=True,
+)
+def set_detector_graph_from_dropdown(integrated_lau, pixel_index=None):
+    if integrated_lau is None: return dash.no_update
+    if not pixel_index:
+        raise dash.exceptions.PreventUpdate
+    print("set_detector_graph_from_dropdown")
+
+    fig = px.imshow(integrated_lau)#, binary_string=True)
+
+    if pixel_index:
+        print(f'changed: {pixel_index}')
+        if isinstance(pixel_index, str): 
+            pixel_index = np.array([int(i) for i in pixel_index.split(',')])
+            print(f'changed check: {pixel_index}')
+            print(f'changed check0: {pixel_index[0]}')
+
+        p_y, p_x = pixel_index
+        print(f'both {p_y}, {p_x}')
+        
+        # Add circle
+        size = 100
+        fig.add_shape(type="circle",
+            xref="x", yref="y",
+            x0=p_x-size, y0=p_y-size, x1=p_x+size, y1=p_y+size,
+            line_color="Red")
+
+    fig.update_layout(width=800, height=800,
+                        coloraxis=dict(
+                            colorscale='gray',
+                            cmax=100, cauto=False)
+    )
+    fig.update_yaxes(scaleanchor='x')      
+
+    return fig
+
+
+@dash.callback(Output('alert-auto-no-data', 'is_open'),
+               Output('alert-auto-update-plot', 'is_open'),
+               Output('detector-graph', 'figure'),
+               Output('pixels', 'value'),
+               Input('integrated-lau', 'value'),
+               Input('listed-pixels', 'value'),
+               Input('detector-graph', 'clickData'),
+               State("alert-auto-no-data", "is_open"),
+               State("alert-auto-update-plot", "is_open"),
+               State('pixels', 'value'),
+               State('zoom_info', 'data'),
+               Input('detector-graph', 'figure'),
+)
+def set_detector_graph_from_click(integrated_lau, ind, clickData, alert_0, alert_1, pixel_index=None, zoom_info=None, prior_fig=None):
+    # if not clickData:
+    #     raise dash.exceptions.PreventUpdate
+    print("set_detector_graph_from_click")
+    if integrated_lau is None: return dash.no_update
+
+    fig = px.imshow(integrated_lau)#, binary_string=True)
+
+    if clickData:
+        #Graph click
+        print(f'previous {pixel_index}')
+        clicked_pixel_index = [clickData["points"][0][k] for k in ["y", "x"]]
+        if clicked_pixel_index not in ind:
+            print(f'no ind {clicked_pixel_index}')
+            alert_0 = True
+            if prior_fig:
+                fig = prior_fig
+                print(fig['layout'])
+            else:
+                return alert_0, alert_1, dash.no_update, pixel_index
+        else:
+            print(f'ind {clicked_pixel_index}')
+            pixel_index = clicked_pixel_index
+            alert_1 = True
+        #
+
+        if zoom_info:
+            x0, x1, y0, y1 = None, None, None, None
+            print(zoom_info)
+            if 'xaxis.range[0]' in zoom_info: x0 = zoom_info['xaxis.range[0]']
+            if 'xaxis.range[1]' in zoom_info: x1 = zoom_info['xaxis.range[1]']
+            if 'yaxis.range[0]' in zoom_info: y0 = zoom_info['yaxis.range[0]']
+            if 'yaxis.range[1]' in zoom_info: y1 = zoom_info['yaxis.range[1]']
+            
+            if all([x0, x1, y0, y1]):
+                newLayout = go.Layout(
+                    xaxis_range=[x0, x1],
+                    yaxis_range=[y0, y1],
+                )
+                fig['layout'] = newLayout
+                print(newLayout)
+
+    if pixel_index:
+        print(f'changed: {pixel_index}')
+        if isinstance(pixel_index, str): 
+            pixel_index = np.array([int(i) for i in pixel_index.split(',')])
+            print(f'changed check: {pixel_index}')
+            print(f'changed check0: {pixel_index[0]}')
+
+        p_y, p_x = pixel_index
+        print(f'both {p_y}, {p_x}')
+        
+        # Add circle
+        size = 100
+        fig.add_shape(type="circle",
+            xref="x", yref="y",
+            x0=p_x-size, y0=p_y-size, x1=p_x+size, y1=p_y+size,
+            line_color="Red")
+
+    fig['layout'].update({'width':800,'height':800,
+                        'coloraxis':dict(
+                            colorscale='gray',
+                            cmax=100, cauto=False)}
+    )
+    fig['layout']['yaxis'].update(dict(scaleanchor='x'))
+    
+    if clickData:
+        pixel_index = None #Reset pixel_index
+ 
+    return alert_0, alert_1, fig, pixel_index
+
+
 @dash.callback(
     Output('zoom_info', 'data'),
-    [Input('my-graph-example2', 'relayoutData'),
+    [Input('detector-graph', 'relayoutData'),
      Input('zoom_info', 'data')]
 )
 def update_zoom_info(relayout_data, zoom_info):
@@ -193,74 +362,6 @@ def update_zoom_info(relayout_data, zoom_info):
     else:
         zoom_info.update(relayout_data)
         return zoom_info
-
-
-@dash.callback(Output('my-graph-example2', 'figure'),
-               Input('integrated-lau', 'value'),
-               Input('pixels', 'value'),
-               State('zoom_info', 'data'),
-)
-def set_image_graph(integrated_lau,pixel_index=None,zoom_info=None):
-    if integrated_lau is None: return dash.no_update
-
-    fig = px.imshow(integrated_lau)#, binary_string=True)
-
-    if zoom_info:
-        print(zoom_info)
-        x0 = zoom_info['xaxis.range[0]']
-        x1 = zoom_info['xaxis.range[1]']
-        y0 = zoom_info['yaxis.range[0]']
-        y1 = zoom_info['yaxis.range[1]']
-        
-        newLayout = go.Layout(
-            xaxis_range=[x0, x1],
-            yaxis_range=[y0, y1],
-        )
-        fig['layout'] = newLayout
-
-    fig.update_layout(width=800, height=800,
-                        coloraxis=dict(
-                            colorscale='gray',
-                            cmax=100, cauto=False)
-    )
-
-    if pixel_index:
-        if isinstance(pixel_index, str): 
-            pixel_index = np.array([int(i) for i in pixel_index.split(',')])
-        p_y, p_x = pixel_index
-
-        # Add circle
-        size = 100
-        fig.add_shape(type="circle",
-            xref="x", yref="y",
-            x0=p_x-size, y0=p_y-size, x1=p_x+size, y1=p_y+size,
-            line_color="Red")
-
-    return fig
-
-
-@dash.callback(
-    Output('pixels', 'value'),
-    Output("alert-auto-no-data", "is_open"),
-    Output("alert-auto-update-plot", "is_open"),
-    Input('pixels', 'value'),
-    Input('listed-pixels', 'value'),
-    Input('my-graph-example2', 'clickData'),
-    State("alert-auto-no-data", "is_open"),
-    State("alert-auto-update-plot", "is_open"),
-)
-def Graphclick(pixel_index, ind, clickData, is_open0, is_open1):
-    if not clickData:
-        raise dash.exceptions.PreventUpdate
-    
-    clicked_pixel_index = [clickData["points"][0][k] for k in ["y", "x"]]
-    if clicked_pixel_index in ind:
-        pixel_index = clicked_pixel_index
-        is_open1 = True
-    else:
-        is_open0 = True
-
-    return pixel_index, is_open0, is_open1
 
 
 
@@ -326,14 +427,11 @@ def cell_clicked(active_cell):
         pixel_selections = [{"label": f'{i}', "value": i} for i in ind]
         set_props("pixels",{"options":pixel_selections})
 
-        lau = loahdh5(file_output,'lau')
-        set_props("listed-lau",{"value":lau})
-
         integrated_lau = loadnpy(file_output)
         set_props("integrated-lau",{"value":integrated_lau})
 
-        #set_props("my-graph-example",{'figure':fig1})
-        #set_props("my-graph-example2",{'figure':fig2})
+        #set_props("lineout-graph",{'figure':fig1})
+        #set_props("detector-graph",{'figure':fig2})
 
     print(f"Row {row} and Column {col} was clicked")
     
