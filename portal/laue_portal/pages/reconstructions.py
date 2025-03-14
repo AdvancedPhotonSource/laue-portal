@@ -182,7 +182,7 @@ def set_lineout_and_detector_graphs(integrated_lau, file_output, pixels_options,
         ind = [e['value'] for e in pixels_options]
 
     if trigger_id == 'detector-graph':
-        clicked_pixel_index = [clickData["points"][0][k] for k in ["y", "x"]]
+        clicked_pixel_index = [clickData["points"][0][k] for k in ["x", "y"]]
 
         if clicked_pixel_index not in ind:
             set_props('alert-auto-no-data',{'is_open':True})
@@ -222,12 +222,14 @@ def set_lineout_and_detector_graphs(integrated_lau, file_output, pixels_options,
         if pixel_index != index_pointer:
             set_props('index_pointer',{'value':pixel_index})
 
-        p_y, p_x = pixel_index
-        print(f'Selected: {p_y}, {p_x}')
+        p_x, p_y = pixel_index
+        print(f'Selected: {p_x}, {p_y}')
 
         # Lineout plot
-        lau = loahdh5(file_output,'lau')
-        lau_lineout = lau[np.where(np.array(ind)==np.array(pixel_index))[0][0]] # lau[*pixel_index,:]
+        #lau_slice = np.where(np.array(ind)==np.array(pixel_index))[0][0] # lau[*pixel_index,:]
+        all_ind = loahdh5(file_output,'ind')
+        lau_slice = np.where((all_ind[:,0]==pixel_index[0]) & (all_ind[:,1]==pixel_index[1]))[0][0]
+        lau_lineout = loahdh5(file_output,'lau',lau_slice)
         
         fig1 = px.line(lau_lineout)
 
@@ -249,7 +251,7 @@ def set_lineout_and_detector_graphs(integrated_lau, file_output, pixels_options,
     fig2.update_layout(width=800, height=800,
                         coloraxis=dict(
                             colorscale='gray',
-                            cmax=100, cauto=False)
+                            cmax=np.max(integrated_lau)/2**7, cauto=False)
     )
     fig2.update_yaxes(scaleanchor='x')
 
@@ -320,13 +322,18 @@ def cell_clicked(active_cell):
         
         file_output = recon.file_output
         set_props("results-path", {"value":file_output})
-        
-        ind = loahdh5(file_output,'ind')
-        pixel_selections = [{"label": f'{i}', "value": i} for i in ind]
-        set_props("pixels",{"options":pixel_selections})
 
         integrated_lau = loadnpy(file_output)
+        integrated_lau[np.isnan(integrated_lau)] = 0
         set_props("integrated-lau",{"value":integrated_lau})
+
+        if np.count_nonzero(integrated_lau) > int(1E2):
+            ind_slice = np.sort(np.argpartition(integrated_lau, -30, axis=None)[-30:]) #np.sort(np.random.randint(0,2048**2,30))#np.argsort(-integrated_lau)[:30]
+            ind = loahdh5(file_output,'ind',ind_slice)
+        else:
+            ind = loahdh5(file_output,'ind')
+        pixel_selections = [{"label": f'{i}', "value": i} for i in ind]
+        set_props("pixels",{"options":pixel_selections})
 
     print(f"Row {row} and Column {col} was clicked")
     
@@ -337,10 +344,13 @@ Helper Functions
 =======================
 """
 
-def loahdh5(path, key, results_filename = "results.h5"):
+def loahdh5(path, key, slice=None, results_filename = "results.h5"):
     results_file = Path(path)/results_filename
     f = h5py.File(results_file, 'r')
-    value = f[key][:]
+    if not np.any(slice):
+        value = f[key][:]
+    else:
+        value = f[key][slice]
     #logging.info("Loaded: " + str(file))
     return value
 
