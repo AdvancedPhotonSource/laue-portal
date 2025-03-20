@@ -222,12 +222,6 @@ def run_recon(config_dict, indices_selection='CALIB_3_X1800', debug=False):
     # cold.saveimg(str(output_dir / ('lau' + name_append)), lau, ind, shape_, frame_)
     # # cold.saveimg(file['output'] + '/lau' + str(len(ind)), lau, ind, (file['frame'][1], file['frame'][3]), file['frame'], swap=True)
 
-    ind, ene, pos, sig, lau = [np.transpose(o,axes=[1,0,2])
-                                    if len(o.shape) == 3 else
-                               np.transpose(o)
-                                    if len(o.shape) == 2 else
-                               o for o in [ind, ene, pos, sig, lau]]
-
     # # HDF5 save
     h5path_ = str(output_dir / ('img' + 'results'))# + name_append))
     # saveh5img(h5path_, 'ene', ene, ind, shape_, frame_)
@@ -237,7 +231,7 @@ def run_recon(config_dict, indices_selection='CALIB_3_X1800', debug=False):
     savenpyimg(h5path_, lau, ind, shape_, frame_)
 
     h5path = str(output_dir / 'results') #('basic' + 'results' + name_append))
-    saveh5basic(h5path, 'ind', ind)
+    saveh5basic(h5path, 'ind', np.flip(ind,axis=1))
     saveh5basic(h5path, 'ene', ene)
     saveh5basic(h5path, 'pos', pos)
     saveh5basic(h5path, 'sig', sig)

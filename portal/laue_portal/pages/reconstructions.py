@@ -161,6 +161,8 @@ def upload_config(contents):
 )
 def set_lineout_and_detector_graphs(integrated_lau, file_output, pixels_options, pixels_value, clickData, index_pointer=None,zoom_info=None):
 
+    pixel_index = index_pointer
+
     fig2 = px.imshow(integrated_lau)#, binary_string=True)
                                                          
     if isinstance(pixels_value, str): 
@@ -172,7 +174,7 @@ def set_lineout_and_detector_graphs(integrated_lau, file_output, pixels_options,
     print(f'trigger_id {trigger_id}')
 
     if trigger_id == 'pixels':
-        if np.any(pixel_index):
+        if pixel_index is not None:
             if pixel_index == index_pointer:
                 raise dash.exceptions.PreventUpdate
             else:
@@ -200,24 +202,22 @@ def set_lineout_and_detector_graphs(integrated_lau, file_output, pixels_options,
             if 'yaxis.range[0]' in zoom_info: y0 = zoom_info['yaxis.range[0]']
             if 'yaxis.range[1]' in zoom_info: y1 = zoom_info['yaxis.range[1]']
             
+            set_props('zoom_info',{'data':None})
+            
             if all([x0, x1, y0, y1]):
                 newLayout = go.Layout(
                     xaxis_range=[x0, x1],
                     yaxis_range=[y0, y1],
                 )
-            else:
-                newLayout = go.Layout(
-                    xaxis_autorange=True,
-                    yaxis_autorange="reversed",
-                )
-            fig2['layout'] = newLayout
+                
+                fig2['layout'] = newLayout
         
-        if np.any(pixel_index):
+        if pixel_index is not None:
             str_pixels_value = ','.join(str(i) for i in pixel_index)
             if str_pixels_value != pixels_value:
                 set_props('pixels',{'value':str_pixels_value})
     
-    if np.any(pixel_index):
+    if pixel_index is not None:
 
         if pixel_index != index_pointer:
             set_props('index_pointer',{'value':pixel_index})
@@ -229,15 +229,20 @@ def set_lineout_and_detector_graphs(integrated_lau, file_output, pixels_options,
         #lau_slice = np.where(np.array(ind)==np.array(pixel_index))[0][0] # lau[*pixel_index,:]
         all_ind = loahdh5(file_output,'ind')
         lau_slice = np.where((all_ind[:,0]==pixel_index[0]) & (all_ind[:,1]==pixel_index[1]))[0][0]
+        print('slice',lau_slice)
         lau_lineout = loahdh5(file_output,'lau',lau_slice)
+        print('lineout shape',lau_lineout.shape)
         
         fig1 = px.line(lau_lineout)
 
         fig1.update_layout(
             title={'text':f'Intensity vs. Depth: {p_x}, {p_y}',
                 'x':0.5,
-                'xanchor':'center'}
+                'xanchor':'center'},
+            xaxis_title="Depth (microns)",
+            yaxis_title="Intensity",
         )
+        fig1.update(layout_showlegend=False)        
         
         set_props('lineout-graph',{'figure':fig1})
 
@@ -347,7 +352,7 @@ Helper Functions
 def loahdh5(path, key, slice=None, results_filename = "results.h5"):
     results_file = Path(path)/results_filename
     f = h5py.File(results_file, 'r')
-    if not np.any(slice):
+    if slice is None:
         value = f[key][:]
     else:
         value = f[key][slice]
