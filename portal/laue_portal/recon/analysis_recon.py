@@ -92,6 +92,28 @@ def saveh5img(path, name, vals, inds, shape, frame=None, swap=False):
 
     logging.info(f"Saved: {name} in + {path}.h5") #logging.info("Saved: " + str(path) + ".tiff")
 
+def savenpyimg(path, vals, inds, shape, frame=None, swap=False):
+    _vals = cold.expand(vals, inds, shape)
+    data = _vals #save(path, _vals, frame, swap)
+
+#def save(path, data, frame=None, swap=False):
+    """Saves Laue diffraction data to file."""
+
+    if frame is not None:
+        data = data[frame[0]:frame[1],frame[2]:frame[3]]
+    if swap is True:
+        data = np.swapaxes(data, 0, 2)
+        data = np.swapaxes(data, 1, 2)
+
+    with open(path+'.npy', 'wb') as f:
+        if data.ndim > 2:
+            saved_data = np.sum(data,axis=2)
+        else:
+            saved_data = data.copy()
+        np.save(f, saved_data)
+
+    logging.info(f"Saved: {path}.npy") #logging.info("Saved: " + str(path) + ".tiff")
+
 def saveh5basic(path, name, vals):
 
     with h5py.File(path+'.h5', 'a') as f:
@@ -201,13 +223,15 @@ def run_recon(config_dict, indices_selection='CALIB_3_X1800', debug=False):
     # # cold.saveimg(file['output'] + '/lau' + str(len(ind)), lau, ind, (file['frame'][1], file['frame'][3]), file['frame'], swap=True)
 
     # # HDF5 save
-    # h5path_ = str(output_dir / ('img' + 'results' + name_append))
+    h5path_ = str(output_dir / ('img' + 'results'))# + name_append))
     # saveh5img(h5path_, 'ene', ene, ind, shape_, frame_)
     # saveh5img(h5path_, 'pos', pos, ind, shape_, frame_)
     # saveh5img(h5path_, 'lau', lau, ind, shape_, frame_)
+    
+    savenpyimg(h5path_, lau, ind, shape_, frame_)
 
     h5path = str(output_dir / 'results') #('basic' + 'results' + name_append))
-    saveh5basic(h5path, 'ind', ind)
+    saveh5basic(h5path, 'ind', np.flip(ind,axis=1))
     saveh5basic(h5path, 'ene', ene)
     saveh5basic(h5path, 'pos', pos)
     saveh5basic(h5path, 'sig', sig)
