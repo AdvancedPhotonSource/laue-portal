@@ -103,7 +103,7 @@ Callbacks
 """
 def _get_recons():
     with Session(db_utils.ENGINE) as session:
-        recons = pd.read_sql(session.query(*VISIBLE_COLS ).statement, session.bind)
+        recons = pd.read_sql(session.query(*VISIBLE_COLS).statement, session.bind)
 
     cols = [{'name': str(col), 'id': str(col)} for col in recons.columns]
     cols.append({'name': 'Parameters', 'id': 'Parameters', 'presentation': 'markdown'})

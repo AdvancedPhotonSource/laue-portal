@@ -23,4 +23,7 @@ app.layout = dash.page_container
 
 # Run the application
 if __name__ == '__main__':
-    app.run_server(debug=True, port=2051, host='0.0.0.0')
+    try:
+        app.run(debug=True, port=2052, host='0.0.0.0')
+    except:
+        app.run_server(debug=True, port=2052, host='0.0.0.0')

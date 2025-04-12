@@ -201,3 +201,109 @@ def create_config_obj(recon):
                 }
             }
     return config_dict
+
+def import_peakindex_row(peakindex_object):
+    """
+    Reads a yaml file and creates a new PeakIndex ORM object with 
+    the base data of the file
+    """
+
+    # Optional Params
+    #use_gpu = peakindex_object['comp']['use_gpu'] if 'use_gpu' in peakindex_object['comp'] else False
+    #batch_size = peakindex_object['comp']['batch_size'] if 'batch_size' in peakindex_object['comp'] else 1
+
+    peakindex_row = db_schema.PeakIndex(        
+        peakProgram=peakindex_object['peakProgram'],
+        threshold=peakindex_object['threshold'],
+        thresholdRatio=peakindex_object['thresholdRatio'],
+        maxRfactor=peakindex_object['maxRfactor'],
+        boxsize=peakindex_object['boxsize'],
+        max_number=peakindex_object['max_number'],
+        min_separation=peakindex_object['min_separation'],
+        peakShape=peakindex_object['peakShape'],
+        scanPointStart=peakindex_object['scanPointStart'],
+        scanPointEnd=peakindex_object['scanPointEnd'],
+        # depthRangeStart=peakindex_object['depthRangeStart'],
+        # depthRangeEnd=peakindex_object['depthRangeEnd'],
+        detectorCropX1=peakindex_object['detectorCropX1'],
+        detectorCropX2=peakindex_object['detectorCropX2'],
+        detectorCropY1=peakindex_object['detectorCropY1'],
+        detectorCropY2=peakindex_object['detectorCropY2'],
+        min_size=peakindex_object['min_size'],
+        max_peaks=peakindex_object['max_peaks'],
+        smooth=peakindex_object['smooth'],
+        maskFile=peakindex_object['maskFile'],
+        indexKeVmaxCalc=peakindex_object['indexKeVmaxCalc'],
+        indexKeVmaxTest=peakindex_object['indexKeVmaxTest'],
+        indexAngleTolerance=peakindex_object['indexAngleTolerance'],
+        indexH=peakindex_object['indexH'],
+        indexK=peakindex_object['indexK'],
+        indexL=peakindex_object['indexL'],
+        indexCone=peakindex_object['indexCone'],
+        energyUnit=peakindex_object['energyUnit'],
+        exposureUnit=peakindex_object['exposureUnit'],
+        cosmicFilter=peakindex_object['cosmicFilter'],
+        recipLatticeUnit=peakindex_object['recipLatticeUnit'],
+        latticeParametersUnit=peakindex_object['latticeParametersUnit'],
+        peaksearchPath=peakindex_object['peaksearchPath'],
+        p2qPath=peakindex_object['p2qPath'],
+        indexingPath=peakindex_object['indexingPath'],
+        outputFolder=peakindex_object['outputFolder'],
+        filefolder=peakindex_object['filefolder'],
+        filenamePrefix=peakindex_object['filenamePrefix'],
+        geoFile=peakindex_object['geoFile'],
+        crystFile=peakindex_object['crystFile'],
+        depth=peakindex_object['depth'],
+        beamline=peakindex_object['beamline'],
+        # cosmicFilter=peakindex_object['cosmicFilter'],
+    )
+    return peakindex_row
+
+
+def create_peakindex_config_obj(peakindex):
+    config_dict = {
+            'peakProgram':peakindex.peakProgram,
+            'threshold':peakindex.threshold,
+            'thresholdRatio':peakindex.thresholdRatio,
+            'maxRfactor':peakindex.maxRfactor,
+            'boxsize':peakindex.boxsize,
+            'max_number':peakindex.max_number,
+            'min_separation':peakindex.min_separation,
+            'peakShape':peakindex.peakShape,
+            'scanPointStart':peakindex.scanPointStart,
+            'scanPointEnd':peakindex.scanPointEnd,
+            # 'depthRangeStart':peakindex.depthRangeStart,
+            # 'depthRangeEnd':peakindex.depthRangeEnd,
+            'detectorCropX1':peakindex.detectorCropX1,
+            'detectorCropX2':peakindex.detectorCropX2,
+            'detectorCropY1':peakindex.detectorCropY1,
+            'detectorCropY2':peakindex.detectorCropY2,
+            'min_size':peakindex.min_size,
+            'max_peaks':peakindex.max_peaks,
+            'smooth':peakindex.smooth,
+            'maskFile':peakindex.maskFile,
+            'indexKeVmaxCalc':peakindex.indexKeVmaxCalc,
+            'indexKeVmaxTest':peakindex.indexKeVmaxTest,
+            'indexAngleTolerance':peakindex.indexAngleTolerance,
+            'indexH':peakindex.indexH,
+            'indexK':peakindex.indexK,
+            'indexL':peakindex.indexL,
+            'indexCone':peakindex.indexCone,
+            'energyUnit':peakindex.energyUnit,
+            'exposureUnit':peakindex.exposureUnit,
+            'cosmicFilter':peakindex.cosmicFilter,
+            'recipLatticeUnit':peakindex.recipLatticeUnit,
+            'latticeParametersUnit':peakindex.latticeParametersUnit,
+            'peaksearchPath':peakindex.peaksearchPath,
+            'p2qPath':peakindex.p2qPath,
+            'indexingPath':peakindex.indexingPath,
+            'outputFolder':peakindex.outputFolder,
+            'filefolder':peakindex.filefolder,
+            'filenamePrefix':peakindex.filenamePrefix,
+            'geoFile':peakindex.geoFile,
+            'crystFile':peakindex.crystFile,
+            'depth':peakindex.depth,
+            'beamline':peakindex.beamline,
+            # 'cosmicFilter':peakindex.cosmicFilter,
+            }
+    return config_dict

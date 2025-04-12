@@ -1,6 +1,6 @@
 """
 This file contains the definitions of the tables in the database.
-We are currently using sqlalchemy ORMs to deifne the tables
+We are currently using sqlalchemy ORMs to define the tables
 """
 from typing import List
 from typing import Optional
@@ -165,7 +165,68 @@ class Recon(Base):
     algo_ene_range: Mapped[list[int]] = mapped_column(JSON)
 
     def __repr__(self) -> str:
-        return f'Recon {self.recon_id}' # TODO: Consider implemeting for debugging
+        return f'Recon {self.recon_id}' # TODO: Consider implementing for debugging
+
+
+class PeakIndex(Base):
+    __tablename__ = "peakindex"
+
+    # Peak Index Metadata
+    peakindex_id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[DateTime] = mapped_column(DateTime)
+    commit_id: Mapped[str] = mapped_column(String)
+    calib_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
+    runtime: Mapped[str] = mapped_column(String)
+    computer_name: Mapped[str] = mapped_column(String)
+    dataset_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
+    notes: Mapped[str] = mapped_column(String)
+
+    # Peak Index Parameters
+    peakProgram: Mapped[str] = mapped_column(String)
+    threshold: Mapped[int] = mapped_column(Integer)
+    thresholdRatio: Mapped[int] = mapped_column(Integer)
+    maxRfactor: Mapped[float] = mapped_column(Float)
+    boxsize: Mapped[int] = mapped_column(Integer)
+    max_number: Mapped[int] = mapped_column(Integer)
+    min_separation: Mapped[int] = mapped_column(Integer)
+    peakShape: Mapped[str] = mapped_column(String)
+    scanPointStart: Mapped[int] = mapped_column(Integer)
+    scanPointEnd: Mapped[int] = mapped_column(Integer)
+    # depthRangeStart: Mapped[int] = mapped_column(Integer)
+    # depthRangeEnd: Mapped[int] = mapped_column(Integer)
+    detectorCropX1: Mapped[int] = mapped_column(Integer)
+    detectorCropX2: Mapped[int] = mapped_column(Integer)
+    detectorCropY1: Mapped[int] = mapped_column(Integer)
+    detectorCropY2: Mapped[int] = mapped_column(Integer)
+    min_size: Mapped[float] = mapped_column(Float)
+    max_peaks: Mapped[int] = mapped_column(Integer)
+    smooth: Mapped[int] = mapped_column(Integer)
+    maskFile: Mapped[str] = mapped_column(String)
+    indexKeVmaxCalc: Mapped[float] = mapped_column(Float)
+    indexKeVmaxTest: Mapped[float] = mapped_column(Float)
+    indexAngleTolerance: Mapped[float] = mapped_column(Float)
+    indexH: Mapped[int] = mapped_column(Integer)
+    indexK: Mapped[int] = mapped_column(Integer)
+    indexL: Mapped[int] = mapped_column(Integer)
+    indexCone: Mapped[float] = mapped_column(Float)
+    energyUnit: Mapped[str] = mapped_column(String)
+    exposureUnit: Mapped[str] = mapped_column(String)
+    cosmicFilter: Mapped[bool] = mapped_column(Boolean)
+    recipLatticeUnit: Mapped[str] = mapped_column(String)
+    latticeParametersUnit: Mapped[str] = mapped_column(String)
+    peaksearchPath: Mapped[str] = mapped_column(String)
+    p2qPath: Mapped[str] = mapped_column(String)
+    indexingPath: Mapped[str] = mapped_column(String)
+    outputFolder: Mapped[str] = mapped_column(String)
+    filefolder: Mapped[str] = mapped_column(String)
+    filenamePrefix: Mapped[str] = mapped_column(String)
+    geoFile: Mapped[str] = mapped_column(String)
+    crystFile: Mapped[str] = mapped_column(String)
+    depth: Mapped[str] = mapped_column(String)
+    beamline: Mapped[str] = mapped_column(String)
+    # cosmicFilter: Mapped[bool] = mapped_column(Boolean)
+    def __repr__(self) -> str:
+        return f'Peak Index {self.peakindex_id}' # TODO: Consider implementing for debugging
 
 # NOTE: Not Implemented
 MASK_FOCUS_TABLE = [
