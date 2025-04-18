@@ -213,7 +213,7 @@ def import_peakindex_row(peakindex_object):
     #batch_size = peakindex_object['comp']['batch_size'] if 'batch_size' in peakindex_object['comp'] else 1
 
     peakindex_row = db_schema.PeakIndex(        
-        peakProgram=peakindex_object['peakProgram'],
+        # peakProgram=peakindex_object['peakProgram'],
         threshold=peakindex_object['threshold'],
         thresholdRatio=peakindex_object['thresholdRatio'],
         maxRfactor=peakindex_object['maxRfactor'],
@@ -262,7 +262,7 @@ def import_peakindex_row(peakindex_object):
 
 def create_peakindex_config_obj(peakindex):
     config_dict = {
-            'peakProgram':peakindex.peakProgram,
+            # 'peakProgram':peakindex.peakProgram,
             'threshold':peakindex.threshold,
             'thresholdRatio':peakindex.thresholdRatio,
             'maxRfactor':peakindex.maxRfactor,

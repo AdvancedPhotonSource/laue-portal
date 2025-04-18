@@ -9,7 +9,7 @@ import laue_portal.database.db_utils as db_utils
 import datetime
 import laue_portal.database.db_schema as db_schema
 from sqlalchemy.orm import Session
-#import laue_portal.recon.analysis_recon as analysis_recon
+import laueindexing.pyLaueGo as pyLaueGo
 
 dash.register_page(__name__)
 
@@ -93,7 +93,7 @@ def upload_config(contents):
 
     # State('dataset', 'value'),
     
-    State('peakProgram', 'value'),
+    # State('peakProgram', 'value'),
     State('threshold', 'value'),
     State('thresholdRatio', 'value'),
     State('maxRfactor', 'value'),
@@ -116,9 +116,10 @@ def upload_config(contents):
     State('indexKeVmaxCalc', 'value'),
     State('indexKeVmaxTest', 'value'),
     State('indexAngleTolerance', 'value'),
-    State('indexH', 'value'),
-    State('indexK', 'value'),
-    State('indexL', 'value'),
+    State('indexHKL', 'value'),
+    # State('indexH', 'value'),
+    # State('indexK', 'value'),
+    # State('indexL', 'value'),
     State('indexCone', 'value'),
     State('energyUnit', 'value'),
     State('exposureUnit', 'value'),
@@ -141,7 +142,7 @@ def upload_config(contents):
 )
 def submit_config(n,
     # dataset,
-    peakProgram,
+    # peakProgram,
     threshold,
     thresholdRatio,
     maxRfactor,
@@ -164,9 +165,10 @@ def submit_config(n,
     indexKeVmaxCalc,
     indexKeVmaxTest,
     indexAngleTolerance,
-    indexH,
-    indexK,
-    indexL,
+    indexHKL,
+    # indexH,
+    # indexK,
+    # indexL,
     indexCone,
     energyUnit,
     exposureUnit,
@@ -197,7 +199,7 @@ def submit_config(n,
         dataset_id=0,
         notes='TODO', 
 
-        peakProgram=peakProgram,
+        # peakProgram=peakProgram,
         threshold=threshold,
         thresholdRatio=thresholdRatio,
         maxRfactor=maxRfactor,
@@ -220,9 +222,9 @@ def submit_config(n,
         indexKeVmaxCalc=indexKeVmaxCalc,
         indexKeVmaxTest=indexKeVmaxTest,
         indexAngleTolerance=indexAngleTolerance,
-        indexH=indexH,
-        indexK=indexK,
-        indexL=indexL,
+        indexH=int(str(indexHKL)[0]),
+        indexK=int(str(indexHKL)[1]),
+        indexL=int(str(indexHKL)[2]),
         indexCone=indexCone,
         energyUnit=energyUnit,
         exposureUnit=exposureUnit,
@@ -252,4 +254,5 @@ def submit_config(n,
                                 'children': 'Config Added to Database',
                                 'color': 'success'})
 
-    #analysis_recon.run_analysis(config_dict)
+    pyLaueGo = pyLaueGo(config_dict)
+    pyLaueGo.run(0, 1)

@@ -1,5 +1,6 @@
+import dash
+from dash import html, Input, Output, State, set_props
 import dash_bootstrap_components as dbc
-from dash import html, set_props
 
 # TODO: Make navbar links dynamic
 """
@@ -43,6 +44,8 @@ def _field(label, field_id, size='sm', kwargs={}):
         width='350px'
     elif size == 'lg':
         width='500px'
+    elif size == 'hg':
+        width='9999px'
 
     return dbc.InputGroup(
         [
@@ -391,24 +394,29 @@ peakindex_form = dbc.Row(
                                 _stack(
                                     [
                                         # _field("Dataset", "dataset", size='lg'),
-                                        _field("Files Path", "filefolder", size='lg'),
+                                        _field("Files Path", "filefolder", size='hg'),
+                                    ]
+                                ),
+                                _stack(
+                                    [
+                                        # _field("Dataset", "dataset", size='lg'),
                                         _field("Filename Prefix", "filenamePrefix", size='lg'),
                                     ]
                                 ),
                                 _stack(
                                     [
-                                        _field("Geo File", "geoFile", size='lg'),
+                                        _field("Scan Point (Inner Index) Range Start", "scanPointStart", size='md'),
+                                        _field("Scan Point (Inner Index) Range End", "scanPointEnd", size='md'),
                                     ]
                                 ),
                                 _stack(
                                     [
-                                        _field("Output Path", "outputFolder", size='lg'),
+                                        _field("Geo File", "geoFile", size='hg'),
                                     ]
                                 ),
                                 _stack(
                                     [
-                                        _field("Scan Point (Inner Index) Range Start", "scanPointStart", size='lg'),
-                                        _field("Scan Point (Inner Index) Range End", "scanPointEnd", size='lg'),
+                                        _field("Output Path", "outputFolder", size='hg'),
                                     ]
                                 ),
                                 # _stack(
@@ -422,56 +430,75 @@ peakindex_form = dbc.Row(
                         ),
                         dbc.AccordionItem(
                             [
+                                # _stack(
+                                #     [
+                                #         _field("Peak Program", "peakProgram", size='md'),
+                                #     ]
+                                # ),
                                 _stack(
                                     [
-                                        _field("Peak Shape", "peakShape", size='lg'),
-                                        _field("Peak Program", "peakProgram", size='lg'),
+                                        _field("Box Size", "boxsize", size='md'),
+                                        _field("Max Rfactor", "maxRfactor", size='md'),
+                                        _field("Threshold", "threshold", size='md'),
+                                        _field("Threshold Ratio", "thresholdRatio", size='md'),
+                                        
                                     ]
                                 ),
                                 _stack(
                                     [
-                                        _field("peaksearch Path", "peaksearchPath", size='lg'),
-                                        _field("p2q Path", "p2qPath", size='lg'),
+                                        _field("Min Spot Size", "min_size", size='md'),
+                                        _field("Min Spot Separation", "min_separation", size='md'),
+                                        _field("Max No. of Spots", "max_number", size='md')
                                     ]
                                 ),
                                 _stack(
                                     [
-                                        _field("Mask File", "maskFile", size='lg'),
-                                    ]
-                                ),
-                                _stack(
-                                    [
-                                        _field("Detector CropX1", "detectorCropX1", size='lg'),
-                                        _field("Detector CropY1", "detectorCropY1", size='lg'),
-                                    ]
-                                ),
-                                _stack(
-                                    [
-                                        _field("Detector CropX2", "detectorCropX2", size='lg'),
-                                        _field("Detector CropY2", "detectorCropY2", size='lg'),
-                                    ]
-                                ),
-                                _stack(
-                                    [
-                                        _field("Threshold", "threshold", size='lg'),
-                                        _field("Threshold Ratio", "thresholdRatio", size='lg'),
-                                        _field("Max Rfactor", "maxRfactor", size='lg'),
-                                    ]
-                                ),
-                                _stack(
-                                    [
-                                        _field("Box Size", "boxsize", size='lg'),
-                                        _field("Max Number", "max_number", size='lg'),
-                                        _field("Min Separation", "min_separation", size='lg'),
-                                        _field("Min Size", "min_size", size='lg'),
-                                    ]
-                                ),
-                                _stack(
-                                    [
-                                        _field("Smooth", "smooth", size='lg'),
-                                        _ckbx("Cosmic Filter", "cosmicFilter", size='lg'),
+                                        #_field("Peak Shape", "peakShape", size='lg'),
+                                        dbc.Select(
+                                            placeholder="Peak Shape",
+                                            options=[
+                                                {"label": "Lorentzian", "value": "Lorentzian"},
+                                                {"label": "Gaussian", "value": "Gaussian"},
+                                            ],
+                                            style={'width':200},
+                                            id="peakShape",
+                                        ),
+                                        _ckbx("Smooth peak before fitting", "smooth", size='md'),
+                                        _ckbx("Cosmic Filter", "cosmicFilter", size='md'),
                                         # _ckbx("Cosmic Filter", "cosmicFilter", size='lg'),
                                     ]
+                                ),
+                                _stack(
+                                    [
+                                        _field("Detector CropX1", "detectorCropX1", size='md'),
+                                        _field("Detector CropY1", "detectorCropY1", size='md'),
+                                    ]
+                                ),
+                                _stack(
+                                    [
+                                        _field("Detector CropX2", "detectorCropX2", size='md'),
+                                        _field("Detector CropY2", "detectorCropY2", size='md'),
+                                    ]
+                                ),
+                                _stack(
+                                    [
+                                        _field("Mask File", "maskFile", size='hg'),
+                                    ]
+                                ),
+                                dbc.Button(
+                                    "Show Paths to Programs",
+                                    id="collapse1-button",
+                                    className="mb-3",
+                                    color="primary",
+                                    n_clicks=0,
+                                ),
+                                dbc.Collapse(
+                                    [
+                                        _field("peaksearch Path", "peaksearchPath", size='hg'),
+                                        _field("p2q Path", "p2qPath", size='hg'),
+                                    ],
+                                id="collapse1",
+                                is_open=False,
                                 ),
                             ],
                             title="Peak Search",
@@ -480,29 +507,39 @@ peakindex_form = dbc.Row(
                             [
                                 _stack(
                                     [
-                                        _field("Indexing Path", "indexingPath", size='lg'),
-                                        _field("Cryst File", "crystFile", size='lg'),
+                                        _field("Cryst File", "crystFile", size='hg'),
                                     ]
                                 ),
                                 _stack(
                                     [
-                                        _field("Index KeVmax Calc", "indexKeVmaxCalc", size='lg'),
-                                        _field("Index KeVmax Test", "indexKeVmaxTest", size='lg'),
-                                        _field("Index Angle Tolerance", "indexAngleTolerance", size='lg'),
+                                        _field("Max Calc Energy [keV]", "indexKeVmaxCalc", size='md'),
+                                        _field("Max Test Energy [keV]", "indexKeVmaxTest", size='md'),
+                                        _field("Index Angle Tolerance", "indexAngleTolerance", size='md'),
                                     ]
                                 ),
                                 _stack(
                                     [
-                                        _field("Index H", "indexH", size='lg'),
-                                        _field("Index K", "indexK", size='lg'),
-                                        _field("Index L", "indexL", size='lg'),
+                                        _field("Index HKL", "indexHKL", size='md'),
+                                        # _field("Index H", "indexH", size='md'),
+                                        # _field("Index K", "indexK", size='md'),
+                                        # _field("Index L", "indexL", size='md'),
+                                        _field("Index Cone", "indexCone", size='md'),
+                                        _field("Max Peaks", "max_peaks", size='md'),
                                     ]
                                 ),
-                                _stack(
+                                dbc.Button(
+                                    "Show Path to Program",
+                                    id="collapse2-button",
+                                    className="mb-3",
+                                    color="primary",
+                                    n_clicks=0,
+                                ),
+                                dbc.Collapse(
                                     [
-                                        _field("Index Cone", "indexCone", size='lg'),
-                                        _field("Max Peaks", "max_peaks", size='lg'),
-                                    ]
+                                        _field("Indexing Path", "indexingPath", size='hg'),
+                                    ],
+                                id="collapse2",
+                                is_open=False,
                                 ),
                             ],
                             title="Indexing",
@@ -511,20 +548,20 @@ peakindex_form = dbc.Row(
                             [
                                 _stack(
                                     [
-                                        _field("Energy Unit", "energyUnit", size='lg'),
-                                        _field("Exposure Unit", "exposureUnit", size='lg'),
+                                        _field("Energy Unit", "energyUnit", size='md'),
+                                        _field("Exposure Unit", "exposureUnit", size='md'),
                                     ]
                                 ),
                                 _stack(
                                     [
-                                        _field("Recip Lattice Unit", "recipLatticeUnit", size='lg'),
-                                        _field("Lattice Parameters Unit", "latticeParametersUnit", size='lg'),
+                                        _field("Recip Lattice Unit", "recipLatticeUnit", size='md'),
+                                        _field("Lattice Parameters Unit", "latticeParametersUnit", size='md'),
                                     ]
                                 ),
                                 _stack(
                                     [
-                                        _field("Beamline", "beamline", size='lg'),
-                                        _field("Depth", "depth", size='lg'),
+                                        _field("Beamline", "beamline", size='md'),
+                                        _field("Depth", "depth", size='md'),
                                     ]
                                 ),
                             ],
@@ -537,11 +574,30 @@ peakindex_form = dbc.Row(
                 style={'width': '100%', 'overflow-x': 'auto'}
         )
 
+@dash.callback(
+    Output("collapse1", "is_open"),
+    [Input("collapse1-button", "n_clicks")],
+    [State("collapse1", "is_open")],
+)
+def toggle_collapse12(n, is_open):
+    if n:
+        return not is_open
+    return is_open
+
+@dash.callback(
+    Output("collapse2", "is_open"),
+    [Input("collapse2-button", "n_clicks")],
+    [State("collapse2", "is_open")],
+)
+def toggle_collapse2(n, is_open):
+    if n:
+        return not is_open
+    return is_open
 
 def set_peakindex_form_props(peakindex, read_only=False):
     # set_props("dataset", {'value':peakindex.dataset_id, 'readonly':read_only})
     
-    set_props("peakProgram", {'value':peakindex.peakProgram, 'readonly':read_only})
+    # set_props("peakProgram", {'value':peakindex.peakProgram, 'readonly':read_only})
     set_props("threshold", {'value':peakindex.threshold, 'readonly':read_only})
     set_props("thresholdRatio", {'value':peakindex.thresholdRatio, 'readonly':read_only})
     set_props("maxRfactor", {'value':peakindex.maxRfactor, 'readonly':read_only})
@@ -564,9 +620,13 @@ def set_peakindex_form_props(peakindex, read_only=False):
     set_props("indexKeVmaxCalc", {'value':peakindex.indexKeVmaxCalc, 'readonly':read_only})
     set_props("indexKeVmaxTest", {'value':peakindex.indexKeVmaxTest, 'readonly':read_only})
     set_props("indexAngleTolerance", {'value':peakindex.indexAngleTolerance, 'readonly':read_only})
-    set_props("indexH", {'value':peakindex.indexH, 'readonly':read_only})
-    set_props("indexK", {'value':peakindex.indexK, 'readonly':read_only})
-    set_props("indexL", {'value':peakindex.indexL, 'readonly':read_only})
+    set_props("indexHKL", {'value':''.join(
+        [str(idx) for idx in [peakindex.indexH, peakindex.indexK, peakindex.indexL]]
+                                          ),
+                           'readonly':read_only})
+    # set_props("indexH", {'value':peakindex.indexH, 'readonly':read_only})
+    # set_props("indexK", {'value':peakindex.indexK, 'readonly':read_only})
+    # set_props("indexL", {'value':peakindex.indexL, 'readonly':read_only})
     set_props("indexCone", {'value':peakindex.indexCone, 'readonly':read_only})
     set_props("energyUnit", {'value':peakindex.energyUnit, 'readonly':read_only})
     set_props("exposureUnit", {'value':peakindex.exposureUnit, 'readonly':read_only})

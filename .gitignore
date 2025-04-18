@@ -144,5 +144,6 @@ sandbox.ipynb
 # Working env
 laue-portal-env
 laue-portal_requirements.txt
+laue-portal_conda-requirements.txt
 
 .DS_Store

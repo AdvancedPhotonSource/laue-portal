@@ -182,7 +182,7 @@ class PeakIndex(Base):
     notes: Mapped[str] = mapped_column(String)
 
     # Peak Index Parameters
-    peakProgram: Mapped[str] = mapped_column(String)
+    # peakProgram: Mapped[str] = mapped_column(String)
     threshold: Mapped[int] = mapped_column(Integer)
     thresholdRatio: Mapped[int] = mapped_column(Integer)
     maxRfactor: Mapped[float] = mapped_column(Float)
@@ -200,7 +200,7 @@ class PeakIndex(Base):
     detectorCropY2: Mapped[int] = mapped_column(Integer)
     min_size: Mapped[float] = mapped_column(Float)
     max_peaks: Mapped[int] = mapped_column(Integer)
-    smooth: Mapped[int] = mapped_column(Integer)
+    smooth: Mapped[bool] = mapped_column(Boolean) #Mapped[int] = mapped_column(Integer)
     maskFile: Mapped[str] = mapped_column(String)
     indexKeVmaxCalc: Mapped[float] = mapped_column(Float)
     indexKeVmaxTest: Mapped[float] = mapped_column(Float)
