@@ -163,7 +163,7 @@ def upload_config(contents):
     State('ene_min', 'value'),
     State('ene_max', 'value'),
     State('ene_step', 'value'),
-
+    
     prevent_initial_call=True,
 )
 def submit_config(n,

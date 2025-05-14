@@ -1,16 +1,254 @@
 import laue_portal.database.db_schema as db_schema
 import config
 import yaml
+import xml.etree.ElementTree as ET
 import sqlalchemy
 import datetime
 
-ENGINE = sqlalchemy.create_engine(f'sqlite:///{config.db_file}') 
+ENGINE = sqlalchemy.create_engine(f'sqlite:///{config.db_file}')
 
-def _clean(line):
-    c = '#'
-    if c in line: line = line[:line.index('#')-1]
-    else: line = line.rstrip('\n').rstrip()
-    return line
+
+def parse_metadata(xml,xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog",scan_no=2,empty='\n\t\t'):
+    # tree = ET.parse(xml)
+    # root = tree.getroot()
+    root = ET.fromstring(xml)
+    scan = root[-1]#root[scan_no]
+
+    def name(s,xmlns=xmlns): return s.replace(f'{{{xmlns}}}','')
+
+    def traverse_tree(fields,tree_dict={},parent_name=''):
+        if not len(fields):
+            pass
+        else:
+            for field in list(fields):
+                field_name = name(field.tag)
+                if not any([field_name == f for f in ['scan','cpt']]):
+                    path_name = f'{parent_name}{field_name}'
+                    field_dict = dict([(f'{path_name}_{k}',v) for k,v in field.attrib.items()])
+                    if empty not in field.text: field_dict[path_name] = field.text
+                    tree_dict.update(field_dict)
+                    traverse_tree(field,tree_dict,path_name+'_')
+        return tree_dict
+    
+    scanNumber = scan.get('scanNumber')
+    log_dict = {'scanNumber': scanNumber,
+                'time_epoch': None,
+                'time': None,
+                'user_name': None,
+                'source_beamBad': None,
+                'source_CCDshutter': None,
+                'source_monoTransStatus': None,
+                'source_energy_unit': None,
+                'source_energy': None,
+                'source_IDgap_unit': None,
+                'source_IDgap': None,
+                'source_IDtaper_unit': None,
+                'source_IDtaper': None,
+                'source_ringCurrent_unit': None,
+                'source_ringCurrent': None,
+                'sample_XYZ_unit': None,
+                'sample_XYZ_desc': None,
+                'sample_XYZ': None,
+                'knife-edge_XYZ_unit': None,
+                'knife-edge_XYZ_desc': None,
+                'knife-edge_XYZ': None,
+                'knife-edge_knifeScan_unit': None,
+                'knife-edge_knifeScan': None,
+                'mda_file': None,
+                'scanEnd_abort': None,
+                'scanEnd_time_epoch': None,
+                'scanEnd_time': None,
+                'scanEnd_scanDuration_unit': None,
+                'scanEnd_scanDuration': None,
+                'scanEnd_source_beamBad': None,
+                'scanEnd_source_ringCurrent_unit': None,
+                'scanEnd_source_ringCurrent': None,
+    }
+
+    log_dict = traverse_tree(scan,log_dict)
+
+    scan_label = 'scan'
+    scan_dims = list(scan.iter(f'{{{xmlns}}}{scan_label}'))
+    #scan_dims_num = str(len(scan_dims))
+
+    #*****#
+    PV_label1 = 'positioner'; PV_label2 = 'detectorTrig'
+    scanEnd_cpt_list = scan.find(f'{{{xmlns}}}scanEnd').find(f'{{{xmlns}}}cpt').text.split()[::-1]
+    dims_dict_list = []
+    for ii,dim in enumerate(scan_dims):
+        dim_dict = {'scanNumber': scanNumber,
+                    'dim': None,
+                    'npts': None,
+                    'after': None,
+                    'positioner1_PV': None,
+                    'positioner1_ar': None,
+                    'positioner1_mode': None,
+                    'positioner1': None,
+                    'positioner2_PV': None,
+                    'positioner2_ar': None,
+                    'positioner2_mode': None,
+                    'positioner2': None,
+                    'positioner3_PV': None,
+                    'positioner3_ar': None,
+                    'positioner3_mode': None,
+                    'positioner3': None,
+                    'positioner4_PV': None,
+                    'positioner4_ar': None,
+                    'positioner4_mode': None,
+                    'positioner4': None,
+                    'detectorTrig1_PV': None,
+                    'detectorTrig1_VAL': None,
+                    'detectorTrig2_PV': None,
+                    'detectorTrig2_VAL': None,
+                    'detectorTrig3_PV': None,
+                    'detectorTrig3_VAL': None,
+                    'detectorTrig4_PV': None,
+                    'detectorTrig4_VAL': None,
+                    'cpt': None,
+        }
+        dim_dict.update(dim.attrib)
+        PV_count_dict = {PV_label1:0, PV_label2:0}
+        for record in dim:
+            #record_name = name(record.tag)
+            if 'PV' in record.attrib.keys():
+                record_name = name(record.tag)
+                for PV_label in PV_count_dict.keys():
+                    if PV_label in record_name:
+                        PV_count_dict[PV_label] += 1
+                        record_label = f'{PV_label}{PV_count_dict[PV_label]}'
+                        record_dict = dict([('_'.join([record_label,k]),v) for k,v in record.attrib.items()])
+                        if record.text: record_dict[f'{record_label}'] = record.text
+                        dim_dict.update(record_dict)
+        dim_dict['cpt'] = scanEnd_cpt_list[ii]
+        dim_dict = {f'{scan_label}_{k}' if k != 'scanNumber' else k:v for k,v in dim_dict.items()}
+        dims_dict_list.append(dim_dict)
+    #*****#
+
+    return log_dict, dims_dict_list
+
+def import_metadata_row(metadata_object):
+    """
+    Reads a yaml file and creates a new Metadata ORM object with 
+    the base data of the file
+    """
+
+    metadata_row = db_schema.Metadata(
+        scanNumber=metadata_object['scanNumber'],
+        time_epoch=metadata_object['time_epoch'],
+        time=metadata_object['time'],
+        user_name=metadata_object['user_name'],
+        source_beamBad=metadata_object['source_beamBad'],
+        source_CCDshutter=metadata_object['source_CCDshutter'],
+        source_monoTransStatus=metadata_object['source_monoTransStatus'],
+        source_energy_unit=metadata_object['source_energy_unit'],
+        source_energy=metadata_object['source_energy'],
+        source_IDgap_unit=metadata_object['source_IDgap_unit'],
+        source_IDgap=metadata_object['source_IDgap'],
+        source_IDtaper_unit=metadata_object['source_IDtaper_unit'],
+        source_IDtaper=metadata_object['source_IDtaper'],
+        source_ringCurrent_unit=metadata_object['source_ringCurrent_unit'],
+        source_ringCurrent=metadata_object['source_ringCurrent'],
+        sample_XYZ_unit=metadata_object['sample_XYZ_unit'],
+        sample_XYZ_desc=metadata_object['sample_XYZ_desc'],
+        sample_XYZ=metadata_object['sample_XYZ'],
+        # sample_X=metadata_object['sample_X'],
+        # sample_Y=metadata_object['sample_Y'],
+        # sample_Z=metadata_object['sample_Z'],
+        knifeEdge_XYZ_unit=metadata_object['knife-edge_XYZ_unit'],
+        knifeEdge_XYZ_desc=metadata_object['knife-edge_XYZ_desc'],
+        knifeEdge_XYZ=metadata_object['knife-edge_XYZ'],
+        # knifeEdge_X=metadata_object['knife-edge_X'],
+        # knifeEdge_Y=metadata_object['knife-edge_Y'],
+        # knifeEdge_Z=metadata_object['knife-edge_Z'],
+        knifeEdge_knifeScan_unit=metadata_object['knife-edge_knifeScan_unit'],
+        knifeEdge_knifeScan=metadata_object['knife-edge_knifeScan'],
+        # scan_dim=metadata_object['scan_dim'],
+        # scan_npts=metadata_object['scan_npts'],
+        # scan_after=metadata_object['scan_after'],
+        # scan_positionerSettle_unit=metadata_object['scan_positionerSettle_unit'],
+        # scan_positionerSettle=metadata_object['scan_positionerSettle'],
+        # scan_detectorSettle_unit=metadata_object['scan_detectorSettle_unit'],
+        # scan_detectorSettle=metadata_object['scan_detectorSettle'],
+        # scan_beforePV_VAL=metadata_object['scan_beforePV_VAL'],
+        # scan_beforePV_wait=metadata_object['scan_beforePV_wait'],
+        # scan_beforePV=metadata_object['scan_beforePV'],
+        # scan_afterPV_VAL=metadata_object['scan_afterPV_VAL'],
+        # scan_afterPV_wait=metadata_object['scan_afterPV_wait'],
+        # scan_afterPV=metadata_object['scan_afterPV'],
+        # scan_positioner_PV=metadata_object['scan_positioner_PV'],
+        # scan_positioner_ar=metadata_object['scan_positioner_ar'],
+        # scan_positioner_mode=metadata_object['scan_positioner_mode'],
+        # scan_positioner_1=metadata_object['scan_positioner_1'],
+        # scan_positioner_2=metadata_object['scan_positioner_2'],
+        # scan_positioner_3=metadata_object['scan_positioner_3'],
+        # scan_detectorTrig_PV=metadata_object['scan_detectorTrig_PV'],
+        # scan_detectorTrig_VAL=metadata_object['scan_detectorTrig_VAL'],
+        # scan_detectors=metadata_object['scan_detectors'],
+        mda_file=metadata_object['mda_file'],
+        scanEnd_abort=metadata_object['scanEnd_abort'],
+        scanEnd_time_epoch=metadata_object['scanEnd_time_epoch'],
+        scanEnd_time=metadata_object['scanEnd_time'],
+        scanEnd_scanDuration_unit=metadata_object['scanEnd_scanDuration_unit'],
+        scanEnd_scanDuration=metadata_object['scanEnd_scanDuration'],
+        # scanEnd_cpt=metadata_object['scanEnd_cpt'],
+        scanEnd_source_beamBad=metadata_object['scanEnd_source_beamBad'],
+        scanEnd_source_ringCurrent_unit=metadata_object['scanEnd_source_ringCurrent_unit'],
+        scanEnd_source_ringCurrent=metadata_object['scanEnd_source_ringCurrent'],
+    )
+    return metadata_row
+
+
+def import_scan_row(scan_object):
+    """
+    Reads a yaml file and creates a new Scan ORM object with 
+    the base data of the file
+    """
+
+    scan_row = db_schema.Scan(
+
+        scanNumber=scan_object['scanNumber'],
+        scan_dim=scan_object['scan_dim'],
+        scan_npts=scan_object['scan_npts'],
+        scan_after=scan_object['scan_after'],
+        # scan_positionerSettle_unit=scan_object['scan_positionerSettle_unit'],
+        # scan_positionerSettle=scan_object['scan_positionerSettle'],
+        # scan_detectorSettle_unit=scan_object['scan_detectorSettle_unit'],
+        # scan_detectorSettle=scan_object['scan_detectorSettle'],
+        # scan_beforePV_VAL=scan_object['scan_beforePV_VAL'],
+        # scan_beforePV_wait=scan_object['scan_beforePV_wait'],
+        # scan_beforePV=scan_object['scan_beforePV'],
+        # scan_afterPV_VAL=scan_object['scan_afterPV_VAL'],
+        # ascan_fterPV_wait=scan_object['scan_afterPV_wait'],
+        # scan_afterPV=scan_object['scan_afterPV'],
+        scan_positioner1_PV=scan_object['scan_positioner1_PV'],
+        scan_positioner1_ar=scan_object['scan_positioner1_ar'],
+        scan_positioner1_mode=scan_object['scan_positioner1_mode'],
+        scan_positioner1=scan_object['scan_positioner1'],
+        scan_positioner2_PV=scan_object['scan_positioner2_PV'],
+        scan_positioner2_ar=scan_object['scan_positioner2_ar'],
+        scan_positioner2_mode=scan_object['scan_positioner2_mode'],
+        scan_positioner2=scan_object['scan_positioner2'],
+        scan_positioner3_PV=scan_object['scan_positioner3_PV'],
+        scan_positioner3_ar=scan_object['scan_positioner3_ar'],
+        scan_positioner3_mode=scan_object['scan_positioner3_mode'],
+        scan_positioner3=scan_object['scan_positioner3'],
+        scan_positioner4_PV=scan_object['scan_positioner4_PV'],
+        scan_positioner4_ar=scan_object['scan_positioner4_ar'],
+        scan_positioner4_mode=scan_object['scan_positioner4_mode'],
+        scan_positioner4=scan_object['scan_positioner4'],
+        scan_detectorTrig1_PV=scan_object['scan_detectorTrig1_PV'],
+        scan_detectorTrig1_VAL=scan_object['scan_detectorTrig1_VAL'],
+        scan_detectorTrig2_PV=scan_object['scan_detectorTrig2_PV'],
+        scan_detectorTrig2_VAL=scan_object['scan_detectorTrig2_VAL'],
+        scan_detectorTrig3_PV=scan_object['scan_detectorTrig3_PV'],
+        scan_detectorTrig3_VAL=scan_object['scan_detectorTrig3_VAL'],
+        scan_detectorTrig4_PV=scan_object['scan_detectorTrig4_PV'],
+        scan_detectorTrig4_VAL=scan_object['scan_detectorTrig4_VAL'],
+        # scan_detectors=metadata_object['scan_detectors'],
+        scan_cpt=scan_object['scan_cpt'],
+    )
+    return scan_row
+
 
 def import_recon_row(recon_object):
     """
@@ -93,7 +331,6 @@ def import_recon_row(recon_object):
         algo_ene_range=recon_object['algo']['ene']['range'],
     )
     return recon_row
-
 
 def create_config_obj(recon):
     config_dict = {
@@ -202,6 +439,7 @@ def create_config_obj(recon):
             }
     return config_dict
 
+
 def import_peakindex_row(peakindex_object):
     """
     Reads a yaml file and creates a new PeakIndex ORM object with 
@@ -258,7 +496,6 @@ def import_peakindex_row(peakindex_object):
         # cosmicFilter=peakindex_object['cosmicFilter'],
     )
     return peakindex_row
-
 
 def create_peakindex_config_obj(peakindex):
     config_dict = {

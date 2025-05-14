@@ -58,12 +58,12 @@ layout = html.Div([
                     dcc.Graph(
                         #style={'height': 300},
                         style={'display': 'inline-block'},
-                        id="lineout-graph"
+                        id="lineout-graph",
                     ),
                     dcc.Graph(
                         #style={'height': 300},
                         style={'display': 'inline-block', 'height': 300},
-                        id="detector-graph"
+                        id="detector-graph",
                     ),
                     dcc.Store(id='zoom_info'),
                     dcc.Store(id='index_pointer'),
@@ -288,7 +288,7 @@ VISIBLE_COLS = [
     prevent_initial_call=True,
 )
 def get_recons(path):
-       if path == '/':
+       if path == '/reconstructions':
             cols, recons = _get_recons()
             return cols, recons
        else:
@@ -314,7 +314,7 @@ def cell_clicked(active_cell):
         set_props("modal-details", {'is_open':True})
         set_props("modal-details-header", {'children':dbc.ModalTitle(f"Details for Recon {row_id} (Read Only)")})
         
-        ui_shared.set_form_props(recon, read_only=True)
+        ui_shared.set_recon_form_props(recon, read_only=True)
 
 
     

@@ -90,7 +90,7 @@ def upload_config(contents):
 
 @dash.callback(
     Input('submit_peakindex', 'n_clicks'),
-
+    
     # State('dataset', 'value'),
     
     # State('peakProgram', 'value'),
@@ -137,7 +137,7 @@ def upload_config(contents):
     State('depth', 'value'),
     State('beamline', 'value'),
     # State('cosmicFilter', 'value'),
-
+    
     prevent_initial_call=True,
 )
 def submit_config(n,
