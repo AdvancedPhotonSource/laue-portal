@@ -21,6 +21,37 @@ app = dash.Dash(__name__,
 
 app.layout = dash.page_container
 
+from dash.dependencies import Input, Output, State
+
+@app.callback(
+    Output("nav-scans", "active"),
+    Output("nav-recon", "active"),
+    Output("nav-index", "active"),
+    #Output("nav-createRecon", "active"),
+    #Output("nav-createIndex", "active"),
+    Input("url", "pathname"),
+)
+def toggle_active_links(pathname):
+    return (
+        pathname == "/",                       # nav-scans
+        pathname == "/reconstructions",        # nav-recon
+        #pathname == "/create_indexing",        # nav-createIndex
+        #pathname == "/create_reconstruction",  # nav-createRecon
+        pathname == "/indexing",               # nav-index
+    )
+
+@app.callback(
+    Output("modal-details", "is_open"),
+    Input("submit-btn-0", "n_clicks"),
+    Input("submit-btn-1", "n_clicks"),
+    Input("submit-btn-2", "n_clicks"),
+    prevent_initial_call=True
+)
+def handle_submit(*args):
+    button_id = ctx.triggered_id
+    print(f"User clicked: {button_id}")
+    return True
+
 # Run the application
 if __name__ == '__main__':
-    app.run_server(debug=True, port=2051, host='0.0.0.0')
+    app.run(debug=True, port=8053)#, host='0.0.0.0')
