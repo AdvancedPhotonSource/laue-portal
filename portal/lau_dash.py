@@ -40,17 +40,6 @@ def toggle_active_links(pathname):
         pathname == "/indexing",               # nav-index
     )
 
-@app.callback(
-    Output("modal-details", "is_open"),
-    Input("submit-btn-0", "n_clicks"),
-    Input("submit-btn-1", "n_clicks"),
-    Input("submit-btn-2", "n_clicks"),
-    prevent_initial_call=True
-)
-def handle_submit(*args):
-    button_id = ctx.triggered_id
-    print(f"User clicked: {button_id}")
-    return True
 
 # Run the application
 if __name__ == '__main__':

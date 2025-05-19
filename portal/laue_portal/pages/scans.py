@@ -1,3 +1,4 @@
+# May 19 2025
 import dash
 from dash import html, dcc
 from dash.dependencies import Input, Output, State
@@ -8,12 +9,12 @@ dash.register_page(__name__, path="/")
 
 # Data
 base_data = [
-    {"scan_id": 126745, "user": "Dina", "sample": "Cu", "scan_dim": "3D", "technique": "area-depth", "date": "2025-05-16", "status": "Collecting"},
-    {"scan_id": 126746, "user": "Ross", "sample": "ZnO", "scan_dim": "2D", "technique": "area", "date": "2025-05-15", "status": "Processing"},
-    {"scan_id": 126747, "user": "Jon", "sample": "Si", "scan_dim": "1D", "technique": "depth", "date": "2025-05-14", "status": "Pending"},
-    {"scan_id": 126748, "user": "Dina","sample": "Si", "scan_dim": "2D", "technique": "line-depth", "date": "2025-05-14", "status": "No action"},
-    {"scan_id": 126749, "user": "Dina","sample": "Si", "scan_dim": "1D", "technique": "energy-depth", "date": "2025-05-14", "status": "No action"},
-    {"scan_id": 126750, "user": "Dina","sample": "Si", "scan_dim": "3D", "technique": "line-energy-depth", "date": "2025-05-14", "status": "No action"},
+    {"scan_id": 126745, "user": "Dina", "sample": "Cu", "scan_dim": "3D", "technique": "area-depth", "date": "2025-05-16", "status": "Collecting", "comment": ""},
+    {"scan_id": 126746, "user": "Ross", "sample": "ZnO", "scan_dim": "2D", "technique": "area", "date": "2025-05-15", "status": "Processing", "comment": ""},
+    {"scan_id": 126747, "user": "Jon", "sample": "Si", "scan_dim": "1D", "technique": "depth", "date": "2025-05-14", "status": "Pending", "comment": "submit indexing"},
+    {"scan_id": 126748, "user": "Dina","sample": "Si", "scan_dim": "2D", "technique": "line-depth", "date": "2025-05-14", "status": "No action", "comment": "recon2 is good"},
+    {"scan_id": 126749, "user": "Dina","sample": "Si", "scan_dim": "1D", "technique": "energy-depth", "date": "2025-05-14", "status": "No action", "comment": ""},
+    {"scan_id": 126750, "user": "Dina","sample": "Si", "scan_dim": "3D", "technique": "line-energy-depth", "date": "2025-05-14", "status": "No action", "comment": "done"},
 ]
 
 def build_table_rows(data):
@@ -42,6 +43,7 @@ def build_table_rows(data):
             html.Td(row["date"]),
             html.Td(action_dropdown),
             html.Td(row["status"]),
+            html.Td(row["comment"])
         ]))
     return rows
 
@@ -50,7 +52,7 @@ layout = dbc.Container([
     dcc.Location(id='url', refresh=False),
     dcc.Store(id="sort-store", data={"column": "scan_id", "ascending": False}),
     dcc.Store(id="filter-store", data={
-        "scan_id": "", "user": "", "sample": "", "scan_dim": "", "technique": "", "date": "", "status": ""
+        "scan_id": "", "user": "", "sample": "", "scan_dim": "", "technique": "", "date": "", "status": "", "comment": ""
     }),
     html.Div(id="scan-table-container")
 ])
@@ -82,7 +84,7 @@ def update_table(sort_data, filter_data):
             except:
                 match = False
 
-        for key in ["user", "sample", "scan_dim", "technique", "status", "date"]:
+        for key in ["user", "sample", "scan_dim", "technique", "status", "date", "comment"]:
             val = filter_data.get(key, "")
             if val and val.lower() not in str(row[key]).lower():
                 match = False
@@ -111,7 +113,10 @@ def update_table(sort_data, filter_data):
                 style={"border": "none", "background": "none", "cursor": "pointer", "paddingLeft": "6px", "fontSize": "12px"})]),
         html.Th("Action"),
         html.Th(["Status", html.Button("⇅", id="sort-status", n_clicks=0,
-                style={"border": "none", "background": "none", "cursor": "pointer", "paddingLeft": "6px", "fontSize": "12px"})])
+                style={"border": "none", "background": "none", "cursor": "pointer", "paddingLeft": "6px", "fontSize": "12px"})]),
+        html.Th(["comment", html.Button("⇅", id="sort-comment", n_clicks=0,
+                style={"border": "none", "background": "none", "cursor": "pointer", "paddingLeft": "6px", "fontSize": "12px"})]),
+
     ])
 
     filter_row = html.Tr([
@@ -123,6 +128,8 @@ def update_table(sort_data, filter_data):
         html.Td(dcc.Input(id="filter-date", value=filter_data["date"], placeholder="filter", size="sm", style=input_style)),
         html.Td(),
         html.Td(dcc.Input(id="filter-status", value=filter_data["status"], placeholder="filter", size="sm", style=input_style)),
+        html.Td(dcc.Input(id="filter-comment", value=filter_data["comment"], placeholder="filter", size="sm", style=input_style)),
+
     ])
 
     return dbc.Table([
@@ -132,7 +139,7 @@ def update_table(sort_data, filter_data):
 
 @dash.callback(
     Output("sort-store", "data"),
-    [Input(f"sort-{col}", "n_clicks") for col in ["scan_id", "user", "sample", "scan_dim", "technique", "date", "status"]],
+    [Input(f"sort-{col}", "n_clicks") for col in ["scan_id", "user", "sample", "scan_dim", "technique", "date", "status", "comment"]],
     State("sort-store", "data"),
     prevent_initial_call=True
 )
@@ -156,9 +163,10 @@ def update_sort(*args):
     Input("filter-technique", "value"),
     Input("filter-date", "value"),
     Input("filter-status", "value"),
+    Input("filter-comment", "value"),
     prevent_initial_call=True
 )
-def update_filter(scan_id, user, sample, scan_dim, technique, date, status):
+def update_filter(scan_id, user, sample, scan_dim, technique, date, status, comment):
     return {
         "scan_id": scan_id or "",
         "user": user or "",
@@ -166,5 +174,6 @@ def update_filter(scan_id, user, sample, scan_dim, technique, date, status):
         "scan_dim": scan_dim or "",
         "technique": technique or "",
         "date": date or "",
-        "status": status or ""
+        "status": status or "",
+        "comment": comment or ""
     }

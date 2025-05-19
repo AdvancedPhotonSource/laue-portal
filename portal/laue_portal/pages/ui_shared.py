@@ -14,8 +14,11 @@ def update_active_links(pathname):
 """
 navbar = dbc.NavbarSimple(
     children=[
-        dbc.NavItem(dbc.NavLink("Reconstructions", href="/")),
-        dbc.NavItem(dbc.NavLink("New Reconstruction", href="/create-reconstruction")),
+        dbc.NavItem(dbc.NavLink("Scans", href="/")),
+        dbc.NavItem(dbc.NavLink("Reconstructions", href="/reconstructions")),
+        dbc.NavItem(dbc.NavLink("Indexing", href="/indexing")),
+        #dbc.NavItem(dbc.NavLink("New Reconstruction", href="/create-reconstruction")),
+        #dbc.NavItem(dbc.NavLink("New Indexing", href="/create-indexing")),
         dbc.NavItem(dbc.NavLink("Run Monitor", href="/runs")),
     ],
     brand="Coded Aperture Laue",
@@ -25,6 +28,25 @@ navbar = dbc.NavbarSimple(
     dark=True,
     style={"max-height": "50px"},
 )
+
+
+navbar = dbc.NavbarSimple(
+    children=[
+        dbc.NavItem(dbc.NavLink("Scans", href="/", id="nav-scans")),
+        dbc.NavItem(dbc.NavLink("Reconstructions", href="/reconstructions", id="nav-recon")),
+        dbc.NavItem(dbc.NavLink("Indexing", href="/indexing", id="nav-index")),
+        #dbc.NavItem(dbc.NavLink("New Reconstruction", href="/create_reconstruction", id="nav-createRecon")),
+        #dbc.NavItem(dbc.NavLink("New Indexing", href="/create_indexing", id="nav-createIndex")),
+        dbc.NavItem(dbc.NavLink("Run Monitor", href="/runs")),
+    ],
+    brand="3DMN Portal",
+    brand_href="/",
+    color="primary",
+    className="navbar-lg",
+    dark=True,
+    style={"max-height": "50px"},
+)
+
 
 def _recon_stack(objects):
     return dbc.Stack(
