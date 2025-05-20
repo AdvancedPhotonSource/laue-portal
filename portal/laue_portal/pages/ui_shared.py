@@ -15,9 +15,9 @@ def update_active_links(pathname):
 """
 navbar = dbc.NavbarSimple(
     children=[
-        dbc.NavItem(dbc.NavLink("Scans", href="/scans")),
+        dbc.NavItem(dbc.NavLink("Scans", href="/")),
         dbc.NavItem(dbc.NavLink("New Scan", href="/create-scan")),
-        dbc.NavItem(dbc.NavLink("Reconstructions", href="/")),
+        dbc.NavItem(dbc.NavLink("Reconstructions", href="/reconstructions")),
         dbc.NavItem(dbc.NavLink("New Reconstruction", href="/create-reconstruction")),
         dbc.NavItem(dbc.NavLink("Recon Run Monitor", href="/runs")),
         dbc.NavItem(dbc.NavLink("Indexations", href="/indexedpeaks")),
@@ -168,7 +168,7 @@ metadata_form = dbc.Row(
                         ),
                         dbc.AccordionItem(
                             [
-                                html.Div(id="scans_container", children=[])#, className="mt-4"),
+                                html.Div(id="scan_cards", children=[])#, className="mt-4"),
                             ],
                             title="Scan",
                         ),
@@ -223,70 +223,70 @@ def make_scan_card(i):
                 [
                     _stack(
                         [
-                            _field("Dimensions", {"type": "scan_dim", "index": i}, size='lg'),
-                            _field("No. Points", {"type": "scan_npts", "index": i}, size='lg'),
-                            _field("After", {"type": "scan_after", "index": i}, size='lg'),
+                            _field("Dimensions", f"scan_dim_{i}", size='lg'),
+                            _field("No. Points", f"scan_npts_{i}", size='lg'),
+                            _field("After", f"scan_after_{i}", size='lg'),
                         ]
                     ),
                     _stack(
                         [
-                            _field("Positioner 1 PV", {"type": "scan_positioner1_PV", "index": i}, size='lg'),
-                            _field("Positioner 1 ar", {"type": "scan_positioner1_ar", "index": i}, size='lg'),
-                            _field("Positioner 1 mode", {"type": "scan_positioner1_mode", "index": i}, size='lg'),
-                            _field("Positioner 1", {"type": "scan_positioner1", "index": i}, size='lg'),
+                            _field("Positioner 1 PV", f"scan_positioner1_PV_{i}", size='lg'),
+                            _field("Positioner 1 ar", f"scan_positioner1_ar_{i}", size='lg'),
+                            _field("Positioner 1 mode", f"scan_positioner1_mode_{i}", size='lg'),
+                            _field("Positioner 1", f"scan_positioner1_{i}", size='lg'),
                         ]
                     ),
                     _stack(
                         [
-                            _field("Positioner 2 PV", {"type": "scan_positioner2_PV", "index": i}, size='lg'),
-                            _field("Positioner 2 ar", {"type": "scan_positioner2_ar", "index": i}, size='lg'),
-                            _field("Positioner 2 mode", {"type": "scan_positioner2_mode", "index": i}, size='lg'),
-                            _field("Positioner 2", {"type": "scan_positioner2", "index": i}, size='lg'),
+                            _field("Positioner 2 PV", f"scan_positioner2_PV_{i}", size='lg'),
+                            _field("Positioner 2 ar", f"scan_positioner2_ar_{i}", size='lg'),
+                            _field("Positioner 2 mode", f"scan_positioner2_mode_{i}", size='lg'),
+                            _field("Positioner 2", f"scan_positioner2_{i}", size='lg'),
                         ]
                     ),
                     _stack(
                         [
-                            _field("Positioner 3 PV", {"type": "scan_positioner3_PV", "index": i}, size='lg'),
-                            _field("Positioner 3 ar", {"type": "scan_positioner3_ar", "index": i}, size='lg'),
-                            _field("Positioner 3 mode", {"type": "scan_positioner3_mode", "index": i}, size='lg'),
-                            _field("Positioner 3", {"type": "scan_positioner3", "index": i}, size='lg'),
+                            _field("Positioner 3 PV", f"scan_positioner3_PV_{i}", size='lg'),
+                            _field("Positioner 3 ar", f"scan_positioner3_ar_{i}", size='lg'),
+                            _field("Positioner 3 mode", f"scan_positioner3_mode_{i}", size='lg'),
+                            _field("Positioner 3", f"scan_positioner3_{i}", size='lg'),
                         ]
                     ),
                     _stack(
                         [
-                            _field("Positioner 4 PV", {"type": "scan_positioner4_PV", "index": i}, size='lg'),
-                            _field("Positioner 4 ar", {"type": "scan_positioner4_ar", "index": i}, size='lg'),
-                            _field("Positioner 4 mode", {"type": "scan_positioner4_mode", "index": i}, size='lg'),
-                            _field("Positioner 4", {"type": "scan_positioner4", "index": i}, size='lg'),
+                            _field("Positioner 4 PV", f"scan_positioner4_PV_{i}", size='lg'),
+                            _field("Positioner 4 ar", f"scan_positioner4_ar_{i}", size='lg'),
+                            _field("Positioner 4 mode", f"scan_positioner4_mode_{i}", size='lg'),
+                            _field("Positioner 4", f"scan_positioner4_{i}", size='lg'),
                         ]
                     ),
                     _stack(
                         [
-                            _field("Detector Trig 1 PV", {"type": "scan_detectorTrig1_PV", "index": i}, size='lg'),
-                            _field("Detector Trig 1 VAL", {"type": "scan_detectorTrig1_VAL", "index": i}, size='lg'),
+                            _field("Detector Trig 1 PV", f"scan_detectorTrig1_PV_{i}", size='lg'),
+                            _field("Detector Trig 1 VAL", f"scan_detectorTrig1_VAL_{i}", size='lg'),
                         ]
                     ),
                     _stack(
                         [
-                            _field("Detector Trig 2 PV", {"type": "scan_detectorTrig2_PV", "index": i}, size='lg'),
-                            _field("Detector Trig 2 VAL", {"type": "scan_detectorTrig2_VAL", "index": i}, size='lg'),
+                            _field("Detector Trig 2 PV", f"scan_detectorTrig2_PV_{i}", size='lg'),
+                            _field("Detector Trig 2 VAL", f"scan_detectorTrig2_VAL_{i}", size='lg'),
                         ]
                     ),
                     _stack(
                         [
-                            _field("Detector Trig 3 PV", {"type": "scan_detectorTrig3_PV", "index": i}, size='lg'),
-                            _field("Detector Trig 3 VAL", {"type": "scan_detectorTrig3_VAL", "index": i}, size='lg'),
+                            _field("Detector Trig 3 PV", f"scan_detectorTrig3_PV_{i}", size='lg'),
+                            _field("Detector Trig 3 VAL", f"scan_detectorTrig3_VAL_{i}", size='lg'),
                         ]
                     ),
                     _stack(
                         [
-                            _field("Detector Trig 4 PV", {"type": "scan_detectorTrig4_PV", "index": i}, size='lg'),
-                            _field("Detector Trig 4 VAL", {"type": "scan_detectorTrig4_VAL", "index": i}, size='lg'),
+                            _field("Detector Trig 4 PV", f"scan_detectorTrig4_PV_{i}", size='lg'),
+                            _field("Detector Trig 4 VAL", f"scan_detectorTrig4_VAL_{i}", size='lg'),
                         ]
                     ),
                     _stack(
                         [
-                            _field("Completed", {"type": "scan_cpt", "index": i}, size='lg'),
+                            _field("Completed", f"scan_cpt_{i}", size='lg'),
                         ]
                     ),
                 ],
@@ -298,10 +298,10 @@ def make_scan_card(i):
         #     "display": "inline-block",
         # },
         # className="m-1",
-        id={"type": "dynamic-card", "index": i},
+        id=f"scan_card_{i}",
     )
 
-def set_metadata_form_props(metadata, scans, read_only=False):
+def set_metadata_form_props(metadata, scans, read_only=True):
     set_props("scanNumber", {'value':metadata.scanNumber, 'readonly':read_only})
 
     set_props("time_epoch", {'value':metadata.time_epoch, 'readonly':read_only})
@@ -366,34 +366,34 @@ def set_metadata_form_props(metadata, scans, read_only=False):
 
     for i,scan in enumerate(scans):
         i += 1
-        set_props({"type": "scan_dim", "index": i}, {'value':scan.scan_dim, 'readonly':read_only})
-        set_props({"type": "scan_npts", "index": i}, {'value':scan.scan_npts, 'readonly':read_only})
-        set_props({"type": "scan_after", "index": i}, {'value':scan.scan_after, 'readonly':read_only})
-        set_props({"type": "scan_positioner1_PV", "index": i}, {'value':scan.scan_positioner1_PV, 'readonly':read_only})
-        set_props({"type": "scan_positioner1_ar", "index": i}, {'value':scan.scan_positioner1_ar, 'readonly':read_only})
-        set_props({"type": "scan_positioner1_mode", "index": i}, {'value':scan.scan_positioner1_mode, 'readonly':read_only})
-        set_props({"type": "scan_positioner1", "index": i}, {'value':scan.scan_positioner1, 'readonly':read_only})
-        set_props({"type": "scan_positioner2_PV", "index": i}, {'value':scan.scan_positioner2_PV, 'readonly':read_only})
-        set_props({"type": "scan_positioner2_ar", "index": i}, {'value':scan.scan_positioner2_ar, 'readonly':read_only})
-        set_props({"type": "scan_positioner2_mode", "index": i}, {'value':scan.scan_positioner2_mode, 'readonly':read_only})
-        set_props({"type": "scan_positioner2", "index": i}, {'value':scan.scan_positioner2, 'readonly':read_only})
-        set_props({"type": "scan_positioner3_PV", "index": i}, {'value':scan.scan_positioner3_PV, 'readonly':read_only})
-        set_props({"type": "scan_positioner3_ar", "index": i}, {'value':scan.scan_positioner3_ar, 'readonly':read_only})
-        set_props({"type": "scan_positioner3_mode", "index": i}, {'value':scan.scan_positioner3_mode, 'readonly':read_only})
-        set_props({"type": "scan_positioner3", "index": i}, {'value':scan.scan_positioner3, 'readonly':read_only})
-        set_props({"type": "scan_positioner4_PV", "index": i}, {'value':scan.scan_positioner4_PV, 'readonly':read_only})
-        set_props({"type": "scan_positioner4_ar", "index": i}, {'value':scan.scan_positioner4_ar, 'readonly':read_only})
-        set_props({"type": "scan_positioner4_mode", "index": i}, {'value':scan.scan_positioner4_mode, 'readonly':read_only})
-        set_props({"type": "scan_positioner4", "index": i}, {'value':scan.scan_positioner4, 'readonly':read_only})
-        set_props({"type": "scan_detectorTrig1_PV", "index": i}, {'value':scan.scan_detectorTrig1_PV, 'readonly':read_only})
-        set_props({"type": "scan_detectorTrig1_VAL", "index": i}, {'value':scan.scan_detectorTrig1_VAL, 'readonly':read_only})
-        set_props({"type": "scan_detectorTrig2_PV", "index": i}, {'value':scan.scan_detectorTrig2_PV, 'readonly':read_only})
-        set_props({"type": "scan_detectorTrig2_VAL", "index": i}, {'value':scan.scan_detectorTrig2_VAL, 'readonly':read_only})
-        set_props({"type": "scan_detectorTrig3_PV", "index": i}, {'value':scan.scan_detectorTrig3_PV, 'readonly':read_only})
-        set_props({"type": "scan_detectorTrig3_VAL", "index": i}, {'value':scan.scan_detectorTrig3_VAL, 'readonly':read_only})
-        set_props({"type": "scan_detectorTrig4_PV", "index": i}, {'value':scan.scan_detectorTrig4_PV, 'readonly':read_only})
-        set_props({"type": "scan_detectorTrig4_VAL", "index": i}, {'value':scan.scan_detectorTrig4_VAL, 'readonly':read_only})
-        set_props({"type": "scan_cpt", "index": i}, {'value':scan.scan_cpt, 'readonly':read_only})
+        set_props(f"scan_dim_{i}", {'value':scan.scan_dim, 'readonly':read_only})
+        set_props(f"scan_npts_{i}", {'value':scan.scan_npts, 'readonly':read_only})
+        set_props(f"scan_after_{i}", {'value':scan.scan_after, 'readonly':read_only})
+        set_props(f"scan_positioner1_PV_{i}", {'value':scan.scan_positioner1_PV, 'readonly':read_only})
+        set_props(f"scan_positioner1_ar_{i}", {'value':scan.scan_positioner1_ar, 'readonly':read_only})
+        set_props(f"scan_positioner1_mode_{i}", {'value':scan.scan_positioner1_mode, 'readonly':read_only})
+        set_props(f"scan_positioner1_{i}", {'value':scan.scan_positioner1, 'readonly':read_only})
+        set_props(f"scan_positioner2_PV_{i}", {'value':scan.scan_positioner2_PV, 'readonly':read_only})
+        set_props(f"scan_positioner2_ar_{i}", {'value':scan.scan_positioner2_ar, 'readonly':read_only})
+        set_props(f"scan_positioner2_mode_{i}", {'value':scan.scan_positioner2_mode, 'readonly':read_only})
+        set_props(f"scan_positioner2_{i}", {'value':scan.scan_positioner2, 'readonly':read_only})
+        set_props(f"scan_positioner3_PV_{i}", {'value':scan.scan_positioner3_PV, 'readonly':read_only})
+        set_props(f"scan_positioner3_ar_{i}", {'value':scan.scan_positioner3_ar, 'readonly':read_only})
+        set_props(f"scan_positioner3_mode_{i}", {'value':scan.scan_positioner3_mode, 'readonly':read_only})
+        set_props(f"scan_positioner3_{i}", {'value':scan.scan_positioner3, 'readonly':read_only})
+        set_props(f"scan_positioner4_PV_{i}", {'value':scan.scan_positioner4_PV, 'readonly':read_only})
+        set_props(f"scan_positioner4_ar_{i}", {'value':scan.scan_positioner4_ar, 'readonly':read_only})
+        set_props(f"scan_positioner4_mode_{i}", {'value':scan.scan_positioner4_mode, 'readonly':read_only})
+        set_props(f"scan_positioner4_{i}", {'value':scan.scan_positioner4, 'readonly':read_only})
+        set_props(f"scan_detectorTrig1_PV_{i}", {'value':scan.scan_detectorTrig1_PV, 'readonly':read_only})
+        set_props(f"scan_detectorTrig1_VAL_{i}", {'value':scan.scan_detectorTrig1_VAL, 'readonly':read_only})
+        set_props(f"scan_detectorTrig2_PV_{i}", {'value':scan.scan_detectorTrig2_PV, 'readonly':read_only})
+        set_props(f"scan_detectorTrig2_VAL_{i}", {'value':scan.scan_detectorTrig2_VAL, 'readonly':read_only})
+        set_props(f"scan_detectorTrig3_PV_{i}", {'value':scan.scan_detectorTrig3_PV, 'readonly':read_only})
+        set_props(f"scan_detectorTrig3_VAL_{i}", {'value':scan.scan_detectorTrig3_VAL, 'readonly':read_only})
+        set_props(f"scan_detectorTrig4_PV_{i}", {'value':scan.scan_detectorTrig4_PV, 'readonly':read_only})
+        set_props(f"scan_detectorTrig4_VAL_{i}", {'value':scan.scan_detectorTrig4_VAL, 'readonly':read_only})
+        set_props(f"scan_cpt_{i}", {'value':scan.scan_cpt, 'readonly':read_only})
 
     # set_props("dataset", {'value':metadata.dataset_id, 'readonly':read_only})
     

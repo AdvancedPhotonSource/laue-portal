@@ -18,7 +18,7 @@ import plotly.graph_objects as go
 from pathlib import Path
 import h5py
 
-dash.register_page(__name__)
+dash.register_page(__name__, path='/')
 
 layout = html.Div([
         ui_shared.navbar,
@@ -74,7 +74,7 @@ def _get_metadatas():
     cols.append({'name': 'Parameters', 'id': 'Parameters', 'presentation': 'markdown'})
     cols.append({'name': 'Results', 'id': 'Results', 'presentation': 'markdown'})
 
-    metadatas['id'] = metadatas['metadata_id']
+    metadatas['id'] = metadatas['scanNumber']
 
     metadatas['Parameters'] = '**Parameters**'
     metadatas['Results'] = '**Results**'
@@ -99,7 +99,7 @@ def upload_log(contents):
         for i,scan in enumerate(scans):
             scan_cards.append(ui_shared.make_scan_card(i))
             scan_rows.append(db_utils.import_scan_row(scan))
-        set_props("scans_container", {'children': scan_cards})
+        set_props("scan_cards", {'children': scan_cards})
         
         metadata_row.date = datetime.datetime.now()
         metadata_row.commit_id = ''
@@ -163,18 +163,19 @@ def cell_clicked(active_cell):
 
     if col == 5:
         with Session(db_utils.ENGINE) as session:
-            metadata = session.query(db_schema.Metadata).filter(db_schema.Metadata.metadata_id == row_id).first()
-        
+            metadata = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == row_id).first()
+            scans = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == row_id)
+
         set_props("modal-details", {'is_open':True})
         set_props("modal-details-header", {'children':dbc.ModalTitle(f"Details for Peak Index {row_id} (Read Only)")})
         
-        ui_shared.set_metadata_form_props(metadata, read_only=True)
+        ui_shared.set_metadata_form_props(metadata, scans, read_only=True)
 
 
     
     elif col == 6:
         with Session(db_utils.ENGINE) as session:
-            metadata = session.query(db_schema.Metadata).filter(db_schema.Metadata.metadata_id == row_id).first()
+            metadata = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == row_id).first()
 
         set_props("modal-results", {'is_open':True})
         set_props("modal-results-header", {'children':dbc.ModalTitle(f"Results for Peak Index {row_id}")})

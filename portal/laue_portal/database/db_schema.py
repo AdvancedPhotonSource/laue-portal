@@ -31,10 +31,10 @@ class Metadata(Base):
     scanNumber: Mapped[int] = mapped_column(primary_key=True)
 
     time_epoch: Mapped[int] = mapped_column(Integer)
-    time: Mapped[DateTime] = mapped_column(DateTime) #str?
+    time: Mapped[str] = mapped_column(String) # DateTime?
     user_name: Mapped[str] = mapped_column(String)
 
-    source_beamBad: Mapped[bool] = mapped_column(Boolean)
+    source_beamBad: Mapped[str] = mapped_column(String) # Mapped[bool] = mapped_column(Boolean)
     source_CCDshutter: Mapped[str] = mapped_column(String) #bool?
     source_monoTransStatus: Mapped[str] = mapped_column(String) #bool?
     source_energy_unit: Mapped[str] = mapped_column(String)
@@ -66,13 +66,13 @@ class Metadata(Base):
 
     mda_file: Mapped[str] = mapped_column(String)
     
-    scanEnd_abort: Mapped[bool] = mapped_column(Boolean)
+    scanEnd_abort: Mapped[str] = mapped_column(String) # Mapped[bool] = mapped_column(Boolean)
     scanEnd_time_epoch: Mapped[int] = mapped_column(Integer)
-    scanEnd_time: Mapped[DateTime] = mapped_column(DateTime) #str?
+    scanEnd_time: Mapped[str] = mapped_column(String) # DateTime?
     scanEnd_scanDuration_unit: Mapped[str] = mapped_column(String)
     scanEnd_scanDuration: Mapped[float] = mapped_column(Float)
     # scanEnd_cpt: Mapped[int] = mapped_column(Integer)
-    scanEnd_source_beamBad: Mapped[bool] = mapped_column(Boolean)
+    scanEnd_source_beamBad: Mapped[str] = mapped_column(String) # Mapped[bool] = mapped_column(Boolean)
     scanEnd_source_ringCurrent_unit: Mapped[str] = mapped_column(String)
     scanEnd_source_ringCurrent: Mapped[float] = mapped_column(Float)
 
@@ -256,7 +256,7 @@ class Recon(Base):
     geo_detector_pos: Mapped[list[float]] = mapped_column(JSON)
 
     geo_source_offset: Mapped[float] = mapped_column(Float)
-    geo_source_grid: Mapped[list[float]] = mapped_column(JSON) # Consdier splitting into components
+    geo_source_grid: Mapped[list[float]] = mapped_column(JSON) # Consider splitting into components
 
     algo_iter: Mapped[int] = mapped_column(Integer)
 

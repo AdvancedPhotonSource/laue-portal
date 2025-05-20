@@ -18,7 +18,7 @@ import plotly.graph_objects as go
 from pathlib import Path
 import h5py
 
-dash.register_page(__name__, path='/')
+dash.register_page(__name__)
 
 layout = html.Div([
         ui_shared.navbar,
