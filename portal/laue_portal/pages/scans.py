@@ -48,13 +48,22 @@ layout = html.Div([
         ),
         dbc.Modal(
             [
-                dbc.ModalHeader(dbc.ModalTitle("Header"), id="modal-results-header"),
-                #dbc.ModalBody(html.H1("TODO: Results Display")),
+                dbc.ModalHeader(dbc.ModalTitle("Header"), id="modal-scan-header"),
+                dbc.ModalBody(html.H1("TODO: Scan Display")),
                 # html.Div(children=[
                     
                 # ])
+                dash_table.DataTable(
+                    id='scan-table',
+                    # columns=[{"name": i, "id": i}
+                    #         for i in df.columns],
+                    # data=df.to_dict('records'),
+                    style_cell=dict(textAlign='left'),
+                    #style_header=dict(backgroundColor="paleturquoise"),
+                    #style_data=dict(backgroundColor="lavender")
+            )
             ],
-            id="modal-results",
+            id="modal-scan",
             size="xl",
             is_open=False,
         ),
@@ -72,12 +81,12 @@ def _get_metadatas():
 
     cols = [{'name': str(col), 'id': str(col)} for col in metadatas.columns]
     cols.append({'name': 'Parameters', 'id': 'Parameters', 'presentation': 'markdown'})
-    cols.append({'name': 'Results', 'id': 'Results', 'presentation': 'markdown'})
+    cols.append({'name': 'Scan', 'id': 'Scan', 'presentation': 'markdown'})
 
     metadatas['id'] = metadatas['scanNumber']
 
     metadatas['Parameters'] = '**Parameters**'
-    metadatas['Results'] = '**Results**'
+    metadatas['Scan'] = '**Scan**'
     
     return cols, metadatas.to_dict('records')
 
@@ -93,10 +102,10 @@ def upload_log(contents):
     try:
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
-        log, scans = db_utils.parse_metadata(decoded) #yaml.safe_load(decoded)
+        log, scan = db_utils.parse_metadata(decoded) #yaml.safe_load(decoded)
         metadata_row = db_utils.import_metadata_row(log)
         scan_cards = []; scan_rows = []
-        for i,scan in enumerate(scans):
+        for i,scan in enumerate(scan):
             scan_cards.append(ui_shared.make_scan_card(i))
             scan_rows.append(db_utils.import_scan_row(scan))
         set_props("scan_cards", {'children': scan_cards})
@@ -134,6 +143,39 @@ VISIBLE_COLS = [
     db_schema.Metadata.notes,
 ]
 
+VISIBLE_COLS_Scan = [
+    db_schema.Scan.scanNumber,
+
+    db_schema.Scan.scan_dim,
+    db_schema.Scan.scan_npts,
+    db_schema.Scan.scan_after,
+    db_schema.Scan.scan_positioner1_PV,
+    db_schema.Scan.scan_positioner1_ar,
+    db_schema.Scan.scan_positioner1_mode,
+    db_schema.Scan.scan_positioner1,
+    db_schema.Scan.scan_positioner2_PV,
+    db_schema.Scan.scan_positioner2_ar,
+    db_schema.Scan.scan_positioner2_mode,
+    db_schema.Scan.scan_positioner2,
+    db_schema.Scan.scan_positioner3_PV,
+    db_schema.Scan.scan_positioner3_ar,
+    db_schema.Scan.scan_positioner3_mode,
+    db_schema.Scan.scan_positioner3,
+    db_schema.Scan.scan_positioner4_PV,
+    db_schema.Scan.scan_positioner4_ar,
+    db_schema.Scan.scan_positioner4_mode,
+    db_schema.Scan.scan_positioner4,
+    db_schema.Scan.scan_detectorTrig1_PV,
+    db_schema.Scan.scan_detectorTrig1_VAL,
+    db_schema.Scan.scan_detectorTrig2_PV,
+    db_schema.Scan.scan_detectorTrig2_VAL,
+    db_schema.Scan.scan_detectorTrig3_PV,
+    db_schema.Scan.scan_detectorTrig3_VAL,
+    db_schema.Scan.scan_detectorTrig4_PV,
+    db_schema.Scan.scan_detectorTrig4_VAL,
+    db_schema.Scan.scan_cpt,
+]
+
 
 @dash.callback(
     Output('metadata-table', 'columns', allow_duplicate=True),
@@ -164,47 +206,27 @@ def cell_clicked(active_cell):
     if col == 5:
         with Session(db_utils.ENGINE) as session:
             metadata = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == row_id).first()
-            scans = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == row_id)
+            scan = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == row_id)
 
         set_props("modal-details", {'is_open':True})
         set_props("modal-details-header", {'children':dbc.ModalTitle(f"Details for Peak Index {row_id} (Read Only)")})
         
-        ui_shared.set_metadata_form_props(metadata, scans, read_only=True)
+        ui_shared.set_metadata_form_props(metadata, scan, read_only=True)
 
 
     
     elif col == 6:
         with Session(db_utils.ENGINE) as session:
-            metadata = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == row_id).first()
+            df = pd.read_sql(session.query(*VISIBLE_COLS_Scan).filter(db_schema.Scan.scanNumber == row_id).statement, session.bind)
 
-        set_props("modal-results", {'is_open':True})
-        set_props("modal-results-header", {'children':dbc.ModalTitle(f"Results for Peak Index {row_id}")})
-        
-        #file_output = metadata.file_output
-        #set_props("results-path", {"value":file_output})
+        set_props("modal-scan", {'is_open':True})
+        set_props("modal-scan-header", {'children':dbc.ModalTitle(f"Scan for {row_id}")})
+
+        set_props("scan-table",
+                    {
+                        'columns':[{"name": i, "id": i} for i in df.columns],
+                        'data':df.to_dict('records'),
+                    }
+        )
 
     print(f"Row {row} and Column {col} was clicked")
-    
-
-"""
-=======================
-Helper Functions
-=======================
-"""
-
-# def loahdh5(path, key, slice=None, results_filename = "results.h5"):
-#     results_file = Path(path)/results_filename
-#     f = h5py.File(results_file, 'r')
-#     if slice is None:
-#         value = f[key][:]
-#     else:
-#         value = f[key][slice]
-#     #logging.info("Loaded: " + str(file))
-#     return value
-
-# def loadnpy(path, results_filename = 'img' + 'results' + '.npy'):
-#     results_file = Path(path)/results_filename
-#     value = np.zeros((2**11,2**11))
-#     if results_file.exists():
-#         value = np.load(results_file)
-#     return value
