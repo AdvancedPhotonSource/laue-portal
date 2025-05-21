@@ -147,3 +147,6 @@ laue-portal_requirements.txt
 laue-portal_conda-requirements.txt
 
 .DS_Store
+
+data
+cold
