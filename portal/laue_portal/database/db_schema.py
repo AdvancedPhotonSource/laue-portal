@@ -1,6 +1,6 @@
 """
 This file contains the definitions of the tables in the database.
-We are currently using sqlalchemy ORMs to deifne the tables
+We are currently using sqlalchemy ORMs to define the tables
 """
 from typing import List
 from typing import Optional
@@ -18,38 +18,152 @@ class Base(DeclarativeBase):
 class Metadata(Base):
     __tablename__ = "metadata"
 
-    dataset_id: Mapped[int] = mapped_column(primary_key=True)
-    dataset_path: Mapped[str] = mapped_column(String)
-    dataset_filename: Mapped[str] = mapped_column(String)
-    dataset_type: Mapped[str] = mapped_column(String)
-    dataset_group: Mapped[str] = mapped_column(String)
-    start_time: Mapped[DateTime] = mapped_column(DateTime)
-    end_time: Mapped[DateTime] = mapped_column(DateTime)
-    start_image_num: Mapped[int] = mapped_column(Integer)
-    end_image_num: Mapped[int] = mapped_column(Integer)
-    total_points: Mapped[int] = mapped_column(Integer)
-    maskX_wireBaseX: Mapped[float] = mapped_column(Float)
-    maskY_wireBaseY: Mapped[float] = mapped_column(Float)
-    sr1_motor: Mapped[float] = mapped_column(Float)
-    motion: Mapped[float] = mapped_column(Float)
-    sr1_init: Mapped[float] = mapped_column(Float)
-    sr1_final: Mapped[float] = mapped_column(Float)
-    sr1_step: Mapped[float] = mapped_column(Float)
-    sr2_motor: Mapped[float] = mapped_column(Float)
-    sr2_init: Mapped[float] = mapped_column(Float)
-    sr2_final: Mapped[float] = mapped_column(Float)
-    sr2_step: Mapped[float] = mapped_column(Float)
-    sr3_motor: Mapped[float] = mapped_column(Float)
-    sr3_init: Mapped[float] = mapped_column(Float)
-    sr3_final: Mapped[float] = mapped_column(Float)
-    sr3_step: Mapped[float] = mapped_column(Float)
-    shift_parameter: Mapped[float] = mapped_column(Float)
-    exp_time: Mapped[float] = mapped_column(Float)
-    mda: Mapped[int] = mapped_column(Integer)
-    sampleXini: Mapped[float] = mapped_column(Float)
-    sampleYini: Mapped[float] = mapped_column(Float)
-    sampleZini: Mapped[float] = mapped_column(Float)
-    comment: Mapped[str] = mapped_column(String)
+    # Metadata Metadata
+    # _id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[DateTime] = mapped_column(DateTime)
+    commit_id: Mapped[str] = mapped_column(String)
+    calib_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
+    runtime: Mapped[str] = mapped_column(String)
+    computer_name: Mapped[str] = mapped_column(String)
+    dataset_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
+    notes: Mapped[str] = mapped_column(String)
+
+    scanNumber: Mapped[int] = mapped_column(primary_key=True)
+
+    time_epoch: Mapped[int] = mapped_column(Integer)
+    time: Mapped[str] = mapped_column(String) # DateTime?
+    user_name: Mapped[str] = mapped_column(String)
+
+    source_beamBad: Mapped[str] = mapped_column(String) # Mapped[bool] = mapped_column(Boolean)
+    source_CCDshutter: Mapped[str] = mapped_column(String) #bool?
+    source_monoTransStatus: Mapped[str] = mapped_column(String) #bool?
+    source_energy_unit: Mapped[str] = mapped_column(String)
+    source_energy: Mapped[float] = mapped_column(Float)
+    source_IDgap_unit: Mapped[str] = mapped_column(String)
+    source_IDgap: Mapped[float] = mapped_column(Float)
+    source_IDtaper_unit: Mapped[str] = mapped_column(String) 
+    source_IDtaper: Mapped[float] = mapped_column(Float)
+    source_ringCurrent_unit: Mapped[str] = mapped_column(String)
+    source_ringCurrent: Mapped[float] = mapped_column(Float)
+
+    sample_XYZ_unit: Mapped[str] = mapped_column(String)
+    sample_XYZ_desc: Mapped[str] = mapped_column(String)
+    sample_XYZ: Mapped[str] = mapped_column(String)
+    # sample_X: Mapped[float] = mapped_column(Float)
+    # sample_Y: Mapped[float] = mapped_column(Float)
+    # sample_Z: Mapped[float] = mapped_column(Float)
+
+    knifeEdge_XYZ_unit: Mapped[str] = mapped_column(String)
+    knifeEdge_XYZ_desc: Mapped[str] = mapped_column(String)
+    knifeEdge_XYZ: Mapped[str] = mapped_column(String)
+    # knifeEdge_X: Mapped[float] = mapped_column(Float)
+    # knifeEdge_Y: Mapped[float] = mapped_column(Float)
+    # knifeEdge_Z: Mapped[float] = mapped_column(Float)
+    knifeEdge_knifeScan_unit: Mapped[str] = mapped_column(String)
+    knifeEdge_knifeScan: Mapped[float] = mapped_column(Float)
+
+    #scan:
+
+    mda_file: Mapped[str] = mapped_column(String)
+    
+    scanEnd_abort: Mapped[str] = mapped_column(String) # Mapped[bool] = mapped_column(Boolean)
+    scanEnd_time_epoch: Mapped[int] = mapped_column(Integer)
+    scanEnd_time: Mapped[str] = mapped_column(String) # DateTime?
+    scanEnd_scanDuration_unit: Mapped[str] = mapped_column(String)
+    scanEnd_scanDuration: Mapped[float] = mapped_column(Float)
+    # scanEnd_cpt: Mapped[int] = mapped_column(Integer)
+    scanEnd_source_beamBad: Mapped[str] = mapped_column(String) # Mapped[bool] = mapped_column(Boolean)
+    scanEnd_source_ringCurrent_unit: Mapped[str] = mapped_column(String)
+    scanEnd_source_ringCurrent: Mapped[float] = mapped_column(Float)
+
+    # dataset_id: Mapped[int] = mapped_column(primary_key=True)
+    
+    # dataset_path: Mapped[str] = mapped_column(String)
+    # dataset_filename: Mapped[str] = mapped_column(String)
+    # dataset_type: Mapped[str] = mapped_column(String)
+    # dataset_group: Mapped[str] = mapped_column(String)
+    # start_time: Mapped[DateTime] = mapped_column(DateTime)
+    # end_time: Mapped[DateTime] = mapped_column(DateTime)
+    # start_image_num: Mapped[int] = mapped_column(Integer)
+    # end_image_num: Mapped[int] = mapped_column(Integer)
+    # total_points: Mapped[int] = mapped_column(Integer)
+    # maskX_wireBaseX: Mapped[float] = mapped_column(Float)
+    # maskY_wireBaseY: Mapped[float] = mapped_column(Float)
+    # sr1_motor: Mapped[float] = mapped_column(Float)
+    # motion: Mapped[float] = mapped_column(Float)
+    # sr1_init: Mapped[float] = mapped_column(Float)
+    # sr1_final: Mapped[float] = mapped_column(Float)
+    # sr1_step: Mapped[float] = mapped_column(Float)
+    # sr2_motor: Mapped[float] = mapped_column(Float)
+    # sr2_init: Mapped[float] = mapped_column(Float)
+    # sr2_final: Mapped[float] = mapped_column(Float)
+    # sr2_step: Mapped[float] = mapped_column(Float)
+    # sr3_motor: Mapped[float] = mapped_column(Float)
+    # sr3_init: Mapped[float] = mapped_column(Float)
+    # sr3_final: Mapped[float] = mapped_column(Float)
+    # sr3_step: Mapped[float] = mapped_column(Float)
+    # shift_parameter: Mapped[float] = mapped_column(Float)
+    # exp_time: Mapped[float] = mapped_column(Float)
+    # mda: Mapped[int] = mapped_column(Integer)
+    # sampleXini: Mapped[float] = mapped_column(Float)
+    # sampleYini: Mapped[float] = mapped_column(Float)
+    # sampleZini: Mapped[float] = mapped_column(Float)
+    # comment: Mapped[str] = mapped_column(String)
+
+    ###scan: Mapped["Scan"] = relationship(back_populates="Metadata")
+
+    def __repr__(self) -> str:
+        pass # TODO: Consider implemeting for debugging
+
+
+class Scan(Base):
+    __tablename__ = "scan"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
+
+    scan_dim: Mapped[int] = mapped_column(Integer)
+    scan_npts: Mapped[int] = mapped_column(Integer)
+    scan_after: Mapped[str] = mapped_column(String)  #bool?
+    # scan_positionerSettle_unit: Mapped[str] = mapped_column(String)
+    # scan_positionerSettle: Mapped[float] = mapped_column(Float)
+    # scan_detectorSettle_unit: Mapped[str] = mapped_column(String)
+    # scan_detectorSettle: Mapped[float] = mapped_column(Float)
+    # scan_beforePV_VAL: Mapped[bool] = mapped_column(Boolean) #* #str?
+    # scan_beforePV_wait: Mapped[bool] = mapped_column(Boolean) #* #str?
+    # scan_beforePV: Mapped[str] = mapped_column(String) #*
+    # scan_afterPV_VAL: Mapped[bool] = mapped_column(Boolean) #* #str?
+    # scan_afterPV_wait: Mapped[bool] = mapped_column(Boolean) #* #str?
+    # scan_afterPV: Mapped[str] = mapped_column(String)
+    scan_positioner1_PV: Mapped[str] = mapped_column(String)
+    scan_positioner1_ar: Mapped[str] = mapped_column(String) #bool?
+    scan_positioner1_mode: Mapped[str] = mapped_column(String)
+    scan_positioner1: Mapped[str] = mapped_column(String)
+    scan_positioner2_PV: Mapped[str] = mapped_column(String)
+    scan_positioner2_ar: Mapped[str] = mapped_column(String) #bool?
+    scan_positioner2_mode: Mapped[str] = mapped_column(String)
+    scan_positioner2: Mapped[str] = mapped_column(String)
+    scan_positioner3_PV: Mapped[str] = mapped_column(String)
+    scan_positioner3_ar: Mapped[str] = mapped_column(String) #bool?
+    scan_positioner3_mode: Mapped[str] = mapped_column(String)
+    scan_positioner3: Mapped[str] = mapped_column(String)
+    scan_positioner4_PV: Mapped[str] = mapped_column(String)
+    scan_positioner4_ar: Mapped[str] = mapped_column(String) #bool?
+    scan_positioner4_mode: Mapped[str] = mapped_column(String)
+    scan_positioner4: Mapped[str] = mapped_column(String)
+    # scan_positioner_1: Mapped[float] = mapped_column(Float)
+    # scan_positioner_2: Mapped[float] = mapped_column(Float)
+    # scan_positioner_3: Mapped[float] = mapped_column(Float)
+    scan_detectorTrig1_PV: Mapped[str] = mapped_column(String)
+    scan_detectorTrig1_VAL: Mapped[str] = mapped_column(String) #int?
+    scan_detectorTrig2_PV: Mapped[str] = mapped_column(String)
+    scan_detectorTrig2_VAL: Mapped[str] = mapped_column(String) #int?
+    scan_detectorTrig3_PV: Mapped[str] = mapped_column(String)
+    scan_detectorTrig3_VAL: Mapped[str] = mapped_column(String) #int?
+    scan_detectorTrig4_PV: Mapped[str] = mapped_column(String)
+    scan_detectorTrig4_VAL: Mapped[str] = mapped_column(String) #int?
+    # scan_detectors: Mapped[str] = mapped_column(String) #list?
+    scan_cpt: Mapped[int] = mapped_column(Integer)
 
     def __repr__(self) -> str:
         pass # TODO: Consider implemeting for debugging
@@ -142,7 +256,7 @@ class Recon(Base):
     geo_detector_pos: Mapped[list[float]] = mapped_column(JSON)
 
     geo_source_offset: Mapped[float] = mapped_column(Float)
-    geo_source_grid: Mapped[list[float]] = mapped_column(JSON) # Consdier splitting into components
+    geo_source_grid: Mapped[list[float]] = mapped_column(JSON) # Consider splitting into components
 
     algo_iter: Mapped[int] = mapped_column(Integer)
 
@@ -165,7 +279,68 @@ class Recon(Base):
     algo_ene_range: Mapped[list[int]] = mapped_column(JSON)
 
     def __repr__(self) -> str:
-        return f'Recon {self.recon_id}' # TODO: Consider implemeting for debugging
+        return f'Recon {self.recon_id}' # TODO: Consider implementing for debugging
+
+
+class PeakIndex(Base):
+    __tablename__ = "peakindex"
+
+    # Peak Index Metadata
+    peakindex_id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[DateTime] = mapped_column(DateTime)
+    commit_id: Mapped[str] = mapped_column(String)
+    calib_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
+    runtime: Mapped[str] = mapped_column(String)
+    computer_name: Mapped[str] = mapped_column(String)
+    dataset_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
+    notes: Mapped[str] = mapped_column(String)
+
+    # Peak Index Parameters
+    # peakProgram: Mapped[str] = mapped_column(String)
+    threshold: Mapped[int] = mapped_column(Integer)
+    thresholdRatio: Mapped[int] = mapped_column(Integer)
+    maxRfactor: Mapped[float] = mapped_column(Float)
+    boxsize: Mapped[int] = mapped_column(Integer)
+    max_number: Mapped[int] = mapped_column(Integer)
+    min_separation: Mapped[int] = mapped_column(Integer)
+    peakShape: Mapped[str] = mapped_column(String)
+    scanPointStart: Mapped[int] = mapped_column(Integer)
+    scanPointEnd: Mapped[int] = mapped_column(Integer)
+    # depthRangeStart: Mapped[int] = mapped_column(Integer)
+    # depthRangeEnd: Mapped[int] = mapped_column(Integer)
+    detectorCropX1: Mapped[int] = mapped_column(Integer)
+    detectorCropX2: Mapped[int] = mapped_column(Integer)
+    detectorCropY1: Mapped[int] = mapped_column(Integer)
+    detectorCropY2: Mapped[int] = mapped_column(Integer)
+    min_size: Mapped[float] = mapped_column(Float)
+    max_peaks: Mapped[int] = mapped_column(Integer)
+    smooth: Mapped[bool] = mapped_column(Boolean) #Mapped[int] = mapped_column(Integer)
+    maskFile: Mapped[str] = mapped_column(String)
+    indexKeVmaxCalc: Mapped[float] = mapped_column(Float)
+    indexKeVmaxTest: Mapped[float] = mapped_column(Float)
+    indexAngleTolerance: Mapped[float] = mapped_column(Float)
+    indexH: Mapped[int] = mapped_column(Integer)
+    indexK: Mapped[int] = mapped_column(Integer)
+    indexL: Mapped[int] = mapped_column(Integer)
+    indexCone: Mapped[float] = mapped_column(Float)
+    energyUnit: Mapped[str] = mapped_column(String)
+    exposureUnit: Mapped[str] = mapped_column(String)
+    cosmicFilter: Mapped[bool] = mapped_column(Boolean)
+    recipLatticeUnit: Mapped[str] = mapped_column(String)
+    latticeParametersUnit: Mapped[str] = mapped_column(String)
+    peaksearchPath: Mapped[str] = mapped_column(String)
+    p2qPath: Mapped[str] = mapped_column(String)
+    indexingPath: Mapped[str] = mapped_column(String)
+    outputFolder: Mapped[str] = mapped_column(String)
+    filefolder: Mapped[str] = mapped_column(String)
+    filenamePrefix: Mapped[str] = mapped_column(String)
+    geoFile: Mapped[str] = mapped_column(String)
+    crystFile: Mapped[str] = mapped_column(String)
+    depth: Mapped[str] = mapped_column(String)
+    beamline: Mapped[str] = mapped_column(String)
+    # cosmicFilter: Mapped[bool] = mapped_column(Boolean)
+    def __repr__(self) -> str:
+        return f'Peak Index {self.peakindex_id}' # TODO: Consider implementing for debugging
 
 # NOTE: Not Implemented
 MASK_FOCUS_TABLE = [

@@ -1,1 +1,1 @@
-db_file = 'CA_params.db'
+db_file = 'Laue_Records.db'
