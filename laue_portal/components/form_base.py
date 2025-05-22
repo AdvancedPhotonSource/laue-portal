@@ -37,5 +37,5 @@ def _ckbx(label, field_id, size='sm'):
 
     return dbc.Checkbox(id=field_id, 
                         label=label,
-                        class_name="mb-3",
+                        className="mb-3",
                         style={'width': width})
