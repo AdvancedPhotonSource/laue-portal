@@ -8,14 +8,16 @@ import yaml
 import laue_portal.database.db_utils as db_utils
 import datetime
 import laue_portal.database.db_schema as db_schema
+import laue_portal.components.navbar as navbar
 from sqlalchemy.orm import Session
 import laueindexing.pyLaueGo as pyLaueGo
+import laue_portal.components.peakindex_form as peakindex_form
 
 dash.register_page(__name__)
 
 layout = dbc.Container(
     [html.Div([
-        ui_shared.navbar,
+        navbar.navbar,
         dbc.Alert(
             "Hello! I am an alert",
             id="alert-upload",
@@ -46,7 +48,7 @@ layout = dbc.Container(
             dbc.Button('Submit', id='submit_peakindex', color='primary'),
         ),
         html.Hr(),
-        ui_shared.peakindex_form,
+        peakindex_form,
     ],
     )
     ],
