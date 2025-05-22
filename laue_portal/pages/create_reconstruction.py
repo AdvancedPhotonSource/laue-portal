@@ -10,12 +10,13 @@ import datetime
 import laue_portal.database.db_schema as db_schema
 from sqlalchemy.orm import Session
 import laue_portal.recon.analysis_recon as analysis_recon
+import laue_portal.components.navbar as navbar
 
 dash.register_page(__name__)
 
 layout = dbc.Container(
     [html.Div([
-        ui_shared.navbar,
+        navbar.navbar,
         dbc.Alert(
             "Hello! I am an alert",
             id="alert-upload",
