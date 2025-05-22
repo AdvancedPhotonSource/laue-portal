@@ -15,7 +15,7 @@ def update_active_links(pathname):
 """
 navbar = dbc.NavbarSimple(
     children=[
-        dbc.NavItem(dbc.NavLink("Scans", href="/")),
+        #dbc.NavItem(dbc.NavLink("Scans", href="/")),
         dbc.NavItem(dbc.NavLink("New Scan", href="/create-scan")),
         dbc.NavItem(dbc.NavLink("Reconstructions", href="/reconstructions")),
         dbc.NavItem(dbc.NavLink("New Reconstruction", href="/create-reconstruction")),
@@ -23,6 +23,7 @@ navbar = dbc.NavbarSimple(
         dbc.NavItem(dbc.NavLink("Indexations", href="/indexedpeaks")),
         dbc.NavItem(dbc.NavLink("New Indexation", href="/create-indexedpeaks")),
         dbc.NavItem(dbc.NavLink("Index Run Monitor", href="/index-runs")),
+        dbc.NavItem(dbc.NavLink("Review", href="/review")),
     ],
     brand="Coded Aperture Laue",
     brand_href="/",

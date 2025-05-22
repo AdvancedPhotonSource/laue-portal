@@ -97,7 +97,6 @@ def upload_log(contents):
             for id,scan_row in enumerate(scan_rows):
                 scan_row.id = scan_row_count + id
                 session.add(scan_row)
-                print(scan_row.id)
             
             session.commit()
         
