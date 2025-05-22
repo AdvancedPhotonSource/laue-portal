@@ -17,11 +17,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
 import h5py
+import laue_portal.components.navbar as navbar
 
 dash.register_page(__name__)
 
 layout = html.Div([
-        ui_shared.navbar,
+        navbar.navbar,
         dcc.Location(id='url', refresh=False),
         dbc.Row(
             [

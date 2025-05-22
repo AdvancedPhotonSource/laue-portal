@@ -13,25 +13,6 @@ def update_active_links(pathname):
     return [pathname == link.href for link in navbar.children]
 
 """
-navbar = dbc.NavbarSimple(
-    children=[
-        dbc.NavItem(dbc.NavLink("Scans", href="/")),
-        dbc.NavItem(dbc.NavLink("New Scan", href="/create-scan")),
-        dbc.NavItem(dbc.NavLink("Reconstructions", href="/reconstructions")),
-        dbc.NavItem(dbc.NavLink("New Reconstruction", href="/create-reconstruction")),
-        dbc.NavItem(dbc.NavLink("Recon Run Monitor", href="/runs")),
-        dbc.NavItem(dbc.NavLink("Indexations", href="/indexedpeaks")),
-        dbc.NavItem(dbc.NavLink("New Indexation", href="/create-indexedpeaks")),
-        dbc.NavItem(dbc.NavLink("Index Run Monitor", href="/index-runs")),
-    ],
-    brand="Coded Aperture Laue",
-    brand_href="/",
-    color="primary",
-    className="navbar-lg",
-    dark=True,
-    style={"max-height": "50px"},
-)
-
 def _stack(objects):
     return dbc.Stack(
         objects, 

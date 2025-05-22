@@ -8,6 +8,7 @@ import yaml
 import laue_portal.database.db_utils as db_utils
 import datetime
 import laue_portal.database.db_schema as db_schema
+import laue_portal.components.navbar as navbar
 from sqlalchemy.orm import Session
 import laueindexing.pyLaueGo as pyLaueGo
 
@@ -15,7 +16,7 @@ dash.register_page(__name__)
 
 layout = dbc.Container(
     [html.Div([
-        ui_shared.navbar,
+        navbar.navbar,
         dbc.Alert(
             "Hello! I am an alert",
             id="alert-upload",
