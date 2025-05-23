@@ -11,6 +11,7 @@ import laue_portal.database.db_schema as db_schema
 from sqlalchemy.orm import Session
 from laue_portal.database.db_schema import Scan
 import laue_portal.components.navbar as navbar
+from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props
 
 dash.register_page(__name__)
 
@@ -47,7 +48,7 @@ layout = dbc.Container(
         #     dbc.Button('Submit', id='submit_metadata', color='primary'),
         # ),
         # html.Hr(),
-        ui_shared.metadata_form,
+        metadata_form,
     ],
     )
     ],
