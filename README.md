@@ -1,21 +1,66 @@
-# Laue-Gladier
+# Laue Portal
 
-Repository for automated data processing and triggering of laue-parallel and cold processing.
+A comprehensive web-based platform for Laue X-ray diffraction data analysis and reconstruction, designed for synchrotron beamline operations at the APS 3DMN beamline: 34-IDE.
 
-## Project Structure
 
-* `dm` contains workflows for the APS Data Management system which monitors files as the detector writes them to system and triggers the downstream processing. 
-* `funcx_launch` contains the funcx endpoint and launch scripts to be staged on the Polaris AMN or login node. This endpoint is used to launch jobs and monitor the queue. 
-* `laue_client` contains the gladier workflow triggered by the DM workflow and calling the funcx endpoint. This includes the workflow to handle data transfer and triggering of the job on Polaris. 
-* `scripts` includes various scripts including the primary script bridging dm and galdier, a detector simulator script, and some reference scripts to work with the DM system.
+Laue Portal is a Dash-based web application that provides an integrated workflow for processing and analyzing Laue diffraction patterns. The platform combines data management, peak indexing, and 3D reconstruction capabilities with an intuitive web interface for researchers working with polychromatic X-ray diffraction data.
 
-## Setup and Launch
 
-Setup:
+### Prerequisites
+- Python 3.12
+- SQLite
+- HDF5 libraries
 
-1. A DM experiment must be created with a DAQ monitoring the filesystem and hooked up to the point workflow. 
-2. On Polaris, a funcx endpoint must be running, with access to the PBS queue. 
-3. The glaider workflow must be configured to point to the correct directories, funcx endpoint ID, and globus EP IDs. 
+### Setup
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   cd laue-portal
+   ```
 
-Launch:
-With this in place, processing will be automatically launched by placing data in a folder that the DAQ is monitoring. For debug, launch can be manually triggered via the `scripts/launch_gladier_run.sh` script if the data has already been staged in Voyager. 
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Run the application:
+   ```bash
+   python lau_dash.py
+   ```
+
+4. Access the web interface at `http://localhost:2052`
+
+## Architecture
+
+### Core Components
+
+- **`lau_dash.py`**: Main Dash application entry point
+- **`laue_portal/`**: Core application package
+  - **`pages/`**: Web interface pages (scans, reconstructions, peak indexing)
+  - **`components/`**: Reusable UI components and forms
+  - **`database/`**: Database schema and utilities
+  - **`recon/`**: Reconstruction algorithms and analysis tools
+
+
+### Workflow Integration
+
+- **`polaris_workflow/`**: Integration with Argonne's Polaris supercomputer
+- **`gladier`**: Workflow orchestration for distributed computing
+- **Remote Processing**: Automated data transfer and processing on HPC resources
+
+
+## Configuration
+
+Key configuration files:
+- **`config.py`**: Database and application settings
+- **`polaris_workflow/funcx_launch/laue_conf.json`**: HPC workflow configuration
+- **`requirements.txt`**: Python dependencies
+
+
+## Testing
+
+Run the test suite:
+```bash
+python -m unittest discover -s tests -p 'test_*.py'
+```
+
