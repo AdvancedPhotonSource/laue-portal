@@ -9,10 +9,7 @@ import unittest
 import sys
 import os
 import tempfile
-import threading
-import time
-import requests
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 # Add the project root to the Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -35,7 +32,7 @@ class SmokeTest(unittest.TestCase):
         """Test that Dash app can be created without errors."""
         try:
             # Create a temporary database file for testing
-            with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as temp_db:
+            with tempfile.NamedTemporaryFile(suffix='.db', delete=True) as temp_db:
                 self.test_db_file = temp_db.name
 
             # Mock the config to use test database
@@ -55,7 +52,7 @@ class SmokeTest(unittest.TestCase):
         """Test that database can be created without errors."""
         try:
             # Create a temporary database file for testing
-            with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as temp_db:
+            with tempfile.NamedTemporaryFile(suffix='.db', delete=True) as temp_db:
                 self.test_db_file = temp_db.name
 
             # Mock the config to use test database

@@ -61,6 +61,6 @@ Key configuration files:
 
 Run the test suite:
 ```bash
-python -m pytest tests/
+python -m unittest discover -s tests -p 'test_*.py'
 ```
 

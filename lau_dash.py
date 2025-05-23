@@ -13,6 +13,7 @@ import laue_portal.database.db_schema as db_schema
 import sqlalchemy
 import os
 import config
+import logging
 
 dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
 
@@ -25,14 +26,14 @@ def ensure_database_exists():
     
     # Check if database file exists
     if not os.path.exists(db_path):
-        print(f"Database file '{db_path}' not found. Creating new database...")
+        logging.info(f"Database file '{db_path}' not found. Creating new database...")
         
         engine = sqlalchemy.create_engine(f'sqlite:///{db_path}')
         db_schema.Base.metadata.create_all(engine)
         
-        print(f"Database '{db_path}' created successfully with all tables.")
+        logging.info(f"Database '{db_path}' created successfully with all tables.")
     else:
-        print(f"Database file '{db_path}' already exists. Running on existing database.")
+        logging.info(f"Database file '{db_path}' already exists. Running on existing database.")
 
 
 app = dash.Dash(__name__, 
