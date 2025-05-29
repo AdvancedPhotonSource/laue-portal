@@ -200,6 +200,7 @@ class Recon(Base):
 
     # Recon Metadata
     recon_id: Mapped[int] = mapped_column(primary_key=True)
+    scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
     date: Mapped[DateTime] = mapped_column(DateTime)
     commit_id: Mapped[str] = mapped_column(String)
     calib_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future

@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import set_props
+from dash import callback, Input, Output, State, set_props
 from laue_portal.components.form_base import _stack, _field, _ckbx
 
 
@@ -243,3 +243,24 @@ def set_peakindex_form_props(peakindex, read_only=False):
     set_props("depth", {'value':peakindex.depth, 'readonly':read_only})
     set_props("beamline", {'value':peakindex.beamline, 'readonly':read_only})
     # set_props("cosmicFilter", {'value':peakindex.cosmicFilter, 'readonly':read_only})
+
+
+@callback(
+    Output("collapse1", "is_open"),
+    [Input("collapse1-button", "n_clicks")],
+    [State("collapse1", "is_open")],
+)
+def toggle_collapse12(n, is_open):
+    if n:
+        return not is_open
+    return is_open
+
+@callback(
+    Output("collapse2", "is_open"),
+    [Input("collapse2-button", "n_clicks")],
+    [State("collapse2", "is_open")],
+)
+def toggle_collapse2(n, is_open):
+    if n:
+        return not is_open
+    return is_open

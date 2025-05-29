@@ -1,8 +1,7 @@
 import dash
-from dash import html, dcc, callback, Input, Output, State, set_props, ctx
+from dash import html, dcc, Input, Output, State, set_props, ctx
 import dash_bootstrap_components as dbc
 import dash_ag_grid as dag
-import laue_portal.pages.ui_shared as ui_shared
 from dash.exceptions import PreventUpdate
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema

@@ -1,10 +1,9 @@
 import dash
 from dash import html, dcc, callback, Input, Output, State
 import dash_bootstrap_components as dbc
-from dash import dcc, ctx, dash_table
+from dash import dcc, dash_table
 from dash import set_props
 # import dash_ag_grid as dag
-import laue_portal.pages.ui_shared as ui_shared
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
 from sqlalchemy.orm import Session

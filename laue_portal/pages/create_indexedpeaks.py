@@ -1,8 +1,6 @@
 import dash_bootstrap_components as dbc
-from dash import html, Input, set_props, State
+from dash import html, dcc, Input, set_props, State
 import dash
-import laue_portal.pages.ui_shared as ui_shared
-from dash import dcc
 import base64
 import yaml
 import laue_portal.database.db_utils as db_utils
@@ -11,7 +9,7 @@ import laue_portal.database.db_schema as db_schema
 import laue_portal.components.navbar as navbar
 from sqlalchemy.orm import Session
 import laueindexing.pyLaueGo as pyLaueGo
-import laue_portal.components.peakindex_form as peakindex_form
+from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
 
 dash.register_page(__name__)
 
@@ -82,7 +80,7 @@ def upload_config(contents):
         set_props("alert-upload", {'is_open': True, 
                                     'children': 'Config uploaded successfully',
                                     'color': 'success'})
-        ui_shared.set_peakindex_form_props(peakindex_row)
+        set_peakindex_form_props(peakindex_row)
 
     except Exception as e:
         set_props("alert-upload", {'is_open': True, 

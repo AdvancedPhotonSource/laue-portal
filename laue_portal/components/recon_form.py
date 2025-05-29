@@ -1,56 +1,6 @@
-import dash
-from dash import html, Input, Output, State, set_props
 import dash_bootstrap_components as dbc
-
-# TODO: Make navbar links dynamic
-"""
-Something like this...
-@app.callback(
-    [Output(f"link-{i}", "active") for i in range(1, 5)],
-    [Input('url', 'pathname')]
-)
-def update_active_links(pathname):
-    return [pathname == link.href for link in navbar.children]
-
-"""
-def _stack(objects):
-    return dbc.Stack(
-        objects, 
-        direction="horizontal",
-        gap=3
-    )
-
-def _field(label, field_id, size='sm', kwargs={}):
-    if size == 'sm':
-        width='200px'
-    elif size == 'md':
-        width='350px'
-    elif size == 'lg':
-        width='500px'
-    elif size == 'hg':
-        width='9999px'
-
-    return dbc.InputGroup(
-        [
-            dbc.InputGroupText(label),
-            dbc.Input(id=field_id, **kwargs),
-        ],
-        style={'width': width},
-        className="mb-3",
-    )
-
-def _ckbx(label, field_id, size='sm'):
-    if size == 'sm':
-        width='200px'
-    elif size == 'md':
-        width='350px'
-    elif size == 'lg':
-        width='500px'
-
-    return dbc.Checkbox(id=field_id, 
-                        label=label,
-                        class_name="mb-3",
-                        style={'width': width})
+from dash import html, set_props
+from laue_portal.components.form_base import _stack, _field, _ckbx
 
 
 recon_form = dbc.Row(
@@ -368,27 +318,3 @@ def set_recon_form_props(recon, read_only=False):
     set_props("ene_min", {'value':recon.algo_ene_range[0], 'readonly':read_only})
     set_props("ene_max", {'value':recon.algo_ene_range[1], 'readonly':read_only})
     set_props("ene_step", {'value':recon.algo_ene_range[2], 'readonly':read_only})
-
-
-
-
-@dash.callback(
-    Output("collapse1", "is_open"),
-    [Input("collapse1-button", "n_clicks")],
-    [State("collapse1", "is_open")],
-)
-def toggle_collapse12(n, is_open):
-    if n:
-        return not is_open
-    return is_open
-
-@dash.callback(
-    Output("collapse2", "is_open"),
-    [Input("collapse2-button", "n_clicks")],
-    [State("collapse2", "is_open")],
-)
-def toggle_collapse2(n, is_open):
-    if n:
-        return not is_open
-    return is_open
-

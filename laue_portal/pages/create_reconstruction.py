@@ -1,8 +1,6 @@
 import dash_bootstrap_components as dbc
-from dash import html, Input, set_props, State
+from dash import html, dcc, Input, set_props, State
 import dash
-import laue_portal.pages.ui_shared as ui_shared
-from dash import dcc
 import base64
 import yaml
 import laue_portal.database.db_utils as db_utils
@@ -11,6 +9,7 @@ import laue_portal.database.db_schema as db_schema
 from sqlalchemy.orm import Session
 import laue_portal.recon.analysis_recon as analysis_recon
 import laue_portal.components.navbar as navbar
+from laue_portal.components.recon_form import recon_form, set_recon_form_props
 
 dash.register_page(__name__)
 
@@ -47,7 +46,7 @@ layout = dbc.Container(
             dbc.Button('Submit', id='submit', color='primary'),
         ),
         html.Hr(),
-        ui_shared.recon_form,
+        recon_form,
     ],
     )
     ],
@@ -81,7 +80,7 @@ def upload_config(contents):
         set_props("alert-upload", {'is_open': True, 
                                     'children': 'Config uploaded successfully',
                                     'color': 'success'})
-        ui_shared.set_form_props(recon_row)
+        set_recon_form_props(recon_row)
 
     except Exception as e:
         set_props("alert-upload", {'is_open': True, 

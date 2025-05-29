@@ -1,8 +1,6 @@
 import dash_bootstrap_components as dbc
-from dash import html, Input, State, set_props, ALL
+from dash import html, dcc, Input, State, set_props, ALL
 import dash
-import laue_portal.pages.ui_shared as ui_shared
-from dash import dcc
 import base64
 import yaml
 import laue_portal.database.db_utils as db_utils
@@ -11,7 +9,7 @@ import laue_portal.database.db_schema as db_schema
 from sqlalchemy.orm import Session
 from laue_portal.database.db_schema import Scan
 import laue_portal.components.navbar as navbar
-from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props
+from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, make_scan_accordion
 
 dash.register_page(__name__)
 
@@ -71,13 +69,13 @@ def upload_log(contents):
         decoded = base64.b64decode(content_string)
         log, scans = db_utils.parse_metadata(decoded) #yaml.safe_load(decoded)
         metadata_row = db_utils.import_metadata_row(log)
-        scan_cards = []; scan_rows = []
+        scan_accordions = []; scan_rows = []
         for i,scan in enumerate(scans):
-            scan_card = ui_shared.make_scan_card(i)
-            scan_cards.append(scan_card)
+            scan_accordion = make_scan_accordion(i)
+            scan_accordions.append(scan_accordion)
             scan_row = db_utils.import_scan_row(scan)
             scan_rows.append(scan_row)
-        set_props("scan_cards", {'children': scan_cards})
+        set_props("scan_accordions", {'children': scan_accordions})
         
         metadata_row.date = datetime.datetime.now()
         metadata_row.commit_id = ''
@@ -90,7 +88,7 @@ def upload_log(contents):
         set_props("alert-upload", {'is_open': True, 
                                     'children': 'Log uploaded successfully',
                                     'color': 'success'})
-        ui_shared.set_metadata_form_props(metadata_row,scan_rows)
+        set_metadata_form_props(metadata_row,scan_rows)
 
         # Add to database
         with Session(db_utils.ENGINE) as session:
