@@ -128,11 +128,11 @@ def load_scan_data(href):
             scan_id = int(scan_id)
             with Session(db_utils.ENGINE) as session:
                 metadata = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == scan_id).first()
-                scan = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_id)
+                scans = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_id)
                 if metadata:
-                    scan_accordions = [make_scan_accordion(i) for i,_ in enumerate(scan)]
+                    scan_accordions = [make_scan_accordion(i) for i,_ in enumerate(scans)]
                     set_props("scan_accordions", {'children': scan_accordions})
-                    set_metadata_form_props(metadata, scan, read_only=True)
+                    set_metadata_form_props(metadata, scans, read_only=True)
         except Exception as e:
             print(f"Error loading scan data: {e}")
 

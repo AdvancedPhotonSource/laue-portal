@@ -17,7 +17,7 @@ metadata_form = dbc.Row(
                                             [
                                                 _field("Time Epoch", "time_epoch", size='lg'),
                                             ],
-                                            style= {'display': 'none'}
+                                            style={'display': 'none'}
                                         ),
                                         _field("Time", "time", size='lg'),
                                         _field("User Name", "user_name", size='lg'),
@@ -96,7 +96,7 @@ metadata_form = dbc.Row(
                         ),
                         dbc.AccordionItem(
                             [
-                                html.Div(id="scan_accordion", children=[])#, className="mt-4"),
+                                dbc.Row(id="scan_accordions")#, children=[], className="mt-4"),
                             ],
                             title="Scan",
                         ),
@@ -226,7 +226,7 @@ def make_scan_accordion(i):
         #     "display": "inline-block",
         # },
         # className="m-1",
-        id=f"scan_card_{i}",
+        id=f"scan_accordion_{i}",
     )
 
 def set_metadata_form_props(metadata, scans, read_only=True):
