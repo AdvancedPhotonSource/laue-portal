@@ -10,8 +10,10 @@ peakindex_form = dbc.Row(
                         dbc.AccordionItem(
                             [
                                 _stack(
+                                    _field("Scan ID", "dataset", size='lg'),
+                                ),
+                                _stack(
                                     [
-                                        #_field("Dataset", "dataset", size='lg'),
                                         _field("Files Path", "filefolder", size='hg'),
                                     ]
                                 ),

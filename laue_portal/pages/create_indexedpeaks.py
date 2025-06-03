@@ -1,7 +1,6 @@
 import dash_bootstrap_components as dbc
 from dash import html, Input, set_props, State
 import dash
-import laue_portal.pages.ui_shared as ui_shared
 from dash import dcc
 import base64
 import yaml
@@ -11,13 +10,17 @@ import laue_portal.database.db_schema as db_schema
 import laue_portal.components.navbar as navbar
 from sqlalchemy.orm import Session
 import laueindexing.pyLaueGo as pyLaueGo
-import laue_portal.components.peakindex_form as peakindex_form
+from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
+import urllib.parse
+from dash.exceptions import PreventUpdate
+import os
 
 dash.register_page(__name__)
 
 layout = dbc.Container(
     [html.Div([
         navbar.navbar,
+        dcc.Location(id='url-create-indexedpeaks', refresh=False),
         dbc.Alert(
             "Hello! I am an alert",
             id="alert-upload",
@@ -29,6 +32,13 @@ layout = dbc.Container(
             id="alert-submit",
             dismissable=True,
             is_open=False,
+        ),
+        dbc.Alert(
+            "Scan data loaded successfully",
+            id="alert-scan-loaded",
+            dismissable=True,
+            is_open=False,
+            color="success",
         ),
         html.Hr(),
         html.Center(
@@ -82,7 +92,7 @@ def upload_config(contents):
         set_props("alert-upload", {'is_open': True, 
                                     'children': 'Config uploaded successfully',
                                     'color': 'success'})
-        ui_shared.set_peakindex_form_props(peakindex_row)
+        set_peakindex_form_props(peakindex_row)
 
     except Exception as e:
         set_props("alert-upload", {'is_open': True, 
@@ -93,7 +103,7 @@ def upload_config(contents):
 @dash.callback(
     Input('submit_peakindex', 'n_clicks'),
     
-    # State('dataset', 'value'),
+    State('dataset', 'value'),
     
     # State('peakProgram', 'value'),
     State('threshold', 'value'),
@@ -143,7 +153,7 @@ def upload_config(contents):
     prevent_initial_call=True,
 )
 def submit_config(n,
-    # dataset,
+    dataset,
     # peakProgram,
     threshold,
     thresholdRatio,
@@ -198,7 +208,7 @@ def submit_config(n,
         calib_id='TEST',
         runtime='TEST',
         computer_name='TEST',
-        dataset_id=0,
+        dataset_id=dataset or 0,
         notes='TODO', 
 
         # peakProgram=peakProgram,
@@ -258,3 +268,117 @@ def submit_config(n,
 
     pyLaueGo = pyLaueGo(config_dict)
     pyLaueGo.run(0, 1)
+
+
+@dash.callback(
+    Input('url-create-indexedpeaks', 'href'),
+    prevent_initial_call=True,
+)
+def load_scan_data_from_url(href):
+    """
+    Load scan data when scan_id is provided in URL query parameter
+    URL format: /create-indexpeaks?scan_id={scan_id}
+    """
+    if not href:
+        raise PreventUpdate
+
+    parsed_url = urllib.parse.urlparse(href)
+    query_params = urllib.parse.parse_qs(parsed_url.query)
+    
+    scan_id = query_params.get('scan_id', [None])[0]
+
+    if scan_id:
+        try:
+            scan_id = int(scan_id)
+            with Session(db_utils.ENGINE) as session:
+                # Query metadata and scan data
+                metadata = session.query(db_schema.Metadata).filter(
+                    db_schema.Metadata.scanNumber == scan_id
+                ).first()
+                
+                scans = session.query(db_schema.Scan).filter(
+                    db_schema.Scan.scanNumber == scan_id
+                ).all()
+
+                if metadata:
+                    # Create a PeakIndex object with populated defaults from metadata/scan
+                    peakindex_defaults = db_schema.PeakIndex(
+                        # Metadata fields
+                        date=datetime.datetime.now(),
+                        commit_id='',
+                        calib_id=metadata.calib_id or 0,
+                        runtime='',
+                        computer_name='',
+                        dataset_id=metadata.scanNumber,
+                        notes=f"Auto-populated from scan {scan_id}. Original notes: {metadata.notes or ''}",
+                        
+                        # File-related fields derived from metadata
+                        filefolder=os.path.dirname(metadata.mda_file) if metadata.mda_file else '',
+                        filenamePrefix=os.path.splitext(os.path.basename(metadata.mda_file))[0] if metadata.mda_file else '',
+                        
+                        # Energy-related fields from source
+                        indexKeVmaxCalc=metadata.source_energy,
+                        indexKeVmaxTest=metadata.source_energy,
+                        energyUnit=metadata.source_energy_unit,
+                        
+                        # Scan point range from scan data
+                        scanPointStart=None,
+                        scanPointEnd=None, # Probably needs logic to determine which dim is the scan dim
+                        
+                        # Default processing parameters - set to None to leave empty for user input
+                        threshold=None,
+                        thresholdRatio=None,
+                        maxRfactor=None,
+                        boxsize=None,
+                        max_number=None,
+                        min_separation=None,
+                        peakShape=None,
+                        detectorCropX1=None,
+                        detectorCropX2=None,
+                        detectorCropY1=None,
+                        detectorCropY2=None,
+                        min_size=None,
+                        max_peaks=None,
+                        smooth=None,
+                        maskFile='',
+                        indexAngleTolerance=None,
+                        indexH=None,
+                        indexK=None,
+                        indexL=None,
+                        indexCone=None,
+                        exposureUnit=None,
+                        cosmicFilter=None,
+                        recipLatticeUnit=None,
+                        latticeParametersUnit=None,
+                        peaksearchPath='',
+                        p2qPath='',
+                        indexingPath='',
+                        outputFolder='',
+                        geoFile='',
+                        crystFile='',
+                        depth=f"{len(scans)}D" if scans else "1D",
+                    )
+                    
+                    # Populate the form with the defaults
+                    set_peakindex_form_props(peakindex_defaults)
+                    
+                    # Show success message
+                    set_props("alert-scan-loaded", {
+                        'is_open': True, 
+                        'children': f'Scan {scan_id} data loaded successfully. Dataset ID: {metadata.dataset_id}, Energy: {metadata.source_energy} {metadata.source_energy_unit}',
+                        'color': 'success'
+                    })
+                else:
+                    # Show error if scan not found
+                    set_props("alert-scan-loaded", {
+                        'is_open': True, 
+                        'children': f'Scan {scan_id} not found in database',
+                        'color': 'warning'
+                    })
+                    
+        except Exception as e:
+            set_props("alert-scan-loaded", {
+                'is_open': True, 
+                'children': f'Error loading scan data: {str(e)}',
+                'color': 'danger'
+            })
