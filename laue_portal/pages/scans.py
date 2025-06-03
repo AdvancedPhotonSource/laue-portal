@@ -101,8 +101,8 @@ VISIBLE_COLS = [
     prevent_initial_call=True,
 )
 def get_metadatas(path):
-       if path == '/':
-            cols, metadatas_records = _get_metadatas()
-            return cols, metadatas_records
-       else:
-            raise PreventUpdate
+    if path == '/':
+        cols, metadatas_records = _get_metadatas()
+        return cols, metadatas_records
+    else:
+        raise PreventUpdate

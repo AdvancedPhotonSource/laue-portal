@@ -215,7 +215,7 @@ class Recon(Base):
     file_range: Mapped[list[int]] = mapped_column(JSON)
     file_threshold: Mapped[int] = mapped_column(Integer)
     file_frame: Mapped[list[int]] = mapped_column(JSON)
-    file_offset: Mapped[list[int]] = mapped_column(JSON)
+    #file_offset: Mapped[list[int]] = mapped_column(JSON)
     file_ext: Mapped[str] = mapped_column(String)
     file_stacked: Mapped[bool] = mapped_column(Boolean)
     file_h5_key: Mapped[str] = mapped_column(String)
@@ -288,6 +288,7 @@ class PeakIndex(Base):
 
     # Peak Index Metadata
     peakindex_id: Mapped[int] = mapped_column(primary_key=True)
+    scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
     date: Mapped[DateTime] = mapped_column(DateTime)
     commit_id: Mapped[str] = mapped_column(String)
     calib_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future

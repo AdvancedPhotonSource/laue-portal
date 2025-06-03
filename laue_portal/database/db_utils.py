@@ -266,7 +266,7 @@ def import_recon_row(recon_object):
         file_range=recon_object['file']['range'],
         file_threshold=recon_object['file']['threshold'],
         file_frame=recon_object['file']['frame'],
-        file_offset=recon_object['file']['offset'],
+        #file_offset=recon_object['file']['offset'],
         file_ext=recon_object['file']['ext'],
         file_stacked=recon_object['file']['stacked'],
         file_h5_key=recon_object['file']['h5']['key'],
@@ -341,7 +341,7 @@ def create_config_obj(recon):
                 'range':recon.file_range+[1], #temp
                 'threshold':recon.file_threshold,
                 'frame':recon.file_frame,
-                'offset':recon.file_offset, #temp
+                #':recon.file_offset, #temp
                 'ext':recon.file_ext,
                 'stacked':recon.file_stacked,
                 'h5':

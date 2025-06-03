@@ -11,6 +11,11 @@ peakindex_form = dbc.Row(
                             [
                                 _stack(
                                     [
+                                        _field("Dataset", "dataset", size='sm'),
+                                    ]
+                                ),
+                                _stack(
+                                    [
                                         #_field("Dataset", "dataset", size='lg'),
                                         _field("Files Path", "filefolder", size='hg'),
                                     ]

@@ -59,7 +59,7 @@ recon_form = dbc.Row(
                                     [
                                         _ckbx("Data Stacked", 'data_stacked', size='sm'),
                                         _field("H5_key", 'h5_key', size='sm'),
-                                        _field("File Offset", 'file_offset', size='sm'),
+                                        #_field("File Offset", 'file_offset', size='sm'),
                                     ]
                                 )
                             ],
@@ -262,7 +262,7 @@ def set_recon_form_props(recon, read_only=False):
     set_props("file_output", {'value':recon.file_output, 'readonly':read_only})
     set_props("data_stacked", {'value':recon.file_stacked, 'readonly':read_only})
     set_props("h5_key", {'value':recon.file_h5_key, 'readonly':read_only})
-    set_props("file_offset", {'value':recon.file_offset, 'readonly':read_only})
+    #set_props("file_offset", {'value':recon.file_offset, 'readonly':read_only})
 
     #TODO: Coloring based on connnection to config table
     set_props("cenx", {'value':recon.geo_mask_focus_cenx, 'readonly':read_only})

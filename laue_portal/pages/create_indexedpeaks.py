@@ -91,7 +91,7 @@ def upload_config(contents):
 @dash.callback(
     Input('submit_peakindex', 'n_clicks'),
     
-    # State('dataset', 'value'),
+    State('dataset', 'value'),
     
     # State('peakProgram', 'value'),
     State('threshold', 'value'),
@@ -141,7 +141,7 @@ def upload_config(contents):
     prevent_initial_call=True,
 )
 def submit_config(n,
-    # dataset,
+    dataset,
     # peakProgram,
     threshold,
     thresholdRatio,
@@ -198,6 +198,8 @@ def submit_config(n,
         computer_name='TEST',
         dataset_id=0,
         notes='TODO', 
+
+         scanNumber = dataset,
 
         # peakProgram=peakProgram,
         threshold=threshold,

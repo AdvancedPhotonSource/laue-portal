@@ -73,14 +73,14 @@ VISIBLE_COLS = [
 
 
 @dash.callback(
-    Output('peakindex-table', 'columnDefs', allow_duplicate=True),
-    Output('peakindex-table', 'rowData', allow_duplicate=True),
+    Output('peakindex-table', 'columnDefs'),
+    Output('peakindex-table', 'rowData'),
     Input('url','pathname'),
     prevent_initial_call=True,
 )
 def get_peakindexs(path):
-       if path == '/indexedpeaks':
-            cols, peakindexs_records = _get_peakindexs()
-            return cols, peakindexs_records
-       else:
-            raise PreventUpdate
+    if path == '/indexedpeaks':
+        cols, peakindexs_records = _get_peakindexs()
+        return cols, peakindexs_records
+    else:
+        raise PreventUpdate

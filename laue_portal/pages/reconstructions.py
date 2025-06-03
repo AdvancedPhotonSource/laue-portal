@@ -105,14 +105,14 @@ VISIBLE_COLS = [
 
 
 @dash.callback(
-    Output('recon-table', 'columnDefs', allow_duplicate=True),
-    Output('recon-table', 'rowData', allow_duplicate=True),
+    Output('recon-table', 'columnDefs'),
+    Output('recon-table', 'rowData'),
     Input('url','pathname'),
     prevent_initial_call=True,
 )
 def get_recons(path):
-       if path == '/reconstructions':
-            cols, recons = _get_recons()
-            return cols, recons
-       else:
-            raise PreventUpdate
+    if path == '/reconstructions':
+        cols, recons = _get_recons()
+        return cols, recons
+    else:
+        raise PreventUpdate

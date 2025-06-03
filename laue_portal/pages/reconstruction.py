@@ -25,7 +25,7 @@ dash.register_page(__name__, path="/recon")
 layout = html.Div([
         navbar.navbar,
         dcc.Location(id='url-recon-page', refresh=False),
-        dbc.Container(id='indexedpeak-content-container', fluid=True, className="mt-4",
+        dbc.Container(id='recon-content-container', fluid=True, className="mt-4",
                   children=[
                         recon_form
                   ]),
@@ -256,7 +256,7 @@ def loadnpy(path, results_filename = 'img' + 'results' + '.npy'):
     Input('url-recon-page', 'href'),
     prevent_initial_call=True
 )
-def load_recon_peak_data(href):
+def load_recon_data(href):
     if not href:
         raise PreventUpdate
 
