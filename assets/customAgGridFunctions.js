@@ -40,7 +40,7 @@ dagcomponentfuncs.ActionButtonsRenderer = function (props) {
         return null; // Or return an empty span or placeholder
     }
 
-    const viewScanUrl = `/view_scan?id=${scanNumber}`; 
+    const viewScanUrl = `/create-indexedpeaks?scan_id=${scanNumber}`; 
     const viewReconstructionUrl = `/view_reconstruction?scan_id=${scanNumber}`;
 
     function handleScanClick() {
@@ -55,13 +55,13 @@ dagcomponentfuncs.ActionButtonsRenderer = function (props) {
         React.createElement(
             window.dash_bootstrap_components.Button,
             {
-                key: 'scanBtn-' + scanNumber,
+                key: 'indexBtn-' + scanNumber,
                 onClick: handleScanClick,
                 color: 'primary', 
                 size: 'sm',
                 style: { marginRight: '5px' }
             },
-            'Scan'
+            'Index'
         ),
         React.createElement(
             window.dash_bootstrap_components.Button,
