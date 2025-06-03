@@ -93,6 +93,35 @@ layout = html.Div([
                             ], align="center", justify="between"),
                             className="bg-light"
                         ),
+                        # dbc.CardBody([
+                        #     dbc.Table([
+                        #         html.Thead(html.Tr([
+                        #             html.Th("ReconID"),
+                        #             html.Th("Author"),
+                        #             html.Th("Method"),
+                        #             html.Th("Points"),
+                        #             html.Th("Depth [um]"),
+                        #             html.Th("Pixels"),
+                        #             html.Th("Date"),
+                        #             html.Th("Status"),
+                        #             html.Th("Comment"),
+                        #         ])),
+                        #         html.Tbody([
+                        #             html.Tr([
+                        #                 html.Td(r["recon_id"]),
+                        #                 html.Td(r["author"]),
+                        #                 html.Td(f"{r['depth_technique']}, calib: {r['calib_id']}"),
+                        #                 html.Td(r["pts_to_recon"]),
+                        #                 html.Td(r["depth_range_um"]),
+                        #                 html.Td(r["pxl_recon"]),
+                        #                 html.Td(r["date"]),
+                        #                 html.Td(r["status"]),
+                        #                 html.Td(r["recon_comment"] or "—")
+                        #             ])
+                        #             for r in base_recon if int(r["scan_id"]) == scan_id
+                        #         ])
+                        #     ], bordered=True, hover=True, responsive=True, striped=True, style={"tableLayout": "fixed", "width": "100%"})
+                        # ])
                         dbc.CardBody([
                             dag.AgGrid(
                                 id='scan-recon-table',
