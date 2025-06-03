@@ -315,7 +315,7 @@ class PeakIndex(Base):
     min_size: Mapped[float] = mapped_column(Float)
     max_peaks: Mapped[int] = mapped_column(Integer)
     smooth: Mapped[bool] = mapped_column(Boolean) #Mapped[int] = mapped_column(Integer)
-    maskFile: Mapped[str] = mapped_column(String)
+    maskFile: Mapped[str] = mapped_column(String, nullable=True)
     indexKeVmaxCalc: Mapped[float] = mapped_column(Float)
     indexKeVmaxTest: Mapped[float] = mapped_column(Float)
     indexAngleTolerance: Mapped[float] = mapped_column(Float)
@@ -328,9 +328,9 @@ class PeakIndex(Base):
     cosmicFilter: Mapped[bool] = mapped_column(Boolean)
     recipLatticeUnit: Mapped[str] = mapped_column(String)
     latticeParametersUnit: Mapped[str] = mapped_column(String)
-    peaksearchPath: Mapped[str] = mapped_column(String)
-    p2qPath: Mapped[str] = mapped_column(String)
-    indexingPath: Mapped[str] = mapped_column(String)
+    peaksearchPath: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    p2qPath: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    indexingPath: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     outputFolder: Mapped[str] = mapped_column(String)
     filefolder: Mapped[str] = mapped_column(String)
     filenamePrefix: Mapped[str] = mapped_column(String)
@@ -352,4 +352,3 @@ MASK_FOCUS_TABLE = [
                     'cenz (X)',
                     'shift parameter',
                     ]
-

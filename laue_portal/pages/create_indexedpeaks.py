@@ -15,6 +15,48 @@ import urllib.parse
 from dash.exceptions import PreventUpdate
 import os
 
+PEAKINDEX_DEFAULTS = {
+    "peakProgram": "peaksearch",
+    "threshold": 250,
+    "thresholdRatio": -1,
+    "maxRfactor": 0.5,
+    "boxsize": 18,
+    "min_separation": 40,
+    "peakShape": "Lorentzian",
+    "scanPointStart": 1,
+    "scanPointEnd": 2,
+    "detectorCropX1": 0,
+    "detectorCropX2": 2047,
+    "detectorCropY1": 0,
+    "detectorCropY2": 2047,
+    "min_size": 1.13,
+    "max_peaks": 50,
+    "smooth": 0,
+    "maskFile": "None", 
+    "indexKeVmaxCalc": 17.2,
+    "indexKeVmaxTest": 30.0,
+    "indexAngleTolerance": 0.1,
+    "indexH": 1,
+    "indexK": 1,
+    "indexL": 1,
+    "indexCone": 72.0,
+    "energyUnit": "keV",
+    "exposureUnit": "sec",
+    "cosmicFilter": True,  # Assuming the last occurrence in YAML is the one to use
+    "recipLatticeUnit": "1/nm",
+    "latticeParametersUnit": "nm",
+    "peaksearchPath": None,
+    "p2qPath": None,
+    "indexingPath": None,
+    "outputFolder": "tests/data/output",
+    "filefolder": "tests/data/gdata",
+    "filenamePrefix": "HAs_long_laue1_",
+    "geoFile": "tests/data/geo/geoN_2022-03-29_14-15-05.xml",
+    "crystFile": "tests/data/crystal/Al.xtal",
+    "depth": float('nan'), # Representing YAML nan
+    "beamline": "34ID-E"
+}
+
 dash.register_page(__name__)
 
 layout = dbc.Container(
@@ -44,9 +86,6 @@ layout = dbc.Container(
         html.Center(
             html.Div(
                 [
-                    html.Div([
-                        dbc.Button('Copy From Existing (TODO)', id='copy-existing', className='mr-2'),
-                    ], style={'display':'inline-block'}),
                     html.Div([
                             dcc.Upload(dbc.Button('Upload Config'), id='upload-peakindex-config'),
                     ], style={'display':'inline-block'}),
@@ -266,9 +305,10 @@ def submit_config(n,
                                 'children': 'Config Added to Database',
                                 'color': 'success'})
 
+    """ TODO: Running not implemented yet. 
     pyLaueGo = pyLaueGo(config_dict)
     pyLaueGo.run(0, 1)
-
+    """
 
 @dash.callback(
     Input('url-create-indexedpeaks', 'href'),
@@ -313,50 +353,51 @@ def load_scan_data_from_url(href):
                         notes=f"Auto-populated from scan {scan_id}. Original notes: {metadata.notes or ''}",
                         
                         # File-related fields derived from metadata
-                        filefolder=os.path.dirname(metadata.mda_file) if metadata.mda_file else '',
-                        filenamePrefix=os.path.splitext(os.path.basename(metadata.mda_file))[0] if metadata.mda_file else '',
+                        filefolder=os.path.dirname(metadata.mda_file) if metadata.mda_file else PEAKINDEX_DEFAULTS["filefolder"],
+                        filenamePrefix=os.path.splitext(os.path.basename(metadata.mda_file))[0] if metadata.mda_file else PEAKINDEX_DEFAULTS["filenamePrefix"],
                         
                         # Energy-related fields from source
-                        indexKeVmaxCalc=metadata.source_energy,
-                        indexKeVmaxTest=metadata.source_energy,
-                        energyUnit=metadata.source_energy_unit,
+                        indexKeVmaxCalc=metadata.source_energy or PEAKINDEX_DEFAULTS["indexKeVmaxCalc"],
+                        indexKeVmaxTest=metadata.source_energy or PEAKINDEX_DEFAULTS["indexKeVmaxTest"],
+                        energyUnit=metadata.source_energy_unit or PEAKINDEX_DEFAULTS["energyUnit"],
                         
                         # Scan point range from scan data
-                        scanPointStart=None,
-                        scanPointEnd=None, # Probably needs logic to determine which dim is the scan dim
+                        scanPointStart=PEAKINDEX_DEFAULTS["scanPointStart"],
+                        scanPointEnd=PEAKINDEX_DEFAULTS["scanPointEnd"], # Probably needs logic to determine which dim is the scan dim
                         
                         # Default processing parameters - set to None to leave empty for user input
-                        threshold=None,
-                        thresholdRatio=None,
-                        maxRfactor=None,
-                        boxsize=None,
-                        max_number=None,
-                        min_separation=None,
-                        peakShape=None,
-                        detectorCropX1=None,
-                        detectorCropX2=None,
-                        detectorCropY1=None,
-                        detectorCropY2=None,
-                        min_size=None,
-                        max_peaks=None,
-                        smooth=None,
-                        maskFile='',
-                        indexAngleTolerance=None,
-                        indexH=None,
-                        indexK=None,
-                        indexL=None,
-                        indexCone=None,
-                        exposureUnit=None,
-                        cosmicFilter=None,
-                        recipLatticeUnit=None,
-                        latticeParametersUnit=None,
-                        peaksearchPath='',
-                        p2qPath='',
-                        indexingPath='',
-                        outputFolder='',
-                        geoFile='',
-                        crystFile='',
-                        depth=f"{len(scans)}D" if scans else "1D",
+                        threshold=PEAKINDEX_DEFAULTS["threshold"],
+                        thresholdRatio=PEAKINDEX_DEFAULTS["thresholdRatio"],
+                        maxRfactor=PEAKINDEX_DEFAULTS["maxRfactor"],
+                        boxsize=PEAKINDEX_DEFAULTS["boxsize"],
+                        max_number=PEAKINDEX_DEFAULTS["max_peaks"], # Assuming max_peaks from YAML maps to max_number
+                        min_separation=PEAKINDEX_DEFAULTS["min_separation"],
+                        peakShape=PEAKINDEX_DEFAULTS["peakShape"],
+                        detectorCropX1=PEAKINDEX_DEFAULTS["detectorCropX1"],
+                        detectorCropX2=PEAKINDEX_DEFAULTS["detectorCropX2"],
+                        detectorCropY1=PEAKINDEX_DEFAULTS["detectorCropY1"],
+                        detectorCropY2=PEAKINDEX_DEFAULTS["detectorCropY2"],
+                        min_size=PEAKINDEX_DEFAULTS["min_size"],
+                        max_peaks=PEAKINDEX_DEFAULTS["max_peaks"],
+                        smooth=PEAKINDEX_DEFAULTS["smooth"],
+                        maskFile=PEAKINDEX_DEFAULTS["maskFile"],
+                        indexAngleTolerance=PEAKINDEX_DEFAULTS["indexAngleTolerance"],
+                        indexH=PEAKINDEX_DEFAULTS["indexH"],
+                        indexK=PEAKINDEX_DEFAULTS["indexK"],
+                        indexL=PEAKINDEX_DEFAULTS["indexL"],
+                        indexCone=PEAKINDEX_DEFAULTS["indexCone"],
+                        exposureUnit=PEAKINDEX_DEFAULTS["exposureUnit"],
+                        cosmicFilter=PEAKINDEX_DEFAULTS["cosmicFilter"],
+                        recipLatticeUnit=PEAKINDEX_DEFAULTS["recipLatticeUnit"],
+                        latticeParametersUnit=PEAKINDEX_DEFAULTS["latticeParametersUnit"],
+                        peaksearchPath=PEAKINDEX_DEFAULTS["peaksearchPath"],
+                        p2qPath=PEAKINDEX_DEFAULTS["p2qPath"],
+                        indexingPath=PEAKINDEX_DEFAULTS["indexingPath"],
+                        outputFolder=PEAKINDEX_DEFAULTS["outputFolder"],
+                        geoFile=PEAKINDEX_DEFAULTS["geoFile"],
+                        crystFile=PEAKINDEX_DEFAULTS["crystFile"],
+                        depth=f"{len(scans)}D" if scans else PEAKINDEX_DEFAULTS["depth"],
+                        beamline=PEAKINDEX_DEFAULTS["beamline"]
                     )
                     
                     # Populate the form with the defaults
