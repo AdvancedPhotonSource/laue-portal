@@ -62,7 +62,8 @@ def _get_peakindexs():
             'filter': True, 
             'sortable': True, 
             'resizable': True,
-            'suppressMenuHide': True
+            'floatingFilter': True,
+            'unSortIcon': True,
         }
         if field_key == 'peakindex_id':
             col_def['cellRenderer'] = 'PeakIndexLinkRenderer'
