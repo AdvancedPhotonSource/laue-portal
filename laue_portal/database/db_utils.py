@@ -12,7 +12,7 @@ def parse_metadata(xml,xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog",sc
     # tree = ET.parse(xml)
     # root = tree.getroot()
     root = ET.fromstring(xml)
-    scan = root[-1]#root[scan_no]
+    scan = root[scan_no]
 
     def name(s,xmlns=xmlns): return s.replace(f'{{{xmlns}}}','')
 
@@ -30,22 +30,29 @@ def parse_metadata(xml,xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog",sc
                     traverse_tree(field,tree_dict,path_name+'_')
         return tree_dict
     
+    # Define numeric fields that should be None instead of empty string
+    numeric_fields = {
+        'time_epoch', 'source_energy', 'source_IDgap', 'source_IDtaper', 
+        'source_ringCurrent', 'knife-edge_knifeScan', 'scanEnd_time_epoch', 
+        'scanEnd_scanDuration', 'scanEnd_source_ringCurrent'
+    }
+    
     scanNumber = scan.get('scanNumber')
     log_dict = {'scanNumber': scanNumber,
-                'time_epoch': '',
+                'time_epoch': None,
                 'time': '',
                 'user_name': '',
                 'source_beamBad': '',
                 'source_CCDshutter': '',
                 'source_monoTransStatus': '',
                 'source_energy_unit': '',
-                'source_energy': '',
+                'source_energy': None,
                 'source_IDgap_unit': '',
-                'source_IDgap': '',
+                'source_IDgap': None,
                 'source_IDtaper_unit': '',
-                'source_IDtaper': '',
+                'source_IDtaper': None,
                 'source_ringCurrent_unit': '',
-                'source_ringCurrent': '',
+                'source_ringCurrent': None,
                 'sample_XYZ_unit': '',
                 'sample_XYZ_desc': '',
                 'sample_XYZ': '',
@@ -53,19 +60,24 @@ def parse_metadata(xml,xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog",sc
                 'knife-edge_XYZ_desc': '',
                 'knife-edge_XYZ': '',
                 'knife-edge_knifeScan_unit': '',
-                'knife-edge_knifeScan': '',
+                'knife-edge_knifeScan': None,
                 'mda_file': '',
                 'scanEnd_abort': '',
-                'scanEnd_time_epoch': '',
+                'scanEnd_time_epoch': None,
                 'scanEnd_time': '',
                 'scanEnd_scanDuration_unit': '',
-                'scanEnd_scanDuration': '',
+                'scanEnd_scanDuration': None,
                 'scanEnd_source_beamBad': '',
                 'scanEnd_source_ringCurrent_unit': '',
-                'scanEnd_source_ringCurrent': '',
+                'scanEnd_source_ringCurrent': None,
     }
 
     log_dict = traverse_tree(scan,log_dict)
+    
+    # Convert empty strings to None for numeric fields
+    for field in numeric_fields:
+        if field in log_dict and log_dict[field] == '':
+            log_dict[field] = None
 
     scan_label = 'scan'
     scan_dims = list(scan.iter(f'{{{xmlns}}}{scan_label}'))
@@ -74,11 +86,14 @@ def parse_metadata(xml,xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog",sc
     #*****#
     PV_label1 = 'positioner'; PV_label2 = 'detectorTrig'
     scanEnd_cpt_list = scan.find(f'{{{xmlns}}}scanEnd').find(f'{{{xmlns}}}cpt').text.split()[::-1]
+    # Define numeric fields for scan dimensions
+    scan_numeric_fields = {'dim', 'npts', 'cpt'}
+    
     dims_dict_list = []
     for ii,dim in enumerate(scan_dims):
         dim_dict = {'scanNumber': scanNumber,
-                    'dim': '',
-                    'npts': '',
+                    'dim': None,
+                    'npts': None,
                     'after': '',
                     'positioner1_PV': '',
                     'positioner1_ar': '',
@@ -104,7 +119,7 @@ def parse_metadata(xml,xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog",sc
                     'detectorTrig3_VAL': '',
                     'detectorTrig4_PV': '',
                     'detectorTrig4_VAL': '',
-                    'cpt': '',
+                    'cpt': None,
         }
         dim_dict.update(dim.attrib)
         PV_count_dict = {PV_label1:0, PV_label2:0}
@@ -120,6 +135,12 @@ def parse_metadata(xml,xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog",sc
                         if record.text: record_dict[f'{record_label}'] = record.text
                         dim_dict.update(record_dict)
         dim_dict['cpt'] = scanEnd_cpt_list[ii]
+        
+        # Convert empty strings to None for numeric fields
+        for field in scan_numeric_fields:
+            if field in dim_dict and dim_dict[field] == '':
+                dim_dict[field] = None
+        
         dim_dict = {f'{scan_label}_{k}' if k != 'scanNumber' else k:v for k,v in dim_dict.items()}
         dims_dict_list.append(dim_dict)
     #*****#

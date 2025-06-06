@@ -9,14 +9,30 @@ import laue_portal.database.db_utils as db_utils
 import datetime
 import laue_portal.database.db_schema as db_schema
 from sqlalchemy.orm import Session
-import laue_portal.recon.analysis_recon as analysis_recon
+import logging
+logger = logging.getLogger(__name__)
 import laue_portal.components.navbar as navbar
+
+try:
+    import laue_portal.recon.analysis_recon as analysis_recon
+    _ANALYSIS_LIB_AVAILABLE = True
+except ImportError:
+    analysis_recon = None
+    _ANALYSIS_LIB_AVAILABLE = False
+    logger.warning("CA Reconstruction libraries not installed. Analysis will be skipped.")
 
 dash.register_page(__name__)
 
 layout = dbc.Container(
     [html.Div([
         navbar.navbar,
+        dbc.Alert(
+            "CA Reconstruction libraries not installed. Dry runs only.",
+            id="alert-lib-warning",
+            dismissable=True,
+            is_open=not _ANALYSIS_LIB_AVAILABLE,
+            color="warning",
+        ),
         dbc.Alert(
             "Hello! I am an alert",
             id="alert-upload",
@@ -33,9 +49,6 @@ layout = dbc.Container(
         html.Center(
             html.Div(
                 [
-                    html.Div([
-                        dbc.Button('Copy From Existing (TODO)', id='copy-existing', className='mr-2'),
-                    ], style={'display':'inline-block'}),
                     html.Div([
                             dcc.Upload(dbc.Button('Upload Config'), id='upload-config'),
                     ], style={'display':'inline-block'}),
@@ -328,4 +341,7 @@ def submit_config(n,
                                 'children': 'Config Added to Database',
                                 'color': 'success'})
 
-    analysis_recon.run_analysis(config_dict)
+    if _ANALYSIS_LIB_AVAILABLE:
+        analysis_recon.run_analysis(config_dict)
+    else:
+        logger.warning("Skipping reconstruction analysis; libraries not available")

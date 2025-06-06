@@ -18,11 +18,13 @@ layout = html.Div([
     dcc.Location(id='url-indexedpeak-page', refresh=False),
     dbc.Container(id='indexedpeak-content-container', fluid=True, className="mt-4",
                   children=[
+                        html.H2(id='scan-id-header', className="mb-3"),
                         peakindex_form
                   ]),
 ])
 
 @callback(
+    Output('scan-id-header', 'children'),
     Input('url-indexedpeak-page', 'href'),
     prevent_initial_call=True
 )
@@ -42,6 +44,9 @@ def load_indexed_peak_data(href):
                 peak_index_data = session.query(db_schema.PeakIndex).filter(db_schema.PeakIndex.peakindex_id == index_id).first()
                 if peak_index_data:
                     set_peakindex_form_props(peak_index_data, read_only=True)
+                    return f"Peak Index | ID: {index_id}"
         except Exception as e:
             print(f"Error loading indexed peak data: {e}")
+            return f"Error loading data for Peak Index ID: {index_id}"
     
+    return "No Peak Index ID provided"
