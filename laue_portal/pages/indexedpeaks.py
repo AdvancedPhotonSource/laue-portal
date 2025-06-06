@@ -1,8 +1,6 @@
 import dash
-from dash import html, dcc, callback, Input, Output, State, set_props, ctx
+from dash import html, dcc, Input, Output
 import dash_bootstrap_components as dbc
-import laue_portal.pages.ui_shared as ui_shared
-from dash import dcc, ctx
 import dash_ag_grid as dag
 from dash.exceptions import PreventUpdate
 import laue_portal.database.db_utils as db_utils
@@ -10,14 +8,6 @@ import laue_portal.database.db_schema as db_schema
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 import pandas as pd
-import base64
-import yaml
-import datetime
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from pathlib import Path
-import h5py
 import laue_portal.components.navbar as navbar
 
 dash.register_page(__name__)
@@ -78,13 +68,14 @@ VISIBLE_COLS = [
     db_schema.PeakIndex.peakindex_id,
     db_schema.PeakIndex.date,
     db_schema.PeakIndex.dataset_id,
+    #db_schema.PeakIndex.scanNumber,
     db_schema.PeakIndex.notes,
 ]
 
 
 @dash.callback(
-    Output('peakindex-table', 'columnDefs', allow_duplicate=True),
-    Output('peakindex-table', 'rowData', allow_duplicate=True),
+    Output('peakindex-table', 'columnDefs'),
+    Output('peakindex-table', 'rowData'),
     Input('url','pathname'),
     prevent_initial_call=True,
 )

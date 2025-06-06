@@ -1,8 +1,6 @@
 import dash_bootstrap_components as dbc
-from dash import html, Input, set_props, State
+from dash import html, dcc, Input, set_props, State
 import dash
-import laue_portal.pages.ui_shared as ui_shared
-from dash import dcc
 import base64
 import yaml
 import laue_portal.database.db_utils as db_utils
@@ -12,6 +10,7 @@ from sqlalchemy.orm import Session
 import logging
 logger = logging.getLogger(__name__)
 import laue_portal.components.navbar as navbar
+from laue_portal.components.recon_form import recon_form, set_recon_form_props
 
 try:
     import laue_portal.recon.analysis_recon as analysis_recon
@@ -60,7 +59,7 @@ layout = dbc.Container(
             dbc.Button('Submit', id='submit', color='primary'),
         ),
         html.Hr(),
-        ui_shared.recon_form,
+        recon_form,
     ],
     )
     ],
@@ -94,7 +93,7 @@ def upload_config(contents):
         set_props("alert-upload", {'is_open': True, 
                                     'children': 'Config uploaded successfully',
                                     'color': 'success'})
-        ui_shared.set_form_props(recon_row)
+        set_recon_form_props(recon_row)
 
     except Exception as e:
         set_props("alert-upload", {'is_open': True, 
@@ -121,7 +120,7 @@ def upload_config(contents):
     State('file_output', 'value'),
     State('data_stacked', 'value'),
     State('h5_key', 'value'),
-    State('file_offset', 'value'),
+    #State('file_offset', 'value'),
 
     State('cenx', 'value'),
     State('ceny', 'value'),
@@ -197,7 +196,7 @@ def submit_config(n,
     file_output,
     data_stacked,
     h5_key,
-    file_offset,
+    #file_offset,
 
     cenx,
     ceny,
@@ -266,13 +265,15 @@ def submit_config(n,
         dataset_id=0,
         notes='TODO', 
 
+        scanNumber = dataset,
+
         file_path=file_path,
         file_output=file_output,
         file_stacked=data_stacked,
         file_range=[frame_start, frame_end],
         file_threshold=0,
         file_frame=[x_start, x_end, y_start, y_end],
-        file_offset=file_offset,
+        #file_offset=file_offset,
         file_ext='h5', #'TODO',
         file_h5_key=h5_key,
         

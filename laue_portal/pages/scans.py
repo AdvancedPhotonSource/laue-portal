@@ -1,5 +1,5 @@
 import dash
-from dash import html, dcc, callback, Input, Output
+from dash import html, dcc, Input, Output, State, set_props, ctx
 import dash_bootstrap_components as dbc
 import dash_ag_grid as dag
 from dash.exceptions import PreventUpdate
@@ -116,8 +116,8 @@ def _get_metadatas():
     prevent_initial_call=True,
 )
 def get_metadatas(path):
-       if path == '/':
-            cols, metadatas_records = _get_metadatas()
-            return cols, metadatas_records
-       else:
-            raise PreventUpdate
+    if path == '/':
+        cols, metadatas_records = _get_metadatas()
+        return cols, metadatas_records
+    else:
+        raise PreventUpdate

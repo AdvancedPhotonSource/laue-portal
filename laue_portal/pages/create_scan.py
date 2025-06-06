@@ -1,8 +1,6 @@
 import dash_bootstrap_components as dbc
-from dash import html, Input, State, set_props, ALL
+from dash import html, dcc, Input, State, set_props, ALL
 import dash
-import laue_portal.pages.ui_shared as ui_shared
-from dash import dcc
 import base64
 import yaml
 import laue_portal.database.db_utils as db_utils
@@ -11,6 +9,7 @@ import laue_portal.database.db_schema as db_schema
 from sqlalchemy.orm import Session
 from laue_portal.database.db_schema import Scan
 import laue_portal.components.navbar as navbar
+from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, make_scan_accordion
 
 
 dash.register_page(__name__)
@@ -44,7 +43,7 @@ layout = dbc.Container(
             )
         ),
         html.Hr(),
-        ui_shared.metadata_form,
+        metadata_form,
         
         # Modal for scan selection
         dbc.Modal(
@@ -179,8 +178,8 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
             scan_cards = []; scan_rows = []
             
             for i, scan in enumerate(scans):
-                scan_card = ui_shared.make_scan_card(i)
-                scan_cards.append(scan_card)
+                #scan_card = ui_shared.make_scan_card(i)
+                #scan_cards.append(scan_card)
                 scan_row = db_utils.import_scan_row(scan)
                 scan_rows.append(scan_row)
                 
@@ -194,7 +193,7 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
             metadata_row.dataset_id = 0
             metadata_row.notes = ''
             
-            ui_shared.set_metadata_form_props(metadata_row, scan_rows)
+            set_metadata_form_props(metadata_row, scan_rows)
             
             # Add to database
             with Session(db_utils.ENGINE) as session:

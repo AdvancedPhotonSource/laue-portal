@@ -1,14 +1,5 @@
 import dash
-from dash import dcc, ctx, dash_table
-from dash import html
-from dash.dependencies import Input, Output
 import dash_bootstrap_components as dbc
-import plotly.graph_objects as go
-import plotly.express as px
-import numpy as np
-from dataclasses import dataclass
-import pandas as pd
-import laue_portal.pages.ui_shared as ui_shared
 import laue_portal.database.db_schema as db_schema
 import sqlalchemy
 import os

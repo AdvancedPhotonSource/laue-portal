@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import html, Input, set_props, State
+from dash import html, dcc, Input, set_props, State
 import dash
 from dash import dcc
 import base64
@@ -150,6 +150,7 @@ def upload_config(contents):
         set_peakindex_form_props(peakindex_row)
 
     except Exception as e:
+        raise e
         set_props("alert-upload", {'is_open': True, 
                                     'children': f'Upload Failed! Error: {e}',
                                     'color': 'danger'})
@@ -159,6 +160,7 @@ def upload_config(contents):
     Input('submit_peakindex', 'n_clicks'),
     
     State('dataset', 'value'),
+    State('recon_id', 'value'),
     
     # State('peakProgram', 'value'),
     State('threshold', 'value'),
@@ -209,6 +211,7 @@ def upload_config(contents):
 )
 def submit_config(n,
     dataset,
+    recon_id,
     # peakProgram,
     threshold,
     thresholdRatio,
@@ -265,6 +268,9 @@ def submit_config(n,
         computer_name='TEST',
         dataset_id=dataset or 0,
         notes='TODO', 
+
+        scanNumber = dataset,
+        recon_id = recon_id,
 
         # peakProgram=peakProgram,
         threshold=threshold,
@@ -365,7 +371,7 @@ def load_scan_data_from_url(href):
                         calib_id=metadata.calib_id or 0,
                         runtime='',
                         computer_name='',
-                        dataset_id=metadata.scanNumber,
+                        dataset_id=scan_id,
                         notes=f"Auto-populated from scan {scan_id}. Original notes: {metadata.notes or ''}",
                         
                         # File-related fields derived from metadata
