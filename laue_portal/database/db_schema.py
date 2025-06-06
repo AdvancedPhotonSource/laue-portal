@@ -30,7 +30,7 @@ class Metadata(Base):
 
     scanNumber: Mapped[int] = mapped_column(primary_key=True)
 
-    time_epoch: Mapped[int] = mapped_column(Integer)
+    time_epoch: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     time: Mapped[str] = mapped_column(String) # DateTime?
     user_name: Mapped[str] = mapped_column(String)
 
@@ -38,13 +38,13 @@ class Metadata(Base):
     source_CCDshutter: Mapped[str] = mapped_column(String) #bool?
     source_monoTransStatus: Mapped[str] = mapped_column(String) #bool?
     source_energy_unit: Mapped[str] = mapped_column(String)
-    source_energy: Mapped[float] = mapped_column(Float)
+    source_energy: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     source_IDgap_unit: Mapped[str] = mapped_column(String)
-    source_IDgap: Mapped[float] = mapped_column(Float)
+    source_IDgap: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     source_IDtaper_unit: Mapped[str] = mapped_column(String) 
-    source_IDtaper: Mapped[float] = mapped_column(Float)
+    source_IDtaper: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     source_ringCurrent_unit: Mapped[str] = mapped_column(String)
-    source_ringCurrent: Mapped[float] = mapped_column(Float)
+    source_ringCurrent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     sample_XYZ_unit: Mapped[str] = mapped_column(String)
     sample_XYZ_desc: Mapped[str] = mapped_column(String)
@@ -60,21 +60,21 @@ class Metadata(Base):
     # knifeEdge_Y: Mapped[float] = mapped_column(Float)
     # knifeEdge_Z: Mapped[float] = mapped_column(Float)
     knifeEdge_knifeScan_unit: Mapped[str] = mapped_column(String)
-    knifeEdge_knifeScan: Mapped[float] = mapped_column(Float)
+    knifeEdge_knifeScan: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     #scan:
 
     mda_file: Mapped[str] = mapped_column(String)
     
     scanEnd_abort: Mapped[str] = mapped_column(String) # Mapped[bool] = mapped_column(Boolean)
-    scanEnd_time_epoch: Mapped[int] = mapped_column(Integer)
+    scanEnd_time_epoch: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     scanEnd_time: Mapped[str] = mapped_column(String) # DateTime?
     scanEnd_scanDuration_unit: Mapped[str] = mapped_column(String)
-    scanEnd_scanDuration: Mapped[float] = mapped_column(Float)
+    scanEnd_scanDuration: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     # scanEnd_cpt: Mapped[int] = mapped_column(Integer)
     scanEnd_source_beamBad: Mapped[str] = mapped_column(String) # Mapped[bool] = mapped_column(Boolean)
     scanEnd_source_ringCurrent_unit: Mapped[str] = mapped_column(String)
-    scanEnd_source_ringCurrent: Mapped[float] = mapped_column(Float)
+    scanEnd_source_ringCurrent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # dataset_id: Mapped[int] = mapped_column(primary_key=True)
     
@@ -122,8 +122,8 @@ class Scan(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
 
-    scan_dim: Mapped[int] = mapped_column(Integer)
-    scan_npts: Mapped[int] = mapped_column(Integer)
+    scan_dim: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    scan_npts: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     scan_after: Mapped[str] = mapped_column(String)  #bool?
     # scan_positionerSettle_unit: Mapped[str] = mapped_column(String)
     # scan_positionerSettle: Mapped[float] = mapped_column(Float)
@@ -163,7 +163,7 @@ class Scan(Base):
     scan_detectorTrig4_PV: Mapped[str] = mapped_column(String)
     scan_detectorTrig4_VAL: Mapped[str] = mapped_column(String) #int?
     # scan_detectors: Mapped[str] = mapped_column(String) #list?
-    scan_cpt: Mapped[int] = mapped_column(Integer)
+    scan_cpt: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     def __repr__(self) -> str:
         pass # TODO: Consider implemeting for debugging

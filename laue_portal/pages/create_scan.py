@@ -12,6 +12,9 @@ from sqlalchemy.orm import Session
 from laue_portal.database.db_schema import Scan
 import laue_portal.components.navbar as navbar
 
+# Global variable to store uploaded XML data
+uploaded_xml_data = None
+
 dash.register_page(__name__)
 
 layout = dbc.Container(
@@ -34,20 +37,37 @@ layout = dbc.Container(
             html.Div(
                 [
                     html.Div([
-                        dbc.Button('Copy From Existing (TODO)', id='copy-existing', className='mr-2'),
-                    ], style={'display':'inline-block'}),
-                    html.Div([
                             dcc.Upload(dbc.Button('Upload Log'), id='upload-metadata-log'),
                     ], style={'display':'inline-block'}),
                 ],
             )
         ),
-        # html.Hr(),
-        # html.Center(
-        #     dbc.Button('Submit', id='submit_metadata', color='primary'),
-        # ),
-        # html.Hr(),
+        html.Hr(),
         ui_shared.metadata_form,
+        
+        # Modal for scan selection
+        dbc.Modal(
+            [
+                dbc.ModalHeader(dbc.ModalTitle("Select Scan")),
+                dbc.ModalBody([
+                    html.P("Select which scan to import from the uploaded file:"),
+                    dcc.Dropdown(
+                        id='scan-selection-dropdown',
+                        placeholder="Select a scan...",
+                        searchable=True,
+                        options=[],
+                        value=None
+                    ),
+                ]),
+                dbc.ModalFooter([
+                    dbc.Button("Cancel", id="scan-modal-cancel", className="ms-auto", n_clicks=0),
+                    dbc.Button("Select", id="scan-modal-select", className="ms-2", color="primary", n_clicks=0),
+                ]),
+            ],
+            id="scan-selection-modal",
+            is_open=False,
+            size="lg",
+        ),
     ],
     )
     ],
@@ -57,57 +77,138 @@ layout = dbc.Container(
 
 """
 =======================
+Helper Functions
+=======================
+"""
+def get_scan_elements(xml_data):
+    """
+    Parse XML data and return available scan options for dropdown
+    
+    Args:
+        xml_data: Decoded XML data
+        
+    Returns:
+        List of dictionaries with 'label' and 'value' keys for dropdown options
+    """
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(xml_data)
+    
+    # Get all scan elements and create dropdown options
+    scan_options = []
+    for i, scan_elem in enumerate(root):
+        if scan_elem.tag.endswith('Scan'):
+            scan_number = scan_elem.get('scanNumber', f'Scan {i+1}')
+            scan_options.append({'label': f'{scan_number}', 'value': i})
+    
+    return scan_options
+
+"""
+=======================
 Callbacks
 =======================
 """
 @dash.callback(
+    [dash.Output('scan-selection-modal', 'is_open'),
+     dash.Output('scan-selection-dropdown', 'options'),
+     dash.Output('alert-upload', 'is_open'),
+     dash.Output('alert-upload', 'children'),
+     dash.Output('alert-upload', 'color'),
+     dash.Output('upload-metadata-log', 'contents')],
     Input('upload-metadata-log', 'contents'),
     prevent_initial_call=True,
 )
 def upload_log(contents):
+    global uploaded_xml_data
     try:
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
-        log, scans = db_utils.parse_metadata(decoded) #yaml.safe_load(decoded)
-        metadata_row = db_utils.import_metadata_row(log)
-        scan_cards = []; scan_rows = []
-        for i,scan in enumerate(scans):
-            scan_card = ui_shared.make_scan_card(i)
-            scan_cards.append(scan_card)
-            scan_row = db_utils.import_scan_row(scan)
-            scan_rows.append(scan_row)
-        set_props("scan_cards", {'children': scan_cards})
         
-        metadata_row.date = datetime.datetime.now()
-        metadata_row.commit_id = ''
-        metadata_row.calib_id = ''
-        metadata_row.runtime = ''
-        metadata_row.computer_name = ''
-        metadata_row.dataset_id = 0
-        metadata_row.notes = ''
-
-        set_props("alert-upload", {'is_open': True, 
-                                    'children': 'Log uploaded successfully',
-                                    'color': 'success'})
-        ui_shared.set_metadata_form_props(metadata_row,scan_rows)
-
-        # Add to database
-        with Session(db_utils.ENGINE) as session:
-            session.add(metadata_row)
-            scan_row_count = session.query(Scan).count()
-            for id,scan_row in enumerate(scan_rows):
-                scan_row.id = scan_row_count + id
-                session.add(scan_row)
-                print(scan_row.id)
-            
-            session.commit()
+        # Store the XML data globally for later use
+        uploaded_xml_data = decoded
         
-        set_props("alert-submit", {'is_open': True, 
-                                    'children': 'Log Added to Database',
-                                    'color': 'success'})
-        #
+        # Get available scan options
+        scan_options = get_scan_elements(decoded)
+        
+        # If no scans found, show error
+        if not scan_options:
+            return False, [], True, 'No scans found in uploaded file', 'danger', None
+        
+        # Show modal with scan options, clear upload contents to allow re-upload
+        return True, scan_options, True, 'File uploaded successfully. Please select a scan.', 'info', None
 
     except Exception as e:
-        set_props("alert-upload", {'is_open': True, 
-                                    'children': f'Upload Failed! Error: {e}',
-                                    'color': 'danger'})
+        return False, [], True, f'Upload Failed! Error: {e}', 'danger', None
+
+
+@dash.callback(
+    [dash.Output('scan-selection-modal', 'is_open', allow_duplicate=True),
+     dash.Output('alert-submit', 'is_open'),
+     dash.Output('alert-submit', 'children'),
+     dash.Output('alert-submit', 'color')],
+    [Input('scan-modal-cancel', 'n_clicks'),
+     Input('scan-modal-select', 'n_clicks')],
+    [State('scan-selection-dropdown', 'value')],
+    prevent_initial_call=True,
+)
+def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index):
+    global uploaded_xml_data
+    
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return False, False, '', 'info'
+    
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    if button_id == 'scan-modal-cancel':
+        # Just close modal on cancel
+        return False, False, '', 'info'
+    
+    elif button_id == 'scan-modal-select':
+        if selected_scan_index is None:
+            # No scan selected, show error but keep modal open
+            return True, True, 'Please select a scan before submitting.', 'warning'
+        
+        try:
+            # Process the selected scan
+            log, scans = db_utils.parse_metadata(uploaded_xml_data, scan_no=selected_scan_index)
+            metadata_row = db_utils.import_metadata_row(log)
+            scan_cards = []; scan_rows = []
+            
+            for i, scan in enumerate(scans):
+                scan_card = ui_shared.make_scan_card(i)
+                scan_cards.append(scan_card)
+                scan_row = db_utils.import_scan_row(scan)
+                scan_rows.append(scan_row)
+                
+            set_props("scan_cards", {'children': scan_cards})
+            
+            metadata_row.date = datetime.datetime.now()
+            metadata_row.commit_id = ''
+            metadata_row.calib_id = ''
+            metadata_row.runtime = ''
+            metadata_row.computer_name = ''
+            metadata_row.dataset_id = 0
+            metadata_row.notes = ''
+            
+            ui_shared.set_metadata_form_props(metadata_row, scan_rows)
+            
+            # Add to database
+            with Session(db_utils.ENGINE) as session:
+                session.add(metadata_row)
+                scan_row_count = session.query(Scan).count()
+                for id, scan_row in enumerate(scan_rows):
+                    scan_row.id = scan_row_count + id
+                    session.add(scan_row)
+                    print(scan_row.id)
+                
+                session.commit()
+            
+            # Close modal and show success
+            return False, True, 'Scan imported to database successfully!', 'success'
+            
+        except Exception as e:
+            # Close modal and show error
+            return False, True, f'Import failed! Error: {e}', 'danger'
+    
+    # Default case
+    return False, False, '', 'info'
