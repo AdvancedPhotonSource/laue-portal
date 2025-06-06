@@ -176,7 +176,7 @@ recon_form = dbc.Row(
                                 ),
                                 _stack(
                                     [
-                                        _field("Offest", 'source_offset', size='sm'),
+                                        _field("Offset", 'source_offset', size='sm'),
                                     ]
                                 )
                             ],
@@ -312,7 +312,7 @@ def set_recon_form_props(recon, read_only=False):
     set_props("sig_order", {'value':recon.algo_sig_order, 'readonly':read_only})
     set_props("sig_scale", {'value':recon.algo_sig_scale, 'readonly':read_only})
     set_props("sig_maxsize", {'value':recon.algo_sig_init_maxsize, 'readonly':read_only})
-    set_props("sig_avgsize", {'value':recon.algo_sig_init_maxsize, 'readonly':read_only})
+    set_props("sig_avgsize", {'value':recon.algo_sig_init_avgsize, 'readonly':read_only})
     set_props("sig_atol", {'value':recon.algo_sig_init_atol, 'readonly':read_only})
     set_props("recon_ene", {'value':recon.algo_ene_recon, 'readonly':read_only})
     set_props("exact_ene", {'value':recon.algo_ene_exact, 'readonly':read_only})
