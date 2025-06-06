@@ -1,0 +1,82 @@
+
+ver: 1.0
+
+file:
+    path: '/Users/mrdiamond/Documents/laue_local/config-model'
+    output: '/Users/mrdiamond/Documents/laue_local/laue-code/outputs/config-model'
+    range: [0, 400, 1] #[0, 6960, 1]
+    threshold: 20 # [readout values]
+    frame: [0, 2048, 0, 2048] # [pixels]
+    ext: 'h5'
+    stacked: True
+    h5:
+        key: '/entry1/data/data'
+
+comp:
+    server: 'local'
+    workers: 8
+    functionid: 'd8461388-9442-4008-a5f1-2cfa112f6923'
+
+geo:
+    mask: 
+        path: 'masks/code-debruijn-2-8-000.npy' #'../masks/code-debruijn-2-8-000.npy'
+        reversed: False
+        bitsizes: [15, 7.5] # [mu]
+        thickness: 3.7 # [mu]
+        resolution: 0.5
+        smoothness: 0 # [mu]
+        alpha: 0 
+        widening: 0 # [mu]
+        pad: 300
+        stretch: 1.0
+        shift: 0 # [mm]
+
+        focus: 
+            cenx: 0
+            dist: 0.4 # [mm]
+            anglez: 0
+            angley: 0
+            anglex: 0
+            cenz: 0
+            
+        cal: 
+            id: 1
+            path: 'config-model'
+
+    scanner:
+        step: 0.5 # 1 # [mu]
+        rot: [1.e-9, 0, 0] # [0.0045, -0.00684, -3.375e-5]
+        axis: [1, 0, 0] #[0.70710678118, 0.70710678118, 0]
+
+    detector: 
+        shape: [2048, 2048] # [pixels]
+        size: [409.6, 409.6] # [mm]
+        rot: [-1.2091995761561452, -1.2091995761561452, -1.2091995761561452] # [-1.20161887, -1.21404493, -1.21852276] # [radian]
+        pos: [0, 0, 500] # [28.828, 2.715, 512.993] # [mm]
+
+    source: 
+        offset: 0
+        grid: [-0.2, 0.2, 0.001] # [mm]
+
+algo:
+    iter: 1
+    pos: 
+        method: 'lsqr' 
+        regpar: 0
+        init: 'spline'
+
+    sig: 
+        recon: True
+        method: 'splines' 
+        order: 5
+        scale: 1
+        init:
+            maxsize: 64
+            avgsize: 10
+            atol: 4
+    ene:
+        recon: False
+        exact: True
+        method: 'lsqr' 
+        range: [0, 31, 1] #[5, 30, 1]
+
