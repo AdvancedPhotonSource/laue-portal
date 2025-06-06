@@ -11,7 +11,8 @@ recon_form = dbc.Row(
                             [
                                 _stack(
                                     [
-                                        _field("Dataset", "dataset", size='lg'),
+                                        # _field("Dataset", "dataset", size='lg'),
+                                        _field("Scan Number", "scanNumber", size='sm'),
                                     ]
                                 ),
                                 _stack(
@@ -245,7 +246,8 @@ recon_form = dbc.Row(
         )
 
 def set_recon_form_props(recon, read_only=False):
-    set_props("dataset", {'value':recon.dataset_id, 'readonly':read_only})
+    # set_props("dataset", {'value':recon.dataset_id, 'readonly':read_only})
+    set_props("scanNumber", {'value':recon.scanNumber, 'readonly':read_only})
 
     set_props("frame_start", {'value':recon.file_range[0], 'readonly':read_only})
     set_props("frame_end", {'value':recon.file_range[1], 'readonly':read_only})

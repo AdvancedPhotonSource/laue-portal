@@ -11,18 +11,18 @@ peakindex_form = dbc.Row(
                             [
                                 _stack(
                                     [
-                                        _field("Dataset", "dataset", size='sm'),
+                                        # _field("Dataset", "dataset", size='lg'),
+                                        _field("Scan Number", "scanNumber", size='sm'),
+                                        _field("Recon ID", "recon_id", size='sm'),
                                     ]
                                 ),
                                 _stack(
                                     [
-                                        #_field("Dataset", "dataset", size='lg'),
                                         _field("Files Path", "filefolder", size='hg'),
                                     ]
                                 ),
                                 _stack(
                                     [
-                                        # _field("Dataset", "dataset", size='lg'),
                                         _field("Filename Prefix", "filenamePrefix", size='lg'),
                                     ]
                                 ),
@@ -199,7 +199,9 @@ peakindex_form = dbc.Row(
 
 
 def set_peakindex_form_props(peakindex, read_only=False):
-    set_props("dataset", {'value':peakindex.dataset_id, 'readonly':read_only})
+    #set_props("dataset", {'value':peakindex.dataset_id, 'readonly':read_only})
+    set_props("scanNumber", {'value':peakindex.scanNumber, 'readonly':read_only})
+    set_props("recon_id", {'value':peakindex.recon_id, 'readonly':read_only})
     
     # set_props("peakProgram", {'value':peakindex.peakProgram, 'readonly':read_only})
     set_props("threshold", {'value':peakindex.threshold, 'readonly':read_only})

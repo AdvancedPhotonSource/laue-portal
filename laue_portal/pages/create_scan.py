@@ -84,6 +84,7 @@ def upload_log(contents):
         metadata_row.computer_name = ''
         metadata_row.dataset_id = 0
         metadata_row.notes = ''
+        metadata_row.sample_name = 'Si'
 
         set_props("alert-upload", {'is_open': True, 
                                     'children': 'Log uploaded successfully',

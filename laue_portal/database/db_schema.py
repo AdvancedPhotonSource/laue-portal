@@ -110,7 +110,12 @@ class Metadata(Base):
     # sampleZini: Mapped[float] = mapped_column(Float)
     # comment: Mapped[str] = mapped_column(String)
 
-    ###scan: Mapped["Scan"] = relationship(back_populates="Metadata")
+    sample_name: Mapped[str] = mapped_column(String)
+
+    calibs: Mapped["Calib"] = relationship(backref="recon")
+    scans: Mapped["Scan"] = relationship(backref="recon")
+    recons: Mapped["Recon"] = relationship(backref="recon")
+    #peakindices: Mapped["PeakIndex"] = relationship(backref="recon")
 
     def __repr__(self) -> str:
         pass # TODO: Consider implemeting for debugging
@@ -173,6 +178,7 @@ class Calib(Base):
     __tablename__ = "calib"
 
     calib_id: Mapped[int] = mapped_column(primary_key=True)
+    scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
     date: Mapped[DateTime] = mapped_column(DateTime)
     commit_id: Mapped[str] = mapped_column(String)
     runtime: Mapped[str] = mapped_column(String)
@@ -203,7 +209,7 @@ class Recon(Base):
     scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
     date: Mapped[DateTime] = mapped_column(DateTime)
     commit_id: Mapped[str] = mapped_column(String)
-    calib_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
+    calib_id: Mapped[int] = mapped_column(Integer) #Mapped[int] = mapped_column(ForeignKey("calib.calib_id"))
     runtime: Mapped[str] = mapped_column(String)
     computer_name: Mapped[str] = mapped_column(String)
     dataset_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
@@ -279,6 +285,8 @@ class Recon(Base):
     algo_ene_method: Mapped[str] = mapped_column(String)
     algo_ene_range: Mapped[list[int]] = mapped_column(JSON)
 
+    peakindices: Mapped["PeakIndex"] = relationship(backref="recon")
+
     def __repr__(self) -> str:
         return f'Recon {self.recon_id}' # TODO: Consider implementing for debugging
 
@@ -296,6 +304,8 @@ class PeakIndex(Base):
     computer_name: Mapped[str] = mapped_column(String)
     dataset_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
     notes: Mapped[str] = mapped_column(String)
+
+    recon_id: Mapped[int] = mapped_column(ForeignKey("recon.recon_id"))
 
     # Peak Index Parameters
     # peakProgram: Mapped[str] = mapped_column(String)

@@ -150,3 +150,6 @@ laue-portal_conda-requirements.txt
 
 data
 cold
+
+# Example files
+example-configs

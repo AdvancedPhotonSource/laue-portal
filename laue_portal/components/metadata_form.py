@@ -11,7 +11,7 @@ metadata_form = dbc.Row(
                             [
                                 _stack(
                                     [
-                                        _field("Scan Number", "scanNumber", size='lg'),
+                                        _field("Scan Number", "scanNumber", size='sm'),
                                         # _field("Time Epoch", "time_epoch", size='lg'),
                                         html.Div(
                                             [

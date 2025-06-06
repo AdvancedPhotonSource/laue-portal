@@ -25,7 +25,8 @@ layout = html.Div([
                 [
                     # Scan Info
                     html.H1(children=["Scan ID: ", html.Div(id="ScanID_print")],
-                        className="mb-4"
+                            style={"display":"flex", "gap":"10px", "align-items":"flex-end"},
+                            className="mb-4"
                     ),
                     # html.H1(
                     #     html.Div(id="ScanID_print"),
@@ -48,11 +49,21 @@ layout = html.Div([
                         ),
                         dbc.CardBody([
                             
-                            html.P(children=[html.Strong("User: "), html.Div(id="User_print")]),
-                            html.P(children=[html.Strong("Date: "), html.Div(id="Date_print")]),
-                            html.P(children=[html.Strong("Scan Type: "), html.Div(id="ScanType_print")]),
-                            html.P(children=[html.Strong("Technique: "), html.Div(id="Technique_print")]),
-                            html.P(children=[html.Strong("Sample: "), html.Div(id="Sample_print")]),
+                            html.P(children=[html.Strong("User: "), html.Div(id="User_print")],
+                                   style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
+                                   ),
+                            html.P(children=[html.Strong("Date: "), html.Div(id="Date_print")],
+                                   style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
+                                   ),
+                            html.P(children=[html.Strong("Scan Type: "), html.Div(id="ScanType_print")],
+                                   style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
+                                   ),
+                            html.P(children=[html.Strong("Technique: "), html.Div(id="Technique_print")],
+                                   style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
+                                   ),
+                            html.P(children=[html.Strong("Sample: "), html.Div(id="Sample_print")],
+                                   style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
+                                   ),
                             # html.P(html.Div(id="User_print")),
                             # html.P(html.Div(id="Date_print")),
                             # html.P(html.Div(id="ScanType_print")),
@@ -93,35 +104,6 @@ layout = html.Div([
                             ], align="center", justify="between"),
                             className="bg-light"
                         ),
-                        # dbc.CardBody([
-                        #     dbc.Table([
-                        #         html.Thead(html.Tr([
-                        #             html.Th("ReconID"),
-                        #             html.Th("Author"),
-                        #             html.Th("Method"),
-                        #             html.Th("Points"),
-                        #             html.Th("Depth [um]"),
-                        #             html.Th("Pixels"),
-                        #             html.Th("Date"),
-                        #             html.Th("Status"),
-                        #             html.Th("Comment"),
-                        #         ])),
-                        #         html.Tbody([
-                        #             html.Tr([
-                        #                 html.Td(r["recon_id"]),
-                        #                 html.Td(r["author"]),
-                        #                 html.Td(f"{r['depth_technique']}, calib: {r['calib_id']}"),
-                        #                 html.Td(r["pts_to_recon"]),
-                        #                 html.Td(r["depth_range_um"]),
-                        #                 html.Td(r["pxl_recon"]),
-                        #                 html.Td(r["date"]),
-                        #                 html.Td(r["status"]),
-                        #                 html.Td(r["recon_comment"] or "—")
-                        #             ])
-                        #             for r in base_recon if int(r["scan_id"]) == scan_id
-                        #         ])
-                        #     ], bordered=True, hover=True, responsive=True, striped=True, style={"tableLayout": "fixed", "width": "100%"})
-                        # ])
                         dbc.CardBody([
                             dag.AgGrid(
                                 id='scan-recon-table',
@@ -147,39 +129,6 @@ layout = html.Div([
                             ], align="center", justify="between"),
                             className="bg-light"
                         ),
-                        # dbc.CardBody([
-                        #     dbc.Table([
-                        #         html.Thead(html.Tr([
-                        #             html.Th("IndexID"),
-                        #             html.Th("ReconID"),
-                        #             html.Th("Author"),
-                        #             html.Th("Structure"),
-                        #             html.Th("Points"),
-                        #             html.Th("Box"),
-                        #             html.Th("Threshold"),
-                        #             html.Th("Date"),
-                        #             html.Th("Status"),
-                        #             html.Th("Comment"),
-
-                                    
-                        #         ])),
-                        #         html.Tbody([
-                        #             html.Tr([
-                        #                 html.Td(index.get("index_id", "")),
-                        #                 html.Td(index.get("recon_id", "")),
-                        #                 html.Td(index.get("author", "")),
-                        #                 html.Td(index.get("structure_file", "")),
-                        #                 html.Td(index.get("points_to_index", "")),
-                        #                 html.Td(index.get("box_size", "")),
-                        #                 html.Td(index.get("threshold_inten", "")),
-                        #                 html.Td(index.get("date", "")),
-                        #                 html.Td(index.get("status", "")),
-                        #                 html.Td(index.get("index_comment", ""))
-                        #             ])
-                        #             for index in base_index if index["scan_id"] == scan_id
-                        #         ])
-                        #     ], bordered=True, hover=True, responsive=True, striped=True, style={"tableLayout": "fixed", "width": "100%"})
-                        # ])
                         dbc.CardBody([
                             dag.AgGrid(
                                 id='scan-peakindex-table',
@@ -490,26 +439,65 @@ Recon Table
 =======================
 """
 
+# VISIBLE_COLS_Recon = [
+#     db_schema.Recon.recon_id,
+#     db_schema.Recon.date,
+#     db_schema.Recon.calib_id,
+#     # db_schema.Recon.dataset_id,
+#     db_schema.Recon.scanNumber,
+#     db_schema.Recon.notes,
+# ]
+
+# CUSTOM_HEADER_NAMES_Recon = {
+#     'recon_id': 'Recon ID',
+#     'scanNumber': 'Scan ID',
+#     #'dataset_id': 'Scan ID',
+# }
+
 VISIBLE_COLS_Recon = [
     db_schema.Recon.recon_id,
+    db_schema.Metadata.user_name, #db_schema.Recon.author,
+    #db_schema.Recon.pxl_recon,
     db_schema.Recon.date,
-    db_schema.Recon.calib_id,
-    # db_schema.Recon.dataset_id,
-    db_schema.Recon.scanNumber,
-    db_schema.Recon.notes,
+    db_schema.Recon.runtime,
+    db_schema.Recon.notes
 ]
 
 CUSTOM_HEADER_NAMES_Recon = {
-    'recon_id': 'Recon ID',
-    'scanNumber': 'Scan ID',
-    #'dataset_id': 'Scan ID',
+    'recon_id': 'Recon ID', #'ReconID',
+    'user_name': 'Author',
+    #'pxl_recon': 'Pixels'
+    #'': 'Date',
+    'runtime': 'Status',
+    'notes': 'Comment',
 }
+
+CUSTOM_COLS_Recon_dict = {
+    2:[
+        #db_schema.Recon.depth_technique, #presently does not exist
+        db_schema.Recon.calib_id, #Calib.calib_id,
+    ],
+    3:[#db_schema.Recon
+        db_schema.PeakIndex.scanPointEnd,
+        db_schema.PeakIndex.scanPointStart,
+        db_schema.PeakIndex.filefolder,
+    ],
+    4:[
+        db_schema.Recon.geo_source_offset,
+        db_schema.Recon.geo_source_grid,
+    ],
+    5:[
+        db_schema.Metadata.computer_name, #placeholder item
+    ],
+}
+
+ALL_COLS_Recon = VISIBLE_COLS_Recon + [ii for i in CUSTOM_COLS_Recon_dict.values() for ii in i]
 
 def _get_scan_recons(scan_id):
     try:
         scan_id = int(scan_id)
         with Session(db_utils.ENGINE) as session:
-            scan_recons = pd.read_sql(session.query(*VISIBLE_COLS_Recon).filter(db_schema.Recon.scanNumber == scan_id).statement, session.bind)
+            scan_recons = pd.read_sql(session.query(*ALL_COLS_Recon).filter(db_schema.Recon.scanNumber == scan_id).statement, session.bind)
 
             # Format columns for ag-grid
             cols = []
@@ -535,17 +523,59 @@ def _get_scan_recons(scan_id):
                 
                 cols.append(col_def)
 
-            # Add the custom actions column
-            cols.append({
-                'headerName': 'Actions',
-                'field': 'actions',  # This field doesn't need to exist in the data
-                'cellRenderer': 'ActionButtonsRenderer',
-                'sortable': False,
-                'filter': False,
-                'resizable': True, # Or False, depending on preference
-                'suppressMenu': True, # Or False
-                'width': 200 # Adjusted width for DBC buttons
-            })
+            # # Add the custom actions column
+            # cols.append({
+            #     'headerName': 'Actions',
+            #     'field': 'actions',  # This field doesn't need to exist in the data
+            #     'cellRenderer': 'ActionButtonsRenderer',
+            #     'sortable': False,
+            #     'filter': False,
+            #     'resizable': True, # Or False, depending on preference
+            #     'suppressMenu': True, # Or False
+            #     'width': 200 # Adjusted width for DBC buttons
+            # })
+
+            # Add a combined fields columns
+            for col_num in CUSTOM_COLS_Recon_dict.keys():
+                if col_num == 2:
+                    col_def = {
+                        'headerName': 'Method',
+                        'valueGetter': {"function":
+                            "'CA, calib: ' + params.data.calib_id"
+                        },
+                    }
+                elif col_num == 3:
+                    col_def = {
+                        'headerName': 'Points', #'points_to_index'
+                        'valueGetter': {"function":
+                            "50*(params.data.scanPointEnd - params.data.scanPointStart) + ' / ' + '2000'"
+                            # "f'{params.data.scanPointEnd - params.data.scanPointStart} out of 2000'", #len(Path(db_schema.PeakIndex.filefolder).glob("*"))
+                        },
+                    }
+                elif col_num == 4:
+                    col_def = {
+                        'headerName': 'Depth [um]', # 'Depth [${\mu}m$]',
+                        'valueGetter': {"function":
+                            "1000*(params.data.geo_source_grid[0] + params.data.geo_source_offset) \
+                            + ' to ' + \
+                            1000*(params.data.geo_source_grid[1] + params.data.geo_source_offset)"
+                        },
+                    }
+                elif col_num == 5:
+                    col_def = {
+                        'headerName': 'Pixels',
+                        'valueGetter': {"function":
+                            "100" # "params.data.Recon.pxl_recon"
+                        },
+                    }
+                col_def.update({
+                    'filter': True, 
+                    'sortable': True, 
+                    'resizable': True,
+                    'suppressMenuHide': True
+                })
+                cols.insert(col_num,col_def)
+
             # recons['id'] = recons['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
             
             return cols, scan_recons.to_dict('records')
@@ -583,27 +613,64 @@ Peak Index Table
 =======================
 """
 
+# VISIBLE_COLS_PeakIndex = [
+#     db_schema.PeakIndex.peakindex_id,
+#     db_schema.PeakIndex.date,
+#     db_schema.PeakIndex.calib_id,
+#     # db_schema.PeakIndex.dataset_id,
+#     db_schema.PeakIndex.scanNumber,
+#     db_schema.PeakIndex.notes,
+# ]
+
+# CUSTOM_HEADER_NAMES_PeakIndex = {
+#     'peakindex_id': 'PeakIndex ID',
+#     'scanNumber': 'Scan ID',
+#     # 'dataset_id': 'Scan ID',
+# }
+
 VISIBLE_COLS_PeakIndex = [
     db_schema.PeakIndex.peakindex_id,
+    db_schema.PeakIndex.recon_id,
+    db_schema.Metadata.user_name,
+    db_schema.Metadata.sample_name,
+    db_schema.PeakIndex.boxsize,
+    db_schema.PeakIndex.threshold,
     db_schema.PeakIndex.date,
-    db_schema.PeakIndex.calib_id,
-    # db_schema.PeakIndex.dataset_id,
-    db_schema.PeakIndex.scanNumber,
+    db_schema.PeakIndex.runtime,
     db_schema.PeakIndex.notes,
 ]
 
 CUSTOM_HEADER_NAMES_PeakIndex = {
-    'peakindex_id': 'PeakIndex ID',
-    'scanNumber': 'Scan ID',
-    #'dataset_id': 'Scan ID',
+    'peakindex_id': 'Index ID', #'Peak Index ID',
+    'recon_id': 'Recon ID', #'ReconID',
+    'user_name': 'Author',
+    'sample_name': 'Sample', #'Structure',
+    #'': 'Points',
+    'boxsize': 'Box',
+    #'': 'Threshold',
+    #'': 'Date',
+    'runtime': 'Status',
+    'notes': 'Comment',
 }
+
+CUSTOM_COLS_PeakIndex_dict = {
+    4:[
+        db_schema.PeakIndex.scanPointEnd,
+        db_schema.PeakIndex.scanPointStart,
+        db_schema.PeakIndex.filefolder,
+    ],
+}
+
+ALL_COLS_PeakIndex = VISIBLE_COLS_PeakIndex + [ii for i in CUSTOM_COLS_PeakIndex_dict.values() for ii in i]
+print("!!!!!!!!!")
+print(ALL_COLS_PeakIndex)
+print("!!!!!!!!!")
 
 def _get_scan_peakindexs(scan_id):
     try:
         scan_id = int(scan_id)
         with Session(db_utils.ENGINE) as session:
-            scan_peakindexs = pd.read_sql(session.query(*VISIBLE_COLS_PeakIndex).filter(db_schema.PeakIndex.scanNumber == scan_id).statement, session.bind)
-
+            scan_peakindexs = pd.read_sql(session.query(*ALL_COLS_PeakIndex).filter(db_schema.PeakIndex.scanNumber == scan_id).statement, session.bind)
             # Format columns for ag-grid
             cols = []
             for col in VISIBLE_COLS_PeakIndex:
@@ -628,17 +695,36 @@ def _get_scan_peakindexs(scan_id):
                 
                 cols.append(col_def)
 
-            # Add the custom actions column
-            cols.append({
-                'headerName': 'Actions',
-                'field': 'actions',  # This field doesn't need to exist in the data
-                'cellRenderer': 'ActionButtonsRenderer',
-                'sortable': False,
-                'filter': False,
-                'resizable': True, # Or False, depending on preference
-                'suppressMenu': True, # Or False
-                'width': 200 # Adjusted width for DBC buttons
-            })
+            # # Add the custom actions column
+            # cols.append({
+            #     'headerName': 'Actions',
+            #     'field': 'actions',  # This field doesn't need to exist in the data
+            #     'cellRenderer': 'ActionButtonsRenderer',
+            #     'sortable': False,
+            #     'filter': False,
+            #     'resizable': True, # Or False, depending on preference
+            #     'suppressMenu': True, # Or False
+            #     'width': 200 # Adjusted width for DBC buttons
+            # })
+
+            # Add a combined fields columns
+            for col_num in CUSTOM_COLS_PeakIndex_dict.keys():
+                if col_num == 4:
+                    col_def = {
+                        'headerName': 'Points', #'points_to_index'
+                        'valueGetter': {"function":
+                            "50*(params.data.scanPointEnd - params.data.scanPointStart) + ' / ' + '2000'"
+                            # "f'{params.data.scanPointEnd - params.data.scanPointStart} out of 2000'", #len(Path(db_schema.PeakIndex.filefolder).glob("*"))
+                        },
+                    }
+                col_def.update({
+                    'filter': True, 
+                    'sortable': True, 
+                    'resizable': True,
+                    'suppressMenuHide': True
+                })
+                cols.insert(col_num,col_def)
+
             # peakindexs['id'] = peakindexs['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
             
             return cols, scan_peakindexs.to_dict('records')
