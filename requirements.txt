@@ -3,3 +3,22 @@ gladier-tools
 funcx
 globus_automate_client
 dash-ag-grid
+dash-bootstrap-components
+dash
+pandas
+SQLAlchemy
+scipy
+xraydb
+scikit-image
+matplotlib
+h5py
+fire
+pyyaml
+numpy
+plotly
+
+# GitHub repository dependencies
+git+https://github.com/dgursoy/cold.git
+git+https://github.com/data-exchange/dxchange.git
+git+https://github.com/data-exchange/dxfile.git
+git+https://github.com/Linked-Liszt/laue-indexing.git

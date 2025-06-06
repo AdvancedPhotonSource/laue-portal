@@ -52,7 +52,8 @@ def _get_peakindexs():
             'filter': True, 
             'sortable': True, 
             'resizable': True,
-            'suppressMenuHide': True
+            'floatingFilter': True,
+            'unSortIcon': True,
         }
         if field_key == 'peakindex_id':
             col_def['cellRenderer'] = 'PeakIndexLinkRenderer'
@@ -79,8 +80,8 @@ VISIBLE_COLS = [
     prevent_initial_call=True,
 )
 def get_peakindexs(path):
-    if path == '/indexedpeaks':
-        cols, peakindexs_records = _get_peakindexs()
-        return cols, peakindexs_records
-    else:
-        raise PreventUpdate
+       if path == '/indexedpeaks':
+            cols, peakindexs_records = _get_peakindexs()
+            return cols, peakindexs_records
+       else:
+            raise PreventUpdate

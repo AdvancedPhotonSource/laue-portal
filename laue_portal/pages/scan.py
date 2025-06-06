@@ -663,7 +663,7 @@ CUSTOM_COLS_PeakIndex_dict = {
 
 ALL_COLS_PeakIndex = VISIBLE_COLS_PeakIndex + [ii for i in CUSTOM_COLS_PeakIndex_dict.values() for ii in i]
 print("!!!!!!!!!")
-print(ALL_COLS_PeakIndex)
+print([col.key for col in ALL_COLS_PeakIndex])  # Print column names instead of objects
 print("!!!!!!!!!")
 
 def _get_scan_peakindexs(scan_id):

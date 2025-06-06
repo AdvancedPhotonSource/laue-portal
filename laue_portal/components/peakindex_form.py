@@ -10,9 +10,8 @@ peakindex_form = dbc.Row(
                         dbc.AccordionItem(
                             [
                                 _stack(
-                                    [
-                                        # _field("Dataset", "dataset", size='lg'),
-                                        _field("Scan Number", "scanNumber", size='sm'),
+                                    [   
+                                        _field("Scan ID", "dataset", size='sm'),
                                         _field("Recon ID", "recon_id", size='sm'),
                                     ]
                                 ),
@@ -200,7 +199,7 @@ peakindex_form = dbc.Row(
 
 def set_peakindex_form_props(peakindex, read_only=False):
     #set_props("dataset", {'value':peakindex.dataset_id, 'readonly':read_only})
-    set_props("scanNumber", {'value':peakindex.scanNumber, 'readonly':read_only})
+    set_props("dataset", {'value':peakindex.dataset_id, 'readonly':read_only})
     set_props("recon_id", {'value':peakindex.recon_id, 'readonly':read_only})
     
     # set_props("peakProgram", {'value':peakindex.peakProgram, 'readonly':read_only})
