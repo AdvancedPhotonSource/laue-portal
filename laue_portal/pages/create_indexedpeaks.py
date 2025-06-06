@@ -9,11 +9,20 @@ import datetime
 import laue_portal.database.db_schema as db_schema
 import laue_portal.components.navbar as navbar
 from sqlalchemy.orm import Session
-import laueindexing.pyLaueGo as pyLaueGo
 from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
 import urllib.parse
 from dash.exceptions import PreventUpdate
+import logging
+logger = logging.getLogger(__name__)
 import os
+
+try:
+    import laueindexing.pyLaueGo as pyLaueGo
+    _PYLAUEGO_AVAILABLE = True
+except ImportError:
+    pyLaueGo = None
+    _PYLAUEGO_AVAILABLE = False
+    logger.warning("PyLaueGo library not installed, Dry runs only.")
 
 PEAKINDEX_DEFAULTS = {
     "peakProgram": "peaksearch",
@@ -62,6 +71,13 @@ dash.register_page(__name__)
 layout = dbc.Container(
     [html.Div([
         navbar.navbar,
+        dbc.Alert(
+            "pyLaueGo library not available; indexing disabled",
+            id="alert-lib-warning",
+            dismissable=True,
+            is_open=not _PYLAUEGO_AVAILABLE,
+            color="warning",
+        ),
         dcc.Location(id='url-create-indexedpeaks', refresh=False),
         dbc.Alert(
             "Hello! I am an alert",
