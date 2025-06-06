@@ -12,13 +12,14 @@ from sqlalchemy.orm import Session
 from laue_portal.database.db_schema import Scan
 import laue_portal.components.navbar as navbar
 
-# Global variable to store uploaded XML data
-uploaded_xml_data = None
 
 dash.register_page(__name__)
 
 layout = dbc.Container(
-    [html.Div([
+    [
+        # Store for uploaded XML data
+        dcc.Store(id='uploaded-xml-data'),
+        html.Div([
         navbar.navbar,
         dbc.Alert(
             "Hello! I am an alert",
@@ -113,31 +114,28 @@ Callbacks
      dash.Output('alert-upload', 'is_open'),
      dash.Output('alert-upload', 'children'),
      dash.Output('alert-upload', 'color'),
-     dash.Output('upload-metadata-log', 'contents')],
+     dash.Output('upload-metadata-log', 'contents'),
+     dash.Output('uploaded-xml-data', 'data')],
     Input('upload-metadata-log', 'contents'),
     prevent_initial_call=True,
 )
 def upload_log(contents):
-    global uploaded_xml_data
     try:
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
-        
-        # Store the XML data globally for later use
-        uploaded_xml_data = decoded
         
         # Get available scan options
         scan_options = get_scan_elements(decoded)
         
         # If no scans found, show error
         if not scan_options:
-            return False, [], True, 'No scans found in uploaded file', 'danger', None
+            return False, [], True, 'No scans found in uploaded file', 'danger', None, None
         
-        # Show modal with scan options, clear upload contents to allow re-upload
-        return True, scan_options, True, 'File uploaded successfully. Please select a scan.', 'info', None
+        # Show modal with scan options, clear upload contents to allow re-upload, store XML data
+        return True, scan_options, True, 'File uploaded successfully. Please select a scan.', 'info', None, decoded.decode('utf-8')
 
     except Exception as e:
-        return False, [], True, f'Upload Failed! Error: {e}', 'danger', None
+        return False, [], True, f'Upload Failed! Error: {e}', 'danger', None, None
 
 
 @dash.callback(
@@ -147,12 +145,11 @@ def upload_log(contents):
      dash.Output('alert-submit', 'color')],
     [Input('scan-modal-cancel', 'n_clicks'),
      Input('scan-modal-select', 'n_clicks')],
-    [State('scan-selection-dropdown', 'value')],
+    [State('scan-selection-dropdown', 'value'),
+     State('uploaded-xml-data', 'data')],
     prevent_initial_call=True,
 )
-def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index):
-    global uploaded_xml_data
-    
+def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_data):
     ctx = dash.callback_context
     if not ctx.triggered:
         return False, False, '', 'info'
@@ -168,7 +165,14 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index):
             # No scan selected, show error but keep modal open
             return True, True, 'Please select a scan before submitting.', 'warning'
         
+        if xml_data is None:
+            # No XML data available, show error
+            return True, True, 'No XML data available. Please upload a file first.', 'danger'
+        
         try:
+            # Convert stored string back to bytes for processing
+            uploaded_xml_data = xml_data.encode('utf-8')
+            
             # Process the selected scan
             log, scans = db_utils.parse_metadata(uploaded_xml_data, scan_no=selected_scan_index)
             metadata_row = db_utils.import_metadata_row(log)
