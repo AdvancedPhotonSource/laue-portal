@@ -21,7 +21,7 @@ def make_pixels_df(idx_file,grain_file=None,grain_idx=0):
         if 'peakList' in l.decode('ascii'):
             names_i = i
     names = (lines[names_i]).decode('ascii').replace('\n','').split('//')[-1].split()
-    df = pd.read_csv(idx_file, encoding='latin1', sep='\s+', header=None, skiprows=names_i+1, names=names)
+    df = pd.read_csv(idx_file, encoding='latin1', sep=r'\s+', header=None, skiprows=names_i+1, names=names)
     return df
 
 def read_indices(idx_file,grain_file=None,grain_idx=0):
