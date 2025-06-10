@@ -13,6 +13,7 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
+import logging
 
 # Add the project root to the Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -92,11 +93,11 @@ class TestMetadataParsing:
                 assert log_dict['scanNumber'] is not None
                 assert isinstance(scan_dims_list, list)
                 
-                print(f"Successfully parsed scan {scan_no}: {log_dict['scanNumber']}")
+                logging.info(f"Successfully parsed scan {scan_no}: {log_dict['scanNumber']}")
                 
             except IndexError:
                 # This is expected when we run out of scans
-                print(f"No more scans available at index {scan_no}")
+                logging.info(f"No more scans available at index {scan_no}")
                 break
     
     def test_parse_metadata_data_types(self, test_xml_data):

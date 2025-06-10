@@ -17,7 +17,7 @@ from dash.exceptions import PreventUpdate
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, project_root)
 
-
+# TODO: If testing expands combine test database creation into its own module
 @pytest.fixture
 def test_metadata_database():
     """
