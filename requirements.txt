@@ -16,6 +16,7 @@ fire
 pyyaml
 numpy
 plotly
+pytest
 
 # GitHub repository dependencies
 git+https://github.com/dgursoy/cold.git
