@@ -1,12 +1,16 @@
 import laue_portal.database.db_schema as db_schema
 import config
-import yaml
 import xml.etree.ElementTree as ET
 import sqlalchemy
-import datetime
+from sqlalchemy import event
 
 ENGINE = sqlalchemy.create_engine(f'sqlite:///{config.db_file}')
 
+@event.listens_for(ENGINE, "connect")
+def enable_sqlite_fks(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 def parse_metadata(xml,xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog",scan_no=2,empty='\n\t\t'):
     # tree = ET.parse(xml)
@@ -269,6 +273,21 @@ def import_scan_row(scan_object):
         scan_cpt=scan_object['scan_cpt'],
     )
     return scan_row
+
+
+def import_catalog_row(catalog_object):
+
+    catalog_row = db_schema.Catalog(
+        scanNumber=catalog_object['scanNumber'],
+
+        filefolder=catalog_object['filefolder'],
+        filenamePrefix=catalog_object['filenamePrefix'],
+        outputFolder=catalog_object['outputFolder'],
+        geoFile=catalog_object['geoFile'],
+
+        aperture=catalog_object['aperture'],
+    )
+    return catalog_row
 
 
 def import_recon_row(recon_object):

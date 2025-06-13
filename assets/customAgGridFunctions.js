@@ -30,6 +30,16 @@ dagcomponentfuncs.ReconLinkRenderer = function (props) {
     );
 };
 
+// dagcomponentfuncs.WireReconLinkRenderer = function (props) {
+//     // props.value will be the peakindex_id for the current row
+//     const url = `/wirereconstruction?indexid=${props.value}`;
+//     return React.createElement(
+//         'a',
+//         { href: url },
+//         props.value // This will be the text of the link (the peakindex_id)
+//     );
+// };
+
 dagcomponentfuncs.DatasetIdScanLinkRenderer = function (props) {
     // props.value will be the dataset_id for the current row
     const url = `/scan?id=${props.value}`;
