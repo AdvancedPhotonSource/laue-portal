@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, State, set_props, ALL
+from dash import html, dcc, Input, State, set_props
 import dash
 import base64
 import yaml
@@ -14,11 +14,13 @@ from laue_portal.components.catalog_form import catalog_form, set_catalog_form_p
 
 CATALOG_DEFAULTS = {#temporary
     # 'scanNumber':log['scanNumber'],
-    'aperture':'wire',
     'filefolder':'example/file/folder',
     'filenamePrefix':'example_filename_prefix',
     'outputFolder':'example/output/folder',
     'geoFile':'example_geo_file',
+
+    'aperture':'wire',
+    'sample_name':'Si',
 }
 
 dash.register_page(__name__)
@@ -248,6 +250,7 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
     State('geoFile', 'value'),
 
     State('aperture', 'value'),
+    State('sample_name', 'value'),
 
     prevent_initial_call=True,
 )
@@ -260,6 +263,7 @@ def submit_catalog(n,
     geoFile,
 
     aperture,
+    sample_name,
     
 ):
     # TODO: Input validation and reponse
@@ -273,6 +277,7 @@ def submit_catalog(n,
         geoFile=geoFile,
 
         aperture=aperture,
+        sample_name=sample_name,
     
     )
 

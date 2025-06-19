@@ -116,7 +116,7 @@ class Metadata(Base):
     calib_: Mapped["Calib"] = relationship(backref="metadata")
     recon_: Mapped["Recon"] = relationship(backref="metadata")
     wirerecon_: Mapped["WireRecon"] = relationship(backref="metadata")
-    #peakindex_: Mapped["PeakIndex"] = relationship(backref="metadata")
+    peakindex_: Mapped["PeakIndex"] = relationship(backref="metadata")
 
     def __repr__(self) -> str:
         pass # TODO: Consider implemeting for debugging
@@ -179,7 +179,7 @@ class Catalog(Base):
     __tablename__ = "catalog"
 
     catalog_id: Mapped[int] = mapped_column(primary_key=True)
-    scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
+    scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"), unique=True)
 
     filefolder: Mapped[str] = mapped_column(String) #infile
     filenamePrefix: Mapped[str] = mapped_column(String) #infile

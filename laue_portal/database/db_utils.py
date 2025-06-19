@@ -286,6 +286,7 @@ def import_catalog_row(catalog_object):
         geoFile=catalog_object['geoFile'],
 
         aperture=catalog_object['aperture'],
+        sample_name=catalog_object['sample_name'],
     )
     return catalog_row
 

@@ -10,17 +10,13 @@ from dash.exceptions import PreventUpdate
 from sqlalchemy import asc # Import asc for ordering
 from laue_portal.components.recon_form import recon_form, set_recon_form_props
 import urllib.parse
-import pandas as pd
-import base64
-import yaml
-import datetime
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
 import h5py
 
-dash.register_page(__name__, path="/recon")
+dash.register_page(__name__, path="/reconstruction")
 
 layout = html.Div([
         navbar.navbar,

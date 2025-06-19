@@ -14,7 +14,10 @@ dash.register_page(__name__)
 
 CUSTOM_HEADER_NAMES = {
     'peakindex_id': 'Peak Index ID',
-    'dataset_id': 'Scan ID',
+    'scanNumber': 'Scan ID',
+    'dataset_id': 'Dataset ID',
+    'recon_id': 'Recon ID', #'ReconID',
+    'wirerecon_id': 'Wire Recon ID', #'ReconID',
 }
 
 layout = html.Div([
@@ -57,8 +60,14 @@ def _get_peakindexs():
         }
         if field_key == 'peakindex_id':
             col_def['cellRenderer'] = 'PeakIndexLinkRenderer'
+        elif field_key == 'recon_id':
+            col_def['cellRenderer'] = 'ReconLinkRenderer'
+        elif field_key == 'wirerecon_id':
+            col_def['cellRenderer'] = 'WireReconLinkRenderer'
         elif field_key == 'dataset_id':
             col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
+        elif field_key == 'scanNumber':
+            col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
         cols.append(col_def)
 
     return cols, peakindexs_df.to_dict('records')
@@ -67,8 +76,10 @@ def _get_peakindexs():
 VISIBLE_COLS = [
     db_schema.PeakIndex.peakindex_id,
     db_schema.PeakIndex.date,
-    db_schema.PeakIndex.dataset_id,
-    #db_schema.PeakIndex.scanNumber,
+    # db_schema.PeakIndex.dataset_id,
+    db_schema.PeakIndex.scanNumber,
+    db_schema.PeakIndex.recon_id,
+    db_schema.PeakIndex.wirerecon_id,
     db_schema.PeakIndex.notes,
 ]
 

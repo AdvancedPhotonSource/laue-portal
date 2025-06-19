@@ -357,13 +357,13 @@ def set_metadata_form_props(metadata, scans, read_only=True):
     # set_props("sampleZini", {'value':metadata.sampleZini, 'readonly':read_only})
     # set_props("comment", {'value':metadata.comment, 'readonly':read_only})
 
-def set_scaninfo_form_props(metadata, scans, read_only=True):
+def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
     set_props('ScanID_print', {'children':[metadata.scanNumber]})
     set_props('User_print', {'children':[metadata.user_name]})
     set_props('Date_print', {'children':[metadata.time]})
     set_props('ScanType_print', {'children':[f"{len([i for i,scan in enumerate(scans)])}D"]})
-    set_props('Technique_print', {'children':["depth"]})
-    set_props('Sample_print', {'children':["Si"]})
+    set_props('Technique_print', {'children':[catalog.aperture]}) #"depth"
+    set_props('Sample_print', {'children':[catalog.sample_name]}) #"Si"
     set_props('Comment_print', {'children':["submit indexing"]})
 # def set_scaninfo_form_props(metadata, scans, read_only=True):
 #     set_props('ScanID_print', {'children':["Scan ID: ", metadata.scanNumber]})

@@ -15,8 +15,8 @@ dash.register_page(__name__)
 CUSTOM_HEADER_NAMES = {
     'scanNumber': 'Scan ID',
     'calib_id': 'Calibration ID',
-    'dataset_id': 'Dataset ID',
-    'wirerecon_id': 'Recon ID',
+    # 'dataset_id': 'Dataset ID',
+    'wirerecon_id': 'Recon ID', #'Wire Recon ID', #'ReconID',
     # Add more custom names here as needed, e.g.:
     # 'date': 'Date of Scan',
 }
@@ -60,8 +60,8 @@ def _get_recons():
             'suppressMenuHide': True
         }
 
-        if 'recon_id' in field_key: # if field_key == 'recon_id':
-            col_def['cellRenderer'] = 'ReconLinkRenderer'
+        if field_key == 'wirerecon_id':
+            col_def['cellRenderer'] = 'WireReconLinkRenderer'
         elif field_key == 'dataset_id':
             col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
         elif field_key == 'scanNumber':
@@ -73,7 +73,7 @@ def _get_recons():
     cols.append({
         'headerName': 'Actions',
         'field': 'actions',  # This field doesn't need to exist in the data
-        'cellRenderer': 'ActionButtonsRenderer',
+        'cellRenderer': 'CreateIndexPeaksButtonRenderer',
         'sortable': False,
         'filter': False,
         'resizable': True, # Or False, depending on preference
@@ -89,7 +89,7 @@ VISIBLE_COLS = [
     db_schema.WireRecon.wirerecon_id,
     db_schema.WireRecon.date,
     db_schema.WireRecon.calib_id,
-    db_schema.WireRecon.dataset_id,
+    # db_schema.WireRecon.dataset_id,
     db_schema.WireRecon.scanNumber,
     db_schema.WireRecon.notes,
 ]

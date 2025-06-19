@@ -286,11 +286,12 @@ def load_scan_metadata(href):
             with Session(db_utils.ENGINE) as session:
                 metadata = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == scan_id).first()
                 scans = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_id)
+                catalog = session.query(db_schema.Catalog).filter(db_schema.Catalog.scanNumber == scan_id).first()
                 if metadata:
                     scan_accordions = [make_scan_accordion(i) for i,_ in enumerate(scans)]
                     set_props("scan_accordions", {'children': scan_accordions})
                     set_metadata_form_props(metadata, scans, read_only=True)
-                    set_scaninfo_form_props(metadata, scans, read_only=True)
+                    set_scaninfo_form_props(metadata, scans, catalog, read_only=True)
         except Exception as e:
             print(f"Error loading scan data: {e}")
 
@@ -501,7 +502,7 @@ VISIBLE_COLS_WireRecon = [
 ]
 
 CUSTOM_HEADER_NAMES_WireRecon = {
-    'wirerecon_id': 'Recon ID', #'ReconID',
+    'wirerecon_id': 'Wire Recon ID', #'ReconID',
     'user_name': 'Author',
     #'pxl_recon': 'Pixels'
     #'': 'Date',
@@ -539,7 +540,12 @@ def _get_scan_recons(scan_id):
         with Session(db_utils.ENGINE) as session:
             aperture = pd.read_sql(session.query(db_schema.Catalog.aperture).filter(db_schema.Catalog.scanNumber == scan_id).statement, session.bind).at[0,'aperture']
             if 'wire' in aperture:
-                scan_recons = pd.read_sql(session.query(*ALL_COLS_WireRecon).filter(db_schema.WireRecon.scanNumber == scan_id).statement, session.bind)
+                scan_recons = pd.read_sql(session.query(*ALL_COLS_WireRecon)
+                                .join(db_schema.Metadata.catalog_)
+                                .join(db_schema.Metadata.wirerecon_)
+                                # .join(db_schema.Catalog, db_schema.Metadata.scanNumber == db_schema.Catalog.scanNumber)
+                                # .join(db_schema.WireRecon, db_schema.Metadata.scanNumber == db_schema.WireRecon.scanNumber)
+                                .filter(db_schema.Metadata.scanNumber == scan_id).statement, session.bind)
                 # Format columns for ag-grid
                 cols = []
                 for col in VISIBLE_COLS_WireRecon:
@@ -555,8 +561,8 @@ def _get_scan_recons(scan_id):
                         'suppressMenuHide': True
                     }
 
-                    if field_key == 'Wirerecon_id':
-                        col_def['cellRenderer'] = 'ReconLinkRenderer'
+                    if field_key == 'wirerecon_id':
+                        col_def['cellRenderer'] = 'WireReconLinkRenderer'
                     elif field_key in ['scanNumber','dataset_id']:
                         col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
                     elif field_key == 'scanNumber':
@@ -622,7 +628,12 @@ def _get_scan_recons(scan_id):
                 
                 return cols, scan_recons.to_dict('records')
             else:
-                scan_recons = pd.read_sql(session.query(*ALL_COLS_Recon).filter(db_schema.Recon.scanNumber == scan_id).statement, session.bind)
+                scan_recons = pd.read_sql(session.query(*ALL_COLS_Recon)
+                                .join(db_schema.Metadata.catalog_)
+                                .join(db_schema.Metadata.recon_)
+                                # .join(db_schema.Catalog, db_schema.Metadata.scanNumber == db_schema.Catalog.scanNumber)
+                                # .join(db_schema.Recon, db_schema.Metadata.scanNumber == db_schema.Recon.scanNumber)
+                                .filter(db_schema.Metadata.scanNumber == scan_id).statement, session.bind)
                 # Format columns for ag-grid
                 cols = []
                 for col in VISIBLE_COLS_Recon:
@@ -757,7 +768,7 @@ VISIBLE_COLS_PeakIndex = [
     db_schema.PeakIndex.peakindex_id,
     db_schema.PeakIndex.recon_id,
     db_schema.Metadata.user_name,
-    db_schema.Catalog.sample_name,
+    # db_schema.PeakIndexResults.structure,
     db_schema.PeakIndex.boxsize,
     db_schema.PeakIndex.threshold,
     db_schema.PeakIndex.date,
@@ -768,8 +779,8 @@ VISIBLE_COLS_PeakIndex = [
 CUSTOM_HEADER_NAMES_PeakIndex = {
     'peakindex_id': 'Index ID', #'Peak Index ID',
     'recon_id': 'Recon ID', #'ReconID',
+    'wirerecon_id': 'WireRecnID', #'Wire Recon ID', #'ReconID',
     'user_name': 'Author',
-    'sample_name': 'Sample', #'Structure',
     #'': 'Points',
     'boxsize': 'Box',
     #'': 'Threshold',
@@ -792,7 +803,16 @@ def _get_scan_peakindexs(scan_id):
     try:
         scan_id = int(scan_id)
         with Session(db_utils.ENGINE) as session:
-            scan_peakindexs = pd.read_sql(session.query(*ALL_COLS_PeakIndex).filter(db_schema.PeakIndex.scanNumber == scan_id).statement, session.bind)
+            aperture = pd.read_sql(session.query(db_schema.Catalog.aperture).filter(db_schema.Catalog.scanNumber == scan_id).statement, session.bind).at[0,'aperture']
+            if 'wire' in aperture:
+                VISIBLE_COLS_PeakIndex[1] = db_schema.PeakIndex.wirerecon_id
+                ALL_COLS_PeakIndex = VISIBLE_COLS_PeakIndex + [ii for i in CUSTOM_COLS_PeakIndex_dict.values() for ii in i]
+            scan_peakindexs = pd.read_sql(session.query(*ALL_COLS_PeakIndex)
+                            .join(db_schema.Metadata.peakindex_)
+                            # .join(db_schema.PeakIndex.peakindexresults_)
+                            # .join(db_schema.PeakIndex, db_schema.Metadata.scanNumber == db_schema.PeakIndex.scanNumber)
+                            # .join(db_schema.PeakIndexResults, db_schema.PeakIndex.scanNumber == db_schema.PeakIndexResults.scanNumber)
+                            .filter(db_schema.Metadata.scanNumber == scan_id).statement, session.bind)
             # Format columns for ag-grid
             cols = []
             for col in VISIBLE_COLS_PeakIndex:
@@ -810,6 +830,10 @@ def _get_scan_peakindexs(scan_id):
 
                 if field_key == 'peakindex_id':
                     col_def['cellRenderer'] = 'PeakIndexLinkRenderer'
+                elif field_key == 'recon_id':
+                    col_def['cellRenderer'] = 'ReconLinkRenderer'
+                elif field_key == 'wirerecon_id':
+                    col_def['cellRenderer'] = 'WireReconLinkRenderer'
                 elif field_key in ['scanNumber','dataset_id']:
                     col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
                 elif field_key == 'scanNumber':

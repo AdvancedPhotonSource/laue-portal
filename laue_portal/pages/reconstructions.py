@@ -98,7 +98,7 @@ VISIBLE_COLS = [
     db_schema.Recon.recon_id,
     db_schema.Recon.date,
     db_schema.Recon.calib_id,
-    db_schema.Recon.dataset_id,
+    # db_schema.Recon.dataset_id,
     db_schema.Recon.scanNumber,
     db_schema.Recon.notes,
 ]
