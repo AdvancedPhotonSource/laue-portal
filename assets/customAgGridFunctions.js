@@ -96,13 +96,13 @@ dagcomponentfuncs.DatasetIdScanLinkRenderer = function (props) {
 //     ]);
 // };
 
-dagcomponentfuncs.CreateIndexPeaksButtonRenderer = function (props) {
+dagcomponentfuncs.ActionButtonsRenderer = function (props) {
     const { data } = props; // data contains the row data
 
     // Ensure scanNumber is available from row data
     const scanNumber = data.scanNumber;
     if (scanNumber === undefined || scanNumber === null) {
-        console.error("scanNumber is missing in row data for CreateIndexPeaksButtonRenderer", data);
+        console.error("scanNumber is missing in row data for ActionButtonsRenderer", data);
         return null; // Or return an empty span or placeholder
     }
 
@@ -118,8 +118,18 @@ dagcomponentfuncs.CreateIndexPeaksButtonRenderer = function (props) {
         createIndexedPeaksUrl += `&${reconParams}`;
     }
 
+    // Determine reconstruction URL based on aperture
+    let createReconstructionUrl = `/create-reconstruction?scan_id=${scanNumber}`;
+    if (data.aperture.includes('wire')) {
+        createReconstructionUrl = `/create-wire-reconstruction?scan_id=${scanNumber}`;
+    }
+
     function handleIndexedPeaksClick() {
         window.location.href = createIndexedPeaksUrl;
+    }
+
+    function handleReconstructClick() {
+        window.location.href = createReconstructionUrl;
     }
 
     return React.createElement('div', null, [
@@ -133,6 +143,16 @@ dagcomponentfuncs.CreateIndexPeaksButtonRenderer = function (props) {
                 style: { marginRight: '5px' }
             },
             'Index'
+        ),
+        React.createElement(
+            window.dash_bootstrap_components.Button,
+            {
+                key: 'reconstructBtn-' + scanNumber,
+                onClick: handleReconstructClick,
+                color: 'primary', 
+                size: 'sm'
+            },
+            'Reconstruct'
         )
     ]);
 };

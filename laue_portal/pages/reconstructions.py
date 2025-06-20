@@ -76,7 +76,8 @@ def _get_recons():
         elif field_key == 'scanNumber':
             col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
         
-        cols.append(col_def)
+        if field_key != 'aperture':
+            cols.append(col_def)
 
     # Add the custom actions column
     cols.append({
@@ -100,6 +101,8 @@ VISIBLE_COLS = [
     db_schema.Recon.calib_id,
     # db_schema.Recon.dataset_id,
     db_schema.Recon.scanNumber,
+    db_schema.Catalog.sample_name,
+    db_schema.Catalog.aperture,
     db_schema.Recon.notes,
 ]
 

@@ -35,6 +35,7 @@ Callbacks
 VISIBLE_COLS = [
     db_schema.Metadata.scanNumber,
     db_schema.Catalog.sample_name,
+    db_schema.Catalog.aperture,
     db_schema.Metadata.user_name,
     db_schema.Metadata.date,
     db_schema.Metadata.notes,
@@ -98,7 +99,7 @@ def _get_metadatas():
     cols.insert(-1, {
         'headerName': 'Actions',
         'field': 'actions',  # This field doesn't need to exist in the data
-        'cellRenderer': 'CreateIndexPeaksButtonRenderer',
+        'cellRenderer': 'ActionButtonsRenderer',
         'sortable': False,
         'filter': False,
         'resizable': True, # Or False, depending on preference
