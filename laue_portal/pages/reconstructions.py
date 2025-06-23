@@ -52,7 +52,12 @@ Callbacks
 """
 def _get_recons():
     with Session(db_utils.ENGINE) as session:
-        recons = pd.read_sql(session.query(*VISIBLE_COLS).statement, session.bind)
+        # Create a proper JOIN query between Recon and Catalog tables
+        query = session.query(*VISIBLE_COLS).join(
+            db_schema.Catalog, 
+            db_schema.Recon.scanNumber == db_schema.Catalog.scanNumber
+        )
+        recons = pd.read_sql(query.statement, session.bind)
 
     # Format columns for ag-grid
     cols = []
