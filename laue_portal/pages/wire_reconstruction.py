@@ -23,6 +23,7 @@ layout = html.Div([
         dcc.Location(id='url-wire-recon-page', refresh=False),
         dbc.Container(id='wire-recon-content-container', fluid=True, className="mt-4",
                   children=[
+                        html.H2(id='wire-recon-id-header', className="mb-3"),
                         wire_recon_form
                   ]),
         # html.Div(children=[
@@ -104,6 +105,7 @@ Callbacks
 
 
 @callback(
+    Output('wire-recon-id-header', 'children'),
     Input('url-wire-recon-page', 'href'),
     prevent_initial_call=True
 )
@@ -113,7 +115,6 @@ def load_wire_recon_data(href):
 
     parsed_url = urllib.parse.urlparse(href)
     query_params = urllib.parse.parse_qs(parsed_url.query)
-    print(query_params)
     
     wirerecon_id = query_params.get('wirereconid', [None])[0]
 
@@ -124,7 +125,11 @@ def load_wire_recon_data(href):
                 wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == wirerecon_id).first()
                 if wirerecon_data:
                     set_wire_recon_form_props(wirerecon_data, read_only=True)
+                    return f"Wire Recon | ID: {wirerecon_id}"
 
         except Exception as e:
             print(f"Error loading wire reconstruction data: {e}")
+            return f"Error loading data for Wire Recon ID: {wirerecon_id}"
+    
+    return "No Wire Recon ID provided"
     

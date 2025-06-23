@@ -12,15 +12,6 @@ import laue_portal.components.navbar as navbar
 
 dash.register_page(__name__)
 
-CUSTOM_HEADER_NAMES = {
-    'scanNumber': 'Scan ID',
-    'calib_id': 'Calibration ID',
-    # 'dataset_id': 'Dataset ID',
-    'wirerecon_id': 'Recon ID', #'Wire Recon ID', #'ReconID',
-    # Add more custom names here as needed, e.g.:
-    # 'date': 'Date of Scan',
-}
-
 layout = html.Div([
         navbar.navbar,
         dcc.Location(id='url', refresh=False),
@@ -41,9 +32,32 @@ layout = html.Div([
 Callbacks
 =======================
 """
+VISIBLE_COLS = [
+    db_schema.WireRecon.wirerecon_id,
+    db_schema.WireRecon.date,
+    db_schema.WireRecon.calib_id,
+    # db_schema.WireRecon.dataset_id,
+    db_schema.WireRecon.scanNumber,
+    db_schema.Catalog.sample_name,
+    db_schema.Catalog.aperture,
+    db_schema.WireRecon.notes,
+]
+
+CUSTOM_HEADER_NAMES = {
+    'scanNumber': 'Scan ID',
+    'calib_id': 'Calibration ID',
+    # 'dataset_id': 'Dataset ID',
+    'wirerecon_id': 'Recon ID', #'Wire Recon ID', #'ReconID',
+    # Add more custom names here as needed, e.g.:
+    # 'date': 'Date of Scan',
+}
+
 def _get_recons():
     with Session(db_utils.ENGINE) as session:
-        recons = pd.read_sql(session.query(*VISIBLE_COLS).statement, session.bind)
+        query = session.query(*VISIBLE_COLS).join(
+            db_schema.Catalog, db_schema.WireRecon.scanNumber == db_schema.Catalog.scanNumber
+        )
+    wirerecons = pd.read_sql(query.statement, session.bind)
 
     # Format columns for ag-grid
     cols = []
@@ -83,20 +97,7 @@ def _get_recons():
     })
     # recons['id'] = recons['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
     
-    return cols, recons.to_dict('records')
-
-
-VISIBLE_COLS = [
-    db_schema.WireRecon.wirerecon_id,
-    db_schema.WireRecon.date,
-    db_schema.WireRecon.calib_id,
-    # db_schema.WireRecon.dataset_id,
-    db_schema.WireRecon.scanNumber,
-    db_schema.Catalog.sample_name,
-    db_schema.Catalog.aperture,
-    db_schema.WireRecon.notes,
-]
-
+    return cols, wirerecons.to_dict('records')
 
 @dash.callback(
     Output('wire-recon-table', 'columnDefs'),

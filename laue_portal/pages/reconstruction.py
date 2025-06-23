@@ -23,6 +23,7 @@ layout = html.Div([
         dcc.Location(id='url-recon-page', refresh=False),
         dbc.Container(id='recon-content-container', fluid=True, className="mt-4",
                   children=[
+                        html.H2(id='recon-id-header', className="mb-3"),
                         recon_form
                   ]),
         html.Div(children=[
@@ -222,33 +223,10 @@ def set_lineout_and_detector_graphs(integrated_lau, file_output, pixels_options,
 )
 def update_zoom_info(relayout_data):
     return relayout_data
-    
-
-"""
-=======================
-Helper Functions
-=======================
-"""
-
-def loahdh5(path, key, slice=None, results_filename = "results.h5"):
-    results_file = Path(path)/results_filename
-    f = h5py.File(results_file, 'r')
-    if slice is None:
-        value = f[key][:]
-    else:
-        value = f[key][slice]
-    #logging.info("Loaded: " + str(file))
-    return value
-
-def loadnpy(path, results_filename = 'img' + 'results' + '.npy'):
-    results_file = Path(path)/results_filename
-    value = np.zeros((2**11,2**11))
-    if results_file.exists():
-        value = np.load(results_file)
-    return value
 
 
 @callback(
+    Output('recon-id-header', 'children'),
     Input('url-recon-page', 'href'),
     prevent_initial_call=True
 )
@@ -283,7 +261,34 @@ def load_recon_data(href):
                         ind = loahdh5(file_output,'ind')
                     pixel_selections = [{"label": f'{i}', "value": i} for i in ind]
                     set_props("pixels",{"options":pixel_selections})
+                    return f"Recon | ID: {recon_id}"
 
         except Exception as e:
             print(f"Error loading reconstruction data: {e}")
+            return f"Error loading data for Recon ID: {recon_id}"
     
+    return "No Recon ID provided"
+
+
+"""
+=======================
+Helper Functions
+=======================
+"""
+
+def loahdh5(path, key, slice=None, results_filename = "results.h5"):
+    results_file = Path(path)/results_filename
+    f = h5py.File(results_file, 'r')
+    if slice is None:
+        value = f[key][:]
+    else:
+        value = f[key][slice]
+    #logging.info("Loaded: " + str(file))
+    return value
+
+def loadnpy(path, results_filename = 'img' + 'results' + '.npy'):
+    results_file = Path(path)/results_filename
+    value = np.zeros((2**11,2**11))
+    if results_file.exists():
+        value = np.load(results_file)
+    return value

@@ -12,14 +12,6 @@ import laue_portal.components.navbar as navbar
 
 dash.register_page(__name__)
 
-CUSTOM_HEADER_NAMES = {
-    'peakindex_id': 'Peak Index ID',
-    'scanNumber': 'Scan ID',
-    'dataset_id': 'Dataset ID',
-    'recon_id': 'Recon ID', #'ReconID',
-    'wirerecon_id': 'Wire Recon ID', #'ReconID',
-}
-
 layout = html.Div([
         navbar.navbar,
         dcc.Location(id='url', refresh=False),
@@ -40,6 +32,24 @@ layout = html.Div([
 Callbacks
 =======================
 """
+VISIBLE_COLS = [
+    db_schema.PeakIndex.peakindex_id,
+    db_schema.PeakIndex.date,
+    # db_schema.PeakIndex.dataset_id,
+    db_schema.PeakIndex.scanNumber,
+    db_schema.PeakIndex.recon_id,
+    db_schema.PeakIndex.wirerecon_id,
+    db_schema.PeakIndex.notes,
+]
+
+CUSTOM_HEADER_NAMES = {
+    'peakindex_id': 'Peak Index ID',
+    'scanNumber': 'Scan ID',
+    'dataset_id': 'Dataset ID',
+    'recon_id': 'Recon ID', #'ReconID',
+    'wirerecon_id': 'Wire Recon ID', #'ReconID',
+}
+
 def _get_peakindexs():
     with Session(db_utils.ENGINE) as session:
         peakindexs_df = pd.read_sql(session.query(*VISIBLE_COLS).statement, session.bind)
@@ -71,18 +81,6 @@ def _get_peakindexs():
         cols.append(col_def)
 
     return cols, peakindexs_df.to_dict('records')
-
-
-VISIBLE_COLS = [
-    db_schema.PeakIndex.peakindex_id,
-    db_schema.PeakIndex.date,
-    # db_schema.PeakIndex.dataset_id,
-    db_schema.PeakIndex.scanNumber,
-    db_schema.PeakIndex.recon_id,
-    db_schema.PeakIndex.wirerecon_id,
-    db_schema.PeakIndex.notes,
-]
-
 
 @dash.callback(
     Output('peakindex-table', 'columnDefs'),

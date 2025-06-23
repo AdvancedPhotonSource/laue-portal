@@ -227,7 +227,7 @@ def load_scan_data_from_url(href):
                     )
                     
                     # Populate the form with the defaults
-                    set_wire_recon_form_props(wirerecon_defaults,read_only=True)
+                    set_wire_recon_form_props(wirerecon_defaults)#,read_only=True)
                     
                     # Show success message
                     set_props("alert-scan-loaded", {
