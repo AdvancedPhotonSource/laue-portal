@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, State, set_props, ALL
+from dash import html, dcc, Input, State, set_props
 import dash
 import base64
 import yaml
@@ -10,7 +10,18 @@ from sqlalchemy.orm import Session
 from laue_portal.database.db_schema import Scan
 import laue_portal.components.navbar as navbar
 from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, make_scan_accordion
+from laue_portal.components.catalog_form import catalog_form, set_catalog_form_props
 
+CATALOG_DEFAULTS = {#temporary
+    # 'scanNumber':log['scanNumber'],
+    'filefolder':'example/file/folder',
+    'filenamePrefix':'example_filename_prefix',
+    'outputFolder':'example/output/folder',
+    'geoFile':'example_geo_file',
+
+    'aperture':'wire',
+    'sample_name':'Si',
+}
 
 dash.register_page(__name__)
 
@@ -42,6 +53,12 @@ layout = dbc.Container(
                 ],
             )
         ),
+        html.Hr(),
+        html.Center(
+            dbc.Button('Submit to Catalog', id='submit_catalog', color='primary'),
+        ),
+        html.Hr(),
+        catalog_form,
         html.Hr(),
         metadata_form,
         
@@ -175,8 +192,13 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
             # Process the selected scan
             log, scans = db_utils.parse_metadata(uploaded_xml_data, scan_no=selected_scan_index)
             metadata_row = db_utils.import_metadata_row(log)
-            scan_cards = []; scan_rows = []
             
+            CATALOG_DEFAULTS.update({'scanNumber':log['scanNumber']})
+            catalog_row = db_utils.import_catalog_row(CATALOG_DEFAULTS)
+            
+            set_catalog_form_props(catalog_row)
+
+            scan_cards = []; scan_rows = []
             for i, scan in enumerate(scans):
                 #scan_card = ui_shared.make_scan_card(i)
                 #scan_cards.append(scan_card)
@@ -198,11 +220,11 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
             # Add to database
             with Session(db_utils.ENGINE) as session:
                 session.add(metadata_row)
+                # session.add(catalog_row)
                 scan_row_count = session.query(Scan).count()
                 for id, scan_row in enumerate(scan_rows):
                     scan_row.id = scan_row_count + id
                     session.add(scan_row)
-                    print(scan_row.id)
                 
                 session.commit()
             
@@ -215,3 +237,56 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
     
     # Default case
     return False, False, '', 'info'
+
+
+@dash.callback(
+    Input('submit_catalog', 'n_clicks'),
+
+    State('scanNumber', 'value'),
+    
+    State('filefolder', 'value'),
+    State('filenamePrefix', 'value'),
+    State('outputFolder', 'value'),
+    State('geoFile', 'value'),
+
+    State('aperture', 'value'),
+    State('sample_name', 'value'),
+
+    prevent_initial_call=True,
+)
+def submit_catalog(n,
+    scanNumber,
+
+    filefolder,
+    filenamePrefix,
+    outputFolder,
+    geoFile,
+
+    aperture,
+    sample_name,
+    
+):
+    # TODO: Input validation and reponse
+    
+    catalog = db_schema.Catalog(
+        scanNumber=scanNumber,
+
+        filefolder=filefolder,
+        filenamePrefix=filenamePrefix,
+        outputFolder=outputFolder,
+        geoFile=geoFile,
+
+        aperture=aperture,
+        sample_name=sample_name,
+    
+    )
+
+    with Session(db_utils.ENGINE) as session:
+        session.add(catalog)
+        # config_dict = db_utils.create_config_obj(wirerecon)
+
+        session.commit()
+    
+    set_props("alert-submit", {'is_open': True, 
+                                'children': 'Catalog Entry Added to Database',
+                                'color': 'success'})

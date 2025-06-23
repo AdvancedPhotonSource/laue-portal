@@ -34,6 +34,8 @@ Callbacks
 """
 VISIBLE_COLS = [
     db_schema.Metadata.scanNumber,
+    db_schema.Catalog.sample_name,
+    db_schema.Catalog.aperture,
     db_schema.Metadata.user_name,
     db_schema.Metadata.date,
     db_schema.Metadata.notes,
@@ -50,12 +52,14 @@ CUSTOM_HEADER_NAMES = {
 
 def _get_metadatas():
     with Session(db_utils.ENGINE) as session:
-        # Query with JOIN to get scan count for each metadata record
+        # Query with JOINs to get scan count and catalog info for each metadata record
         query = session.query(
             *VISIBLE_COLS,
             func.concat(func.count(db_schema.Scan.id), 'D').label('scan_dim') # Count dimensions and label it as 'scan_dim'
         ).outerjoin(
             db_schema.Scan, db_schema.Metadata.scanNumber == db_schema.Scan.scanNumber
+        ).outerjoin(
+            db_schema.Catalog, db_schema.Metadata.scanNumber == db_schema.Catalog.scanNumber
         ).group_by(db_schema.Metadata.scanNumber)
         
         metadatas = pd.read_sql(query.statement, session.bind)

@@ -7,17 +7,18 @@ import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-import pandas as pd
+import pandas as pd 
 import laue_portal.components.navbar as navbar
 
 dash.register_page(__name__)
 
 CUSTOM_HEADER_NAMES = {
-    'peakindex_id': 'Peak Index ID',
     'scanNumber': 'Scan ID',
-    'dataset_id': 'Dataset ID',
-    'recon_id': 'Recon ID', #'ReconID',
-    'wirerecon_id': 'Wire Recon ID', #'ReconID',
+    'calib_id': 'Calibration ID',
+    # 'dataset_id': 'Dataset ID',
+    'wirerecon_id': 'Recon ID', #'Wire Recon ID', #'ReconID',
+    # Add more custom names here as needed, e.g.:
+    # 'date': 'Date of Scan',
 }
 
 layout = html.Div([
@@ -25,13 +26,13 @@ layout = html.Div([
         dcc.Location(id='url', refresh=False),
         dbc.Container(fluid=True, className="p-0", children=[
             dag.AgGrid(
-                id='peakindex-table',
+                id='wire-recon-table',
                 columnSize="responsiveSizeToFit",
                 dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight'},
                 style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                 className="ag-theme-alpine"
             )
-        ])
+        ]),
     ],
 )
 
@@ -40,10 +41,11 @@ layout = html.Div([
 Callbacks
 =======================
 """
-def _get_peakindexs():
+def _get_recons():
     with Session(db_utils.ENGINE) as session:
-        peakindexs_df = pd.read_sql(session.query(*VISIBLE_COLS).statement, session.bind)
+        recons = pd.read_sql(session.query(*VISIBLE_COLS).statement, session.bind)
 
+    # Format columns for ag-grid
     cols = []
     for col in VISIBLE_COLS:
         field_key = col.key
@@ -55,44 +57,56 @@ def _get_peakindexs():
             'filter': True, 
             'sortable': True, 
             'resizable': True,
-            'floatingFilter': True,
-            'unSortIcon': True,
+            'suppressMenuHide': True
         }
-        if field_key == 'peakindex_id':
-            col_def['cellRenderer'] = 'PeakIndexLinkRenderer'
-        elif field_key == 'recon_id':
-            col_def['cellRenderer'] = 'ReconLinkRenderer'
-        elif field_key == 'wirerecon_id':
+
+        if field_key == 'wirerecon_id':
             col_def['cellRenderer'] = 'WireReconLinkRenderer'
         elif field_key == 'dataset_id':
             col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
         elif field_key == 'scanNumber':
             col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
-        cols.append(col_def)
+        
+        if field_key != 'aperture':
+            cols.append(col_def)
 
-    return cols, peakindexs_df.to_dict('records')
+    # Add the custom actions column
+    cols.append({
+        'headerName': 'Actions',
+        'field': 'actions',  # This field doesn't need to exist in the data
+        'cellRenderer': 'ActionButtonsRenderer',
+        'sortable': False,
+        'filter': False,
+        'resizable': True, # Or False, depending on preference
+        'suppressMenu': True, # Or False
+        'width': 200 # Adjusted width for DBC buttons
+    })
+    # recons['id'] = recons['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
+    
+    return cols, recons.to_dict('records')
 
 
 VISIBLE_COLS = [
-    db_schema.PeakIndex.peakindex_id,
-    db_schema.PeakIndex.date,
-    # db_schema.PeakIndex.dataset_id,
-    db_schema.PeakIndex.scanNumber,
-    db_schema.PeakIndex.recon_id,
-    db_schema.PeakIndex.wirerecon_id,
-    db_schema.PeakIndex.notes,
+    db_schema.WireRecon.wirerecon_id,
+    db_schema.WireRecon.date,
+    db_schema.WireRecon.calib_id,
+    # db_schema.WireRecon.dataset_id,
+    db_schema.WireRecon.scanNumber,
+    db_schema.Catalog.sample_name,
+    db_schema.Catalog.aperture,
+    db_schema.WireRecon.notes,
 ]
 
 
 @dash.callback(
-    Output('peakindex-table', 'columnDefs'),
-    Output('peakindex-table', 'rowData'),
+    Output('wire-recon-table', 'columnDefs'),
+    Output('wire-recon-table', 'rowData'),
     Input('url','pathname'),
     prevent_initial_call=True,
 )
-def get_peakindexs(path):
-       if path == '/indexedpeaks':
-            cols, peakindexs_records = _get_peakindexs()
-            return cols, peakindexs_records
-       else:
-            raise PreventUpdate
+def get_recons(path):
+    if path == '/wire-reconstructions':
+        cols, recons = _get_recons()
+        return cols, recons
+    else:
+        raise PreventUpdate

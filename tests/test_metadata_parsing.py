@@ -23,15 +23,19 @@ import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
 
 
+# Global test XML path - shared between all test classes
+TEST_XML_PATH = os.path.join(os.path.dirname(__file__), 'scan_logs', 'test_log.xml')
+
+
+@pytest.fixture
+def test_xml_data():
+    """Load test XML data from test_log.xml file."""
+    with open(TEST_XML_PATH, 'rb') as f:
+        return f.read()
+
+
 class TestMetadataParsing:
     """Test class for metadata parsing functionality."""
-    
-    @pytest.fixture
-    def test_xml_data(self):
-        """Load test XML data from test_log.xml file."""
-        test_xml_path = os.path.join(os.path.dirname(__file__), 'data', 'test_log.xml')
-        with open(test_xml_path, 'rb') as f:
-            return f.read()
     
     @pytest.fixture
     def temp_database(self):
@@ -159,13 +163,6 @@ class TestMetadataParsing:
 
 class TestDatabaseIntegration:
     """Test class for database integration functionality."""
-    
-    @pytest.fixture
-    def test_xml_data(self):
-        """Load test XML data from test_log.xml file."""
-        test_xml_path = os.path.join(os.path.dirname(__file__), 'data', 'test_log.xml')
-        with open(test_xml_path, 'rb') as f:
-            return f.read()
     
     @pytest.fixture
     def temp_database(self):

@@ -110,12 +110,13 @@ class Metadata(Base):
     # sampleZini: Mapped[float] = mapped_column(Float)
     # comment: Mapped[str] = mapped_column(String)
 
-    sample_name: Mapped[str] = mapped_column(String, nullable=True)
-
-    calibs: Mapped["Calib"] = relationship(backref="recon")
-    scans: Mapped["Scan"] = relationship(backref="recon")
-    recons: Mapped["Recon"] = relationship(backref="recon")
-    #peakindices: Mapped["PeakIndex"] = relationship(backref="recon")
+    # Parent of:
+    scan_: Mapped["Scan"] = relationship(backref="metadata")
+    catalog_: Mapped["Catalog"] = relationship(backref="metadata")
+    calib_: Mapped["Calib"] = relationship(backref="metadata")
+    recon_: Mapped["Recon"] = relationship(backref="metadata")
+    wirerecon_: Mapped["WireRecon"] = relationship(backref="metadata")
+    peakindex_: Mapped["PeakIndex"] = relationship(backref="metadata")
 
     def __repr__(self) -> str:
         pass # TODO: Consider implemeting for debugging
@@ -172,6 +173,21 @@ class Scan(Base):
 
     def __repr__(self) -> str:
         pass # TODO: Consider implemeting for debugging
+
+
+class Catalog(Base):
+    __tablename__ = "catalog"
+
+    catalog_id: Mapped[int] = mapped_column(primary_key=True)
+    scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"), unique=True)
+
+    filefolder: Mapped[str] = mapped_column(String) #infile
+    filenamePrefix: Mapped[str] = mapped_column(String) #infile
+    outputFolder: Mapped[str] = mapped_column(String) #outfile
+    geoFile: Mapped[str] = mapped_column(String) #geofile
+    
+    aperture: Mapped[str] = mapped_column(String)
+    sample_name: Mapped[str] = mapped_column(String, nullable=True)
 
 
 class Calib(Base):
@@ -285,11 +301,49 @@ class Recon(Base):
     algo_ene_method: Mapped[str] = mapped_column(String)
     algo_ene_range: Mapped[list[int]] = mapped_column(JSON)
 
-    peakindices: Mapped["PeakIndex"] = relationship(backref="recon")
+    # Parent of:
+    peakindex_: Mapped["PeakIndex"] = relationship(backref="recon")
 
     def __repr__(self) -> str:
         return f'Recon {self.recon_id}' # TODO: Consider implementing for debugging
 
+
+class WireRecon(Base):
+    __tablename__ = "wirerecon"
+
+    # Wire Recon Metadata
+    wirerecon_id: Mapped[int] = mapped_column(primary_key=True)
+    scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
+    date: Mapped[DateTime] = mapped_column(DateTime)
+    commit_id: Mapped[str] = mapped_column(String)
+    calib_id: Mapped[int] = mapped_column(Integer) #Mapped[int] = mapped_column(ForeignKey("calib.calib_id"))
+    runtime: Mapped[str] = mapped_column(String)
+    computer_name: Mapped[str] = mapped_column(String)
+    dataset_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
+    notes: Mapped[str] = mapped_column(String)
+    
+    # Wire Recon Parameters
+    depth_start: Mapped[float] = mapped_column(Float) #depth-start
+    depth_end: Mapped[float] = mapped_column(Float) #depth-end
+    depth_resolution: Mapped[float] = mapped_column(Float) #resolution
+
+    # filefolder: Mapped[str] = mapped_column(String) #infile
+    # filenamePrefix: Mapped[str] = mapped_column(String) #infile
+    # outputFolder: Mapped[str] = mapped_column(String) #outfile
+    # geoFile: Mapped[str] = mapped_column(String) #geofile
+
+    # outputFolder: Mapped[str] = mapped_column(String) #outfile
+    # filefolder: Mapped[str] = mapped_column(String) #infile
+    # filenamePrefix: Mapped[str] = mapped_column(String) #infile
+    # geoFile: Mapped[str] = mapped_column(String) #geofile
+    # # geo_source_offset: Mapped[float] = mapped_column(Float)
+    # geo_source_grid: Mapped[list[float]] = mapped_column(JSON) # depth-start; depth-end; resolution
+
+    # Parent of:
+    peakindex_: Mapped["PeakIndex"] = relationship(backref="wirerecon")
+
+    def __repr__(self) -> str:
+        return f'WireRecon {self.wirerecon_id}' # TODO: Consider implementing for debugging
 
 class PeakIndex(Base):
     __tablename__ = "peakindex"
@@ -305,7 +359,8 @@ class PeakIndex(Base):
     dataset_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
     notes: Mapped[str] = mapped_column(String)
 
-    recon_id: Mapped[int] = mapped_column(ForeignKey("recon.recon_id"))
+    recon_id: Mapped[int] = mapped_column(ForeignKey("recon.recon_id"),nullable=True)
+    wirerecon_id: Mapped[int] = mapped_column(ForeignKey("wirerecon.wirerecon_id"),nullable=True)
 
     # Peak Index Parameters
     # peakProgram: Mapped[str] = mapped_column(String)

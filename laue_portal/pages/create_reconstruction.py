@@ -56,7 +56,7 @@ layout = dbc.Container(
         ),
         html.Hr(),
         html.Center(
-            dbc.Button('Submit', id='submit', color='primary'),
+            dbc.Button('Submit', id='submit_recon', color='primary'),
         ),
         html.Hr(),
         recon_form,
@@ -102,9 +102,9 @@ def upload_config(contents):
 
 
 @dash.callback(
-    Input('submit', 'n_clicks'),
+    Input('submit_recon', 'n_clicks'),
 
-    State('dataset', 'value'),
+    State('scanNumber', 'value'),
     State('frame_start', 'value'),
     State('frame_end', 'value'),
     State('x_start', 'value'),
@@ -180,7 +180,7 @@ def upload_config(contents):
     prevent_initial_call=True,
 )
 def submit_config(n,
-    dataset,
+    scanNumber,
     frame_start,
     frame_end,
     x_start,
@@ -265,8 +265,7 @@ def submit_config(n,
         dataset_id=0,
         notes='TODO', 
 
-        scanNumber = dataset,
-
+        scanNumber=scanNumber,
         file_path=file_path,
         file_output=file_output,
         file_stacked=data_stacked,
@@ -343,6 +342,6 @@ def submit_config(n,
                                 'color': 'success'})
 
     if _ANALYSIS_LIB_AVAILABLE:
-        analysis_recon.run_analysis(config_dict)
+        pass #analysis_recon.run_analysis(config_dict)
     else:
         logger.warning("Skipping reconstruction analysis; libraries not available")

@@ -159,9 +159,9 @@ def upload_config(contents):
 @dash.callback(
     Input('submit_peakindex', 'n_clicks'),
     
-    State('dataset', 'value'),
+    State('scanNumber', 'value'),
     State('recon_id', 'value'),
-    
+    State('wirerecon_id', 'value'),
     # State('peakProgram', 'value'),
     State('threshold', 'value'),
     State('thresholdRatio', 'value'),
@@ -210,8 +210,9 @@ def upload_config(contents):
     prevent_initial_call=True,
 )
 def submit_config(n,
-    dataset,
+    scanNumber,
     recon_id,
+    wirerecon_id,
     # peakProgram,
     threshold,
     thresholdRatio,
@@ -266,12 +267,12 @@ def submit_config(n,
         calib_id='TEST',
         runtime='TEST',
         computer_name='TEST',
-        dataset_id=dataset or 0,
+        dataset_id=0,
         notes='TODO', 
 
-        scanNumber = dataset,
+        scanNumber = scanNumber,
         recon_id = recon_id,
-
+        wirerecon_id = wirerecon_id,
         # peakProgram=peakProgram,
         threshold=threshold,
         thresholdRatio=thresholdRatio,
@@ -349,6 +350,9 @@ def load_scan_data_from_url(href):
     
     scan_id = query_params.get('scan_id', [None])[0]
 
+    recon_id = query_params.get('recon_id', [None])[0]
+    wirerecon_id = query_params.get('wirerecon_id', [None])[0]
+
     if scan_id:
         try:
             scan_id = int(scan_id)
@@ -373,7 +377,11 @@ def load_scan_data_from_url(href):
                         computer_name='',
                         dataset_id=scan_id,
                         notes=f"Auto-populated from scan {scan_id}. Original notes: {metadata.notes or ''}",
-                        
+
+                        scanNumber = scan_id,
+                        recon_id = recon_id,
+                        wirerecon_id = wirerecon_id,
+                                        
                         # File-related fields derived from metadata
                         filefolder=os.path.dirname(metadata.mda_file) if metadata.mda_file else PEAKINDEX_DEFAULTS["filefolder"],
                         filenamePrefix=os.path.splitext(os.path.basename(metadata.mda_file))[0] if metadata.mda_file else PEAKINDEX_DEFAULTS["filenamePrefix"],

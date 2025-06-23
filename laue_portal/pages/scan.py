@@ -13,8 +13,6 @@ from sqlalchemy import asc # Import asc for ordering
 from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, make_scan_accordion, set_scaninfo_form_props
 import urllib.parse
 import pandas as pd
-import base64
-import datetime
 
 dash.register_page(__name__, path="/scan") # Simplified path
 
@@ -288,11 +286,12 @@ def load_scan_metadata(href):
             with Session(db_utils.ENGINE) as session:
                 metadata = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == scan_id).first()
                 scans = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_id)
+                catalog = session.query(db_schema.Catalog).filter(db_schema.Catalog.scanNumber == scan_id).first()
                 if metadata:
                     scan_accordions = [make_scan_accordion(i) for i,_ in enumerate(scans)]
                     set_props("scan_accordions", {'children': scan_accordions})
                     set_metadata_form_props(metadata, scans, read_only=True)
-                    set_scaninfo_form_props(metadata, scans, read_only=True)
+                    set_scaninfo_form_props(metadata, scans, catalog, read_only=True)
         except Exception as e:
             print(f"Error loading scan data: {e}")
 
@@ -474,13 +473,13 @@ CUSTOM_HEADER_NAMES_Recon = {
 
 CUSTOM_COLS_Recon_dict = {
     2:[
-        #db_schema.Recon.depth_technique, #presently does not exist
+        db_schema.Catalog.aperture, #db_schema.Recon.depth_technique, #presently does not exist
         db_schema.Recon.calib_id, #Calib.calib_id,
     ],
     3:[#db_schema.Recon
-        db_schema.PeakIndex.scanPointEnd,
-        db_schema.PeakIndex.scanPointStart,
-        db_schema.PeakIndex.filefolder,
+        #db_schema.PeakIndex.scanPointStart,
+        #db_schema.PeakIndex.scanPointEnd,
+        #db_schema.PeakIndex.filefolder,
     ],
     4:[
         db_schema.Recon.geo_source_offset,
@@ -493,92 +492,229 @@ CUSTOM_COLS_Recon_dict = {
 
 ALL_COLS_Recon = VISIBLE_COLS_Recon + [ii for i in CUSTOM_COLS_Recon_dict.values() for ii in i]
 
+VISIBLE_COLS_WireRecon = [
+    db_schema.WireRecon.wirerecon_id,
+    db_schema.Metadata.user_name, #db_schema.Recon.author,
+    #db_schema.Recon.pxl_recon,
+    db_schema.WireRecon.date,
+    db_schema.WireRecon.runtime,
+    db_schema.WireRecon.notes
+]
+
+CUSTOM_HEADER_NAMES_WireRecon = {
+    'wirerecon_id': 'Wire Recon ID', #'ReconID',
+    'user_name': 'Author',
+    #'pxl_recon': 'Pixels'
+    #'': 'Date',
+    'runtime': 'Status',
+    'notes': 'Comment',
+}
+
+CUSTOM_COLS_WireRecon_dict = {
+    2:[
+        db_schema.Catalog.aperture, #db_schema.Recon.depth_technique, #presently does not exist
+        db_schema.WireRecon.calib_id, #Calib.calib_id,
+    ],
+    3:[#db_schema.Recon
+        #db_schema.PeakIndex.scanPointStart,
+        #db_schema.PeakIndex.scanPointEnd,
+        #db_schema.PeakIndex.filefolder,
+    ],
+    4:[
+        # db_schema.Recon.geo_source_offset,
+        # db_schema.Recon.geo_source_grid,
+        db_schema.WireRecon.depth_start,
+        db_schema.WireRecon.depth_end,
+        db_schema.WireRecon.depth_resolution,
+    ],
+    5:[
+        db_schema.Metadata.computer_name, #placeholder item
+    ],
+}
+
+ALL_COLS_WireRecon = VISIBLE_COLS_WireRecon + [ii for i in CUSTOM_COLS_WireRecon_dict.values() for ii in i]
+
 def _get_scan_recons(scan_id):
     try:
         scan_id = int(scan_id)
         with Session(db_utils.ENGINE) as session:
-            scan_recons = pd.read_sql(session.query(*ALL_COLS_Recon).filter(db_schema.Recon.scanNumber == scan_id).statement, session.bind)
+            aperture = pd.read_sql(session.query(db_schema.Catalog.aperture).filter(db_schema.Catalog.scanNumber == scan_id).statement, session.bind).at[0,'aperture']
+            if 'wire' in aperture:
+                scan_recons = pd.read_sql(session.query(*ALL_COLS_WireRecon)
+                                .join(db_schema.Metadata.catalog_)
+                                .join(db_schema.Metadata.wirerecon_)
+                                # .join(db_schema.Catalog, db_schema.Metadata.scanNumber == db_schema.Catalog.scanNumber)
+                                # .join(db_schema.WireRecon, db_schema.Metadata.scanNumber == db_schema.WireRecon.scanNumber)
+                                .filter(db_schema.Metadata.scanNumber == scan_id).statement, session.bind)
+                # Format columns for ag-grid
+                cols = []
+                for col in VISIBLE_COLS_WireRecon:
+                    field_key = col.key
+                    header_name = CUSTOM_HEADER_NAMES_WireRecon.get(field_key, field_key.replace('_', ' ').title())
+                    
+                    col_def = {
+                        'headerName': header_name,
+                        'field': field_key,
+                        'filter': True, 
+                        'sortable': True, 
+                        'resizable': True,
+                        'suppressMenuHide': True
+                    }
 
-            # Format columns for ag-grid
-            cols = []
-            for col in VISIBLE_COLS_Recon:
-                field_key = col.key
-                header_name = CUSTOM_HEADER_NAMES_Recon.get(field_key, field_key.replace('_', ' ').title())
+                    if field_key == 'wirerecon_id':
+                        col_def['cellRenderer'] = 'WireReconLinkRenderer'
+                    elif field_key in ['scanNumber','dataset_id']:
+                        col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
+                    elif field_key == 'scanNumber':
+                        col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+                    
+                    cols.append(col_def)
+
+                # # Add the custom actions column
+                # cols.append({
+                #     'headerName': 'Actions',
+                #     'field': 'actions',  # This field doesn't need to exist in the data
+                #     'cellRenderer': 'ActionButtonsRenderer',
+                #     'sortable': False,
+                #     'filter': False,
+                #     'resizable': True, # Or False, depending on preference
+                #     'suppressMenu': True, # Or False
+                #     'width': 200 # Adjusted width for DBC buttons
+                # })
+
+                # Add a combined fields columns
+                for col_num in CUSTOM_COLS_Recon_dict.keys():
+                    if col_num == 2:
+                        col_def = {
+                            'headerName': 'Method',
+                            'valueGetter': {"function":
+                                "params.data.aperture + ', calib: ' + params.data.calib_id" # "'CA, calib: ' + params.data.calib_id"
+                            },
+                        }
+                    elif col_num == 3:
+                        col_def = {
+                            'headerName': 'Points', #'points_to_index'
+                            'valueGetter': {"function":
+                                "50 + ' / ' + '2000'"
+                                #"50*(params.data.scanPointEnd - params.data.scanPointStart) + ' / ' + '2000'"
+                                # "f'{params.data.scanPointEnd - params.data.scanPointStart} out of 2000'", #len(Path(db_schema.PeakIndex.filefolder).glob("*"))
+                            },
+                        }
+                    elif col_num == 4:
+                        col_def = {
+                            'headerName': 'Depth [µm]', # 'Depth [${\mu}m$]',
+                            'valueGetter': {"function":
+                                "params.data.depth_start \
+                                + ' to ' + \
+                                params.data.depth_end"
+                            },
+                        }
+                    elif col_num == 5:
+                        col_def = {
+                            'headerName': 'Pixels',
+                            'valueGetter': {"function":
+                                "100" # "params.data.Recon.pxl_recon"
+                            },
+                        }
+                    col_def.update({
+                        'filter': True, 
+                        'sortable': True, 
+                        'resizable': True,
+                        'suppressMenuHide': True
+                    })
+                    cols.insert(col_num,col_def)
+
+                # recons['id'] = recons['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
                 
-                col_def = {
-                    'headerName': header_name,
-                    'field': field_key,
-                    'filter': True, 
-                    'sortable': True, 
-                    'resizable': True,
-                    'suppressMenuHide': True
-                }
+                return cols, scan_recons.to_dict('records')
+            else:
+                scan_recons = pd.read_sql(session.query(*ALL_COLS_Recon)
+                                .join(db_schema.Metadata.catalog_)
+                                .join(db_schema.Metadata.recon_)
+                                # .join(db_schema.Catalog, db_schema.Metadata.scanNumber == db_schema.Catalog.scanNumber)
+                                # .join(db_schema.Recon, db_schema.Metadata.scanNumber == db_schema.Recon.scanNumber)
+                                .filter(db_schema.Metadata.scanNumber == scan_id).statement, session.bind)
+                # Format columns for ag-grid
+                cols = []
+                for col in VISIBLE_COLS_Recon:
+                    field_key = col.key
+                    header_name = CUSTOM_HEADER_NAMES_Recon.get(field_key, field_key.replace('_', ' ').title())
+                    
+                    col_def = {
+                        'headerName': header_name,
+                        'field': field_key,
+                        'filter': True, 
+                        'sortable': True, 
+                        'resizable': True,
+                        'suppressMenuHide': True
+                    }
 
-                if field_key == 'recon_id':
-                    col_def['cellRenderer'] = 'ReconLinkRenderer'
-                elif field_key in ['scanNumber','dataset_id']:
-                    col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
-                elif field_key == 'scanNumber':
-                    col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+                    if field_key == 'recon_id':
+                        col_def['cellRenderer'] = 'ReconLinkRenderer'
+                    elif field_key in ['scanNumber','dataset_id']:
+                        col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
+                    elif field_key == 'scanNumber':
+                        col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+                    
+                    cols.append(col_def)
+
+                # # Add the custom actions column
+                # cols.append({
+                #     'headerName': 'Actions',
+                #     'field': 'actions',  # This field doesn't need to exist in the data
+                #     'cellRenderer': 'ActionButtonsRenderer',
+                #     'sortable': False,
+                #     'filter': False,
+                #     'resizable': True, # Or False, depending on preference
+                #     'suppressMenu': True, # Or False
+                #     'width': 200 # Adjusted width for DBC buttons
+                # })
+
+                # Add a combined fields columns
+                for col_num in CUSTOM_COLS_Recon_dict.keys():
+                    if col_num == 2:
+                        col_def = {
+                            'headerName': 'Method',
+                            'valueGetter': {"function":
+                                "params.data.aperture + ', calib: ' + params.data.calib_id" # "'CA, calib: ' + params.data.calib_id"
+                            },
+                        }
+                    elif col_num == 3:
+                        col_def = {
+                            'headerName': 'Points', #'points_to_index'
+                            'valueGetter': {"function":
+                                "50 + ' / ' + '2000'"
+                                #"50*(params.data.scanPointEnd - params.data.scanPointStart) + ' / ' + '2000'"
+                                # "f'{params.data.scanPointEnd - params.data.scanPointStart} out of 2000'", #len(Path(db_schema.PeakIndex.filefolder).glob("*"))
+                            },
+                        }
+                    elif col_num == 4:
+                        col_def = {
+                            'headerName': 'Depth [µm]', # 'Depth [${\mu}m$]',
+                            'valueGetter': {"function":
+                                "1000*(params.data.geo_source_grid[0] + params.data.geo_source_offset) \
+                                + ' to ' + \
+                                1000*(params.data.geo_source_grid[1] + params.data.geo_source_offset)"
+                            },
+                        }
+                    elif col_num == 5:
+                        col_def = {
+                            'headerName': 'Pixels',
+                            'valueGetter': {"function":
+                                "100" # "params.data.Recon.pxl_recon"
+                            },
+                        }
+                    col_def.update({
+                        'filter': True, 
+                        'sortable': True, 
+                        'resizable': True,
+                        'suppressMenuHide': True
+                    })
+                    cols.insert(col_num,col_def)
+
+                # recons['id'] = recons['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
                 
-                cols.append(col_def)
-
-            # # Add the custom actions column
-            # cols.append({
-            #     'headerName': 'Actions',
-            #     'field': 'actions',  # This field doesn't need to exist in the data
-            #     'cellRenderer': 'ActionButtonsRenderer',
-            #     'sortable': False,
-            #     'filter': False,
-            #     'resizable': True, # Or False, depending on preference
-            #     'suppressMenu': True, # Or False
-            #     'width': 200 # Adjusted width for DBC buttons
-            # })
-
-            # Add a combined fields columns
-            for col_num in CUSTOM_COLS_Recon_dict.keys():
-                if col_num == 2:
-                    col_def = {
-                        'headerName': 'Method',
-                        'valueGetter': {"function":
-                            "'CA, calib: ' + params.data.calib_id"
-                        },
-                    }
-                elif col_num == 3:
-                    col_def = {
-                        'headerName': 'Points', #'points_to_index'
-                        'valueGetter': {"function":
-                            "50*(params.data.scanPointEnd - params.data.scanPointStart) + ' / ' + '2000'"
-                            # "f'{params.data.scanPointEnd - params.data.scanPointStart} out of 2000'", #len(Path(db_schema.PeakIndex.filefolder).glob("*"))
-                        },
-                    }
-                elif col_num == 4:
-                    col_def = {
-                        'headerName': 'Depth [um]', # 'Depth [${\mu}m$]',
-                        'valueGetter': {"function":
-                            "1000*(params.data.geo_source_grid[0] + params.data.geo_source_offset) \
-                            + ' to ' + \
-                            1000*(params.data.geo_source_grid[1] + params.data.geo_source_offset)"
-                        },
-                    }
-                elif col_num == 5:
-                    col_def = {
-                        'headerName': 'Pixels',
-                        'valueGetter': {"function":
-                            "100" # "params.data.Recon.pxl_recon"
-                        },
-                    }
-                col_def.update({
-                    'filter': True, 
-                    'sortable': True, 
-                    'resizable': True,
-                    'suppressMenuHide': True
-                })
-                cols.insert(col_num,col_def)
-
-            # recons['id'] = recons['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
-            
-            return cols, scan_recons.to_dict('records')
+                return cols, scan_recons.to_dict('records')
     
     except Exception as e:
         print(f"Error loading reconstruction data: {e}")
@@ -632,7 +768,7 @@ VISIBLE_COLS_PeakIndex = [
     db_schema.PeakIndex.peakindex_id,
     db_schema.PeakIndex.recon_id,
     db_schema.Metadata.user_name,
-    db_schema.Metadata.sample_name,
+    # db_schema.PeakIndexResults.structure,
     db_schema.PeakIndex.boxsize,
     db_schema.PeakIndex.threshold,
     db_schema.PeakIndex.date,
@@ -643,8 +779,8 @@ VISIBLE_COLS_PeakIndex = [
 CUSTOM_HEADER_NAMES_PeakIndex = {
     'peakindex_id': 'Index ID', #'Peak Index ID',
     'recon_id': 'Recon ID', #'ReconID',
+    'wirerecon_id': 'WireRecnID', #'Wire Recon ID', #'ReconID',
     'user_name': 'Author',
-    'sample_name': 'Sample', #'Structure',
     #'': 'Points',
     'boxsize': 'Box',
     #'': 'Threshold',
@@ -667,7 +803,16 @@ def _get_scan_peakindexs(scan_id):
     try:
         scan_id = int(scan_id)
         with Session(db_utils.ENGINE) as session:
-            scan_peakindexs = pd.read_sql(session.query(*ALL_COLS_PeakIndex).filter(db_schema.PeakIndex.scanNumber == scan_id).statement, session.bind)
+            aperture = pd.read_sql(session.query(db_schema.Catalog.aperture).filter(db_schema.Catalog.scanNumber == scan_id).statement, session.bind).at[0,'aperture']
+            if 'wire' in aperture:
+                VISIBLE_COLS_PeakIndex[1] = db_schema.PeakIndex.wirerecon_id
+                ALL_COLS_PeakIndex = VISIBLE_COLS_PeakIndex + [ii for i in CUSTOM_COLS_PeakIndex_dict.values() for ii in i]
+            scan_peakindexs = pd.read_sql(session.query(*ALL_COLS_PeakIndex)
+                            .join(db_schema.Metadata.peakindex_)
+                            # .join(db_schema.PeakIndex.peakindexresults_)
+                            # .join(db_schema.PeakIndex, db_schema.Metadata.scanNumber == db_schema.PeakIndex.scanNumber)
+                            # .join(db_schema.PeakIndexResults, db_schema.PeakIndex.scanNumber == db_schema.PeakIndexResults.scanNumber)
+                            .filter(db_schema.Metadata.scanNumber == scan_id).statement, session.bind)
             # Format columns for ag-grid
             cols = []
             for col in VISIBLE_COLS_PeakIndex:
@@ -685,6 +830,10 @@ def _get_scan_peakindexs(scan_id):
 
                 if field_key == 'peakindex_id':
                     col_def['cellRenderer'] = 'PeakIndexLinkRenderer'
+                elif field_key == 'recon_id':
+                    col_def['cellRenderer'] = 'ReconLinkRenderer'
+                elif field_key == 'wirerecon_id':
+                    col_def['cellRenderer'] = 'WireReconLinkRenderer'
                 elif field_key in ['scanNumber','dataset_id']:
                     col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
                 elif field_key == 'scanNumber':
