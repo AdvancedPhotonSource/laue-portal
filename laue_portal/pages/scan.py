@@ -546,6 +546,7 @@ def _get_scan_recons(scan_id):
                                 # .join(db_schema.Catalog, db_schema.Metadata.scanNumber == db_schema.Catalog.scanNumber)
                                 # .join(db_schema.WireRecon, db_schema.Metadata.scanNumber == db_schema.WireRecon.scanNumber)
                                 .filter(db_schema.Metadata.scanNumber == scan_id).statement, session.bind)
+                
                 # Format columns for ag-grid
                 cols = []
                 for col in VISIBLE_COLS_WireRecon:

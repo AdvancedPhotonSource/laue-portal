@@ -17,13 +17,13 @@ layout = html.Div([
     dcc.Location(id='url-indexedpeak-page', refresh=False),
     dbc.Container(id='indexedpeak-content-container', fluid=True, className="mt-4",
                   children=[
-                        html.H2(id='scan-id-header', className="mb-3"),
+                        html.H2(id='peakindex-id-header', className="mb-3"),
                         peakindex_form
                   ]),
 ])
 
 @callback(
-    Output('scan-id-header', 'children'),
+    Output('peakindex-id-header', 'children'),
     Input('url-indexedpeak-page', 'href'),
     prevent_initial_call=True
 )
