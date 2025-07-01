@@ -6,7 +6,7 @@ navbar = dbc.NavbarSimple(
         dbc.NavItem(dbc.NavLink("Mask Reconstructions", href="/reconstructions", active="exact")),
         dbc.NavItem(dbc.NavLink("Wire Reconstructions", href="/wire-reconstructions", active="exact")),
         dbc.NavItem(dbc.NavLink("Indexations", href="/indexedpeaks", active="exact")),
-        dbc.NavItem(dbc.NavLink("Run Monitor", href="/index-runs", active="exact")),
+        dbc.NavItem(dbc.NavLink("Run Monitor", href="/run-monitor", active="exact")),
         dbc.DropdownMenu(
             id="manual-entry-dropdown",
             children=[

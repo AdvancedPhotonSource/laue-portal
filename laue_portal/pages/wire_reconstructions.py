@@ -34,30 +34,33 @@ Callbacks
 """
 VISIBLE_COLS = [
     db_schema.WireRecon.wirerecon_id,
-    db_schema.WireRecon.date,
-    db_schema.WireRecon.calib_id,
-    # db_schema.WireRecon.dataset_id,
     db_schema.WireRecon.scanNumber,
+    # db_schema.WireRecon.calib_id,
     db_schema.Catalog.sample_name,
     db_schema.Catalog.aperture,
-    db_schema.WireRecon.notes,
+    #db_schema.WireRecon.pxl_recon,
+    db_schema.Job.submit_time,
+    db_schema.Job.start_time,
+    db_schema.Job.finish_time,
+    db_schema.Job.status,
+    db_schema.Job.author,
+    db_schema.Job.notes,
 ]
 
 CUSTOM_HEADER_NAMES = {
+    'wirerecon_id': 'Recon ID (Wire)', #'Wire Recon ID', #'ReconID',
     'scanNumber': 'Scan ID',
     'calib_id': 'Calibration ID',
-    # 'dataset_id': 'Dataset ID',
-    'wirerecon_id': 'Recon ID', #'Wire Recon ID', #'ReconID',
-    # Add more custom names here as needed, e.g.:
-    # 'date': 'Date of Scan',
+    #'pxl_recon': 'Pixels'
+    'submit_time': 'Date',
 }
 
 def _get_recons():
     with Session(db_utils.ENGINE) as session:
-        query = session.query(*VISIBLE_COLS).join(
-            db_schema.Catalog, db_schema.WireRecon.scanNumber == db_schema.Catalog.scanNumber
-        )
-    wirerecons = pd.read_sql(query.statement, session.bind)
+        wirerecons = pd.read_sql(session.query(*VISIBLE_COLS)
+            .join(db_schema.Catalog, db_schema.WireRecon.scanNumber == db_schema.Catalog.scanNumber)
+            .join(db_schema.Job, db_schema.WireRecon.job_id == db_schema.Job.job_id)
+            .statement, session.bind)
 
     # Format columns for ag-grid
     cols = []

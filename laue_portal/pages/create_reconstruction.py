@@ -82,13 +82,13 @@ def upload_config(contents):
         decoded = base64.b64decode(content_string)
         config = yaml.safe_load(decoded)
         recon_row = db_utils.import_recon_row(config)
-        recon_row.date = datetime.datetime.now()
-        recon_row.commit_id = ''
-        recon_row.calib_id = ''
-        recon_row.runtime = ''
-        recon_row.computer_name = ''
-        recon_row.dataset_id = 0
-        recon_row.notes = ''
+        # recon_row.date = datetime.datetime.now()
+        # recon_row.commit_id = ''
+        # recon_row.calib_id = ''
+        # recon_row.runtime = ''
+        # recon_row.computer_name = ''
+        # recon_row.dataset_id = 0
+        # recon_row.notes = ''
 
         set_props("alert-upload", {'is_open': True, 
                                     'children': 'Config uploaded successfully',

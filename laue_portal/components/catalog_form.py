@@ -19,7 +19,16 @@ catalog_form = dbc.Row(
                                 ),
                                 _stack(
                                     [
-                                        _field("Aperture", 'aperture', size='lg'),
+                                        #_field("Aperture", 'aperture', size='lg'),
+                                        dbc.Select(
+                                            placeholder="Aperture",
+                                            options=[
+                                                {"label": "Wire", "value": "wire"},
+                                                {"label": "Coded Aperture", "value": "mask"},
+                                            ],
+                                            style={'width':200},
+                                            id="aperture",
+                                        ),
                                     ]
                                 ),
                                 _stack(
@@ -63,10 +72,25 @@ catalog_form = dbc.Row(
                             title="File Parameters",
                             item_id="item-2",
                         ),
+dbc.AccordionItem(
+                            [
+                                _stack(
+                                    [
+                                        # _field("Notes", "notes", size='hg')
+                                        dbc.Textarea(
+                                            id="notes",
+                                            style={"width": "100%", "minHeight": "100px"},
+                                        )
+                                    ]
+                                ),
+                            ],
+                            title="Notes",
+                            item_id="item-3",
+                        ),
                         ],
                         always_open=True,
                         start_collapsed=False,
-                        active_item=["item-1","item-2"]
+                        active_item=["item-1","item-2","item-3"]
                     ),
                 ],
                 style={'width': '100%', 'overflow-x': 'auto'}
@@ -82,3 +106,4 @@ def set_catalog_form_props(catalog, read_only=False):
 
     set_props("aperture", {'value':catalog.aperture, 'readonly':read_only})
     set_props("sample_name", {'value':catalog.sample_name, 'readonly':read_only})
+    set_props("notes", {'value':catalog.notes, 'readonly':read_only})

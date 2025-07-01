@@ -362,7 +362,7 @@ def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
     set_props('User_print', {'children':[metadata.user_name]})
     set_props('Date_print', {'children':[metadata.time]})
     set_props('ScanType_print', {'children':[f"{len([i for i,scan in enumerate(scans)])}D"]})
-    set_props('Technique_print', {'children':[catalog.aperture]}) #"depth"
+    set_props('Technique_print', {'children':[catalog.aperture.title()]}) #"depth"
     set_props('Sample_print', {'children':[catalog.sample_name]}) #"Si"
     set_props('Comment_print', {'children':["submit indexing"]})
 # def set_scaninfo_form_props(metadata, scans, read_only=True):

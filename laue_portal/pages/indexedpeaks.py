@@ -34,25 +34,36 @@ Callbacks
 """
 VISIBLE_COLS = [
     db_schema.PeakIndex.peakindex_id,
-    db_schema.PeakIndex.date,
     # db_schema.PeakIndex.dataset_id,
     db_schema.PeakIndex.scanNumber,
     db_schema.PeakIndex.recon_id,
     db_schema.PeakIndex.wirerecon_id,
-    db_schema.PeakIndex.notes,
+    # db_schema.PeakIndexResults.structure,
+    db_schema.PeakIndex.boxsize,
+    db_schema.PeakIndex.threshold,
+    db_schema.Job.submit_time,
+    db_schema.Job.start_time,
+    db_schema.Job.finish_time,
+    db_schema.Job.status,
+    db_schema.Job.author,
+    db_schema.Job.notes,
 ]
 
 CUSTOM_HEADER_NAMES = {
     'peakindex_id': 'Peak Index ID',
     'scanNumber': 'Scan ID',
-    'dataset_id': 'Dataset ID',
     'recon_id': 'Recon ID', #'ReconID',
     'wirerecon_id': 'Wire Recon ID', #'ReconID',
+        #'': 'Points',
+    'boxsize': 'Box',
+    'submit_time,': 'Date',
 }
 
 def _get_peakindexs():
     with Session(db_utils.ENGINE) as session:
-        peakindexs_df = pd.read_sql(session.query(*VISIBLE_COLS).statement, session.bind)
+        peakindexs = pd.read_sql(session.query(*VISIBLE_COLS)
+            .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
+            .statement, session.bind)
 
     cols = []
     for col in VISIBLE_COLS:
@@ -80,7 +91,7 @@ def _get_peakindexs():
             col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
         cols.append(col_def)
 
-    return cols, peakindexs_df.to_dict('records')
+    return cols, peakindexs.to_dict('records')
 
 @dash.callback(
     Output('peakindex-table', 'columnDefs'),

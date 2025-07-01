@@ -18,16 +18,6 @@ class Base(DeclarativeBase):
 class Metadata(Base):
     __tablename__ = "metadata"
 
-    # Metadata Metadata
-    # _id: Mapped[int] = mapped_column(primary_key=True)
-    date: Mapped[DateTime] = mapped_column(DateTime)
-    commit_id: Mapped[str] = mapped_column(String)
-    calib_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
-    runtime: Mapped[str] = mapped_column(String)
-    computer_name: Mapped[str] = mapped_column(String)
-    dataset_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
-    notes: Mapped[str] = mapped_column(String)
-
     scanNumber: Mapped[int] = mapped_column(primary_key=True)
 
     time_epoch: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -75,8 +65,6 @@ class Metadata(Base):
     scanEnd_source_beamBad: Mapped[str] = mapped_column(String) # Mapped[bool] = mapped_column(Boolean)
     scanEnd_source_ringCurrent_unit: Mapped[str] = mapped_column(String)
     scanEnd_source_ringCurrent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-
-    # dataset_id: Mapped[int] = mapped_column(primary_key=True)
     
     # dataset_path: Mapped[str] = mapped_column(String)
     # dataset_filename: Mapped[str] = mapped_column(String)
@@ -188,6 +176,28 @@ class Catalog(Base):
     
     aperture: Mapped[str] = mapped_column(String)
     sample_name: Mapped[str] = mapped_column(String, nullable=True)
+    notes: Mapped[str] = mapped_column(String, nullable=True)
+
+
+class Job(Base):
+    __tablename__ = "job"
+
+    job_id: Mapped[int] = mapped_column(primary_key=True)
+
+    computer_name: Mapped[str] = mapped_column(String)
+    status: Mapped[int] = mapped_column(Integer) #pending, running, finished, stopped
+    priority: Mapped[int] = mapped_column(Integer)
+    submit_time: Mapped[DateTime] = mapped_column(DateTime) #date
+    start_time: Mapped[DateTime] = mapped_column(DateTime)
+    finish_time: Mapped[DateTime] = mapped_column(DateTime)
+    author: Mapped[str] = mapped_column(String, nullable=True)
+    notes: Mapped[str] = mapped_column(String, nullable=True)
+
+    # Parent of:
+    calib_: Mapped["Calib"] = relationship(backref="job")
+    recon_: Mapped["Recon"] = relationship(backref="job")
+    wirerecon_: Mapped["WireRecon"] = relationship(backref="job")
+    peakindex_: Mapped["PeakIndex"] = relationship(backref="job")
 
 
 class Calib(Base):
@@ -195,15 +205,10 @@ class Calib(Base):
 
     calib_id: Mapped[int] = mapped_column(primary_key=True)
     scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
-    date: Mapped[DateTime] = mapped_column(DateTime)
-    commit_id: Mapped[str] = mapped_column(String)
-    runtime: Mapped[str] = mapped_column(String)
-    computer_name: Mapped[str] = mapped_column(String)
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"), unique=True)
+
     calib_config: Mapped[str] = mapped_column(String)
-    dataset_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
-    dataset_path: Mapped[str] = mapped_column(String)
-    dataset_filename: Mapped[str] = mapped_column(String)
-    notes: Mapped[str] = mapped_column(String)
+
     cenx: Mapped[float] = mapped_column(Float)
     dist: Mapped[float] = mapped_column(Float)
     anglez: Mapped[float] = mapped_column(Float)
@@ -211,7 +216,10 @@ class Calib(Base):
     anglex: Mapped[float] = mapped_column(Float)
     cenz: Mapped[float] = mapped_column(Float)
     shift_parameter: Mapped[float] = mapped_column(Float)
-    comment: Mapped[str] = mapped_column(String)
+
+    # Parent of:
+    recon_: Mapped["Recon"] = relationship(backref="calib")
+    #wirerecon_: Mapped["WireRecon"] = relationship(backref="calib")
 
     def __repr__(self) -> str:
         pass # TODO: Consider implemeting for debugging
@@ -223,13 +231,8 @@ class Recon(Base):
     # Recon Metadata
     recon_id: Mapped[int] = mapped_column(primary_key=True)
     scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
-    date: Mapped[DateTime] = mapped_column(DateTime)
-    commit_id: Mapped[str] = mapped_column(String)
-    calib_id: Mapped[int] = mapped_column(Integer) #Mapped[int] = mapped_column(ForeignKey("calib.calib_id"))
-    runtime: Mapped[str] = mapped_column(String)
-    computer_name: Mapped[str] = mapped_column(String)
-    dataset_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
-    notes: Mapped[str] = mapped_column(String)
+    calib_id: Mapped[int] = mapped_column(ForeignKey("calib.calib_id"))
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"), unique=True)
 
     # Recon Parameters
     file_path: Mapped[str] = mapped_column(String)
@@ -314,13 +317,8 @@ class WireRecon(Base):
     # Wire Recon Metadata
     wirerecon_id: Mapped[int] = mapped_column(primary_key=True)
     scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
-    date: Mapped[DateTime] = mapped_column(DateTime)
-    commit_id: Mapped[str] = mapped_column(String)
-    calib_id: Mapped[int] = mapped_column(Integer) #Mapped[int] = mapped_column(ForeignKey("calib.calib_id"))
-    runtime: Mapped[str] = mapped_column(String)
-    computer_name: Mapped[str] = mapped_column(String)
-    dataset_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
-    notes: Mapped[str] = mapped_column(String)
+    # calib_id: Mapped[int] = mapped_column(ForeignKey("calib.calib_id"))
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"), unique=True)
     
     # Wire Recon Parameters
     depth_start: Mapped[float] = mapped_column(Float) #depth-start
@@ -351,13 +349,7 @@ class PeakIndex(Base):
     # Peak Index Metadata
     peakindex_id: Mapped[int] = mapped_column(primary_key=True)
     scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
-    date: Mapped[DateTime] = mapped_column(DateTime)
-    commit_id: Mapped[str] = mapped_column(String)
-    calib_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
-    runtime: Mapped[str] = mapped_column(String)
-    computer_name: Mapped[str] = mapped_column(String)
-    dataset_id: Mapped[int] = mapped_column(Integer) # Likely foreign key in the future
-    notes: Mapped[str] = mapped_column(String)
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"), unique=True)
 
     recon_id: Mapped[int] = mapped_column(ForeignKey("recon.recon_id"),nullable=True)
     wirerecon_id: Mapped[int] = mapped_column(ForeignKey("wirerecon.wirerecon_id"),nullable=True)

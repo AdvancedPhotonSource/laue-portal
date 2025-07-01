@@ -1,5 +1,5 @@
 import dash
-from dash import html, dcc, ctx, Input, Output
+from dash import html, dcc, Input, Output
 import dash_bootstrap_components as dbc
 import dash_ag_grid as dag
 from dash.exceptions import PreventUpdate
@@ -7,10 +7,8 @@ import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-import pandas as pd
-import h5py
+import pandas as pd 
 import laue_portal.components.navbar as navbar
-from laue_portal.components.recon_form import recon_form, set_recon_form_props
 
 dash.register_page(__name__)
 
@@ -19,7 +17,7 @@ layout = html.Div([
         dcc.Location(id='url', refresh=False),
         dbc.Container(fluid=True, className="p-0", children=[
             dag.AgGrid(
-                id='recon-table',
+                id='job-table',
                 columnSize="responsiveSizeToFit",
                 dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight'},
                 style={'height': 'calc(100vh - 150px)', 'width': '100%'},
@@ -35,12 +33,12 @@ Callbacks
 =======================
 """
 VISIBLE_COLS = [
-    db_schema.Recon.recon_id,
-    db_schema.Recon.scanNumber,
-    db_schema.Recon.calib_id,
+    db_schema.WireRecon.wirerecon_id,
+    db_schema.WireRecon.scanNumber,
+    # db_schema.WireRecon.calib_id,
     db_schema.Catalog.sample_name,
     db_schema.Catalog.aperture,
-    #db_schema.Recon.pxl_recon,
+    #db_schema.WireRecon.pxl_recon,
     db_schema.Job.submit_time,
     db_schema.Job.start_time,
     db_schema.Job.finish_time,
@@ -50,24 +48,32 @@ VISIBLE_COLS = [
 ]
 
 CUSTOM_HEADER_NAMES = {
-    'recon_id': 'Recon ID', #'ReconID',
+    'wirerecon_id': 'Recon ID (Wire)', #'Wire Recon ID', #'ReconID',
     'scanNumber': 'Scan ID',
     'calib_id': 'Calibration ID',
     #'pxl_recon': 'Pixels'
     'submit_time': 'Date',
 }
 
-def _get_recons():
+def _get_jobs():
     with Session(db_utils.ENGINE) as session:
-        recons = pd.read_sql(session.query(*VISIBLE_COLS)
-            .join(db_schema.Catalog, db_schema.Recon.scanNumber == db_schema.Catalog.scanNumber)
-            .join(db_schema.Job, db_schema.Recon.job_id == db_schema.Job.job_id)
+        jobs = pd.read_sql(session.query(db_schema.Job,
+                                         db_schema.Calib.calib_id,
+                                         db_schema.Recon.recon_id,
+                                         db_schema.WireRecon.wirerecon_id,
+                                         db_schema.PeakIndex.peakindex_id,
+                                         )
+            # .join(db_schema.Catalog, db_schema.WireRecon.scanNumber == db_schema.Catalog.scanNumber)
+            .outerjoin(db_schema.Calib, db_schema.Job.job_id == db_schema.Calib.job_id)
+            .outerjoin(db_schema.Recon, db_schema.Job.job_id == db_schema.Recon.job_id)
+            .outerjoin(db_schema.WireRecon, db_schema.Job.job_id == db_schema.WireRecon.job_id)
+            .outerjoin(db_schema.PeakIndex, db_schema.Job.job_id == db_schema.PeakIndex.job_id)
             .statement, session.bind)
 
     # Format columns for ag-grid
     cols = []
-    for col in VISIBLE_COLS:
-        field_key = col.key
+    for field_key in jobs.columns: #for col in VISIBLE_COLS:
+        # field_key = col.key
         header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
         
         col_def = {
@@ -79,8 +85,8 @@ def _get_recons():
             'suppressMenuHide': True
         }
 
-        if field_key == 'recon_id':
-            col_def['cellRenderer'] = 'ReconLinkRenderer'
+        if field_key == 'wirerecon_id':
+            col_def['cellRenderer'] = 'WireReconLinkRenderer'
         elif field_key == 'dataset_id':
             col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
         elif field_key == 'scanNumber':
@@ -102,17 +108,17 @@ def _get_recons():
     })
     # recons['id'] = recons['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
     
-    return cols, recons.to_dict('records')
+    return cols, jobs.to_dict('records')
 
 @dash.callback(
-    Output('recon-table', 'columnDefs'),
-    Output('recon-table', 'rowData'),
+    Output('job-table', 'columnDefs'),
+    Output('job-table', 'rowData'),
     Input('url','pathname'),
     prevent_initial_call=True,
 )
-def get_recons(path):
-    if path == '/reconstructions':
-        cols, recons = _get_recons()
-        return cols, recons
+def get_jobs(path):
+    if path == '/run-monitor':
+        cols, jobs = _get_jobs()
+        return cols, jobs
     else:
         raise PreventUpdate
