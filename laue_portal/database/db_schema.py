@@ -21,7 +21,7 @@ class Metadata(Base):
     scanNumber: Mapped[int] = mapped_column(primary_key=True)
 
     time_epoch: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    time: Mapped[str] = mapped_column(String) # DateTime?
+    time: Mapped[DateTime] = mapped_column(DateTime)
     user_name: Mapped[str] = mapped_column(String)
 
     source_beamBad: Mapped[str] = mapped_column(String) # Mapped[bool] = mapped_column(Boolean)

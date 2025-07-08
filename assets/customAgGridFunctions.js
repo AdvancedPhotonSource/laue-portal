@@ -1,5 +1,30 @@
 var dagcomponentfuncs = (window.dashAgGridComponentFunctions = window.dashAgGridComponentFunctions || {});
 
+// Date formatter for displaying datetime values in human-readable format
+dagcomponentfuncs.DateFormatter = function (params) {
+    if (!params.value) return '';
+    
+    // Parse the date string
+    const date = new Date(params.value);
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) return params.value;
+    
+    // Format the date as YYYY-MM-DD HH:MM:SS using toLocaleString
+    const options = {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    };
+    
+    // Use en-CA locale which gives YYYY-MM-DD format
+    return date.toLocaleString('en-CA', options);
+};
+
 dagcomponentfuncs.ScanLinkRenderer = function (props) {
     // props.value will be the scanNumber for the current row
     const url = `/scan?id=${props.value}`;

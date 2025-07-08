@@ -85,6 +85,8 @@ def _get_recons():
                 col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
             elif field_key == 'scanNumber':
                 col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+            elif field_key in ['submit_time', 'start_time', 'finish_time']:
+                col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
         
             cols.append(col_def)
 
