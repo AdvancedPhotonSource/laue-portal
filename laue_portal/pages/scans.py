@@ -81,7 +81,7 @@ CUSTOM_HEADER_NAMES = {
     'scanNumber': 'Scan ID',
     'user_name': 'User',
     'scan_dim': 'Scan Dim',
-    'time,': 'Date',
+    'time': 'Date',
 }
 
 def _get_metadatas():

@@ -16,38 +16,83 @@ dagcomponentfuncs.PeakIndexLinkRenderer = function (props) {
     return React.createElement(
         'a',
         { href: url },
-        props.value // This will be the text of the link (the peakindex_id)
+        props.value // This will be the text of the link (the peakindex ID)
     );
 };
 
 dagcomponentfuncs.ReconLinkRenderer = function (props) {
-    // props.value will be the peakindex_id for the current row
+    // props.value will be the recon_id for the current row
     const url = `/reconstruction?reconid=${props.value}`;
     return React.createElement(
         'a',
         { href: url },
-        props.value // This will be the text of the link (the peakindex_id)
+        props.value // This will be the text of the link (the recon ID)
     );
 };
 
 dagcomponentfuncs.WireReconLinkRenderer = function (props) {
-    // props.value will be the peakindex_id for the current row
+    // props.value will be the wirerecon_id for the current row
     const url = `/wire_reconstruction?wirereconid=${props.value}`;
     return React.createElement(
         'a',
         { href: url },
-        props.value // This will be the text of the link (the peakindex_id)
+        props.value // This will be the text of the link (the wirerecon ID)
     );
 };
 
-dagcomponentfuncs.DatasetIdScanLinkRenderer = function (props) {
-    // props.value will be the dataset_id for the current row
-    const url = `/scan?id=${props.value}`;
+dagcomponentfuncs.JobIdLinkRenderer = function (props) {
+    // props.value will be the job_id for the current row
+    const url = `/job?id=${props.value}`;
     return React.createElement(
         'a',
         { href: url },
-        props.value // This will be the text of the link (the dataset_id)
+        props.value // This will be the text of the link (the job ID)
     );
+};
+
+dagcomponentfuncs.JobRefsRenderer = function (props) {
+    const field_keys = props.value; // Array of field names from valueGetter
+    const data = props.data; // Row data
+    let job_refs = [];
+    
+    function make_table_link(text, url) {
+        return React.createElement(
+            'a',
+            { href: url },
+            text // This will be the text of the link (the table)
+        );
+    };
+
+    // Iterate through the field names and get their values
+    for (const field_key of field_keys) {
+        const value = data[field_key];
+        if (value !== null && value !== undefined) {
+            let id_link;
+            let table_link;
+            
+            if (field_key === 'calib_id') {
+                id_link = value;
+                table_link = 'Calib' //temp
+            }
+            else if (field_key === 'recon_id') {
+                id_link = dagcomponentfuncs.ReconLinkRenderer({ value: value });
+                table_link = make_table_link('Recon', `/reconstructions`)
+            }
+            else if (field_key === 'wirerecon_id') {
+                id_link = dagcomponentfuncs.WireReconLinkRenderer({ value: value });
+                table_link = make_table_link('WireRecon', `/wire-reconstructions`)
+            }
+            else if (field_key === 'peakindex_id') {
+                id_link = dagcomponentfuncs.PeakIndexLinkRenderer({ value: value });
+                table_link = make_table_link('PeakIndex', `/indexedpeaks`)
+            }
+            
+            job_refs.push(table_link, `: `, id_link);
+        }
+    }
+    
+    // Return a span element containing all the job references
+    return React.createElement('span', null, job_refs);
 };
 
 // dagcomponentfuncs.ActionButtonsRenderer = function (props) {

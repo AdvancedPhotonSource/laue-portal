@@ -8,7 +8,6 @@ import laue_portal.database.db_schema as db_schema
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 import pandas as pd
-import h5py
 import laue_portal.components.navbar as navbar
 from laue_portal.components.recon_form import recon_form, set_recon_form_props
 
@@ -68,25 +67,25 @@ def _get_recons():
     cols = []
     for col in VISIBLE_COLS:
         field_key = col.key
-        header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
-        
-        col_def = {
-            'headerName': header_name,
-            'field': field_key,
-            'filter': True, 
-            'sortable': True, 
-            'resizable': True,
-            'suppressMenuHide': True
-        }
-
-        if field_key == 'recon_id':
-            col_def['cellRenderer'] = 'ReconLinkRenderer'
-        elif field_key == 'dataset_id':
-            col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
-        elif field_key == 'scanNumber':
-            col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
-        
         if field_key != 'aperture':
+            header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
+            
+            col_def = {
+                'headerName': header_name,
+                'field': field_key,
+                'filter': True, 
+                'sortable': True, 
+                'resizable': True,
+                'suppressMenuHide': True
+            }
+
+            if field_key == 'recon_id':
+                col_def['cellRenderer'] = 'ReconLinkRenderer'
+            elif field_key == 'dataset_id':
+                col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
+            elif field_key == 'scanNumber':
+                col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+        
             cols.append(col_def)
 
     # Add the custom actions column

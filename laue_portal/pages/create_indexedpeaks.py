@@ -24,6 +24,17 @@ except ImportError:
     _PYLAUEGO_AVAILABLE = False
     logger.warning("PyLaueGo library not installed, Dry runs only.")
 
+JOB_DEFAULTS = {
+    "computer_name": 'example_computer',
+    "status": 0, #pending, running, finished, stopped
+    "priority": 0,
+    "submit_time": datetime.datetime.now(),
+    "start_time": datetime.datetime.now(),
+    "finish_time": datetime.datetime.now(),
+    "author": '',
+    "notes": '',
+}
+
 PEAKINDEX_DEFAULTS = {
     "peakProgram": "peaksearch",
     "threshold": 250,
@@ -210,7 +221,7 @@ def upload_config(contents):
     prevent_initial_call=True,
 )
 def submit_config(n,
-    scanNumber,
+    scanNumbers, #Pooled scanNumbers
     recon_id,
     wirerecon_id,
     # peakProgram,
@@ -260,78 +271,103 @@ def submit_config(n,
     
 ):
     # TODO: Input validation and reponse
+    for scanNumber in str(scanNumbers).split(','):
+
+        JOB_DEFAULTS.update({'submit_time':datetime.datetime.now()})
+        JOB_DEFAULTS.update({'start_time':datetime.datetime.now()})
+        JOB_DEFAULTS.update({'finish_time':datetime.datetime.now()})
+        
+        job = db_schema.Job(
+            computer_name=JOB_DEFAULTS['computer_name'],
+            status=JOB_DEFAULTS['status'],
+            priority=JOB_DEFAULTS['priority'],
+
+            submit_time=JOB_DEFAULTS['submit_time'],
+            start_time=JOB_DEFAULTS['start_time'],
+            finish_time=JOB_DEFAULTS['finish_time'],
+            
+            author=JOB_DEFAULTS['author'],
+            notes=JOB_DEFAULTS['notes'],
+        )
+
+        with Session(db_utils.ENGINE) as session:
+            
+            session.add(job)
+            job_id = session.query(db_schema.Job).order_by(db_schema.Job.job_id.desc()).first().job_id
     
-    peakindex = db_schema.PeakIndex(
-        date=datetime.datetime.now(),
-        commit_id='TEST',
-        calib_id='TEST',
-        runtime='TEST',
-        computer_name='TEST',
-        dataset_id=0,
-        notes='TODO', 
+            peakindex = db_schema.PeakIndex(
+                # date=datetime.datetime.now(),
+                # commit_id='TEST',
+                # calib_id='TEST',
+                # runtime='TEST',
+                # computer_name='TEST',
+                # dataset_id=0,
+                # notes='TODO', 
 
-        scanNumber = scanNumber,
-        recon_id = recon_id,
-        wirerecon_id = wirerecon_id,
-        # peakProgram=peakProgram,
-        threshold=threshold,
-        thresholdRatio=thresholdRatio,
-        maxRfactor=maxRfactor,
-        boxsize=boxsize,
-        max_number=max_number,
-        min_separation=min_separation,
-        peakShape=peakShape,
-        scanPointStart=scanPointStart,
-        scanPointEnd=scanPointEnd,
-        # depthRangeStart=depthRangeStart,
-        # depthRangeEnd=depthRangeEnd,
-        detectorCropX1=detectorCropX1,
-        detectorCropX2=detectorCropX2,
-        detectorCropY1=detectorCropY1,
-        detectorCropY2=detectorCropY2,
-        min_size=min_size,
-        max_peaks=max_peaks,
-        smooth=smooth,
-        maskFile=maskFile,
-        indexKeVmaxCalc=indexKeVmaxCalc,
-        indexKeVmaxTest=indexKeVmaxTest,
-        indexAngleTolerance=indexAngleTolerance,
-        indexH=int(str(indexHKL)[0]),
-        indexK=int(str(indexHKL)[1]),
-        indexL=int(str(indexHKL)[2]),
-        indexCone=indexCone,
-        energyUnit=energyUnit,
-        exposureUnit=exposureUnit,
-        cosmicFilter=cosmicFilter,
-        recipLatticeUnit=recipLatticeUnit,
-        latticeParametersUnit=latticeParametersUnit,
-        peaksearchPath=peaksearchPath,
-        p2qPath=p2qPath,
-        indexingPath=indexingPath,
-        outputFolder=outputFolder,
-        filefolder=filefolder,
-        filenamePrefix=filenamePrefix,
-        geoFile=geoFile,
-        crystFile=crystFile,
-        depth=depth,
-        beamline=beamline,
-        # cosmicFilter=cosmicFilter,
-    )
+                scanNumber = scanNumber,
+                recon_id = recon_id,
+                wirerecon_id = wirerecon_id,
+                job_id = job_id,
 
-    with Session(db_utils.ENGINE) as session:
-        session.add(peakindex)
-        config_dict = db_utils.create_peakindex_config_obj(peakindex)
+                # peakProgram=peakProgram,
+                threshold=threshold,
+                thresholdRatio=thresholdRatio,
+                maxRfactor=maxRfactor,
+                boxsize=boxsize,
+                max_number=max_number,
+                min_separation=min_separation,
+                peakShape=peakShape,
+                scanPointStart=scanPointStart,
+                scanPointEnd=scanPointEnd,
+                # depthRangeStart=depthRangeStart,
+                # depthRangeEnd=depthRangeEnd,
+                detectorCropX1=detectorCropX1,
+                detectorCropX2=detectorCropX2,
+                detectorCropY1=detectorCropY1,
+                detectorCropY2=detectorCropY2,
+                min_size=min_size,
+                max_peaks=max_peaks,
+                smooth=smooth,
+                maskFile=maskFile,
+                indexKeVmaxCalc=indexKeVmaxCalc,
+                indexKeVmaxTest=indexKeVmaxTest,
+                indexAngleTolerance=indexAngleTolerance,
+                indexH=int(str(indexHKL)[0]),
+                indexK=int(str(indexHKL)[1]),
+                indexL=int(str(indexHKL)[2]),
+                indexCone=indexCone,
+                energyUnit=energyUnit,
+                exposureUnit=exposureUnit,
+                cosmicFilter=cosmicFilter,
+                recipLatticeUnit=recipLatticeUnit,
+                latticeParametersUnit=latticeParametersUnit,
+                peaksearchPath=peaksearchPath,
+                p2qPath=p2qPath,
+                indexingPath=indexingPath,
+                outputFolder=outputFolder,
+                filefolder=filefolder,
+                filenamePrefix=filenamePrefix,
+                geoFile=geoFile,
+                crystFile=crystFile,
+                depth=depth,
+                beamline=beamline,
+                # cosmicFilter=cosmicFilter,
+            )
 
-        session.commit()
-    
-    set_props("alert-submit", {'is_open': True, 
-                                'children': 'Config Added to Database',
-                                'color': 'success'})
+        # with Session(db_utils.ENGINE) as session:
+            session.add(peakindex)
+            config_dict = db_utils.create_peakindex_config_obj(peakindex)
 
-    """ TODO: Running not implemented yet. 
-    pyLaueGo = pyLaueGo(config_dict)
-    pyLaueGo.run(0, 1)
-    """
+            session.commit()
+            
+            set_props("alert-submit", {'is_open': True, 
+                                        'children': 'Config Added to Database',
+                                        'color': 'success'})
+
+            """ TODO: Running not implemented yet. 
+            pyLaueGo = pyLaueGo(config_dict)
+            pyLaueGo.run(0, 1)
+            """
 
 @dash.callback(
     Input('url-create-indexedpeaks', 'href'),
@@ -369,14 +405,14 @@ def load_scan_data_from_url(href):
                 if metadata:
                     # Create a PeakIndex object with populated defaults from metadata/scan
                     peakindex_defaults = db_schema.PeakIndex(
-                        # Metadata fields
-                        date=datetime.datetime.now(),
-                        commit_id='',
-                        calib_id=metadata.calib_id or 0,
-                        runtime='',
-                        computer_name='',
-                        dataset_id=scan_id,
-                        notes=f"Auto-populated from scan {scan_id}. Original notes: {metadata.notes or ''}",
+                        # # Metadata fields
+                        # date=datetime.datetime.now(),
+                        # commit_id='',
+                        # calib_id=metadata.calib_id or 0,
+                        # runtime='',
+                        # computer_name='',
+                        # dataset_id=scan_id,
+                        # notes=f"Auto-populated from scan {scan_id}. Original notes: {metadata.notes or ''}",
 
                         scanNumber = scan_id,
                         recon_id = recon_id,
@@ -436,7 +472,7 @@ def load_scan_data_from_url(href):
                     # Show success message
                     set_props("alert-scan-loaded", {
                         'is_open': True, 
-                        'children': f'Scan {scan_id} data loaded successfully. Dataset ID: {metadata.dataset_id}, Energy: {metadata.source_energy} {metadata.source_energy_unit}',
+                        'children': f'Scan {scan_id} data loaded successfully. Scan Number: {metadata.scanNumber}, Energy: {metadata.source_energy} {metadata.source_energy_unit}',
                         'color': 'success'
                     })
                 else:

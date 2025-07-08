@@ -1,5 +1,5 @@
 import dash
-from dash import html, dcc, ctx, callback, Input, Output, State, set_props
+from dash import html, dcc, callback, Input, Output
 import dash_bootstrap_components as dbc
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
@@ -10,11 +10,6 @@ from dash.exceptions import PreventUpdate
 from sqlalchemy import asc # Import asc for ordering
 from laue_portal.components.wire_recon_form import wire_recon_form, set_wire_recon_form_props
 import urllib.parse
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from pathlib import Path
-import h5py
 
 dash.register_page(__name__, path="/wire_reconstruction")
 

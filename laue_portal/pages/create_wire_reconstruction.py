@@ -139,7 +139,7 @@ Callbacks
     prevent_initial_call=True,
 )
 def submit_config(n,
-    scanNumbers, #Pooled scanNumbers 
+    scanNumbers, #Pooled scanNumbers
     
     depth_start,
     depth_end,
@@ -147,7 +147,7 @@ def submit_config(n,
     
 ):
     # TODO: Input validation and reponse
-    for scanNumber in scanNumbers.split(','):
+     for scanNumber in str(scanNumbers).split(','):
 
         JOB_DEFAULTS.update({'submit_time':datetime.datetime.now()})
         JOB_DEFAULTS.update({'start_time':datetime.datetime.now()})
@@ -170,7 +170,7 @@ def submit_config(n,
             
             session.add(job)
             job_id = session.query(db_schema.Job).order_by(db_schema.Job.job_id.desc()).first().job_id
-            print(job_id)
+            
             wirerecon = db_schema.WireRecon(
                 # date=datetime.datetime.now(),
                 # commit_id='TEST',
@@ -190,7 +190,6 @@ def submit_config(n,
 
         # with Session(db_utils.ENGINE) as session:
             session.add(wirerecon)
-            wirerecon_id = session.query(db_schema.WireRecon).order_by(db_schema.WireRecon.wirerecon_id.desc()).first().wirerecon_id
             # config_dict = db_utils.create_config_obj(wirerecon)
 
             session.commit()
@@ -209,7 +208,7 @@ def submit_config(n,
     Input('url-create-wirerecon','pathname'),
     prevent_initial_call=True,
 )
-def get_peakindexs(path):
+def get_wirerecons(path):
        if path == '/create-wire-reconstruction':
             wirerecon_defaults = db_schema.WireRecon(
                 scanNumber=WIRERECON_DEFAULTS["scanNumber"],
@@ -229,8 +228,8 @@ def get_peakindexs(path):
 def load_scan_data_from_url(href):
     """
     Load scan data when scan_id is provided in URL query parameter
-    URL format: /create-indexpeaks?scan_id={scan_id}
-    Pooled URL format: /create-indexpeaks?scan_id={(scan_ids)}
+    URL format: /create-wirerecons?scan_id={scan_id}
+    Pooled URL format: /create-wirerecons?scan_id={(scan_ids)}
     """
     if not href:
         raise PreventUpdate
@@ -254,7 +253,7 @@ def load_scan_data_from_url(href):
                 ).all()
 
                 if metadata:
-                    # Create a PeakIndex object with populated defaults from metadata/scan
+                    # Create a WireRecon object with populated defaults from metadata/scan
                     wirerecon_defaults = db_schema.WireRecon(
                         scanNumber=scan_id,
                         # Depth range
@@ -269,7 +268,7 @@ def load_scan_data_from_url(href):
                     # Show success message
                     set_props("alert-scan-loaded", {
                         'is_open': True, 
-                        'children': f'Scan {scan_id} data loaded successfully. Dataset ID: {metadata.dataset_id}, Energy: {metadata.source_energy} {metadata.source_energy_unit}',
+                        'children': f'Scan {scan_id} data loaded successfully. Scan Number: {metadata.dataset_id}, Energy: {metadata.source_energy} {metadata.source_energy_unit}',
                         'color': 'success'
                     })
                 else:

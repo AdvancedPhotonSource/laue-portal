@@ -66,25 +66,25 @@ def _get_recons():
     cols = []
     for col in VISIBLE_COLS:
         field_key = col.key
-        header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
-        
-        col_def = {
-            'headerName': header_name,
-            'field': field_key,
-            'filter': True, 
-            'sortable': True, 
-            'resizable': True,
-            'suppressMenuHide': True
-        }
-
-        if field_key == 'wirerecon_id':
-            col_def['cellRenderer'] = 'WireReconLinkRenderer'
-        elif field_key == 'dataset_id':
-            col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
-        elif field_key == 'scanNumber':
-            col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
-        
         if field_key != 'aperture':
+            header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
+            
+            col_def = {
+                'headerName': header_name,
+                'field': field_key,
+                'filter': True,
+                'sortable': True,
+                'resizable': True,
+                'suppressMenuHide': True
+            }
+
+            if field_key == 'wirerecon_id':
+                col_def['cellRenderer'] = 'WireReconLinkRenderer'
+            elif field_key == 'dataset_id':
+                col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
+            elif field_key == 'scanNumber':
+                col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+            
             cols.append(col_def)
 
     # Add the custom actions column

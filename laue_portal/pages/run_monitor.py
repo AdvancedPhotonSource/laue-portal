@@ -32,19 +32,11 @@ layout = html.Div([
 Callbacks
 =======================
 """
-VISIBLE_COLS = [
+REFERENCE_COLS = [
+    db_schema.Calib.calib_id,
+    db_schema.Recon.recon_id,
     db_schema.WireRecon.wirerecon_id,
-    db_schema.WireRecon.scanNumber,
-    # db_schema.WireRecon.calib_id,
-    db_schema.Catalog.sample_name,
-    db_schema.Catalog.aperture,
-    #db_schema.WireRecon.pxl_recon,
-    db_schema.Job.submit_time,
-    db_schema.Job.start_time,
-    db_schema.Job.finish_time,
-    db_schema.Job.status,
-    db_schema.Job.author,
-    db_schema.Job.notes,
+    db_schema.PeakIndex.peakindex_id,
 ]
 
 CUSTOM_HEADER_NAMES = {
@@ -58,10 +50,7 @@ CUSTOM_HEADER_NAMES = {
 def _get_jobs():
     with Session(db_utils.ENGINE) as session:
         jobs = pd.read_sql(session.query(db_schema.Job,
-                                         db_schema.Calib.calib_id,
-                                         db_schema.Recon.recon_id,
-                                         db_schema.WireRecon.wirerecon_id,
-                                         db_schema.PeakIndex.peakindex_id,
+                                         *REFERENCE_COLS
                                          )
             # .join(db_schema.Catalog, db_schema.WireRecon.scanNumber == db_schema.Catalog.scanNumber)
             .outerjoin(db_schema.Calib, db_schema.Job.job_id == db_schema.Calib.job_id)
@@ -69,10 +58,13 @@ def _get_jobs():
             .outerjoin(db_schema.WireRecon, db_schema.Job.job_id == db_schema.WireRecon.job_id)
             .outerjoin(db_schema.PeakIndex, db_schema.Job.job_id == db_schema.PeakIndex.job_id)
             .statement, session.bind)
+        
+        jobs_table = pd.read_sql(session.query(db_schema.Job)
+            .statement, session.bind)
 
     # Format columns for ag-grid
     cols = []
-    for field_key in jobs.columns: #for col in VISIBLE_COLS:
+    for field_key in jobs_table.columns: #for col in VISIBLE_COLS:
         # field_key = col.key
         header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
         
@@ -85,28 +77,51 @@ def _get_jobs():
             'suppressMenuHide': True
         }
 
-        if field_key == 'wirerecon_id':
-            col_def['cellRenderer'] = 'WireReconLinkRenderer'
+        if field_key == 'job_id':
+            col_def['cellRenderer'] = 'JobIdLinkRenderer'
         elif field_key == 'dataset_id':
             col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
         elif field_key == 'scanNumber':
             col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
         
-        if field_key != 'aperture':
-            cols.append(col_def)
+        cols.append(col_def)
 
     # Add the custom actions column
     cols.append({
         'headerName': 'Actions',
         'field': 'actions',  # This field doesn't need to exist in the data
-        'cellRenderer': 'ActionButtonsRenderer',
+        # 'cellRenderer': 'ActionButtonsRenderer',
         'sortable': False,
         'filter': False,
         'resizable': True, # Or False, depending on preference
         'suppressMenu': True, # Or False
         'width': 200 # Adjusted width for DBC buttons
     })
-    # recons['id'] = recons['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
+
+    # Add combined fields columns
+    col_def = {
+        'headerName': 'Job Reference',
+        'valueGetter': {"function": """ [
+                    'calib_id',
+                    'recon_id',
+                    'wirerecon_id',
+                    'peakindex_id'
+        ];"""},
+        'cellRenderer': 'JobRefsRenderer',
+        'sortable': False,
+        'filter': False,
+        'resizable': True, # Or False, depending on preference
+        'suppressMenu': True, # Or False
+        'width': 200 # Adjusted width for DBC buttons
+    }
+    
+    col_def.update({
+        'filter': True, 
+        'sortable': True, 
+        'resizable': True,
+        'suppressMenuHide': True
+    })
+    cols.insert(1,col_def)
     
     return cols, jobs.to_dict('records')
 
