@@ -8,14 +8,6 @@ import laue_portal.database.db_schema as db_schema
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 import pandas as pd
-import base64
-import yaml
-import datetime
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from pathlib import Path
-import h5py
 import laue_portal.components.navbar as navbar
 from laue_portal.components.recon_form import recon_form, set_recon_form_props
 
@@ -43,54 +35,59 @@ Callbacks
 """
 VISIBLE_COLS = [
     db_schema.Recon.recon_id,
-    db_schema.Recon.date,
-    db_schema.Recon.calib_id,
-    # db_schema.Recon.dataset_id,
     db_schema.Recon.scanNumber,
+    db_schema.Recon.calib_id,
     db_schema.Catalog.sample_name,
     db_schema.Catalog.aperture,
-    db_schema.Recon.notes,
+    #db_schema.Recon.pxl_recon,
+    db_schema.Job.submit_time,
+    db_schema.Job.start_time,
+    db_schema.Job.finish_time,
+    db_schema.Job.status,
+    db_schema.Job.author,
+    db_schema.Job.notes,
 ]
 
 CUSTOM_HEADER_NAMES = {
+    'recon_id': 'Recon ID', #'ReconID',
     'scanNumber': 'Scan ID',
     'calib_id': 'Calibration ID',
-    'dataset_id': 'Dataset ID',
-    'recon_id': 'Recon ID',
-    # Add more custom names here as needed, e.g.:
-    # 'date': 'Date of Scan',
+    #'pxl_recon': 'Pixels'
+    'submit_time': 'Date',
 }
 
 def _get_recons():
     with Session(db_utils.ENGINE) as session:
-        query = session.query(*VISIBLE_COLS).join(
-            db_schema.Catalog, db_schema.Recon.scanNumber == db_schema.Catalog.scanNumber
-        )
-    recons = pd.read_sql(query.statement, session.bind)
+        recons = pd.read_sql(session.query(*VISIBLE_COLS)
+            .join(db_schema.Catalog, db_schema.Recon.scanNumber == db_schema.Catalog.scanNumber)
+            .join(db_schema.Job, db_schema.Recon.job_id == db_schema.Job.job_id)
+            .statement, session.bind)
 
     # Format columns for ag-grid
     cols = []
     for col in VISIBLE_COLS:
         field_key = col.key
-        header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
-        
-        col_def = {
-            'headerName': header_name,
-            'field': field_key,
-            'filter': True, 
-            'sortable': True, 
-            'resizable': True,
-            'suppressMenuHide': True
-        }
-
-        if field_key == 'recon_id':
-            col_def['cellRenderer'] = 'ReconLinkRenderer'
-        elif field_key == 'dataset_id':
-            col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
-        elif field_key == 'scanNumber':
-            col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
-        
         if field_key != 'aperture':
+            header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
+            
+            col_def = {
+                'headerName': header_name,
+                'field': field_key,
+                'filter': True, 
+                'sortable': True, 
+                'resizable': True,
+                'suppressMenuHide': True
+            }
+
+            if field_key == 'recon_id':
+                col_def['cellRenderer'] = 'ReconLinkRenderer'
+            elif field_key == 'dataset_id':
+                col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
+            elif field_key == 'scanNumber':
+                col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+            elif field_key in ['submit_time', 'start_time', 'finish_time']:
+                col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+        
             cols.append(col_def)
 
     # Add the custom actions column

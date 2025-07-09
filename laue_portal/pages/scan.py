@@ -1,8 +1,6 @@
 import dash
-from dash import html, dcc, callback, Input, Output, State
+from dash import html, dcc, callback, Input, Output, State, set_props
 import dash_bootstrap_components as dbc
-from dash import dcc, dash_table
-from dash import set_props
 import dash_ag_grid as dag
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
@@ -455,38 +453,37 @@ Recon Table
 
 VISIBLE_COLS_Recon = [
     db_schema.Recon.recon_id,
-    db_schema.Metadata.user_name, #db_schema.Recon.author,
     #db_schema.Recon.pxl_recon,
-    db_schema.Recon.date,
-    db_schema.Recon.runtime,
-    db_schema.Recon.notes
+    db_schema.Job.submit_time,
+    db_schema.Job.start_time,
+    db_schema.Job.finish_time,
+    db_schema.Job.status,
+    db_schema.Job.author,
+    db_schema.Job.notes,
 ]
 
 CUSTOM_HEADER_NAMES_Recon = {
     'recon_id': 'Recon ID', #'ReconID',
-    'user_name': 'Author',
     #'pxl_recon': 'Pixels'
-    #'': 'Date',
-    'runtime': 'Status',
-    'notes': 'Comment',
+    'submit_time': 'Date',
 }
 
 CUSTOM_COLS_Recon_dict = {
-    2:[
+    1:[
         db_schema.Catalog.aperture, #db_schema.Recon.depth_technique, #presently does not exist
         db_schema.Recon.calib_id, #Calib.calib_id,
     ],
-    3:[#db_schema.Recon
+    2:[#db_schema.Recon
         #db_schema.PeakIndex.scanPointStart,
         #db_schema.PeakIndex.scanPointEnd,
         #db_schema.PeakIndex.filefolder,
     ],
-    4:[
+    3:[
         db_schema.Recon.geo_source_offset,
         db_schema.Recon.geo_source_grid,
     ],
-    5:[
-        db_schema.Metadata.computer_name, #placeholder item
+    4:[
+        db_schema.Job.computer_name, #placeholder item
     ],
 }
 
@@ -494,41 +491,40 @@ ALL_COLS_Recon = VISIBLE_COLS_Recon + [ii for i in CUSTOM_COLS_Recon_dict.values
 
 VISIBLE_COLS_WireRecon = [
     db_schema.WireRecon.wirerecon_id,
-    db_schema.Metadata.user_name, #db_schema.Recon.author,
-    #db_schema.Recon.pxl_recon,
-    db_schema.WireRecon.date,
-    db_schema.WireRecon.runtime,
-    db_schema.WireRecon.notes
+    #db_schema.WireRecon.pxl_recon,
+    db_schema.Job.submit_time,
+    db_schema.Job.start_time,
+    db_schema.Job.finish_time,
+    db_schema.Job.status,
+    db_schema.Job.author,
+    db_schema.Job.notes,
 ]
 
 CUSTOM_HEADER_NAMES_WireRecon = {
-    'wirerecon_id': 'Wire Recon ID', #'ReconID',
-    'user_name': 'Author',
+    'wirerecon_id': 'Recon ID (Wire)', #'Wire Recon ID',
     #'pxl_recon': 'Pixels'
-    #'': 'Date',
-    'runtime': 'Status',
-    'notes': 'Comment',
+    'submit_time': 'Date',
 }
 
 CUSTOM_COLS_WireRecon_dict = {
-    2:[
+    1:[
         db_schema.Catalog.aperture, #db_schema.Recon.depth_technique, #presently does not exist
-        db_schema.WireRecon.calib_id, #Calib.calib_id,
+        # db_schema.WireRecon.calib_id, #Calib.calib_id,
     ],
-    3:[#db_schema.Recon
+    2:[#db_schema.Recon
         #db_schema.PeakIndex.scanPointStart,
         #db_schema.PeakIndex.scanPointEnd,
         #db_schema.PeakIndex.filefolder,
     ],
-    4:[
+    3:[
         # db_schema.Recon.geo_source_offset,
         # db_schema.Recon.geo_source_grid,
         db_schema.WireRecon.depth_start,
         db_schema.WireRecon.depth_end,
         db_schema.WireRecon.depth_resolution,
     ],
-    5:[
-        db_schema.Metadata.computer_name, #placeholder item
+    4:[
+        db_schema.Job.computer_name, #placeholder item
     ],
 }
 
@@ -545,6 +541,7 @@ def _get_scan_recons(scan_id):
                                 .join(db_schema.Metadata.wirerecon_)
                                 # .join(db_schema.Catalog, db_schema.Metadata.scanNumber == db_schema.Catalog.scanNumber)
                                 # .join(db_schema.WireRecon, db_schema.Metadata.scanNumber == db_schema.WireRecon.scanNumber)
+                                .join(db_schema.Job, db_schema.WireRecon.job_id == db_schema.Job.job_id)
                                 .filter(db_schema.Metadata.scanNumber == scan_id).statement, session.bind)
                 
                 # Format columns for ag-grid
@@ -568,6 +565,8 @@ def _get_scan_recons(scan_id):
                         col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
                     elif field_key == 'scanNumber':
                         col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+                    elif field_key in ['submit_time', 'start_time', 'finish_time']:
+                        col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
                     
                     cols.append(col_def)
 
@@ -583,16 +582,16 @@ def _get_scan_recons(scan_id):
                 #     'width': 200 # Adjusted width for DBC buttons
                 # })
 
-                # Add a combined fields columns
-                for col_num in CUSTOM_COLS_Recon_dict.keys():
-                    if col_num == 2:
+                # Add combined fields columns
+                for col_num in CUSTOM_COLS_WireRecon_dict.keys():
+                    if col_num == 1:
                         col_def = {
-                            'headerName': 'Method',
+                            'headerName': 'Calib ID',
                             'valueGetter': {"function":
-                                "params.data.aperture + ', calib: ' + params.data.calib_id" # "'CA, calib: ' + params.data.calib_id"
+                                "params.data.aperture + ': ' + params.data.calib_id"
                             },
                         }
-                    elif col_num == 3:
+                    elif col_num == 2:
                         col_def = {
                             'headerName': 'Points', #'points_to_index'
                             'valueGetter': {"function":
@@ -601,7 +600,7 @@ def _get_scan_recons(scan_id):
                                 # "f'{params.data.scanPointEnd - params.data.scanPointStart} out of 2000'", #len(Path(db_schema.PeakIndex.filefolder).glob("*"))
                             },
                         }
-                    elif col_num == 4:
+                    elif col_num == 3:
                         col_def = {
                             'headerName': 'Depth [µm]', # 'Depth [${\mu}m$]',
                             'valueGetter': {"function":
@@ -610,7 +609,7 @@ def _get_scan_recons(scan_id):
                                 params.data.depth_end"
                             },
                         }
-                    elif col_num == 5:
+                    elif col_num == 4:
                         col_def = {
                             'headerName': 'Pixels',
                             'valueGetter': {"function":
@@ -634,6 +633,7 @@ def _get_scan_recons(scan_id):
                                 .join(db_schema.Metadata.recon_)
                                 # .join(db_schema.Catalog, db_schema.Metadata.scanNumber == db_schema.Catalog.scanNumber)
                                 # .join(db_schema.Recon, db_schema.Metadata.scanNumber == db_schema.Recon.scanNumber)
+                                .join(db_schema.Job, db_schema.Recon.job_id == db_schema.Job.job_id)
                                 .filter(db_schema.Metadata.scanNumber == scan_id).statement, session.bind)
                 # Format columns for ag-grid
                 cols = []
@@ -656,6 +656,8 @@ def _get_scan_recons(scan_id):
                         col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
                     elif field_key == 'scanNumber':
                         col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+                    elif field_key in ['submit_time', 'start_time', 'finish_time']:
+                        col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
                     
                     cols.append(col_def)
 
@@ -768,26 +770,24 @@ Peak Index Table
 VISIBLE_COLS_PeakIndex = [
     db_schema.PeakIndex.peakindex_id,
     db_schema.PeakIndex.recon_id,
-    db_schema.Metadata.user_name,
     # db_schema.PeakIndexResults.structure,
     db_schema.PeakIndex.boxsize,
     db_schema.PeakIndex.threshold,
-    db_schema.PeakIndex.date,
-    db_schema.PeakIndex.runtime,
-    db_schema.PeakIndex.notes,
+    db_schema.Job.submit_time,
+    db_schema.Job.start_time,
+    db_schema.Job.finish_time,
+    db_schema.Job.status,
+    db_schema.Job.author,
+    db_schema.Job.notes,
 ]
 
 CUSTOM_HEADER_NAMES_PeakIndex = {
     'peakindex_id': 'Index ID', #'Peak Index ID',
     'recon_id': 'Recon ID', #'ReconID',
-    'wirerecon_id': 'WireRecnID', #'Wire Recon ID', #'ReconID',
-    'user_name': 'Author',
+    'wirerecon_id': 'Recon ID (Wire)', #'Wire Recon ID',
     #'': 'Points',
     'boxsize': 'Box',
-    #'': 'Threshold',
-    #'': 'Date',
-    'runtime': 'Status',
-    'notes': 'Comment',
+    'submit_time': 'Date',
 }
 
 CUSTOM_COLS_PeakIndex_dict = {
@@ -813,6 +813,7 @@ def _get_scan_peakindexs(scan_id):
                             # .join(db_schema.PeakIndex.peakindexresults_)
                             # .join(db_schema.PeakIndex, db_schema.Metadata.scanNumber == db_schema.PeakIndex.scanNumber)
                             # .join(db_schema.PeakIndexResults, db_schema.PeakIndex.scanNumber == db_schema.PeakIndexResults.scanNumber)
+                            .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
                             .filter(db_schema.Metadata.scanNumber == scan_id).statement, session.bind)
             # Format columns for ag-grid
             cols = []
@@ -839,6 +840,8 @@ def _get_scan_peakindexs(scan_id):
                     col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
                 elif field_key == 'scanNumber':
                     col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+                elif field_key in ['submit_time', 'start_time', 'finish_time']:
+                    col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
                 
                 cols.append(col_def)
 

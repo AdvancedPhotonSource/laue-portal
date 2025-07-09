@@ -13,12 +13,23 @@ import logging
 logger = logging.getLogger(__name__)
 
 try:
-    import laue_portal.recon.analysis_wire_recon as analysis_wire_recon
+    import laue_portal.recon.analysis_recon as analysis_recon
     _ANALYSIS_LIB_AVAILABLE = True
 except ImportError:
-    analysis_wire_recon = None
+    analysis_recon = None
     _ANALYSIS_LIB_AVAILABLE = False
     logger.warning("Wire Reconstruction libraries not installed. Analysis will be skipped.")
+
+JOB_DEFAULTS = {
+    "computer_name": 'example_computer',
+    "status": 0, #pending, running, finished, stopped
+    "priority": 0,
+    "submit_time": datetime.datetime.now(),
+    "start_time": datetime.datetime.now(),
+    "finish_time": datetime.datetime.now(),
+    "author": '',
+    "notes": '',
+}
 
 WIRERECON_DEFAULTS = {
     'scanNumber': 276994,
@@ -128,7 +139,7 @@ Callbacks
     prevent_initial_call=True,
 )
 def submit_config(n,
-    scanNumber,
+    scanNumbers, #Pooled scanNumbers
     
     depth_start,
     depth_end,
@@ -136,44 +147,68 @@ def submit_config(n,
     
 ):
     # TODO: Input validation and reponse
-    
-    wirerecon = db_schema.WireRecon(
-        date=datetime.datetime.now(),
-        commit_id='TEST',
-        calib_id='TEST',
-        runtime='TEST',
-        computer_name='TEST',
-        dataset_id=0,
-        notes='TODO', 
+     for scanNumber in str(scanNumbers).split(','):
 
-        scanNumber=scanNumber,
+        JOB_DEFAULTS.update({'submit_time':datetime.datetime.now()})
+        JOB_DEFAULTS.update({'start_time':datetime.datetime.now()})
+        JOB_DEFAULTS.update({'finish_time':datetime.datetime.now()})
         
-        depth_start=depth_start,
-        depth_end=depth_end,
-        depth_resolution=depth_resolution, #depth_step
-    )
+        job = db_schema.Job(
+            computer_name=JOB_DEFAULTS['computer_name'],
+            status=JOB_DEFAULTS['status'],
+            priority=JOB_DEFAULTS['priority'],
 
-    with Session(db_utils.ENGINE) as session:
-        session.add(wirerecon)
-        # config_dict = db_utils.create_config_obj(wirerecon)
+            submit_time=JOB_DEFAULTS['submit_time'],
+            start_time=JOB_DEFAULTS['start_time'],
+            finish_time=JOB_DEFAULTS['finish_time'],
+            
+            author=JOB_DEFAULTS['author'],
+            notes=JOB_DEFAULTS['notes'],
+        )
 
-        session.commit()
-    
-    set_props("alert-submit", {'is_open': True, 
-                                'children': 'Config Added to Database',
-                                'color': 'success'})
+        with Session(db_utils.ENGINE) as session:
+            
+            session.add(job)
+            job_id = session.query(db_schema.Job).order_by(db_schema.Job.job_id.desc()).first().job_id
+            
+            wirerecon = db_schema.WireRecon(
+                # date=datetime.datetime.now(),
+                # commit_id='TEST',
+                # calib_id='TEST',
+                # runtime='TEST',
+                # computer_name='TEST',
+                # dataset_id=0,
+                # notes='TODO', 
 
-    if _ANALYSIS_LIB_AVAILABLE:
-        pass
-        # analysis_wire_recon.run_analysis(config_dict)
-    else:
-        logger.warning("Skipping reconstruction analysis; libraries not available")
+                scanNumber=int(scanNumber),
+                job_id = job_id,
+                
+                depth_start=depth_start,
+                depth_end=depth_end,
+                depth_resolution=depth_resolution, #depth_step
+            )
+
+        # with Session(db_utils.ENGINE) as session:
+            session.add(wirerecon)
+            # config_dict = db_utils.create_config_obj(wirerecon)
+
+            session.commit()
+        
+        set_props("alert-submit", {'is_open': True, 
+                                    'children': 'Config Added to Database',
+                                    'color': 'success'})
+
+        if _ANALYSIS_LIB_AVAILABLE:
+            pass
+            # analysis_recon.run_analysis(config_dict)
+        else:
+            logger.warning("Skipping reconstruction analysis; libraries not available")
 
 @dash.callback(
     Input('url-create-wirerecon','pathname'),
     prevent_initial_call=True,
 )
-def get_peakindexs(path):
+def get_wirerecons(path):
        if path == '/create-wire-reconstruction':
             wirerecon_defaults = db_schema.WireRecon(
                 scanNumber=WIRERECON_DEFAULTS["scanNumber"],
@@ -193,7 +228,8 @@ def get_peakindexs(path):
 def load_scan_data_from_url(href):
     """
     Load scan data when scan_id is provided in URL query parameter
-    URL format: /create-indexpeaks?scan_id={scan_id}
+    URL format: /create-wirerecons?scan_id={scan_id}
+    Pooled URL format: /create-wirerecons?scan_id={(scan_ids)}
     """
     if not href:
         raise PreventUpdate
@@ -217,7 +253,7 @@ def load_scan_data_from_url(href):
                 ).all()
 
                 if metadata:
-                    # Create a PeakIndex object with populated defaults from metadata/scan
+                    # Create a WireRecon object with populated defaults from metadata/scan
                     wirerecon_defaults = db_schema.WireRecon(
                         scanNumber=scan_id,
                         # Depth range
@@ -232,7 +268,7 @@ def load_scan_data_from_url(href):
                     # Show success message
                     set_props("alert-scan-loaded", {
                         'is_open': True, 
-                        'children': f'Scan {scan_id} data loaded successfully. Dataset ID: {metadata.dataset_id}, Energy: {metadata.source_energy} {metadata.source_energy_unit}',
+                        'children': f'Scan {scan_id} data loaded successfully. Scan Number: {metadata.dataset_id}, Energy: {metadata.source_energy} {metadata.source_energy_unit}',
                         'color': 'success'
                     })
                 else:
@@ -242,10 +278,23 @@ def load_scan_data_from_url(href):
                         'children': f'Scan {scan_id} not found in database',
                         'color': 'warning'
                     })
-                    
-        except Exception as e:
-            set_props("alert-scan-loaded", {
-                'is_open': True, 
-                'children': f'Error loading scan data: {str(e)}',
-                'color': 'danger'
-            })
+
+        except Exception:
+            try:
+                wirerecon_defaults = db_schema.WireRecon(
+                    scanNumber=str(scan_id).replace('$','').replace(',',', '),
+                    # Depth range
+                    depth_start=WIRERECON_DEFAULTS["depth_start"],
+                    depth_end=WIRERECON_DEFAULTS["depth_end"],
+                    depth_resolution=WIRERECON_DEFAULTS["depth_resolution"],
+                )
+                
+                # Populate the form with the defaults
+                set_wire_recon_form_props(wirerecon_defaults)#,read_only=True) 
+                
+            except Exception as e:
+                set_props("alert-scan-loaded", {
+                    'is_open': True, 
+                    'children': f'Error loading scan data: {str(e)}',
+                    'color': 'danger'
+                })

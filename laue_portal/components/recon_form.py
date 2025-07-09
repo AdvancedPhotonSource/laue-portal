@@ -258,8 +258,7 @@ def set_recon_form_props(recon, read_only=False):
     set_props("depth_start", {'value':recon.geo_source_grid[0], 'readonly':read_only})
     set_props("depth_end", {'value':recon.geo_source_grid[1], 'readonly':read_only})
     set_props("depth_step", {'value':recon.geo_source_grid[2], 'readonly':read_only})
-    set_props("recon_name", {'value':recon.notes, 'readonly':read_only})
-
+    
     set_props("file_path", {'value':recon.file_path, 'readonly':read_only})
     set_props("file_output", {'value':recon.file_output, 'readonly':read_only})
     set_props("data_stacked", {'value':recon.file_stacked, 'readonly':read_only})

@@ -1,5 +1,5 @@
 import dash
-from dash import html, dcc, Input, Output, State, set_props, ctx
+from dash import html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
 import dash_ag_grid as dag
 from dash.exceptions import PreventUpdate
@@ -15,11 +15,47 @@ dash.register_page(__name__, path='/')
 layout = html.Div([
         navbar.navbar,
         dcc.Location(id='url', refresh=False),
+        
+        # Secondary action bar aligned to right
+        dbc.Row([
+            dbc.Col([
+                dbc.Nav([
+                    dbc.NavItem(
+                        dbc.NavLink(
+                            "New Recon",
+                            href="/create-wire-reconstruction",
+                            active=False,
+                            id="create-wire-recons"
+                        )
+                    ),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("New Recon with selected (only 1 sel)", href="#", active=False)),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("Stop ALL", href="#", active=False)),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("Stop Selected", href="#", active=False)),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("Set high Priority for selected (only 1 sel)", href="#", active=False)),
+                ],
+                className="bg-light px-2 py-2 d-flex justify-content-end w-100")
+            ], width=12)
+        ], className="mb-3 mt-0"),
+
         dbc.Container(fluid=True, className="p-0", children=[ 
             dag.AgGrid(
                 id='metadata-table',
                 columnSize="responsiveSizeToFit",
-                dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight',},
+                defaultColDef={
+                    "filter": True,
+                    "checkboxSelection": {
+                        "function": 'params.column == params.columnApi.getAllDisplayedColumns()[0]'
+                    },
+                    "headerCheckboxSelection": {
+                        "function": 'params.column == params.columnApi.getAllDisplayedColumns()[0]'
+                    },
+            },
+                dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight',
+                                 "rowSelection": 'multiple', "suppressRowClickSelection": True, "animateRows": False},
                 style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                 className="ag-theme-alpine" 
             )
@@ -37,17 +73,15 @@ VISIBLE_COLS = [
     db_schema.Catalog.sample_name,
     db_schema.Catalog.aperture,
     db_schema.Metadata.user_name,
-    db_schema.Metadata.date,
-    db_schema.Metadata.notes,
+    db_schema.Metadata.time,
+    db_schema.Catalog.notes,
 ]
 
 CUSTOM_HEADER_NAMES = {
     'scanNumber': 'Scan ID',
     'user_name': 'User',
-    'dataset_id': 'Dataset ID',
     'scan_dim': 'Scan Dim',
-    # Add more custom names here as needed, e.g.:
-    # 'date': 'Date of Scan',
+    'time': 'Date',
 }
 
 def _get_metadatas():
@@ -83,6 +117,8 @@ def _get_metadatas():
 
         if field_key == 'scanNumber':
             col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+        elif field_key == 'time':
+            col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
         
         cols.append(col_def)
     
@@ -125,3 +161,16 @@ def get_metadatas(path):
         return cols, metadatas_records
     else:
         raise PreventUpdate
+
+
+@dash.callback(
+    Output('create-wire-recons', 'href'),
+    Input('metadata-table','selectedRows'),
+    State('create-wire-recons', 'href'),
+    prevent_initial_call=True,
+)
+def selected_scans_href(rows,href,id_query="?scan_id=$"):
+    href = href.split(id_query)[0]
+    if rows:
+        href += "?scan_id=$" + ','.join([str(row['scanNumber']) for row in rows]) 
+    return href

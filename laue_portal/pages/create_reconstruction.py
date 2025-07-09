@@ -20,6 +20,21 @@ except ImportError:
     _ANALYSIS_LIB_AVAILABLE = False
     logger.warning("CA Reconstruction libraries not installed. Analysis will be skipped.")
 
+JOB_DEFAULTS = {
+    "computer_name": 'example_computer',
+    "status": 0, #pending, running, finished, stopped
+    "priority": 0,
+    "submit_time": datetime.datetime.now(),
+    "start_time": datetime.datetime.now(),
+    "finish_time": datetime.datetime.now(),
+    "author": '',
+    "notes": '',
+}
+
+RECON_DEFAULTS = {
+    'calib_id': 0,
+}
+
 dash.register_page(__name__)
 
 layout = dbc.Container(
@@ -82,13 +97,13 @@ def upload_config(contents):
         decoded = base64.b64decode(content_string)
         config = yaml.safe_load(decoded)
         recon_row = db_utils.import_recon_row(config)
-        recon_row.date = datetime.datetime.now()
-        recon_row.commit_id = ''
-        recon_row.calib_id = ''
-        recon_row.runtime = ''
-        recon_row.computer_name = ''
-        recon_row.dataset_id = 0
-        recon_row.notes = ''
+        # recon_row.date = datetime.datetime.now()
+        # recon_row.commit_id = ''
+        # recon_row.calib_id = ''
+        # recon_row.runtime = ''
+        # recon_row.computer_name = ''
+        # recon_row.dataset_id = 0
+        # recon_row.notes = ''
 
         set_props("alert-upload", {'is_open': True, 
                                     'children': 'Config uploaded successfully',
@@ -180,7 +195,8 @@ def upload_config(contents):
     prevent_initial_call=True,
 )
 def submit_config(n,
-    scanNumber,
+    scanNumbers, #Pooled scanNumbers
+
     frame_start,
     frame_end,
     x_start,
@@ -255,93 +271,119 @@ def submit_config(n,
     
 ):
     # TODO: Input validation and reponse
-    
-    recon = db_schema.Recon(
-        date=datetime.datetime.now(),
-        commit_id='TEST',
-        calib_id='TEST',
-        runtime='TEST',
-        computer_name='TEST',
-        dataset_id=0,
-        notes='TODO', 
+     for scanNumber in str(scanNumbers).split(','):
 
-        scanNumber=scanNumber,
-        file_path=file_path,
-        file_output=file_output,
-        file_stacked=data_stacked,
-        file_range=[frame_start, frame_end],
-        file_threshold=0,
-        file_frame=[x_start, x_end, y_start, y_end],
-        #file_offset=file_offset,
-        file_ext='h5', #'TODO',
-        file_h5_key=h5_key,
+        JOB_DEFAULTS.update({'submit_time':datetime.datetime.now()})
+        JOB_DEFAULTS.update({'start_time':datetime.datetime.now()})
+        JOB_DEFAULTS.update({'finish_time':datetime.datetime.now()})
         
-        comp_server='TODO',
-        comp_workers=0,
-        comp_usegpu=True,
-        comp_batch_size=0,
-        
-        geo_mask_path=mask_path,
-        geo_mask_reversed=mask_reversed,
-        geo_mask_bitsizes=[bitsize_0, bitsize_1],
-        geo_mask_thickness=thickness,
-        geo_mask_resolution=resolution,
-        geo_mask_smoothness=0,
-        geo_mask_alpha=0,
-        geo_mask_widening=widening,
-        geo_mask_pad=pad,
-        geo_mask_stretch=stretch,
-        geo_mask_shift=shift,
+        job = db_schema.Job(
+            computer_name=JOB_DEFAULTS['computer_name'],
+            status=JOB_DEFAULTS['status'],
+            priority=JOB_DEFAULTS['priority'],
 
-        geo_mask_focus_cenx=cenx,
-        geo_mask_focus_dist=ceny, 
-        geo_mask_focus_anglez=anglez,
-        geo_mask_focus_angley=angley,
-        geo_mask_focus_anglex=anglex,
-        geo_mask_focus_cenz=cenz,
+            submit_time=JOB_DEFAULTS['submit_time'],
+            start_time=JOB_DEFAULTS['start_time'],
+            finish_time=JOB_DEFAULTS['finish_time'],
+            
+            author=JOB_DEFAULTS['author'],
+            notes=JOB_DEFAULTS['notes'],
+        )
 
-        geo_mask_cal_id=0,
-        geo_mask_cal_path='TODO',
+        with Session(db_utils.ENGINE) as session:
+            
+            session.add(job)
+            job_id = session.query(db_schema.Job).order_by(db_schema.Job.job_id.desc()).first().job_id
+            
+            recon = db_schema.Recon(
+                # date=datetime.datetime.now(),
+                # commit_id='TEST',
+                # calib_id='TEST',
+                # runtime='TEST',
+                # computer_name='TEST',
+                # dataset_id=0,
+                # notes='TODO', 
 
-        geo_scanner_step=step,
-        geo_scanner_rot=[mot_rot_a, mot_rot_b, mot_rot_c],
-        geo_scanner_axis=[mot_axis_x, mot_axis_y, mot_axis_z],
+                scanNumber=scanNumber,
+                calib_id = RECON_DEFAULTS['calib_id'],
+                job_id = job_id,
 
-        geo_detector_shape=[pixels_x, pixels_y],
-        geo_detector_size=[size_x, size_y],
-        geo_detector_rot=[det_rot_a, det_rot_b, det_rot_c],
-        geo_detector_pos=[det_pos_x, det_pos_y, det_pos_z],
-        geo_source_offset=source_offset,
-        geo_source_grid=[depth_start, depth_end, depth_step],
+                file_path=file_path,
+                file_output=file_output,
+                file_stacked=data_stacked,
+                file_range=[frame_start, frame_end],
+                file_threshold=0,
+                file_frame=[x_start, x_end, y_start, y_end],
+                #file_offset=file_offset,
+                file_ext='h5', #'TODO',
+                file_h5_key=h5_key,
+                
+                comp_server='TODO',
+                comp_workers=0,
+                comp_usegpu=True,
+                comp_batch_size=0,
+                
+                geo_mask_path=mask_path,
+                geo_mask_reversed=mask_reversed,
+                geo_mask_bitsizes=[bitsize_0, bitsize_1],
+                geo_mask_thickness=thickness,
+                geo_mask_resolution=resolution,
+                geo_mask_smoothness=0,
+                geo_mask_alpha=0,
+                geo_mask_widening=widening,
+                geo_mask_pad=pad,
+                geo_mask_stretch=stretch,
+                geo_mask_shift=shift,
 
-        algo_iter=iters,
-        algo_pos_method=pos_method,
-        algo_pos_regpar=pos_regpar,
-        algo_pos_init=pos_init,
-        algo_sig_recon=recon_sig,
-        algo_sig_method=sig_method,
-        algo_sig_order=sig_order,
-        algo_sig_scale=sig_scale,
-        algo_sig_init_maxsize=sig_maxsize,
-        algo_sig_init_avgsize=sig_avgsize,
-        algo_sig_init_atol=sig_atol,
-        algo_ene_recon=recon_ene,
-        algo_ene_exact=exact_ene,
-        algo_ene_method=ene_method,
-        algo_ene_range=[ene_min, ene_max, ene_step],
-    )
+                geo_mask_focus_cenx=cenx,
+                geo_mask_focus_dist=ceny, 
+                geo_mask_focus_anglez=anglez,
+                geo_mask_focus_angley=angley,
+                geo_mask_focus_anglex=anglex,
+                geo_mask_focus_cenz=cenz,
 
-    with Session(db_utils.ENGINE) as session:
-        session.add(recon)
-        config_dict = db_utils.create_config_obj(recon)
+                geo_mask_cal_id=0,
+                geo_mask_cal_path='TODO',
 
-        session.commit()
-    
-    set_props("alert-submit", {'is_open': True, 
-                                'children': 'Config Added to Database',
-                                'color': 'success'})
+                geo_scanner_step=step,
+                geo_scanner_rot=[mot_rot_a, mot_rot_b, mot_rot_c],
+                geo_scanner_axis=[mot_axis_x, mot_axis_y, mot_axis_z],
 
-    if _ANALYSIS_LIB_AVAILABLE:
-        pass #analysis_recon.run_analysis(config_dict)
-    else:
-        logger.warning("Skipping reconstruction analysis; libraries not available")
+                geo_detector_shape=[pixels_x, pixels_y],
+                geo_detector_size=[size_x, size_y],
+                geo_detector_rot=[det_rot_a, det_rot_b, det_rot_c],
+                geo_detector_pos=[det_pos_x, det_pos_y, det_pos_z],
+                geo_source_offset=source_offset,
+                geo_source_grid=[depth_start, depth_end, depth_step],
+
+                algo_iter=iters,
+                algo_pos_method=pos_method,
+                algo_pos_regpar=pos_regpar,
+                algo_pos_init=pos_init,
+                algo_sig_recon=recon_sig,
+                algo_sig_method=sig_method,
+                algo_sig_order=sig_order,
+                algo_sig_scale=sig_scale,
+                algo_sig_init_maxsize=sig_maxsize,
+                algo_sig_init_avgsize=sig_avgsize,
+                algo_sig_init_atol=sig_atol,
+                algo_ene_recon=recon_ene,
+                algo_ene_exact=exact_ene,
+                algo_ene_method=ene_method,
+                algo_ene_range=[ene_min, ene_max, ene_step],
+            )
+
+        # with Session(db_utils.ENGINE) as session:
+            session.add(recon)
+            config_dict = db_utils.create_config_obj(recon)
+
+            session.commit()
+            
+            set_props("alert-submit", {'is_open': True, 
+                                        'children': 'Config Added to Database',
+                                        'color': 'success'})
+
+            if _ANALYSIS_LIB_AVAILABLE:
+                pass #analysis_recon.run_analysis(config_dict)
+            else:
+                logger.warning("Skipping reconstruction analysis; libraries not available")

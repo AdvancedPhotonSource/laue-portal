@@ -1,6 +1,7 @@
 import dash_bootstrap_components as dbc
 from dash import html, set_props
 from laue_portal.components.form_base import _stack, _field, _ckbx
+from datetime import datetime
 
 
 metadata_form = dbc.Row(
@@ -233,7 +234,11 @@ def set_metadata_form_props(metadata, scans, read_only=True):
     set_props("scanNumber", {'value':metadata.scanNumber, 'readonly':read_only})
 
     set_props("time_epoch", {'value':metadata.time_epoch, 'readonly':read_only})
-    set_props("time", {'value':metadata.time, 'readonly':read_only})
+    # Format datetime for display
+    time_value = metadata.time
+    if isinstance(time_value, datetime):
+        time_value = time_value.strftime('%Y-%m-%d, %H:%M:%S')
+    set_props("time", {'value':time_value, 'readonly':read_only})
     set_props("user_name", {'value':metadata.user_name, 'readonly':read_only})
     set_props("source_beamBad", {'value':metadata.source_beamBad, 'readonly':read_only})
     set_props("source_CCDshutter", {'value':metadata.source_CCDshutter, 'readonly':read_only})
@@ -360,9 +365,13 @@ def set_metadata_form_props(metadata, scans, read_only=True):
 def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
     set_props('ScanID_print', {'children':[metadata.scanNumber]})
     set_props('User_print', {'children':[metadata.user_name]})
-    set_props('Date_print', {'children':[metadata.time]})
+    # Format datetime for display
+    time_value = metadata.time
+    if isinstance(time_value, datetime):
+        time_value = time_value.strftime('%Y-%m-%d, %H:%M:%S')
+    set_props('Date_print', {'children':[time_value]})
     set_props('ScanType_print', {'children':[f"{len([i for i,scan in enumerate(scans)])}D"]})
-    set_props('Technique_print', {'children':[catalog.aperture]}) #"depth"
+    set_props('Technique_print', {'children':[catalog.aperture.title()]}) #"depth"
     set_props('Sample_print', {'children':[catalog.sample_name]}) #"Si"
     set_props('Comment_print', {'children':["submit indexing"]})
 # def set_scaninfo_form_props(metadata, scans, read_only=True):

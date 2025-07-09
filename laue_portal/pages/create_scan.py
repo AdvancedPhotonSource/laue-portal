@@ -19,8 +19,9 @@ CATALOG_DEFAULTS = {#temporary
     'outputFolder':'example/output/folder',
     'geoFile':'example_geo_file',
 
-    'aperture':'wire',
+    'aperture':{'options':'wire'},
     'sample_name':'Si',
+    'notes':'',
 }
 
 dash.register_page(__name__)
@@ -233,7 +234,10 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
             
         except Exception as e:
             # Close modal and show error
-            return False, True, f'Import failed! Error: {e}', 'danger'
+            if "UNIQUE constraint failed: metadata.scanNumber" in f'{e}':
+                return False, True, f"Import failed! Scan {log['scanNumber']} already exists.", 'danger'
+            else:
+                return False, True, f'Import failed! Error: {e}', 'danger'
     
     # Default case
     return False, False, '', 'info'
