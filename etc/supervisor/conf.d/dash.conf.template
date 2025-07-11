@@ -1,0 +1,12 @@
+[program:dash]
+command=bash -c 'eval "$({{CONDA_BASE}}/bin/conda shell.bash hook)" && conda activate {{CONDA_ENV}} && python lau_dash.py'
+directory={{SCRIPT_DIR}}
+autostart=true
+autorestart=true
+stdout_logfile={{SUPERVISOR_DIR}}/logs/dash.log
+stderr_logfile={{SUPERVISOR_DIR}}/logs/dash_err.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+stderr_logfile_maxbytes=10MB
+stderr_logfile_backups=5
+environment=HOME="%(ENV_HOME)s",USER="%(ENV_USER)s"

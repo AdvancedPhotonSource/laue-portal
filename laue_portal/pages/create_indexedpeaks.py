@@ -15,6 +15,15 @@ from dash.exceptions import PreventUpdate
 import logging
 logger = logging.getLogger(__name__)
 import os
+from rq import Queue
+from redis import Redis
+
+# Tell RQ what Redis connection to use
+redis_conn = Redis()
+q = Queue(connection=redis_conn)  # no args implies the default queue
+# Dummy function for redis
+def run(p0,p1):
+    return p0,p1
 
 try:
     import laueindexing.pyLaueGo as pyLaueGo
@@ -368,6 +377,11 @@ def submit_config(n,
             pyLaueGo = pyLaueGo(config_dict)
             pyLaueGo.run(0, 1)
             """
+            #Example redis implementation
+            # Delay execution of count_words_at_url('http://nvie.com')
+            job = q.enqueue(run, 0, 1)
+            print(job.return_value)   # => None  # Changed to job.return_value() in RQ >= 1.12.0
+
 
 @dash.callback(
     Input('url-create-indexedpeaks', 'href'),
