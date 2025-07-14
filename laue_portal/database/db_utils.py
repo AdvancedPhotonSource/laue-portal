@@ -3,6 +3,7 @@ import config
 import xml.etree.ElementTree as ET
 import sqlalchemy
 from sqlalchemy import event
+from datetime import datetime
 
 ENGINE = sqlalchemy.create_engine(f'sqlite:///{config.db_file}')
 
@@ -151,6 +152,42 @@ def parse_metadata(xml,xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog",sc
 
     return log_dict, dims_dict_list
 
+def convert_time_string_to_datetime(time_string):
+    """
+    Convert time string to datetime object.
+    Handles various time formats commonly found in the XML data.
+    """
+    if not time_string or time_string == '':
+        return None
+    
+    # Common time formats in the XML data
+    time_formats = [
+        '%Y-%m-%dT%H:%M:%S',  # ISO format: 2023-02-01T18:46:06
+        '%Y-%m-%d %H:%M:%S',  # Alternative format
+        '%Y-%m-%dT%H:%M:%S.%f',  # With microseconds
+    ]
+    
+    for fmt in time_formats:
+        try:
+            return datetime.strptime(time_string, fmt)
+        except ValueError:
+            continue
+    
+    # If none of the formats work, raise an error
+    raise ValueError(f"Unable to parse time string: {time_string}")
+
+def convert_epoch_string_to_int(epoch_string):
+    """
+    Convert epoch time string to integer.
+    """
+    if not epoch_string or epoch_string == '' or epoch_string is None:
+        return None
+    
+    try:
+        return int(epoch_string)
+    except ValueError:
+        return None
+
 def import_metadata_row(metadata_object):
     """
     Reads a yaml file and creates a new Metadata ORM object with 
@@ -159,8 +196,8 @@ def import_metadata_row(metadata_object):
 
     metadata_row = db_schema.Metadata(
         scanNumber=metadata_object['scanNumber'],
-        time_epoch=metadata_object['time_epoch'],
-        time=metadata_object['time'],
+        time_epoch=convert_epoch_string_to_int(metadata_object['time_epoch']),
+        time=convert_time_string_to_datetime(metadata_object['time']),
         user_name=metadata_object['user_name'],
         source_beamBad=metadata_object['source_beamBad'],
         source_CCDshutter=metadata_object['source_CCDshutter'],
@@ -211,7 +248,7 @@ def import_metadata_row(metadata_object):
         # scan_detectors=metadata_object['scan_detectors'],
         mda_file=metadata_object['mda_file'],
         scanEnd_abort=metadata_object['scanEnd_abort'],
-        scanEnd_time_epoch=metadata_object['scanEnd_time_epoch'],
+        scanEnd_time_epoch=convert_epoch_string_to_int(metadata_object['scanEnd_time_epoch']),
         scanEnd_time=metadata_object['scanEnd_time'],
         scanEnd_scanDuration_unit=metadata_object['scanEnd_scanDuration_unit'],
         scanEnd_scanDuration=metadata_object['scanEnd_scanDuration'],
