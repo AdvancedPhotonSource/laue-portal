@@ -48,7 +48,9 @@ fi
 # Process Redis configuration (when template exists)
 if [ -f "$SUPERVISOR_DIR/conf.d/redis.conf.template" ]; then
     echo "  - Configuring Redis..."
-    sed -e "s|{{SCRIPT_DIR}}|$SCRIPT_DIR|g" \
+    sed -e "s|{{CONDA_ENV}}|$CONDA_ENV|g" \
+        -e "s|{{CONDA_BASE}}|$CONDA_BASE|g" \
+        -e "s|{{SCRIPT_DIR}}|$SCRIPT_DIR|g" \
         -e "s|{{SUPERVISOR_DIR}}|$SUPERVISOR_DIR|g" \
         "$SUPERVISOR_DIR/conf.d/redis.conf.template" > "$SUPERVISOR_DIR/conf.d/redis.conf"
 fi

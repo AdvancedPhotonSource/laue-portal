@@ -9,4 +9,3 @@ stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=5
 stderr_logfile_maxbytes=10MB
 stderr_logfile_backups=5
-environment=HOME="%(ENV_HOME)s",USER="%(ENV_USER)s"
