@@ -5,6 +5,7 @@ import dash_ag_grid as dag
 from dash.exceptions import PreventUpdate
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
+from laue_portal.processing.redis_utils import STATUS_MAPPING
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 import pandas as pd 
@@ -19,7 +20,7 @@ layout = html.Div([
             dag.AgGrid(
                 id='job-table',
                 columnSize="responsiveSizeToFit",
-                dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight'},
+                dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight', "rowHeight": 32},
                 style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                 className="ag-theme-alpine"
             )
@@ -57,9 +58,11 @@ def _get_jobs():
             .outerjoin(db_schema.Recon, db_schema.Job.job_id == db_schema.Recon.job_id)
             .outerjoin(db_schema.WireRecon, db_schema.Job.job_id == db_schema.WireRecon.job_id)
             .outerjoin(db_schema.PeakIndex, db_schema.Job.job_id == db_schema.PeakIndex.job_id)
+            .order_by(db_schema.Job.job_id.desc())
             .statement, session.bind)
         
         jobs_table = pd.read_sql(session.query(db_schema.Job)
+            .order_by(db_schema.Job.job_id.desc())
             .statement, session.bind)
 
     # Format columns for ag-grid
@@ -85,6 +88,8 @@ def _get_jobs():
             col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
         elif field_key in ['submit_time', 'start_time', 'finish_time']:
             col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+        elif field_key == 'status':
+            col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
         
         cols.append(col_def)
 

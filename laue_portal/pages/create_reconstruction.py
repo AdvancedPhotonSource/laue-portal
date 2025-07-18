@@ -11,14 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 import laue_portal.components.navbar as navbar
 from laue_portal.components.recon_form import recon_form, set_recon_form_props
-
-try:
-    import laue_portal.recon.analysis_recon as analysis_recon
-    _ANALYSIS_LIB_AVAILABLE = True
-except ImportError:
-    analysis_recon = None
-    _ANALYSIS_LIB_AVAILABLE = False
-    logger.warning("CA Reconstruction libraries not installed. Analysis will be skipped.")
+from laue_portal.processing.redis_utils import enqueue_reconstruction
 
 JOB_DEFAULTS = {
     "computer_name": 'example_computer',
@@ -41,21 +34,17 @@ layout = dbc.Container(
     [html.Div([
         navbar.navbar,
         dbc.Alert(
-            "CA Reconstruction libraries not installed. Dry runs only.",
-            id="alert-lib-warning",
-            dismissable=True,
-            is_open=not _ANALYSIS_LIB_AVAILABLE,
-            color="warning",
-        ),
-        dbc.Alert(
-            "Hello! I am an alert",
             id="alert-upload",
             dismissable=True,
             is_open=False,
         ),
         dbc.Alert(
-            "Hello! I am an alert",
             id="alert-submit",
+            dismissable=True,
+            is_open=False,
+        ),
+        dbc.Alert(
+            id="alert-submit-job",
             dismissable=True,
             is_open=False,
         ),
@@ -383,7 +372,16 @@ def submit_config(n,
                                         'children': 'Config Added to Database',
                                         'color': 'success'})
 
-            if _ANALYSIS_LIB_AVAILABLE:
-                pass #analysis_recon.run_analysis(config_dict)
-            else:
-                logger.warning("Skipping reconstruction analysis; libraries not available")
+            # Enqueue the job to Redis
+            try:
+                rq_job_id = enqueue_reconstruction(job_id, config_dict)
+                logger.info(f"Job {job_id} enqueued with RQ ID: {rq_job_id}")
+                
+                set_props("alert-submit-job", {'is_open': True, 
+                                               'children': f'Job {job_id} submitted to queue',
+                                               'color': 'info'})
+            except Exception as e:
+                logger.error(f"Failed to enqueue job: {e}")
+                set_props("alert-submit-job", {'is_open': True, 
+                                               'children': f'Failed to queue job: {str(e)}',
+                                               'color': 'danger'})

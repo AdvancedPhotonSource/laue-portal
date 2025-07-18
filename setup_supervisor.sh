@@ -14,7 +14,8 @@ if [ $# -eq 0 ]; then
     echo ""
     echo "This script configures all supervisor-managed services:"
     echo "  - Dash web application"
-    echo "  - Redis (when added later)"
+    echo "  - Redis"
+    echo "  - RQ Worker (job processor)"
     exit 1
 fi
 
@@ -53,6 +54,16 @@ if [ -f "$SUPERVISOR_DIR/conf.d/redis.conf.template" ]; then
         -e "s|{{SCRIPT_DIR}}|$SCRIPT_DIR|g" \
         -e "s|{{SUPERVISOR_DIR}}|$SUPERVISOR_DIR|g" \
         "$SUPERVISOR_DIR/conf.d/redis.conf.template" > "$SUPERVISOR_DIR/conf.d/redis.conf"
+fi
+
+# Process RQ Worker configuration (when template exists)
+if [ -f "$SUPERVISOR_DIR/conf.d/rq_worker.conf.template" ]; then
+    echo "  - Configuring RQ Worker..."
+    sed -e "s|{{CONDA_ENV}}|$CONDA_ENV|g" \
+        -e "s|{{CONDA_BASE}}|$CONDA_BASE|g" \
+        -e "s|{{SCRIPT_DIR}}|$SCRIPT_DIR|g" \
+        -e "s|{{SUPERVISOR_DIR}}|$SUPERVISOR_DIR|g" \
+        "$SUPERVISOR_DIR/conf.d/rq_worker.conf.template" > "$SUPERVISOR_DIR/conf.d/rq_worker.conf"
 fi
 
 # Future: Add more services here as needed

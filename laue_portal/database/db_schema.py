@@ -172,7 +172,7 @@ class Catalog(Base):
     filefolder: Mapped[str] = mapped_column(String) #infile
     filenamePrefix: Mapped[str] = mapped_column(String) #infile
     outputFolder: Mapped[str] = mapped_column(String) #outfile
-    geoFile: Mapped[str] = mapped_column(String) #geofile
+    geoFile: Mapped[str] = mapped_column(String, nullable=True) #geofile
     
     aperture: Mapped[str] = mapped_column(String)
     sample_name: Mapped[str] = mapped_column(String, nullable=True)

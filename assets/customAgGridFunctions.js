@@ -120,6 +120,29 @@ dagcomponentfuncs.JobRefsRenderer = function (props) {
     return React.createElement('span', null, job_refs);
 };
 
+dagcomponentfuncs.StatusRenderer = function (props) {
+    // Status mapping
+    const statusMapping = {
+        0: { text: "Queued", color: "warning" },
+        1: { text: "Running", color: "info" },
+        2: { text: "Finished", color: "success" },
+        3: { text: "Failed", color: "danger" },
+        4: { text: "Cancelled", color: "secondary" }
+    };
+    
+    const statusInfo = statusMapping[props.value] || { text: `Unknown (${props.value})`, color: "secondary" };
+    
+    // Create a Bootstrap badge
+    return React.createElement(
+        window.dash_bootstrap_components.Badge,
+        {
+            color: statusInfo.color,
+            className: 'text-white'
+        },
+        statusInfo.text
+    );
+};
+
 // dagcomponentfuncs.ActionButtonsRenderer = function (props) {
 //     const { data } = props; // data contains the row data
 

@@ -1,0 +1,13 @@
+[program:rq_worker]
+command={{CONDA_BASE}}/envs/{{CONDA_ENV}}/bin/python -m laue_portal.processing.worker
+directory={{SCRIPT_DIR}}
+autostart=true
+autorestart=true
+stdout_logfile={{SUPERVISOR_DIR}}/logs/rq_worker_%(process_num)02d.log
+stderr_logfile={{SUPERVISOR_DIR}}/logs/rq_worker_%(process_num)02d_err.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+stderr_logfile_maxbytes=10MB
+stderr_logfile_backups=5
+numprocs=2
+process_name=%(program_name)s_%(process_num)02d
