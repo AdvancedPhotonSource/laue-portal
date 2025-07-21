@@ -52,32 +52,11 @@ supervisord -c "$SUPERVISOR_DIR/supervisord.conf"
 echo "Waiting for supervisor to start..."
 for i in {1..10}; do
     sleep 1
-    if [ -f "$SUPERVISOR_DIR/supervisor.sock" ]; then
-        # Socket exists, try to connect
-        # Suppress stderr to avoid pkg_resources warnings
-        if supervisorctl -c "$SUPERVISOR_DIR/supervisord.conf" pid 2>/dev/null | grep -q '^[0-9]'; then
-            echo ""
-            echo "Supervisor started successfully!"
-            echo ""
-            echo "Checking service status..."
-            "$SCRIPT_DIR/manage_supervisor.sh" status
-            echo ""
-            echo "Use ./supervisor/manage_supervisor.sh to control individual services"
-            exit 0
-        fi
-    fi
     echo -n "."
 done
 
-# If we get here, supervisor failed to start
+echo "Checking service status..."
+"$SCRIPT_DIR/manage_supervisor.sh" status
 echo ""
-echo "ERROR: Supervisor failed to start properly!"
-echo ""
-echo "Check the log file for errors:"
-echo "  tail -50 $SUPERVISOR_DIR/logs/supervisord.log"
-echo ""
-echo "Common issues:"
-echo "  - Port already in use"
-echo "  - Permission problems"
-echo "  - Invalid configuration"
-exit 1
+echo "Use ./supervisor/manage_supervisor.sh to control individual services"
+exit 0

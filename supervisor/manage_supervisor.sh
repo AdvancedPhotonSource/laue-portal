@@ -8,8 +8,8 @@ SUPERVISOR_DIR="$SCRIPT_DIR"
 
 # Try to connect to supervisor directly
 # This is more reliable than checking for socket file existence
-# Suppress stderr to avoid pkg_resources warnings, but check if we get a valid PID
-if ! supervisorctl -c "$SUPERVISOR_DIR/supervisord.conf" pid 2>/dev/null | grep -q '^[0-9]'; then
+PID_OUTPUT=$(supervisorctl -c "$SUPERVISOR_DIR/supervisord.conf" pid 2>/dev/null)
+if ! [[ "$PID_OUTPUT" =~ ^[0-9]+$ ]]; then
     echo "Error: Cannot connect to supervisor!"
     echo ""
     
