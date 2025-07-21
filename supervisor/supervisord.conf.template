@@ -1,0 +1,69 @@
+# Supervisor configuration for Laue Portal
+# This template is processed by setup_supervisor.sh
+
+[unix_http_server]
+file=%(here)s/supervisor.sock
+chmod=0700
+
+[supervisord]
+logfile=%(here)s/logs/supervisord.log
+logfile_maxbytes=50MB
+logfile_backups=10
+loglevel=info
+pidfile=%(here)s/supervisord.pid
+nodaemon=false
+minfds=1024
+minprocs=200
+childlogdir=%(here)s/logs
+
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+
+[supervisorctl]
+serverurl=unix://%(here)s/supervisor.sock
+
+# ===== SERVICES =====
+
+# Dash Web Application
+[program:dash]
+command={{PYTHON_BIN}} lau_dash.py
+directory={{PROJECT_DIR}}
+autostart=true
+autorestart=true
+redirect_stderr=true
+stdout_logfile=%(here)s/logs/%(program_name)s.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+priority=200
+
+# Redis Server (optional - can be commented out if using system Redis)
+[program:redis]
+command={{REDIS_BIN}} %(here)s/redis.conf
+directory={{PROJECT_DIR}}
+autostart=true
+autorestart=true
+redirect_stderr=true
+stdout_logfile=%(here)s/logs/%(program_name)s.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+priority=100
+
+# RQ Worker for background job processing
+[program:rq_worker]
+command={{PYTHON_BIN}} -m laue_portal.processing.worker
+directory={{PROJECT_DIR}}
+autostart=true
+autorestart=true
+redirect_stderr=true
+stdout_logfile=%(here)s/logs/%(program_name)s.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+priority=300
+# Start with 1 worker, increase if needed
+numprocs=1
+process_name=%(program_name)s_%(process_num)02d
+
+# Group all Laue Portal services
+[group:laue-portal]
+programs=dash,redis,rq_worker
+priority=999
