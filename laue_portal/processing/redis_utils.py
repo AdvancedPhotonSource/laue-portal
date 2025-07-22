@@ -14,6 +14,7 @@ import json
 import time
 from laue_portal.database import db_utils, db_schema
 from sqlalchemy.orm import Session
+from sqlalchemy.inspection import inspect
 
 # Import Laue Analysis functions
 from laue_portal.recon import analysis_recon
@@ -42,15 +43,18 @@ STATUS_REVERSE_MAPPING = {v: k for k, v in STATUS_MAPPING.items()}
 
 
 # Generic helper for enqueueing jobs
-def enqueue_job(job_id: int, job_type: str, execute_func, priority: int = 0, *args, **kwargs) -> str:
+def enqueue_job(job_id: int, job_type: str, execute_func, priority: int = 0, 
+                depends_on=None, table=db_schema.Job, *args, **kwargs) -> str:
     """
     Generic function to enqueue any job type.
     
     Args:
-        job_id: Database job ID
+        job_id: Database job ID (can be Job.job_id or SubJob.subjob_id)
         job_type: Type of job (e.g., 'wire_reconstruction', 'reconstruction', 'peak_indexing')
         execute_func: The execution function to call
         priority: Job priority (higher numbers = higher priority, default: 0)
+        depends_on: Optional RQ job ID or Job object to depend on
+        table: Database table class (db_schema.Job or db_schema.SubJob)
         *args, **kwargs: Arguments to pass to the execution function
     
     Returns:
@@ -61,10 +65,11 @@ def enqueue_job(job_id: int, job_type: str, execute_func, priority: int = 0, *ar
         'db_job_id': job_id,
         'job_type': job_type,
         'priority': priority,
+        'table': table.__tablename__,
         'enqueued_at': datetime.now().isoformat()
     }
     
-    # Enqueue the job with priority
+    # Enqueue the job with priority and optional dependency
     rq_job = job_queue.enqueue(
         execute_func,
         job_id,  # First parameter for all execute functions
@@ -73,6 +78,7 @@ def enqueue_job(job_id: int, job_type: str, execute_func, priority: int = 0, *ar
         job_id=f"{job_type}_{job_id}",
         meta=job_meta,
         priority=priority,  # Add priority parameter
+        depends_on=depends_on,  # Add dependency support
         result_ttl=86400,  # Keep result for 24 hours
         failure_ttl=86400  # Keep failed job info for 24 hours
     )
@@ -81,7 +87,11 @@ def enqueue_job(job_id: int, job_type: str, execute_func, priority: int = 0, *ar
     
     # Update job status in database
     with Session(db_utils.ENGINE) as session:
-        job = session.query(db_schema.Job).filter(db_schema.Job.job_id == job_id).first()
+        # Get the primary key column dynamically
+        mapper = inspect(table)
+        pk_col = list(mapper.primary_key)[0]  # Get first primary key column
+        # Query using the primary key
+        job = session.query(table).filter(pk_col == job_id).first()
         if job:
             job.status = STATUS_REVERSE_MAPPING["Queued"]
             session.commit()
@@ -93,7 +103,8 @@ def enqueue_wire_reconstruction(job_id: int, input_file: str, output_file: str,
                                geometry_file: str, depth_range: tuple, 
                                resolution: float = 1.0, priority: int = 0, **kwargs) -> str:
     """
-    Enqueue a wire reconstruction job.
+    Enqueue a wire reconstruction batch job.
+    Always expects subjobs to exist for the given job_id.
     
     Args:
         job_id: Database job ID
@@ -118,9 +129,9 @@ def enqueue_wire_reconstruction(job_id: int, input_file: str, output_file: str,
             - wire_depths_file: Optional[str] - Path to wire depths file
     
     Returns:
-        RQ job ID
+        RQ job ID of the batch coordinator
     """
-    return enqueue_job(
+    return _enqueue_batch(
         job_id,
         'wire_reconstruction',
         execute_wire_reconstruction_job,
@@ -136,7 +147,8 @@ def enqueue_wire_reconstruction(job_id: int, input_file: str, output_file: str,
 
 def enqueue_reconstruction(job_id: int, config_dict: Dict[str, Any], priority: int = 0) -> str:
     """
-    Enqueue a reconstruction job (CA reconstruction).
+    Enqueue a reconstruction batch job (CA reconstruction).
+    Always expects subjobs to exist for the given job_id.
     
     Args:
         job_id: Database job ID
@@ -144,9 +156,9 @@ def enqueue_reconstruction(job_id: int, config_dict: Dict[str, Any], priority: i
         priority: Job priority (higher numbers = higher priority, default: 0)
     
     Returns:
-        RQ job ID
+        RQ job ID of the batch coordinator
     """
-    return enqueue_job(
+    return _enqueue_batch(
         job_id,
         'reconstruction',
         execute_reconstruction_job,
@@ -356,21 +368,155 @@ def publish_job_update(job_id: int, status: str, message: str = None):
     redis_conn.publish('laue:job_updates', json.dumps(update_data))
 
 
+# Generic batch handler
+def _enqueue_batch(job_id: int, job_type: str, execute_func, priority: int = 0, *args, **kwargs) -> str:
+    """
+    Generic batch handler that enqueues subjobs in parallel with a coordinator.
+    
+    Args:
+        job_id: Database job ID (the main/batch job)
+        job_type: Type of job (e.g., 'wire_reconstruction', 'reconstruction')
+        execute_func: The execution function to call for each subjob
+        priority: Job priority
+        *args, **kwargs: Arguments to pass to the execution function
+    
+    Returns:
+        RQ job ID of the batch coordinator
+    """
+    # Query for subjobs
+    with Session(db_utils.ENGINE) as session:
+        subjobs = session.query(db_schema.SubJob).filter(
+            db_schema.SubJob.job_id == job_id
+        ).all()
+        
+        if not subjobs:
+            raise ValueError(f"No subjobs found for job_id {job_id}. "
+                           f"{job_type} requires subjobs to be created first.")
+    
+    rq_job_ids = []
+    
+    # Enqueue each subjob in parallel (no dependencies between them)
+    for subjob in subjobs:
+        rq_job_id = enqueue_job(
+            subjob.subjob_id,
+            job_type,
+            execute_func,
+            priority,
+            None,  # No dependencies - run in parallel
+            db_schema.SubJob,  # Specify SubJob table
+            *args,
+            **kwargs
+        )
+        rq_job_ids.append(rq_job_id)
+    
+    # Enqueue coordinator that depends on all subjobs
+    coordinator_id = enqueue_batch_coordinator(
+        job_id=job_id,
+        depends_on=rq_job_ids,  # Depends on ALL subjobs
+        priority=priority
+    )
+    
+    logger.info(f"Enqueued batch {job_type} job {job_id} with {len(subjobs)} parallel subjobs")
+    return coordinator_id
+
+
+def enqueue_batch_coordinator(job_id: int, depends_on=None, priority: int = 0) -> str:
+    """
+    Enqueue a batch coordinator job that updates the main job status
+    based on subjob completion.
+    
+    Args:
+        job_id: Database job ID (the batch job)
+        depends_on: RQ job(s) to depend on (can be a list)
+        priority: Job priority
+    
+    Returns:
+        RQ job ID of the coordinator
+    """
+    return enqueue_job(
+        job_id,
+        'batch_coordinator',
+        execute_batch_coordinator,
+        priority,
+        depends_on,
+        db_schema.Job  # Coordinator updates the main Job
+    )
+
+
+def execute_batch_coordinator(job_id: int):
+    """
+    Execute batch coordinator logic.
+    Updates the main job status based on subjob statuses.
+    """
+    try:
+        with Session(db_utils.ENGINE) as session:
+            # Query for all subjobs of this job
+            subjobs = session.query(db_schema.SubJob).filter(
+                db_schema.SubJob.job_id == job_id
+            ).all()
+            
+            if not subjobs:
+                logger.error(f"No subjobs found for job {job_id} in batch coordinator")
+                return
+            
+            all_finished = all(s.status == STATUS_REVERSE_MAPPING["Finished"] for s in subjobs)
+            any_failed = any(s.status == STATUS_REVERSE_MAPPING["Failed"] for s in subjobs)
+            
+            # Update job status
+            job = session.query(db_schema.Job).filter(
+                db_schema.Job.job_id == job_id
+            ).first()
+            
+            if job:
+                if all_finished:
+                    job.status = STATUS_REVERSE_MAPPING["Finished"]
+                    message = f"All {len(subjobs)} subjobs completed successfully"
+                elif any_failed:
+                    job.status = STATUS_REVERSE_MAPPING["Failed"]
+                    failed_count = sum(1 for s in subjobs if s.status == STATUS_REVERSE_MAPPING["Failed"])
+                    message = f"{failed_count} of {len(subjobs)} subjobs failed"
+                else:
+                    # This shouldn't happen if dependencies work correctly
+                    job.status = STATUS_REVERSE_MAPPING["Failed"]
+                    message = "Batch completed with unknown status"
+                
+                job.finish_time = datetime.now()
+                if job.notes:
+                    job.notes += f"\n{message}"
+                else:
+                    job.notes = message
+                
+                session.commit()
+                
+                publish_job_update(job_id, 'batch_completed', message)
+                logger.info(f"Batch job {job_id} completed: {message}")
+                
+    except Exception as e:
+        logger.error(f"Error in batch coordinator for job {job_id}: {e}")
+        raise
+
+
 # Helper function that wraps job execution with status updates
-def execute_with_status_updates(job_id: int, job_type: str, job_func, *args, **kwargs):
+def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_schema.Job, *args, **kwargs):
     """
     Execute a job function with automatic status updates.
     
     Args:
-        job_id: Database job ID
+        job_id: Database job ID (can be Job.job_id or SubJob.subjob_id)
         job_type: Type of job (for logging)
         job_func: The actual job function to execute
+        table: Database table class (db_schema.Job or db_schema.SubJob)
         *args, **kwargs: Arguments to pass to job_func
     """
+    # Get the primary key column dynamically
+    mapper = inspect(table)
+    pk_col = list(mapper.primary_key)[0]  # Get first primary key column
+    
     try:
         # Update job status to running
         with Session(db_utils.ENGINE) as session:
-            job = session.query(db_schema.Job).filter(db_schema.Job.job_id == job_id).first()
+            # Query using the primary key
+            job = session.query(table).filter(pk_col == job_id).first()
             if job:
                 job.status = STATUS_REVERSE_MAPPING["Running"]
                 job.start_time = datetime.now()
@@ -383,7 +529,8 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, *args, **k
         
         # Update job status to finished
         with Session(db_utils.ENGINE) as session:
-            job = session.query(db_schema.Job).filter(db_schema.Job.job_id == job_id).first()
+            # Query using the primary key
+            job = session.query(table).filter(pk_col == job_id).first()
             if job:
                 job.status = STATUS_REVERSE_MAPPING["Finished"]
                 job.finish_time = datetime.now()
@@ -395,11 +542,13 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, *args, **k
     except Exception as e:
         # Update job status to failed
         with Session(db_utils.ENGINE) as session:
-            job = session.query(db_schema.Job).filter(db_schema.Job.job_id == job_id).first()
+            # Query using the primary key
+            job = session.query(table).filter(pk_col == job_id).first()
             if job:
                 job.status = STATUS_REVERSE_MAPPING["Failed"]
                 job.finish_time = datetime.now()
-                job.notes = f"Error: {str(e)}"
+                if hasattr(job, 'notes'):  # Job has notes field, SubJob doesn't
+                    job.notes = f"Error: {str(e)}"
                 session.commit()
         
         publish_job_update(job_id, 'failed', f'{job_type} failed: {str(e)}')
@@ -408,7 +557,7 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, *args, **k
 
 # Job execution functions that will be called by RQ workers
 def execute_reconstruction_job(job_id: int, config_dict: Dict[str, Any]):
-    """Execute a reconstruction job."""
+    """Execute a reconstruction job (subjob)."""
     def _do_reconstruction():
         # return analysis_recon.run_analysis(config_dict)
         # Testing: sleep for 5 seconds instead
@@ -418,14 +567,15 @@ def execute_reconstruction_job(job_id: int, config_dict: Dict[str, Any]):
     return execute_with_status_updates(
         job_id,
         'Reconstruction analysis',
-        _do_reconstruction
+        _do_reconstruction,
+        db_schema.SubJob  # This is called for subjobs
     )
 
 
 def execute_wire_reconstruction_job(job_id: int, input_file: str, output_file: str,
                                    geometry_file: str, depth_range: tuple,
                                    resolution: float, **kwargs):
-    """Execute a wire reconstruction job."""
+    """Execute a wire reconstruction job (subjob)."""
     def _do_wire_reconstruction():
         # return wire_reconstruct(input_file, output_file, geometry_file, depth_range, resolution, **kwargs)
         # Testing: sleep for 5 seconds instead
@@ -435,7 +585,8 @@ def execute_wire_reconstruction_job(job_id: int, input_file: str, output_file: s
     return execute_with_status_updates(
         job_id,
         'Wire reconstruction',
-        _do_wire_reconstruction
+        _do_wire_reconstruction,
+        db_schema.SubJob  # This is called for subjobs
     )
 
 
@@ -450,5 +601,6 @@ def execute_peak_indexing_job(job_id: int, config_dict: Dict[str, Any]):
     return execute_with_status_updates(
         job_id,
         'Peak indexing',
-        _do_peak_indexing
+        _do_peak_indexing,
+        db_schema.Job  # This is called for regular jobs (default)
     )

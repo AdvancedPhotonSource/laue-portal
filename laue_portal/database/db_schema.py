@@ -185,7 +185,7 @@ class Job(Base):
     job_id: Mapped[int] = mapped_column(primary_key=True)
 
     computer_name: Mapped[str] = mapped_column(String)
-    status: Mapped[int] = mapped_column(Integer) #pending, running, finished, stopped
+    status: Mapped[int] = mapped_column(Integer) #Queued, Running, Finished, Failed, Cancelled
     priority: Mapped[int] = mapped_column(Integer)
     submit_time: Mapped[DateTime] = mapped_column(DateTime) #date
     start_time: Mapped[DateTime] = mapped_column(DateTime)
@@ -194,10 +194,22 @@ class Job(Base):
     notes: Mapped[str] = mapped_column(String, nullable=True)
 
     # Parent of:
+    subjob_: Mapped["SubJob"] = relationship(backref="job")
     calib_: Mapped["Calib"] = relationship(backref="job")
     recon_: Mapped["Recon"] = relationship(backref="job")
     wirerecon_: Mapped["WireRecon"] = relationship(backref="job")
     peakindex_: Mapped["PeakIndex"] = relationship(backref="job")
+
+
+class SubJob(Base):
+    __tablename__ = "subjob"
+
+    subjob_id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"))
+
+    status: Mapped[int] = mapped_column(Integer) #Queued, Running, Finished, Failed, Cancelled
+    start_time: Mapped[DateTime] = mapped_column(DateTime)
+    finish_time: Mapped[DateTime] = mapped_column(DateTime)
 
 
 class Calib(Base):
