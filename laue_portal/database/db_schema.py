@@ -187,11 +187,12 @@ class Job(Base):
     computer_name: Mapped[str] = mapped_column(String)
     status: Mapped[int] = mapped_column(Integer) #Queued, Running, Finished, Failed, Cancelled
     priority: Mapped[int] = mapped_column(Integer)
-    submit_time: Mapped[DateTime] = mapped_column(DateTime) #date
-    start_time: Mapped[DateTime] = mapped_column(DateTime)
-    finish_time: Mapped[DateTime] = mapped_column(DateTime)
+    submit_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    start_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    finish_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
     author: Mapped[str] = mapped_column(String, nullable=True)
     notes: Mapped[str] = mapped_column(String, nullable=True)
+    messages: Mapped[str] = mapped_column(String, nullable=True)
 
     # Parent of:
     subjob_: Mapped["SubJob"] = relationship(backref="job")
@@ -208,8 +209,10 @@ class SubJob(Base):
     job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"))
 
     status: Mapped[int] = mapped_column(Integer) #Queued, Running, Finished, Failed, Cancelled
-    start_time: Mapped[DateTime] = mapped_column(DateTime)
-    finish_time: Mapped[DateTime] = mapped_column(DateTime)
+    start_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    finish_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    messages: Mapped[str] = mapped_column(String, nullable=True)
+
 
 
 class Calib(Base):

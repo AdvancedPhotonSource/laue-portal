@@ -5,11 +5,12 @@ import dash_ag_grid as dag
 from dash.exceptions import PreventUpdate
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
-from laue_portal.processing.redis_utils import STATUS_MAPPING
-from sqlalchemy import select
+from laue_portal.processing.redis_utils import STATUS_MAPPING, STATUS_REVERSE_MAPPING
+from sqlalchemy import select, func, case
 from sqlalchemy.orm import Session
 import pandas as pd 
 import laue_portal.components.navbar as navbar
+from datetime import datetime
 
 dash.register_page(__name__)
 

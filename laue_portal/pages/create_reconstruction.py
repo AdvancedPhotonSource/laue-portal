@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 import laue_portal.components.navbar as navbar
 from laue_portal.components.recon_form import recon_form, set_recon_form_props
-from laue_portal.processing.redis_utils import enqueue_reconstruction
+from laue_portal.processing.redis_utils import enqueue_reconstruction, STATUS_REVERSE_MAPPING
 
 JOB_DEFAULTS = {
     "computer_name": 'example_computer',
@@ -282,7 +282,16 @@ def submit_config(n,
         with Session(db_utils.ENGINE) as session:
             
             session.add(job)
-            job_id = session.query(db_schema.Job).order_by(db_schema.Job.job_id.desc()).first().job_id
+            session.flush()  # Get job_id without committing
+            job_id = job.job_id
+            
+            # Create 6 subjobs for parallel processing
+            for i in range(6):
+                subjob = db_schema.SubJob(
+                    job_id=job_id,
+                    status=STATUS_REVERSE_MAPPING["Queued"]
+                )
+                session.add(subjob)
             
             recon = db_schema.Recon(
                 # date=datetime.datetime.now(),

@@ -99,6 +99,114 @@ def enqueue_job(job_id: int, job_type: str, execute_func, priority: int = 0,
     return rq_job.id
 
 
+def execute_batch_coordinator(job_id: int):
+    """
+    Execute batch coordinator logic.
+    Updates the main job status based on subjob statuses.
+    """
+    try:
+        with Session(db_utils.ENGINE) as session:
+            # Query for all subjobs of this job
+            subjobs = session.query(db_schema.SubJob).filter(
+                db_schema.SubJob.job_id == job_id
+            ).all()
+            
+            if not subjobs:
+                logger.error(f"No subjobs found for job {job_id} in batch coordinator")
+                return
+            
+            all_finished = all(s.status == STATUS_REVERSE_MAPPING["Finished"] for s in subjobs)
+            any_failed = any(s.status == STATUS_REVERSE_MAPPING["Failed"] for s in subjobs)
+            
+            # Update job status
+            job = session.query(db_schema.Job).filter(
+                db_schema.Job.job_id == job_id
+            ).first()
+            
+            if job:
+                if all_finished:
+                    job.status = STATUS_REVERSE_MAPPING["Finished"]
+                    message = f"All {len(subjobs)} subjobs completed successfully"
+                elif any_failed:
+                    job.status = STATUS_REVERSE_MAPPING["Failed"]
+                    failed_count = sum(1 for s in subjobs if s.status == STATUS_REVERSE_MAPPING["Failed"])
+                    message = f"{failed_count} of {len(subjobs)} subjobs failed"
+                else:
+                    # This shouldn't happen if dependencies work correctly
+                    job.status = STATUS_REVERSE_MAPPING["Failed"]
+                    message = "Batch completed with unknown status"
+                
+                job.finish_time = datetime.now()
+                if job.messages:
+                    job.messages += f"\n{message}"
+                else:
+                    job.messages = message
+                
+                session.commit()
+                
+                publish_job_update(job_id, 'batch_completed', message)
+                logger.info(f"Batch job {job_id} completed: {message}")
+                
+    except Exception as e:
+        logger.error(f"Error in batch coordinator for job {job_id}: {e}")
+        raise
+
+
+# Generic batch handler
+def _enqueue_batch(job_id: int, job_type: str, execute_func, priority: int = 0, *args, **kwargs) -> str:
+    """
+    Generic batch handler that enqueues subjobs in parallel with a coordinator.
+    
+    Args:
+        job_id: Database job ID (the main/batch job)
+        job_type: Type of job (e.g., 'wire_reconstruction', 'reconstruction')
+        execute_func: The execution function to call for each subjob
+        priority: Job priority
+        *args, **kwargs: Arguments to pass to the execution function
+    
+    Returns:
+        RQ job ID of the batch coordinator
+    """
+    # Query for subjobs
+    with Session(db_utils.ENGINE) as session:
+        subjobs = session.query(db_schema.SubJob).filter(
+            db_schema.SubJob.job_id == job_id
+        ).all()
+        
+        if not subjobs:
+            raise ValueError(f"No subjobs found for job_id {job_id}. "
+                           f"{job_type} requires subjobs to be created first.")
+    
+    rq_job_ids = []
+    
+    # Enqueue each subjob in parallel (no dependencies between them)
+    for subjob in subjobs:
+        rq_job_id = enqueue_job(
+            subjob.subjob_id,
+            job_type,
+            execute_func,
+            priority,
+            None,  # No dependencies - run in parallel
+            db_schema.SubJob,  # Specify SubJob table
+            *args,
+            **kwargs
+        )
+        rq_job_ids.append(rq_job_id)
+    
+    # Enqueue coordinator that depends on all subjobs
+    coordinator_id = enqueue_job(
+        job_id,
+        'batch_coordinator',
+        execute_batch_coordinator,
+        priority,
+        rq_job_ids,  # Depends on ALL subjobs
+        db_schema.Job  # Coordinator updates the main Job
+    )
+    
+    logger.info(f"Enqueued batch {job_type} job {job_id} with {len(subjobs)} parallel subjobs")
+    return coordinator_id
+
+
 def enqueue_wire_reconstruction(job_id: int, input_file: str, output_file: str,
                                geometry_file: str, depth_range: tuple, 
                                resolution: float = 1.0, priority: int = 0, **kwargs) -> str:
@@ -310,10 +418,10 @@ def cancel_job(rq_job_id: str) -> bool:
                 if db_job:
                     db_job.status = STATUS_REVERSE_MAPPING["Cancelled"]
                     db_job.finish_time = datetime.now()
-                    if not db_job.notes:
-                        db_job.notes = "Job cancelled by user"
+                    if not db_job.messages:
+                        db_job.messages = "Job cancelled by user"
                     else:
-                        db_job.notes += "\nJob cancelled by user"
+                        db_job.messages += "\nJob cancelled by user"
                     session.commit()
             
             publish_job_update(db_job_id, 'cancelled', 'Job cancelled by user')
@@ -368,134 +476,6 @@ def publish_job_update(job_id: int, status: str, message: str = None):
     redis_conn.publish('laue:job_updates', json.dumps(update_data))
 
 
-# Generic batch handler
-def _enqueue_batch(job_id: int, job_type: str, execute_func, priority: int = 0, *args, **kwargs) -> str:
-    """
-    Generic batch handler that enqueues subjobs in parallel with a coordinator.
-    
-    Args:
-        job_id: Database job ID (the main/batch job)
-        job_type: Type of job (e.g., 'wire_reconstruction', 'reconstruction')
-        execute_func: The execution function to call for each subjob
-        priority: Job priority
-        *args, **kwargs: Arguments to pass to the execution function
-    
-    Returns:
-        RQ job ID of the batch coordinator
-    """
-    # Query for subjobs
-    with Session(db_utils.ENGINE) as session:
-        subjobs = session.query(db_schema.SubJob).filter(
-            db_schema.SubJob.job_id == job_id
-        ).all()
-        
-        if not subjobs:
-            raise ValueError(f"No subjobs found for job_id {job_id}. "
-                           f"{job_type} requires subjobs to be created first.")
-    
-    rq_job_ids = []
-    
-    # Enqueue each subjob in parallel (no dependencies between them)
-    for subjob in subjobs:
-        rq_job_id = enqueue_job(
-            subjob.subjob_id,
-            job_type,
-            execute_func,
-            priority,
-            None,  # No dependencies - run in parallel
-            db_schema.SubJob,  # Specify SubJob table
-            *args,
-            **kwargs
-        )
-        rq_job_ids.append(rq_job_id)
-    
-    # Enqueue coordinator that depends on all subjobs
-    coordinator_id = enqueue_batch_coordinator(
-        job_id=job_id,
-        depends_on=rq_job_ids,  # Depends on ALL subjobs
-        priority=priority
-    )
-    
-    logger.info(f"Enqueued batch {job_type} job {job_id} with {len(subjobs)} parallel subjobs")
-    return coordinator_id
-
-
-def enqueue_batch_coordinator(job_id: int, depends_on=None, priority: int = 0) -> str:
-    """
-    Enqueue a batch coordinator job that updates the main job status
-    based on subjob completion.
-    
-    Args:
-        job_id: Database job ID (the batch job)
-        depends_on: RQ job(s) to depend on (can be a list)
-        priority: Job priority
-    
-    Returns:
-        RQ job ID of the coordinator
-    """
-    return enqueue_job(
-        job_id,
-        'batch_coordinator',
-        execute_batch_coordinator,
-        priority,
-        depends_on,
-        db_schema.Job  # Coordinator updates the main Job
-    )
-
-
-def execute_batch_coordinator(job_id: int):
-    """
-    Execute batch coordinator logic.
-    Updates the main job status based on subjob statuses.
-    """
-    try:
-        with Session(db_utils.ENGINE) as session:
-            # Query for all subjobs of this job
-            subjobs = session.query(db_schema.SubJob).filter(
-                db_schema.SubJob.job_id == job_id
-            ).all()
-            
-            if not subjobs:
-                logger.error(f"No subjobs found for job {job_id} in batch coordinator")
-                return
-            
-            all_finished = all(s.status == STATUS_REVERSE_MAPPING["Finished"] for s in subjobs)
-            any_failed = any(s.status == STATUS_REVERSE_MAPPING["Failed"] for s in subjobs)
-            
-            # Update job status
-            job = session.query(db_schema.Job).filter(
-                db_schema.Job.job_id == job_id
-            ).first()
-            
-            if job:
-                if all_finished:
-                    job.status = STATUS_REVERSE_MAPPING["Finished"]
-                    message = f"All {len(subjobs)} subjobs completed successfully"
-                elif any_failed:
-                    job.status = STATUS_REVERSE_MAPPING["Failed"]
-                    failed_count = sum(1 for s in subjobs if s.status == STATUS_REVERSE_MAPPING["Failed"])
-                    message = f"{failed_count} of {len(subjobs)} subjobs failed"
-                else:
-                    # This shouldn't happen if dependencies work correctly
-                    job.status = STATUS_REVERSE_MAPPING["Failed"]
-                    message = "Batch completed with unknown status"
-                
-                job.finish_time = datetime.now()
-                if job.notes:
-                    job.notes += f"\n{message}"
-                else:
-                    job.notes = message
-                
-                session.commit()
-                
-                publish_job_update(job_id, 'batch_completed', message)
-                logger.info(f"Batch job {job_id} completed: {message}")
-                
-    except Exception as e:
-        logger.error(f"Error in batch coordinator for job {job_id}: {e}")
-        raise
-
-
 # Helper function that wraps job execution with status updates
 def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_schema.Job, *args, **kwargs):
     """
@@ -547,8 +527,8 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
             if job:
                 job.status = STATUS_REVERSE_MAPPING["Failed"]
                 job.finish_time = datetime.now()
-                if hasattr(job, 'notes'):  # Job has notes field, SubJob doesn't
-                    job.notes = f"Error: {str(e)}"
+                if hasattr(job, 'messages'):  # Both Job and SubJob have messages field
+                    job.messages = f"Error: {str(e)}"
                 session.commit()
         
         publish_job_update(job_id, 'failed', f'{job_type} failed: {str(e)}')
