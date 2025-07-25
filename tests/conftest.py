@@ -32,15 +32,8 @@ def create_test_metadata(scan_number: int = 1) -> Any:
     
     return db_schema.Metadata(
         scanNumber=scan_number,
-        date=datetime.datetime.now(),
-        commit_id='TEST_COMMIT',
-        calib_id=1,
-        runtime='TEST_RUNTIME',
-        computer_name='TEST_COMPUTER',
-        dataset_id=1,
-        notes='Test metadata for smoke test',
         time_epoch=1640995200,
-        time='2022-01-01T00:00:00',
+        time=datetime.datetime(2022, 1, 1, 0, 0, 0),
         user_name='test_user',
         source_beamBad='false',
         source_CCDshutter='open',
@@ -87,13 +80,8 @@ def create_test_recon(scan_number: int = 1) -> Any:
     
     return db_schema.Recon(
         scanNumber=scan_number,
-        date=datetime.datetime.now(),
-        commit_id='TEST_COMMIT',
         calib_id=1,
-        runtime='TEST_RUNTIME',
-        computer_name='TEST_COMPUTER',
-        dataset_id=1,
-        notes='Test reconstruction for smoke test',
+        job_id=1,
         
         # Required file parameters
         file_path='/test/path',
@@ -248,13 +236,7 @@ def create_test_peakindex(scan_number: int = 1, recon_id: Optional[int] = None) 
     
     return db_schema.PeakIndex(
         scanNumber=scan_number,
-        date=datetime.datetime.now(),
-        commit_id='TEST_COMMIT',
-        calib_id=1,
-        runtime='TEST_RUNTIME',
-        computer_name='TEST_COMPUTER',
-        dataset_id=1,
-        notes='Test peak index for smoke test',
+        job_id=scan_number,
         recon_id=recon_id,  # This will be set after recon is saved if None
         
         # Required peak search and indexing parameters
@@ -300,6 +282,31 @@ def create_test_peakindex(scan_number: int = 1, recon_id: Optional[int] = None) 
     )
 
 
+def create_test_job(scan_number: int = 1) -> Any:
+    """
+    Factory function to create a test Job record.
+    
+    Args:
+        scan_number: The scan number for the job record (used as job_id)
+        
+    Returns:
+        db_schema.Job: A test job record
+    """
+    import laue_portal.database.db_schema as db_schema
+    
+    return db_schema.Job(
+        job_id=scan_number,
+        computer_name='TEST_COMPUTER',
+        status=1,  # Running
+        priority=5,
+        submit_time=datetime.datetime(2022, 1, 1, 0, 0, 0),
+        start_time=datetime.datetime(2022, 1, 1, 0, 1, 0),
+        finish_time=datetime.datetime(2022, 1, 1, 0, 2, 0),
+        author='test_user',
+        notes='Test job for smoke test'
+    )
+
+
 def create_test_database_with_entities(
     entities: List[str], 
     scan_number: int = 1
@@ -335,7 +342,8 @@ def create_test_database_with_entities(
             'recon': create_test_recon,
             'catalog': create_test_catalog,
             'scan': create_test_scan,
-            'peakindex': create_test_peakindex
+            'peakindex': create_test_peakindex,
+            'job': create_test_job
         }
         
         for entity_type in entities:
@@ -351,18 +359,18 @@ def create_test_database_with_entities(
 @pytest.fixture
 def test_database():
     """
-    Pytest fixture that creates a temporary database with metadata, recon, and catalog data.
+    Pytest fixture that creates a temporary database with metadata, job, recon, and catalog data.
     Compatible with existing test_recon_table.py tests.
     
     Returns:
-        tuple: (test_engine, test_db_file, test_metadata, test_recon, test_catalog)
+        tuple: (test_engine, test_db_file, test_metadata, test_job, test_recon, test_catalog)
     """
     test_engine, test_db_file, entities = create_test_database_with_entities(
-        ['metadata', 'recon', 'catalog']
+        ['metadata', 'job', 'recon', 'catalog']
     )
     
     try:
-        yield test_engine, test_db_file, entities[0], entities[1], entities[2]
+        yield test_engine, test_db_file, entities[0], entities[1], entities[2], entities[3]
     finally:
         # Clean up temporary database file
         if os.path.exists(test_db_file):
@@ -393,18 +401,18 @@ def test_metadata_database():
 @pytest.fixture
 def test_peakindex_database():
     """
-    Pytest fixture that creates a temporary database with metadata, recon, and peakindex data.
+    Pytest fixture that creates a temporary database with metadata, job, recon, and peakindex data.
     Compatible with existing test_peakindex_retrievers.py tests.
     
     Returns:
-        tuple: (test_engine, test_db_file, test_metadata, test_recon, test_peakindex)
+        tuple: (test_engine, test_db_file, test_metadata, test_job, test_recon, test_peakindex)
     """
     test_engine, test_db_file, entities = create_test_database_with_entities(
-        ['metadata', 'recon', 'peakindex']
+        ['metadata', 'job', 'recon', 'peakindex']
     )
     
     try:
-        yield test_engine, test_db_file, entities[0], entities[1], entities[2]
+        yield test_engine, test_db_file, entities[0], entities[1], entities[2], entities[3]
     finally:
         # Clean up temporary database file
         if os.path.exists(test_db_file):

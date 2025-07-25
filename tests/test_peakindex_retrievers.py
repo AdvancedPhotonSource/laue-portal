@@ -21,7 +21,7 @@ class TestPeakIndexRetrievers:
     
     def test_get_peakindexs_function_smoke(self, test_peakindex_database):
         """Test that _get_peakindexs function can execute without errors."""
-        test_engine, test_db_file, test_metadata, test_recon, test_peakindex = test_peakindex_database
+        test_engine, test_db_file, test_metadata, test_job, test_recon, test_peakindex = test_peakindex_database
         
         # Mock the config to use test database
         with patch('config.db_file', test_db_file):
@@ -36,6 +36,7 @@ class TestPeakIndexRetrievers:
                 # Add test data to the database
                 with Session(test_engine) as session:
                     session.add(test_metadata)
+                    session.add(test_job)
                     session.add(test_recon)
                     session.commit()
                     
@@ -64,13 +65,13 @@ class TestPeakIndexRetrievers:
             for peakindex in peakindexs:
                 assert isinstance(peakindex, dict), "Each peakindex should be a dictionary"
                 # Check for some expected fields based on VISIBLE_COLS (note: dataset_id is commented out in VISIBLE_COLS)
-                expected_fields = ['peakindex_id', 'date', 'scanNumber', 'recon_id', 'wirerecon_id', 'notes']
+                expected_fields = ['peakindex_id', 'submit_time', 'scanNumber', 'recon_id', 'wirerecon_id', 'notes']
                 for field in expected_fields:
                     assert field in peakindex, f"PeakIndex record should contain field: {field}"
 
     def test_get_peakindexs_callback_smoke(self, test_peakindex_database):
         """Test that get_peakindexs callback function can execute without errors."""
-        test_engine, test_db_file, test_metadata, test_recon, test_peakindex = test_peakindex_database
+        test_engine, test_db_file, test_metadata, test_job, test_recon, test_peakindex = test_peakindex_database
         
         # Mock the config to use test database
         with patch('config.db_file', test_db_file):
@@ -85,6 +86,7 @@ class TestPeakIndexRetrievers:
                 # Add test data to the database
                 with Session(test_engine) as session:
                     session.add(test_metadata)
+                    session.add(test_job)
                     session.add(test_recon)
                     session.commit()
                     
@@ -135,6 +137,6 @@ class TestPeakIndexRetrievers:
             
             # Verify specific expected columns are present
             column_fields = [col['field'] for col in cols]
-            expected_columns = ['peakindex_id', 'date', 'scanNumber', 'recon_id', 'wirerecon_id', 'notes']
+            expected_columns = ['peakindex_id', 'submit_time', 'scanNumber', 'recon_id', 'wirerecon_id', 'notes']
             for expected_col in expected_columns:
                 assert expected_col in column_fields, f"Column {expected_col} should be present in column definitions"

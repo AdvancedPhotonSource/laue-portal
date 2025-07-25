@@ -21,7 +21,7 @@ class TestDataRetrievers:
     
     def test_get_recons_function_smoke(self, test_database):
         """Test that _get_recons function can execute without errors."""
-        test_engine, test_db_file, test_metadata, test_recon, test_catalog = test_database
+        test_engine, test_db_file, test_metadata, test_job, test_recon, test_catalog = test_database
         
         # Mock the config to use test database
         with patch('config.db_file', test_db_file):
@@ -36,6 +36,7 @@ class TestDataRetrievers:
                 # Add test data to the database
                 with Session(test_engine) as session:
                     session.add(test_metadata)
+                    session.add(test_job)
                     session.add(test_catalog)
                     session.add(test_recon)
                     session.commit()
@@ -60,13 +61,13 @@ class TestDataRetrievers:
             for recon in recons:
                 assert isinstance(recon, dict), "Each recon should be a dictionary"
                 # Check for some expected fields based on VISIBLE_COLS (note: dataset_id is commented out in VISIBLE_COLS)
-                expected_fields = ['recon_id', 'date', 'calib_id', 'scanNumber', 'sample_name', 'aperture', 'notes']
+                expected_fields = ['recon_id', 'submit_time', 'calib_id', 'scanNumber', 'sample_name', 'aperture', 'notes']
                 for field in expected_fields:
                     assert field in recon, f"Recon record should contain field: {field}"
 
     def test_get_recons_callback_smoke(self, test_database):
         """Test that get_recons callback function can execute without errors."""
-        test_engine, test_db_file, test_metadata, test_recon, test_catalog = test_database
+        test_engine, test_db_file, test_metadata, test_job, test_recon, test_catalog = test_database
         
         # Mock the config to use test database
         with patch('config.db_file', test_db_file):
@@ -81,6 +82,7 @@ class TestDataRetrievers:
                 # Add test data to the database
                 with Session(test_engine) as session:
                     session.add(test_metadata)
+                    session.add(test_job)
                     session.add(test_catalog)
                     session.add(test_recon)
                     session.commit()

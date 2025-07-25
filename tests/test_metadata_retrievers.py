@@ -60,7 +60,7 @@ class TestMetadataRetrievers:
             for metadata in metadatas:
                 assert isinstance(metadata, dict), "Each metadata should be a dictionary"
                 # Check for some expected fields based on VISIBLE_COLS
-                expected_fields = ['scanNumber', 'sample_name', 'aperture', 'user_name', 'date', 'notes']
+                expected_fields = ['scanNumber', 'sample_name', 'aperture', 'user_name', 'time', 'notes']
                 for field in expected_fields:
                     assert field in metadata, f"Metadata record should contain field: {field}"
                 
@@ -130,6 +130,6 @@ class TestMetadataRetrievers:
             
             # Verify specific expected columns are present
             column_fields = [col['field'] for col in cols]
-            expected_columns = ['scanNumber', 'sample_name', 'aperture', 'user_name', 'date', 'scan_dim', 'actions', 'notes']
+            expected_columns = ['scanNumber', 'sample_name', 'aperture', 'user_name', 'time', 'scan_dim', 'actions', 'notes']
             for expected_col in expected_columns:
                 assert expected_col in column_fields, f"Column {expected_col} should be present in column definitions"

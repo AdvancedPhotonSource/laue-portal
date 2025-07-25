@@ -272,25 +272,66 @@ def submit_catalog(n,
 ):
     # TODO: Input validation and reponse
     
-    catalog = db_schema.Catalog(
-        scanNumber=scanNumber,
-
-        filefolder=filefolder,
-        filenamePrefix=filenamePrefix,
-        outputFolder=outputFolder,
-        geoFile=geoFile,
-
-        aperture=aperture,
-        sample_name=sample_name,
-    
-    )
-
-    with Session(db_utils.ENGINE) as session:
-        session.add(catalog)
-        # config_dict = db_utils.create_config_obj(wirerecon)
-
-        session.commit()
-    
-    set_props("alert-submit", {'is_open': True, 
-                                'children': 'Catalog Entry Added to Database',
-                                'color': 'success'})
+    try:
+        # Convert scanNumber to int if it's a string
+        if isinstance(scanNumber, str):
+            scanNumber = int(scanNumber)
+            
+        with Session(db_utils.ENGINE) as session:
+            # Check if metadata record exists for this scanNumber
+            metadata_exists = session.query(db_schema.Metadata).filter(
+                db_schema.Metadata.scanNumber == scanNumber
+            ).first()
+            
+            if not metadata_exists:
+                set_props("alert-submit", {'is_open': True, 
+                                            'children': f'Cannot create catalog entry: No metadata found for scan {scanNumber}. Please import the scan metadata first.',
+                                            'color': 'danger'})
+                return
+            
+            # Check if catalog entry already exists
+            existing_catalog = session.query(db_schema.Catalog).filter(
+                db_schema.Catalog.scanNumber == scanNumber
+            ).first()
+            
+            if existing_catalog:
+                # Update existing catalog entry
+                existing_catalog.filefolder = filefolder
+                existing_catalog.filenamePrefix = filenamePrefix
+                existing_catalog.outputFolder = outputFolder
+                existing_catalog.geoFile = geoFile
+                existing_catalog.aperture = aperture
+                existing_catalog.sample_name = sample_name
+                
+                session.commit()
+                
+                set_props("alert-submit", {'is_open': True, 
+                                            'children': f'Catalog Entry Updated for scan {scanNumber}',
+                                            'color': 'success'})
+            else:
+                # Create new catalog entry
+                catalog = db_schema.Catalog(
+                    scanNumber=scanNumber,
+                    filefolder=filefolder,
+                    filenamePrefix=filenamePrefix,
+                    outputFolder=outputFolder,
+                    geoFile=geoFile,
+                    aperture=aperture,
+                    sample_name=sample_name,
+                )
+                
+                session.add(catalog)
+                session.commit()
+                
+                set_props("alert-submit", {'is_open': True, 
+                                            'children': f'Catalog Entry Added to Database for scan {scanNumber}',
+                                            'color': 'success'})
+                                            
+    except ValueError as e:
+        set_props("alert-submit", {'is_open': True, 
+                                    'children': f'Error: Invalid scan number format. Please enter a valid integer.',
+                                    'color': 'danger'})
+    except Exception as e:
+        set_props("alert-submit", {'is_open': True, 
+                                    'children': f'Error creating catalog entry: {str(e)}',
+                                    'color': 'danger'})
