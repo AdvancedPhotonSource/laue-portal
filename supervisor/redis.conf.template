@@ -14,7 +14,7 @@ loglevel notice
 logfile ""
 
 # Data persistence
-dir ./etc/redis/data
+dir {{SUPERVISOR_DIR}}/redis_data
 dbfilename dump.rdb
 save 900 1
 save 300 10

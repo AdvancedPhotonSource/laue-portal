@@ -1,0 +1,14 @@
+# Ignore generated configuration files
+supervisord.conf
+redis.conf
+
+# Ignore runtime files
+supervisord.pid
+supervisor.sock
+
+# Ignore log files
+logs/
+*.log
+
+# Ignore Redis data
+redis_data/
