@@ -143,6 +143,110 @@ dagcomponentfuncs.StatusRenderer = function (props) {
     );
 };
 
+// SubJob Progress Renderer - shows completion status with text and progress bar
+dagcomponentfuncs.SubJobProgressRenderer = function (props) {
+    const data = props.data;
+    const total = data.total_subjobs || 0;
+    
+    if (total === 0) {
+        return React.createElement('span', { className: 'text-muted' }, 'No subjobs');
+    }
+    
+    const completed = data.completed_subjobs || 0;
+    const failed = data.failed_subjobs || 0;
+    const running = data.running_subjobs || 0;
+    const queued = data.queued_subjobs || 0;
+    
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+    
+    // Create progress bar with different segments
+    const progressSegments = [];
+    
+    if (completed > 0) {
+        progressSegments.push(
+            React.createElement('div', {
+                key: 'completed',
+                className: 'progress-bar bg-success',
+                style: { width: `${(completed / total) * 100}%` },
+                title: `${completed} completed`
+            })
+        );
+    }
+    
+    if (failed > 0) {
+        progressSegments.push(
+            React.createElement('div', {
+                key: 'failed',
+                className: 'progress-bar bg-danger',
+                style: { width: `${(failed / total) * 100}%` },
+                title: `${failed} failed`
+            })
+        );
+    }
+    
+    if (running > 0) {
+        progressSegments.push(
+            React.createElement('div', {
+                key: 'running',
+                className: 'progress-bar bg-info progress-bar-striped progress-bar-animated',
+                style: { width: `${(running / total) * 100}%` },
+                title: `${running} running`
+            })
+        );
+    }
+    
+    if (queued > 0) {
+        progressSegments.push(
+            React.createElement('div', {
+                key: 'queued',
+                className: 'progress-bar bg-warning',
+                style: { width: `${(queued / total) * 100}%` },
+                title: `${queued} queued`
+            })
+        );
+    }
+    
+    return React.createElement('div', { style: { width: '100%' } }, [
+        React.createElement('div', { 
+            key: 'text',
+            className: 'text-center small mb-1' 
+        }, `${completed}/${total} completed`),
+        React.createElement('div', {
+            key: 'progress',
+            className: 'progress',
+            style: { height: '20px' }
+        }, progressSegments)
+    ]);
+};
+
+// SubJob Detail Renderer - renders the detail grid for subjobs
+dagcomponentfuncs.SubJobDetailRenderer = function (props) {
+    const subjobs = props.data.subjobs || [];
+    
+    if (subjobs.length === 0) {
+        return React.createElement('div', { 
+            className: 'text-center text-muted p-3' 
+        }, 'No subjobs for this job');
+    }
+    
+    // Create a new grid for the subjobs
+    const detailGridOptions = props.detailGridOptions || {};
+    detailGridOptions.rowData = subjobs;
+    
+    // Create container for the detail grid
+    const eDetailGrid = document.createElement('div');
+    eDetailGrid.style.height = '100%';
+    eDetailGrid.style.width = '100%';
+    eDetailGrid.className = 'ag-theme-alpine';
+    
+    // Initialize the detail grid
+    setTimeout(() => {
+        new agGrid.Grid(eDetailGrid, detailGridOptions);
+    }, 0);
+    
+    return eDetailGrid;
+};
+
 // dagcomponentfuncs.ActionButtonsRenderer = function (props) {
 //     const { data } = props; // data contains the row data
 

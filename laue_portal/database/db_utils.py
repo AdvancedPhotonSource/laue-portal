@@ -3,6 +3,7 @@ import config
 import xml.etree.ElementTree as ET
 import sqlalchemy
 from sqlalchemy import event
+from datetime import datetime
 
 ENGINE = sqlalchemy.create_engine(f'sqlite:///{config.db_file}')
 
