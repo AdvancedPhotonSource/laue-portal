@@ -166,7 +166,7 @@ def submit_config(n,
             job_id = job.job_id
             
             # Create subjobs for parallel processing
-            for i in range(2):
+            for i in range(6):
                 subjob = db_schema.SubJob(
                     job_id=job_id,
                     status=STATUS_REVERSE_MAPPING["Queued"]

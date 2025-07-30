@@ -26,18 +26,9 @@ layout = html.Div([
                     "paginationPageSize": 20, 
                     "domLayout": 'autoHeight', 
                     "rowHeight": 32,
-                    # Simple row grouping configuration
-                    "groupDisplayType": "groupRows",
-                    "groupDefaultExpanded": 0,  # Keep groups collapsed by default
                     "animateRows": True,
-                    # Auto group column configuration
-                    "autoGroupColumnDef": {
-                        "headerName": "Job/SubJob",
-                        "minWidth": 200,
-                        "cellRendererParams": {
-                            "suppressCount": True
-                        }
-                    }
+                    # Custom row styling for subjobs
+                    "getRowClass": {"function": "params => params.data.row_type === 'subjob' ? 'subjob-row' : ''"}
                 },
                 style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                 className="ag-theme-alpine"
@@ -133,24 +124,30 @@ def _get_jobs():
             subjobs.loc[running_mask, 'duration'] = current_time - subjobs.loc[running_mask, 'start_time']
             subjobs.loc[running_mask, 'duration_display'] = subjobs.loc[running_mask, 'duration'].astype(str) + ' (running)'
         
-        # Create a combined dataframe with jobs and subjobs for row grouping
+        # Create a combined dataframe - initially only with jobs
         all_rows = []
         
-        # Add job rows
+        # Store all subjobs in a global variable for JavaScript access
+        subjobs_dict = {}
+        if not subjobs.empty:
+            for job_id in jobs['job_id'].unique():
+                job_subjobs = subjobs[subjobs['job_id'] == job_id]
+                if not job_subjobs.empty:
+                    subjobs_list = []
+                    for _, subjob in job_subjobs.iterrows():
+                        subjob_row = subjob.to_dict()
+                        subjob_row['row_type'] = 'subjob'
+                        subjob_row['parent_job_id'] = job_id
+                        subjobs_list.append(subjob_row)
+                    subjobs_dict[str(job_id)] = subjobs_list
+        
+        # Add job rows only (subjobs will be added dynamically)
         for _, job in jobs.iterrows():
             job_row = job.to_dict()
             job_row['row_type'] = 'job'
+            # Store subjobs data in the job row for JavaScript access
+            job_row['_subjobs'] = subjobs_dict.get(str(job_row['job_id']), [])
             all_rows.append(job_row)
-            
-            # Add subjob rows if they exist
-            if not subjobs.empty and job_row['job_id'] in subjobs['job_id'].values:
-                job_subjobs = subjobs[subjobs['job_id'] == job_row['job_id']]
-                for _, subjob in job_subjobs.iterrows():
-                    # Use all fields from subjob
-                    subjob_row = subjob.to_dict()
-                    # Add row type identifier
-                    subjob_row['row_type'] = 'subjob'
-                    all_rows.append(subjob_row)
         
         # Convert to DataFrame
         combined_df = pd.DataFrame(all_rows)
@@ -158,13 +155,27 @@ def _get_jobs():
     # Format columns for ag-grid
     cols = []
     
+    # Add expand/collapse column as the first column
+    cols.append({
+        'headerName': '',
+        'field': 'expand',
+        'width': 50,
+        'resizable': False,
+        'sortable': False,
+        'filter': False,
+        'suppressMenu': True,
+        'cellRenderer': 'ExpandCollapseRenderer',
+        'suppressSizeToFit': True,
+        'cellStyle': {'overflow': 'visible'},
+        'autoHeight': False
+    })
     
     # Get all unique columns from combined dataframe
     all_columns = combined_df.columns.tolist()
     
     for field_key in all_columns:
         # Skip internal columns
-        if field_key in ['row_type', 'completed_subjobs', 'failed_subjobs', 'running_subjobs', 'queued_subjobs', 'duration'] + [col.key for col in REFERENCE_COLS]:
+        if field_key in ['row_type', 'parent_job_id', '_subjobs', 'completed_subjobs', 'failed_subjobs', 'running_subjobs', 'queued_subjobs', 'duration'] + [col.key for col in REFERENCE_COLS]:
             continue
             
         header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
@@ -179,8 +190,6 @@ def _get_jobs():
         }
 
         if field_key == 'job_id':
-            # Add row grouping to job_id column
-            col_def['rowGroup'] = True
             col_def['cellRenderer'] = 'JobIdLinkRenderer'
         elif field_key == 'dataset_id':
             col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'

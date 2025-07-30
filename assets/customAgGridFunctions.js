@@ -1,5 +1,99 @@
 var dagcomponentfuncs = (window.dashAgGridComponentFunctions = window.dashAgGridComponentFunctions || {});
 
+// Custom renderer for expand/collapse functionality
+dagcomponentfuncs.ExpandCollapseRenderer = function (params) {
+    // Check if we have the required data
+    if (!params || !params.data) {
+        return null;
+    }
+    
+    // Only show expand/collapse for job rows that have subjobs
+    if (params.data.row_type === 'job' && params.data.total_subjobs > 0) {
+        const jobId = params.data.job_id;
+        const jobNode = params.node;
+        
+        // Store expanded state in a global object
+        if (!window.expandedJobs) {
+            window.expandedJobs = {};
+        }
+        
+        const handleClick = (e) => {
+            e.stopPropagation();
+            
+            // Toggle expanded state
+            const isExpanded = window.expandedJobs[jobId] || false;
+            window.expandedJobs[jobId] = !isExpanded;
+            
+            if (!isExpanded) {
+                // Expanding - add subjobs
+                const subjobs = params.data._subjobs || [];
+                if (subjobs.length > 0) {
+                    // Find the index of this job row
+                    let jobIndex = -1;
+                    const allRows = [];
+                    params.api.forEachNode((node, index) => {
+                        allRows.push(node.data);
+                        if (node.data.job_id === jobId) {
+                            jobIndex = index;
+                        }
+                    });
+                    
+                    // Insert subjobs after the job row
+                    if (jobIndex !== -1) {
+                        const newRows = [
+                            ...allRows.slice(0, jobIndex + 1),
+                            ...subjobs,
+                            ...allRows.slice(jobIndex + 1)
+                        ];
+                        params.api.setRowData(newRows);
+                    }
+                }
+            } else {
+                // Collapsing - remove subjobs
+                const filteredRows = [];
+                params.api.forEachNode(node => {
+                    if (node.data) {
+                        // Keep all job rows and subjobs that don't belong to this job
+                        if (node.data.row_type === 'job' || 
+                            (node.data.row_type === 'subjob' && node.data.parent_job_id !== jobId)) {
+                            filteredRows.push(node.data);
+                        }
+                    }
+                });
+                params.api.setRowData(filteredRows);
+            }
+            
+            // Force re-render of this cell
+            params.api.refreshCells({
+                force: true,
+                columns: ['expand']
+            });
+        };
+        
+        const isExpanded = window.expandedJobs[jobId] || false;
+        
+        return React.createElement(
+            'button',
+            {
+                onClick: handleClick,
+                style: {
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    padding: '4px',
+                    width: '100%',
+                    outline: 'none'
+                }
+            },
+            isExpanded ? '▼' : '▶'
+        );
+    }
+    
+    // Return null for subjob rows or jobs without subjobs
+    return null;
+};
+
 // Date formatter for displaying datetime values in human-readable format
 dagcomponentfuncs.DateFormatter = function (params) {
     if (!params.value) return '';
@@ -66,13 +160,29 @@ dagcomponentfuncs.WireReconLinkRenderer = function (props) {
 };
 
 dagcomponentfuncs.JobIdLinkRenderer = function (props) {
-    // Only render as link for job rows, not subjob rows
+    // When used as innerRenderer in group cell, props.value contains the grouped value
+    // When used as regular cell renderer, props.value is the cell value
+    
+    // Check if this is a group row (has children)
+    if (props.node && props.node.group) {
+        // This is a group row (job row)
+        // Extract job_id from the grouped value
+        const jobId = props.value || props.node.key;
+        const url = `/job?id=${jobId}`;
+        return React.createElement(
+            'a',
+            { href: url },
+            jobId // This will be the text of the link (the job ID)
+        );
+    }
+    
+    // For leaf rows (subjob rows) or when data is available
     if (props.data && props.data.row_type === 'subjob') {
         // For subjob rows, just return the plain value
         return props.value;
     }
     
-    // For job rows, render as a link
+    // Default case - render as link
     const url = `/job?id=${props.value}`;
     return React.createElement(
         'a',
