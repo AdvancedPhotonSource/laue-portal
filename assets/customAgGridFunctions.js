@@ -12,9 +12,75 @@ dagcomponentfuncs.ExpandCollapseRenderer = function (params) {
         const jobId = params.data.job_id;
         const jobNode = params.node;
         
-        // Store expanded state in a global object
+        // Store expanded state and auto-expansion tracking in global objects
         if (!window.expandedJobs) {
             window.expandedJobs = {};
+        }
+        if (!window.autoExpandedJobs) {
+            window.autoExpandedJobs = {};
+        }
+        if (!window.manuallyCollapsedJobs) {
+            window.manuallyCollapsedJobs = {};
+        }
+        
+        // Handle auto-expansion on initial render
+        if (params.data._should_auto_expand && 
+            !window.expandedJobs.hasOwnProperty(jobId) && 
+            !window.manuallyCollapsedJobs[jobId]) {
+            // Auto-expand this job
+            window.expandedJobs[jobId] = true;
+            window.autoExpandedJobs[jobId] = true;
+            
+            // Trigger expansion after a short delay to ensure grid is ready
+            setTimeout(() => {
+                const subjobs = params.data._subjobs || [];
+                if (subjobs.length > 0) {
+                    // Find the index of this job row
+                    let jobIndex = -1;
+                    const allRows = [];
+                    params.api.forEachNode((node, index) => {
+                        allRows.push(node.data);
+                        if (node.data.job_id === jobId) {
+                            jobIndex = index;
+                        }
+                    });
+                    
+                    // Insert subjobs after the job row
+                    if (jobIndex !== -1) {
+                        const newRows = [
+                            ...allRows.slice(0, jobIndex + 1),
+                            ...subjobs,
+                            ...allRows.slice(jobIndex + 1)
+                        ];
+                        params.api.setRowData(newRows);
+                    }
+                }
+            }, 100);
+        }
+        
+        // Handle auto-collapse when no longer running
+        if (!params.data._should_auto_expand && 
+            window.expandedJobs[jobId] && 
+            window.autoExpandedJobs[jobId] &&
+            !window.manuallyCollapsedJobs[jobId]) {
+            // Auto-collapse this job
+            window.expandedJobs[jobId] = false;
+            delete window.autoExpandedJobs[jobId];
+            
+            // Trigger collapse
+            setTimeout(() => {
+                const filteredRows = [];
+                params.api.forEachNode(node => {
+                    if (node.data) {
+                        // Keep all job rows and subjobs that don't belong to this job
+                        if (node.data.row_type === 'job' || 
+                            (node.data.row_type === 'subjob' && node.data.parent_job_id !== jobId)) {
+                            filteredRows.push(node.data);
+                        }
+                    }
+                });
+                params.api.setRowData(filteredRows);
+            }, 100);
         }
         
         const handleClick = (e) => {
@@ -23,6 +89,23 @@ dagcomponentfuncs.ExpandCollapseRenderer = function (params) {
             // Toggle expanded state
             const isExpanded = window.expandedJobs[jobId] || false;
             window.expandedJobs[jobId] = !isExpanded;
+            
+            // Track manual interactions
+            if (!isExpanded) {
+                // User is manually expanding
+                delete window.manuallyCollapsedJobs[jobId];
+                if (window.autoExpandedJobs[jobId]) {
+                    // User manually expanded an auto-expanded job, keep it as auto-expanded
+                    window.autoExpandedJobs[jobId] = true;
+                }
+            } else {
+                // User is manually collapsing
+                if (window.autoExpandedJobs[jobId]) {
+                    // User manually collapsed an auto-expanded job
+                    window.manuallyCollapsedJobs[jobId] = true;
+                    delete window.autoExpandedJobs[jobId];
+                }
+            }
             
             if (!isExpanded) {
                 // Expanding - add subjobs

@@ -293,6 +293,8 @@ def enqueue_peak_indexing(job_id: int, config_dict: Dict[str, Any], at_front: bo
         'peak_indexing',
         execute_peak_indexing_job,
         at_front,
+        None,  # depends_on
+        db_schema.Job,  # table
         config_dict
     )
 

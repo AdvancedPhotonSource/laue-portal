@@ -289,7 +289,9 @@ def submit_config(n,
             for i in range(6):
                 subjob = db_schema.SubJob(
                     job_id=job_id,
-                    status=STATUS_REVERSE_MAPPING["Queued"]
+                    computer_name=JOB_DEFAULTS['computer_name'],
+                    status=STATUS_REVERSE_MAPPING["Queued"],
+                    priority=JOB_DEFAULTS['priority']
                 )
                 session.add(subjob)
             

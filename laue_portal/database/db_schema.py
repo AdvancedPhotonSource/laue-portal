@@ -187,9 +187,11 @@ class Job(Base):
     computer_name: Mapped[str] = mapped_column(String)
     status: Mapped[int] = mapped_column(Integer) #Queued, Running, Finished, Failed, Cancelled
     priority: Mapped[int] = mapped_column(Integer)
+
     submit_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
     start_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
     finish_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    
     author: Mapped[str] = mapped_column(String, nullable=True)
     notes: Mapped[str] = mapped_column(String, nullable=True)
     messages: Mapped[str] = mapped_column(String, nullable=True)
@@ -208,9 +210,13 @@ class SubJob(Base):
     subjob_id: Mapped[int] = mapped_column(primary_key=True)
     job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"))
 
+    computer_name: Mapped[str] = mapped_column(String)
     status: Mapped[int] = mapped_column(Integer) #Queued, Running, Finished, Failed, Cancelled
+    priority: Mapped[int] = mapped_column(Integer)
+
     start_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
     finish_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    
     messages: Mapped[str] = mapped_column(String, nullable=True)
 
 

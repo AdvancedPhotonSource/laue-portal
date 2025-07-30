@@ -59,6 +59,30 @@ CUSTOM_HEADER_NAMES = {
     'duration_display': 'Duration',
 }
 
+def calculate_duration_display(start_time, finish_time, current_time):
+    """Calculate duration display string for jobs/subjobs"""
+    if pd.notna(start_time):
+        if pd.notna(finish_time):
+            # Completed
+            duration = finish_time - start_time
+        else:
+            # Running
+            duration = current_time - start_time
+        
+        # Convert to total seconds and format as HH:MM:SS
+        total_seconds = int(duration.total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        
+        formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        
+        if pd.isna(finish_time):
+            formatted += " (running)"
+            
+        return formatted
+    return None
+
 def _get_jobs():
     with Session(db_utils.ENGINE) as session:
         # Query all subjobs once
@@ -110,19 +134,11 @@ def _get_jobs():
         # Pre-calculate durations for all subjobs to avoid time drift
         current_time = datetime.now()
         if not subjobs.empty:
-            # Initialize duration column
-            subjobs['duration'] = None
-            subjobs['duration_display'] = None
-            
-            # Calculate durations for completed subjobs
-            completed_mask = subjobs['start_time'].notna() & subjobs['finish_time'].notna()
-            subjobs.loc[completed_mask, 'duration'] = subjobs.loc[completed_mask, 'finish_time'] - subjobs.loc[completed_mask, 'start_time']
-            subjobs.loc[completed_mask, 'duration_display'] = subjobs.loc[completed_mask, 'duration'].astype(str)
-            
-            # Calculate durations for running subjobs
-            running_mask = subjobs['start_time'].notna() & subjobs['finish_time'].isna()
-            subjobs.loc[running_mask, 'duration'] = current_time - subjobs.loc[running_mask, 'start_time']
-            subjobs.loc[running_mask, 'duration_display'] = subjobs.loc[running_mask, 'duration'].astype(str) + ' (running)'
+            # Calculate duration display for all subjobs
+            subjobs['duration_display'] = subjobs.apply(
+                lambda row: calculate_duration_display(row['start_time'], row['finish_time'], current_time),
+                axis=1
+            )
         
         # Create a combined dataframe - initially only with jobs
         all_rows = []
@@ -147,6 +163,14 @@ def _get_jobs():
             job_row['row_type'] = 'job'
             # Store subjobs data in the job row for JavaScript access
             job_row['_subjobs'] = subjobs_dict.get(str(job_row['job_id']), [])
+            # Add flag for auto-expansion if job has running subjobs
+            job_row['_should_auto_expand'] = job_row.get('running_subjobs', 0) > 0
+            # Calculate duration for job rows
+            job_row['duration_display'] = calculate_duration_display(
+                job_row.get('start_time'), 
+                job_row.get('finish_time'), 
+                current_time
+            )
             all_rows.append(job_row)
         
         # Convert to DataFrame
@@ -174,8 +198,8 @@ def _get_jobs():
     all_columns = combined_df.columns.tolist()
     
     for field_key in all_columns:
-        # Skip internal columns
-        if field_key in ['row_type', 'parent_job_id', '_subjobs', 'completed_subjobs', 'failed_subjobs', 'running_subjobs', 'queued_subjobs', 'duration'] + [col.key for col in REFERENCE_COLS]:
+        # Skip internal columns and special columns we'll add at specific positions
+        if field_key in ['row_type', 'parent_job_id', '_subjobs', '_should_auto_expand', 'completed_subjobs', 'failed_subjobs', 'running_subjobs', 'queued_subjobs', 'duration', 'total_subjobs', 'finish_time', 'submit_time', 'duration_display'] + [col.key for col in REFERENCE_COLS]:
             continue
             
         header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
@@ -191,6 +215,7 @@ def _get_jobs():
 
         if field_key == 'job_id':
             col_def['cellRenderer'] = 'JobIdLinkRenderer'
+            col_def['width'] = 175
         elif field_key == 'dataset_id':
             col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
         elif field_key == 'scanNumber':
@@ -199,27 +224,11 @@ def _get_jobs():
             col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
         elif field_key == 'status':
             col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
-        elif field_key == 'total_subjobs':
-            col_def['headerName'] = 'SubJobs Progress'
-            col_def['cellRenderer'] = 'SubJobProgressRenderer'
-            col_def['width'] = 200
         
         cols.append(col_def)
 
-    # Add the custom actions column
-    cols.append({
-        'headerName': 'Actions',
-        'field': 'actions',  # This field doesn't need to exist in the data
-        # 'cellRenderer': 'ActionButtonsRenderer',
-        'sortable': False,
-        'filter': False,
-        'resizable': True, # Or False, depending on preference
-        'suppressMenu': True, # Or False
-        'width': 200 # Adjusted width for DBC buttons
-    })
-
-    # Add combined fields columns
-    col_def = {
+    # Create Job Reference column
+    job_reference_col = {
         'headerName': 'Job Reference',
         'valueGetter': {"function": """ [
                     'calib_id',
@@ -230,18 +239,61 @@ def _get_jobs():
         'cellRenderer': 'JobRefsRenderer',
         'sortable': False,
         'filter': False,
-        'resizable': True, # Or False, depending on preference
-        'suppressMenu': True, # Or False
-        'width': 200 # Adjusted width for DBC buttons
-    }
-    
-    col_def.update({
+        'resizable': True,
+        'suppressMenu': True,
+        'width': 250,
         'filter': True, 
         'sortable': True, 
         'resizable': True,
         'suppressMenuHide': True
+    }
+    
+    # Create SubJobs Progress column
+    subjobs_progress_col = None
+    if 'total_subjobs' in all_columns:
+        subjobs_progress_col = {
+            'headerName': 'SubJobs Progress',
+            'field': 'total_subjobs',
+            'cellRenderer': 'SubJobProgressRenderer',
+            'width': 200,
+            'filter': True, 
+            'sortable': True, 
+            'resizable': True,
+            'suppressMenuHide': True
+        }
+
+    # Insert Job Reference at position 2 (after expand column)
+    cols.insert(2, job_reference_col)
+    
+    # Insert SubJobs Progress at position 5
+    if subjobs_progress_col:
+        cols.insert(5, subjobs_progress_col)
+    
+    # Create Duration column
+    duration_col = {
+        'headerName': 'Duration',
+        'field': 'duration_display',
+        'filter': True,
+        'sortable': True,
+        'resizable': True,
+        'suppressMenuHide': True,
+        'width': 200
+    }
+    
+    # Insert Duration at position 8
+    cols.insert(8, duration_col)
+
+    # Add the custom actions column at the end
+    cols.append({
+        'headerName': 'Actions',
+        'field': 'actions',  # This field doesn't need to exist in the data
+        # 'cellRenderer': 'ActionButtonsRenderer',
+        'sortable': False,
+        'filter': False,
+        'resizable': True,
+        'suppressMenu': True,
+        'width': 200
     })
-    cols.insert(1,col_def)
     
     return cols, combined_df.to_dict('records')
 
