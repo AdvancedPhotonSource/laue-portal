@@ -66,7 +66,13 @@ dagcomponentfuncs.WireReconLinkRenderer = function (props) {
 };
 
 dagcomponentfuncs.JobIdLinkRenderer = function (props) {
-    // props.value will be the job_id for the current row
+    // Only render as link for job rows, not subjob rows
+    if (props.data && props.data.row_type === 'subjob') {
+        // For subjob rows, just return the plain value
+        return props.value;
+    }
+    
+    // For job rows, render as a link
     const url = `/job?id=${props.value}`;
     return React.createElement(
         'a',

@@ -43,7 +43,7 @@ STATUS_REVERSE_MAPPING = {v: k for k, v in STATUS_MAPPING.items()}
 
 
 # Generic helper for enqueueing jobs
-def enqueue_job(job_id: int, job_type: str, execute_func, priority: int = 0, 
+def enqueue_job(job_id: int, job_type: str, execute_func, at_front: bool = False,
                 depends_on=None, table=db_schema.Job, *args, **kwargs) -> str:
     """
     Generic function to enqueue any job type.
@@ -52,7 +52,7 @@ def enqueue_job(job_id: int, job_type: str, execute_func, priority: int = 0,
         job_id: Database job ID (can be Job.job_id or SubJob.subjob_id)
         job_type: Type of job (e.g., 'wire_reconstruction', 'reconstruction', 'peak_indexing')
         execute_func: The execution function to call
-        priority: Job priority (higher numbers = higher priority, default: 0)
+        at_front: Whether to add job at front of queue (default: False)
         depends_on: Optional RQ job ID or Job object to depend on
         table: Database table class (db_schema.Job or db_schema.SubJob)
         *args, **kwargs: Arguments to pass to the execution function
@@ -64,12 +64,24 @@ def enqueue_job(job_id: int, job_type: str, execute_func, priority: int = 0,
     job_meta = {
         'db_job_id': job_id,
         'job_type': job_type,
-        'priority': priority,
         'table': table.__tablename__,
         'enqueued_at': datetime.now().isoformat()
     }
     
-    # Enqueue the job with priority and optional dependency
+    # Update job status in database
+    # Skip status update for batch coordinator since it manages the parent job status
+    if job_type != 'batch_coordinator':
+        with Session(db_utils.ENGINE) as session:
+            # Get the primary key column dynamically
+            mapper = inspect(table)
+            pk_col = list(mapper.primary_key)[0]  # Get first primary key column
+            # Query using the primary key
+            job = session.query(table).filter(pk_col == job_id).first()
+            if job:
+                job.status = STATUS_REVERSE_MAPPING["Queued"]
+                session.commit()
+    
+    # Enqueue the job with optional dependency
     rq_job = job_queue.enqueue(
         execute_func,
         job_id,  # First parameter for all execute functions
@@ -77,24 +89,13 @@ def enqueue_job(job_id: int, job_type: str, execute_func, priority: int = 0,
         **kwargs,
         job_id=f"{job_type}_{job_id}",
         meta=job_meta,
-        priority=priority,  # Add priority parameter
+        at_front=at_front,  # Use at_front parameter
         depends_on=depends_on,  # Add dependency support
         result_ttl=86400,  # Keep result for 24 hours
         failure_ttl=86400  # Keep failed job info for 24 hours
     )
     
     logger.info(f"Enqueued {job_type} job {job_id} with RQ ID: {rq_job.id}")
-    
-    # Update job status in database
-    with Session(db_utils.ENGINE) as session:
-        # Get the primary key column dynamically
-        mapper = inspect(table)
-        pk_col = list(mapper.primary_key)[0]  # Get first primary key column
-        # Query using the primary key
-        job = session.query(table).filter(pk_col == job_id).first()
-        if job:
-            job.status = STATUS_REVERSE_MAPPING["Queued"]
-            session.commit()
     
     return rq_job.id
 
@@ -153,7 +154,7 @@ def execute_batch_coordinator(job_id: int):
 
 
 # Generic batch handler
-def _enqueue_batch(job_id: int, job_type: str, execute_func, priority: int = 0, *args, **kwargs) -> str:
+def _enqueue_batch(job_id: int, job_type: str, execute_func, at_front: bool = False, *args, **kwargs) -> str:
     """
     Generic batch handler that enqueues subjobs in parallel with a coordinator.
     
@@ -161,7 +162,7 @@ def _enqueue_batch(job_id: int, job_type: str, execute_func, priority: int = 0, 
         job_id: Database job ID (the main/batch job)
         job_type: Type of job (e.g., 'wire_reconstruction', 'reconstruction')
         execute_func: The execution function to call for each subjob
-        priority: Job priority
+        at_front: Whether to add jobs at front of queue (default: False)
         *args, **kwargs: Arguments to pass to the execution function
     
     Returns:
@@ -185,7 +186,7 @@ def _enqueue_batch(job_id: int, job_type: str, execute_func, priority: int = 0, 
             subjob.subjob_id,
             job_type,
             execute_func,
-            priority,
+            at_front,
             None,  # No dependencies - run in parallel
             db_schema.SubJob,  # Specify SubJob table
             *args,
@@ -198,7 +199,7 @@ def _enqueue_batch(job_id: int, job_type: str, execute_func, priority: int = 0, 
         job_id,
         'batch_coordinator',
         execute_batch_coordinator,
-        priority,
+        True,  # Put coordinator at front since it depends on subjobs
         rq_job_ids,  # Depends on ALL subjobs
         db_schema.Job  # Coordinator updates the main Job
     )
@@ -209,7 +210,7 @@ def _enqueue_batch(job_id: int, job_type: str, execute_func, priority: int = 0, 
 
 def enqueue_wire_reconstruction(job_id: int, input_file: str, output_file: str,
                                geometry_file: str, depth_range: tuple, 
-                               resolution: float = 1.0, priority: int = 0, **kwargs) -> str:
+                               resolution: float = 1.0, at_front: bool = False, **kwargs) -> str:
     """
     Enqueue a wire reconstruction batch job.
     Always expects subjobs to exist for the given job_id.
@@ -221,7 +222,7 @@ def enqueue_wire_reconstruction(job_id: int, input_file: str, output_file: str,
         geometry_file: Path to geometry file
         depth_range: Tuple of (start, end) depths
         resolution: Resolution parameter (default: 1.0)
-        priority: Job priority (higher numbers = higher priority, default: 0)
+        at_front: Whether to add job at front of queue (default: False)
         **kwargs: Additional optional arguments for wire reconstruction:
             - image_range: Optional[Tuple[int, int]] - Range of images to process
             - verbose: int - Verbosity level (default: 1)
@@ -243,7 +244,7 @@ def enqueue_wire_reconstruction(job_id: int, input_file: str, output_file: str,
         job_id,
         'wire_reconstruction',
         execute_wire_reconstruction_job,
-        priority,
+        at_front,
         input_file,
         output_file,
         geometry_file,
@@ -253,7 +254,7 @@ def enqueue_wire_reconstruction(job_id: int, input_file: str, output_file: str,
     )
 
 
-def enqueue_reconstruction(job_id: int, config_dict: Dict[str, Any], priority: int = 0) -> str:
+def enqueue_reconstruction(job_id: int, config_dict: Dict[str, Any], at_front: bool = False) -> str:
     """
     Enqueue a reconstruction batch job (CA reconstruction).
     Always expects subjobs to exist for the given job_id.
@@ -261,7 +262,7 @@ def enqueue_reconstruction(job_id: int, config_dict: Dict[str, Any], priority: i
     Args:
         job_id: Database job ID
         config_dict: Configuration dictionary for CA reconstruction
-        priority: Job priority (higher numbers = higher priority, default: 0)
+        at_front: Whether to add job at front of queue (default: False)
     
     Returns:
         RQ job ID of the batch coordinator
@@ -270,19 +271,19 @@ def enqueue_reconstruction(job_id: int, config_dict: Dict[str, Any], priority: i
         job_id,
         'reconstruction',
         execute_reconstruction_job,
-        priority,
+        at_front,
         config_dict
     )
 
 
-def enqueue_peak_indexing(job_id: int, config_dict: Dict[str, Any], priority: int = 0) -> str:
+def enqueue_peak_indexing(job_id: int, config_dict: Dict[str, Any], at_front: bool = False) -> str:
     """
     Enqueue a peak indexing job.
     
     Args:
         job_id: Database job ID
         config_dict: Configuration dictionary for peak indexing
-        priority: Job priority (higher numbers = higher priority, default: 0)
+        at_front: Whether to add job at front of queue (default: False)
     
     Returns:
         RQ job ID
@@ -291,7 +292,7 @@ def enqueue_peak_indexing(job_id: int, config_dict: Dict[str, Any], priority: in
         job_id,
         'peak_indexing',
         execute_peak_indexing_job,
-        priority,
+        at_front,
         config_dict
     )
 
@@ -499,7 +500,19 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
             job = session.query(table).filter(pk_col == job_id).first()
             if job:
                 job.status = STATUS_REVERSE_MAPPING["Running"]
-                job.start_time = datetime.now()
+                job_start_time = datetime.now()
+                job.start_time = job_start_time
+                
+                # If this is a subjob, also update the parent job status if it's still queued
+                if table == db_schema.SubJob and hasattr(job, 'job_id'):
+                    parent_job = session.query(db_schema.Job).filter(
+                        db_schema.Job.job_id == job.job_id
+                    ).first()
+                    if parent_job and parent_job.status == STATUS_REVERSE_MAPPING["Queued"]:
+                        parent_job.status = STATUS_REVERSE_MAPPING["Running"]
+                        parent_job.start_time = job_start_time
+                        logger.info(f"Updated parent job {job.job_id} status to Running")
+                
                 session.commit()
         
         publish_job_update(job_id, 'running', f'Starting {job_type}')

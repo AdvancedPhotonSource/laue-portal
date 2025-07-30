@@ -165,8 +165,8 @@ def submit_config(n,
             session.flush()  # Get job_id without committing
             job_id = job.job_id
             
-            # Create 6 subjobs for parallel processing
-            for i in range(6):
+            # Create subjobs for parallel processing
+            for i in range(2):
                 subjob = db_schema.SubJob(
                     job_id=job_id,
                     status=STATUS_REVERSE_MAPPING["Queued"]

@@ -26,27 +26,18 @@ layout = html.Div([
                     "paginationPageSize": 20, 
                     "domLayout": 'autoHeight', 
                     "rowHeight": 32,
-                    "masterDetail": True,
-                    "detailRowHeight": 200,
-                    "detailCellRenderer": "SubJobDetailRenderer",
-                    "detailCellRendererParams": {
-                        "detailGridOptions": {
-                            "columnDefs": [
-                                {"field": "subjob_id", "headerName": "SubJob ID", "width": 100},
-                                {"field": "status", "headerName": "Status", "cellRenderer": "StatusRenderer", "width": 120},
-                                {"field": "start_time", "headerName": "Start Time", "cellRenderer": "DateFormatter", "width": 180},
-                                {"field": "duration", "headerName": "Duration", "width": 120},
-                                {"field": "messages", "headerName": "Messages", "flex": 1}
-                            ],
-                            "defaultColDef": {
-                                "sortable": True,
-                                "filter": True,
-                                "resizable": True
-                            }
+                    # Simple row grouping configuration
+                    "groupDisplayType": "groupRows",
+                    "groupDefaultExpanded": 0,  # Keep groups collapsed by default
+                    "animateRows": True,
+                    # Auto group column configuration
+                    "autoGroupColumnDef": {
+                        "headerName": "Job/SubJob",
+                        "minWidth": 200,
+                        "cellRendererParams": {
+                            "suppressCount": True
                         }
-                    },
-                    "getDetailRowData": {"function": "params => params.successCallback(params.data.subjobs || [])"},
-                    "isRowMaster": {"function": "dataItem => (dataItem.total_subjobs || 0) > 0"}
+                    }
                 },
                 style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                 className="ag-theme-alpine"
@@ -73,6 +64,8 @@ CUSTOM_HEADER_NAMES = {
     'calib_id': 'Calibration ID',
     #'pxl_recon': 'Pixels'
     'submit_time': 'Date',
+    'subjob_id': 'SubJob ID',
+    'duration_display': 'Duration',
 }
 
 def _get_jobs():
@@ -84,21 +77,23 @@ def _get_jobs():
             .statement, session.bind
         )
         
+        subjob_columns = ['total_subjobs', 'completed_subjobs', 'failed_subjobs', 'running_subjobs', 'queued_subjobs']
+
         # Calculate subjob statistics from the single query
         subjob_stats_df = pd.DataFrame()
         if not subjobs.empty:
             # Calculate statistics using pandas
-            subjob_stats_df = subjobs.groupby('job_id').agg({
-                'subjob_id': 'count',
-                'status': [
-                    lambda x: (x == STATUS_REVERSE_MAPPING["Finished"]).sum(),
-                    lambda x: (x == STATUS_REVERSE_MAPPING["Failed"]).sum(),
-                    lambda x: (x == STATUS_REVERSE_MAPPING["Running"]).sum(),
-                    lambda x: (x == STATUS_REVERSE_MAPPING["Queued"]).sum()
-                ]
+            grouped_subjobs = subjobs.groupby('job_id')
+            
+            # Create the stats dataframe manually to avoid MultiIndex issues
+            subjob_stats_df = pd.DataFrame({
+                'job_id': list(grouped_subjobs.groups.keys()),
+                'total_subjobs': grouped_subjobs.size().values,
+                'completed_subjobs': grouped_subjobs['status'].apply(lambda x: (x == STATUS_REVERSE_MAPPING["Finished"]).sum()).values,
+                'failed_subjobs': grouped_subjobs['status'].apply(lambda x: (x == STATUS_REVERSE_MAPPING["Failed"]).sum()).values,
+                'running_subjobs': grouped_subjobs['status'].apply(lambda x: (x == STATUS_REVERSE_MAPPING["Running"]).sum()).values,
+                'queued_subjobs': grouped_subjobs['status'].apply(lambda x: (x == STATUS_REVERSE_MAPPING["Queued"]).sum()).values
             })
-            subjob_stats_df.columns = ['total_subjobs', 'completed_subjobs', 'failed_subjobs', 'running_subjobs', 'queued_subjobs']
-            subjob_stats_df = subjob_stats_df.reset_index()
         
         # Main query for jobs with related entities
         jobs = pd.read_sql(session.query(
@@ -115,50 +110,61 @@ def _get_jobs():
         # Merge subjob statistics with jobs
         if not subjob_stats_df.empty:
             jobs = jobs.merge(subjob_stats_df, on='job_id', how='left')
+            # Fill NaN values with 0 for jobs without subjobs
+            jobs[subjob_columns] = jobs[subjob_columns].fillna(0).astype(int)
         else:
             # Add empty columns if no subjobs exist
-            for col in ['total_subjobs', 'completed_subjobs', 'failed_subjobs', 'running_subjobs', 'queued_subjobs']:
-                jobs[col] = 0
+            jobs[subjob_columns] = 0
         
-        # Fill NaN values with 0 for jobs without subjobs
-        for col in ['total_subjobs', 'completed_subjobs', 'failed_subjobs', 'running_subjobs', 'queued_subjobs']:
-            jobs[col] = jobs[col].fillna(0).astype(int)
-        
-        # Add subjobs detail to jobs dataframe
+        # Pre-calculate durations for all subjobs to avoid time drift
+        current_time = datetime.now()
         if not subjobs.empty:
-            # Calculate duration for each subjob
-            subjobs['duration'] = subjobs.apply(
-                lambda row: str(row['finish_time'] - row['start_time']) if pd.notna(row['start_time']) and pd.notna(row['finish_time']) else None,
-                axis=1
-            )
-            # Group subjobs by job_id
-            subjobs_by_job = subjobs.groupby('job_id').apply(lambda x: x.to_dict('records')).to_dict()
-            jobs['subjobs'] = jobs['job_id'].map(subjobs_by_job).fillna([]).apply(list)
-        else:
-            jobs['subjobs'] = [[] for _ in range(len(jobs))]
+            # Initialize duration column
+            subjobs['duration'] = None
+            subjobs['duration_display'] = None
+            
+            # Calculate durations for completed subjobs
+            completed_mask = subjobs['start_time'].notna() & subjobs['finish_time'].notna()
+            subjobs.loc[completed_mask, 'duration'] = subjobs.loc[completed_mask, 'finish_time'] - subjobs.loc[completed_mask, 'start_time']
+            subjobs.loc[completed_mask, 'duration_display'] = subjobs.loc[completed_mask, 'duration'].astype(str)
+            
+            # Calculate durations for running subjobs
+            running_mask = subjobs['start_time'].notna() & subjobs['finish_time'].isna()
+            subjobs.loc[running_mask, 'duration'] = current_time - subjobs.loc[running_mask, 'start_time']
+            subjobs.loc[running_mask, 'duration_display'] = subjobs.loc[running_mask, 'duration'].astype(str) + ' (running)'
+        
+        # Create a combined dataframe with jobs and subjobs for row grouping
+        all_rows = []
+        
+        # Add job rows
+        for _, job in jobs.iterrows():
+            job_row = job.to_dict()
+            job_row['row_type'] = 'job'
+            all_rows.append(job_row)
+            
+            # Add subjob rows if they exist
+            if not subjobs.empty and job_row['job_id'] in subjobs['job_id'].values:
+                job_subjobs = subjobs[subjobs['job_id'] == job_row['job_id']]
+                for _, subjob in job_subjobs.iterrows():
+                    # Use all fields from subjob
+                    subjob_row = subjob.to_dict()
+                    # Add row type identifier
+                    subjob_row['row_type'] = 'subjob'
+                    all_rows.append(subjob_row)
+        
+        # Convert to DataFrame
+        combined_df = pd.DataFrame(all_rows)
 
     # Format columns for ag-grid
     cols = []
     
-    # Add expand/collapse column for master-detail (if there are subjobs)
-    if jobs['total_subjobs'].sum() > 0:
-        cols.append({
-            'field': 'expand',
-            'headerName': '',
-            'cellRenderer': 'agGroupCellRenderer',
-            'width': 50,
-            'resizable': False,
-            'suppressMenu': True,
-            'sortable': False,
-            'filter': False
-        })
     
-    # Get list of reference column names to exclude
-    reference_col_names = [col.key for col in REFERENCE_COLS]
+    # Get all unique columns from combined dataframe
+    all_columns = combined_df.columns.tolist()
     
-    for field_key in jobs.columns:
-        # Skip subjobs detail and internal subjob stat columns
-        if field_key in ['subjobs', 'completed_subjobs', 'failed_subjobs', 'running_subjobs', 'queued_subjobs'] + reference_col_names:
+    for field_key in all_columns:
+        # Skip internal columns
+        if field_key in ['row_type', 'completed_subjobs', 'failed_subjobs', 'running_subjobs', 'queued_subjobs', 'duration'] + [col.key for col in REFERENCE_COLS]:
             continue
             
         header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
@@ -173,6 +179,8 @@ def _get_jobs():
         }
 
         if field_key == 'job_id':
+            # Add row grouping to job_id column
+            col_def['rowGroup'] = True
             col_def['cellRenderer'] = 'JobIdLinkRenderer'
         elif field_key == 'dataset_id':
             col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
@@ -226,7 +234,7 @@ def _get_jobs():
     })
     cols.insert(1,col_def)
     
-    return cols, jobs.to_dict('records')
+    return cols, combined_df.to_dict('records')
 
 @dash.callback(
     Output('job-table', 'columnDefs'),
