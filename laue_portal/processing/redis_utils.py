@@ -19,12 +19,11 @@ from sqlalchemy.inspection import inspect
 # Import Laue Analysis functions
 from laue_portal.recon import analysis_recon
 from laueanalysis.reconstruct import reconstruct as wire_reconstruct  # This is actually for wire reconstruction
-from laueanalysis.indexing import pyLaueGo
 
 logger = logging.getLogger(__name__)
 
 # Redis connection
-redis_conn = Redis(host='localhost', port=6379, decode_responses=False)
+redis_conn = Redis(host='localhost', port=6385, decode_responses=False)
 
 # Single queue for all job types
 job_queue = Queue('laue_jobs', connection=redis_conn)
