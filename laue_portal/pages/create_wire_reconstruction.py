@@ -11,14 +11,7 @@ import urllib.parse
 from dash.exceptions import PreventUpdate
 import logging
 logger = logging.getLogger(__name__)
-
-try:
-    import laue_portal.recon.analysis_recon as analysis_recon
-    _ANALYSIS_LIB_AVAILABLE = True
-except ImportError:
-    analysis_recon = None
-    _ANALYSIS_LIB_AVAILABLE = False
-    logger.warning("Wire Reconstruction libraries not installed. Analysis will be skipped.")
+from laue_portal.processing.redis_utils import enqueue_wire_reconstruction, STATUS_REVERSE_MAPPING
 
 JOB_DEFAULTS = {
     "computer_name": 'example_computer',
@@ -32,10 +25,17 @@ JOB_DEFAULTS = {
 }
 
 WIRERECON_DEFAULTS = {
-    'scanNumber': 276994,
+    "scanNumber": 276994,
     "depth_start": -50,
     "depth_end": 150,
     "depth_resolution": 1,
+}
+
+CATALOG_DEFAULTS = {
+    "outputFolder": "tests/data/output",
+    "filefolder": "tests/data/gdata",
+    "filenamePrefix": "HAs_long_laue1_",
+    "geoFile": "tests/data/geo/geoN_2022-03-29_14-15-05.xml",
 }
 
 dash.register_page(__name__)
@@ -43,13 +43,6 @@ dash.register_page(__name__)
 layout = dbc.Container(
     [html.Div([
         navbar.navbar,
-        dbc.Alert(
-            "Wire Reconstruction libraries not installed. Dry runs only.",
-            id="alert-lib-warning",
-            dismissable=True,
-            is_open=not _ANALYSIS_LIB_AVAILABLE,
-            color="warning",
-        ),
         dcc.Location(id='url-create-wirerecon', refresh=False),
         dbc.Alert(
             "Hello! I am an alert",
@@ -169,7 +162,18 @@ def submit_config(n,
         with Session(db_utils.ENGINE) as session:
             
             session.add(job)
-            job_id = session.query(db_schema.Job).order_by(db_schema.Job.job_id.desc()).first().job_id
+            session.flush()  # Get job_id without committing
+            job_id = job.job_id
+            
+            # Create subjobs for parallel processing
+            for i in range(6):
+                subjob = db_schema.SubJob(
+                    job_id=job_id,
+                    computer_name=JOB_DEFAULTS['computer_name'],
+                    status=STATUS_REVERSE_MAPPING["Queued"],
+                    priority=JOB_DEFAULTS['priority']
+                )
+                session.add(subjob)
             
             wirerecon = db_schema.WireRecon(
                 # date=datetime.datetime.now(),
@@ -198,11 +202,34 @@ def submit_config(n,
                                     'children': 'Config Added to Database',
                                     'color': 'success'})
 
-        if _ANALYSIS_LIB_AVAILABLE:
-            pass
-            # analysis_recon.run_analysis(config_dict)
-        else:
-            logger.warning("Skipping reconstruction analysis; libraries not available")
+        # Enqueue the job to Redis
+        try:
+            # Prepare parameters for wire reconstruction
+            input_file = f"{CATALOG_DEFAULTS['filefolder']}/{CATALOG_DEFAULTS['filenamePrefix']}{scanNumber}"
+            output_file = f"{CATALOG_DEFAULTS['outputFolder']}/wire_recon_{scanNumber}"
+            geometry_file = CATALOG_DEFAULTS["geoFile"]
+            depth_range = (depth_start, depth_end)
+            
+            rq_job_id = enqueue_wire_reconstruction(
+                job_id=job_id,
+                input_file=input_file,
+                output_file=output_file,
+                geometry_file=geometry_file,
+                depth_range=depth_range,
+                resolution=depth_resolution
+            )
+            
+            logger.info(f"Wire reconstruction job {job_id} enqueued with RQ ID: {rq_job_id}")
+            
+            set_props("alert-submit", {'is_open': True, 
+                                      'children': f'Job {job_id} submitted to queue',
+                                      'color': 'info'})
+        except Exception as e:
+            logger.error(f"Failed to enqueue job: {e}")
+            set_props("alert-submit", {'is_open': True, 
+                                      'children': f'Failed to queue job: {str(e)}',
+                                      'color': 'danger'})
+
 
 @dash.callback(
     Input('url-create-wirerecon','pathname'),

@@ -15,14 +15,7 @@ from dash.exceptions import PreventUpdate
 import logging
 logger = logging.getLogger(__name__)
 import os
-
-try:
-    import laueindexing.pyLaueGo as pyLaueGo
-    _PYLAUEGO_AVAILABLE = True
-except ImportError:
-    pyLaueGo = None
-    _PYLAUEGO_AVAILABLE = False
-    logger.warning("PyLaueGo library not installed, Dry runs only.")
+from laue_portal.processing.redis_utils import enqueue_peak_indexing
 
 JOB_DEFAULTS = {
     "computer_name": 'example_computer',
@@ -82,13 +75,6 @@ dash.register_page(__name__)
 layout = dbc.Container(
     [html.Div([
         navbar.navbar,
-        dbc.Alert(
-            "pyLaueGo library not available; indexing disabled",
-            id="alert-lib-warning",
-            dismissable=True,
-            is_open=not _PYLAUEGO_AVAILABLE,
-            color="warning",
-        ),
         dcc.Location(id='url-create-indexedpeaks', refresh=False),
         dbc.Alert(
             "Hello! I am an alert",
@@ -364,10 +350,20 @@ def submit_config(n,
                                         'children': 'Config Added to Database',
                                         'color': 'success'})
 
-            """ TODO: Running not implemented yet. 
-            pyLaueGo = pyLaueGo(config_dict)
-            pyLaueGo.run(0, 1)
-            """
+            # Enqueue the job to Redis
+            try:
+                rq_job_id = enqueue_peak_indexing(job_id, config_dict)
+                logger.info(f"Peak indexing job {job_id} enqueued with RQ ID: {rq_job_id}")
+                
+                set_props("alert-submit", {'is_open': True, 
+                                          'children': f'Job {job_id} submitted to queue',
+                                          'color': 'info'})
+            except Exception as e:
+                logger.error(f"Failed to enqueue job: {e}")
+                set_props("alert-submit", {'is_open': True, 
+                                          'children': f'Failed to queue job: {str(e)}',
+                                          'color': 'danger'})
+
 
 @dash.callback(
     Input('url-create-indexedpeaks', 'href'),

@@ -104,7 +104,7 @@ layout = html.Div([
                             dag.AgGrid(
                                 id='scan-recon-table',
                                 columnSize="responsiveSizeToFit",
-                                dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight'},
+                                dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight', "rowHeight": 32},
                                 #style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                                 className="ag-theme-alpine"
                             )
@@ -129,7 +129,7 @@ layout = html.Div([
                             dag.AgGrid(
                                 id='scan-peakindex-table',
                                 columnSize="responsiveSizeToFit",
-                                dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight'},
+                                dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight', "rowHeight": 32},
                                 #style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                                 className="ag-theme-alpine"
                             )
@@ -567,6 +567,8 @@ def _get_scan_recons(scan_id):
                         col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
                     elif field_key in ['submit_time', 'start_time', 'finish_time']:
                         col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+                    elif field_key == 'status':
+                        col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
                     
                     cols.append(col_def)
 
@@ -658,6 +660,8 @@ def _get_scan_recons(scan_id):
                         col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
                     elif field_key in ['submit_time', 'start_time', 'finish_time']:
                         col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+                    elif field_key == 'status':
+                        col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
                     
                     cols.append(col_def)
 
@@ -842,6 +846,8 @@ def _get_scan_peakindexs(scan_id):
                     col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
                 elif field_key in ['submit_time', 'start_time', 'finish_time']:
                     col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+                elif field_key == 'status':
+                    col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
                 
                 cols.append(col_def)
 

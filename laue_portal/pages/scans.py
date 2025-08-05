@@ -55,7 +55,7 @@ layout = html.Div([
                     },
             },
                 dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight',
-                                 "rowSelection": 'multiple', "suppressRowClickSelection": True, "animateRows": False},
+                                 "rowSelection": 'multiple', "suppressRowClickSelection": True, "animateRows": False, "rowHeight": 32},
                 style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                 className="ag-theme-alpine" 
             )

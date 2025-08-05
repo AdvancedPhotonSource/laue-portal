@@ -9,6 +9,7 @@ import laue_portal.components.navbar as navbar
 from dash.exceptions import PreventUpdate
 import urllib.parse
 import pandas as pd
+from laue_portal.processing.redis_utils import STATUS_MAPPING
 
 dash.register_page(__name__, path="/job")
 
@@ -120,14 +121,6 @@ Callbacks
 =======================
 """
 
-STATUS_MAPPING = {
-    0: "Pending",
-    1: "Running", 
-    2: "Finished",
-    3: "Failed",
-    4: "Cancelled"
-}
-
 @callback(
     [Output('JobID_print', 'children'),
      Output('Status_print', 'children'),
@@ -178,7 +171,7 @@ def load_job_data(href):
                     # Format status with color
                     status_text = STATUS_MAPPING.get(job.status, f"Unknown ({job.status})")
                     status_color = {
-                        0: "warning",  # Pending
+                        0: "warning",  # Queued
                         1: "info",     # Running
                         2: "success",  # Finished
                         3: "danger",   # Failed

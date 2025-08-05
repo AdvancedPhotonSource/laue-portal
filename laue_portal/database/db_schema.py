@@ -172,7 +172,7 @@ class Catalog(Base):
     filefolder: Mapped[str] = mapped_column(String) #infile
     filenamePrefix: Mapped[str] = mapped_column(String) #infile
     outputFolder: Mapped[str] = mapped_column(String) #outfile
-    geoFile: Mapped[str] = mapped_column(String) #geofile
+    geoFile: Mapped[str] = mapped_column(String, nullable=True) #geofile
     
     aperture: Mapped[str] = mapped_column(String)
     sample_name: Mapped[str] = mapped_column(String, nullable=True)
@@ -185,19 +185,40 @@ class Job(Base):
     job_id: Mapped[int] = mapped_column(primary_key=True)
 
     computer_name: Mapped[str] = mapped_column(String)
-    status: Mapped[int] = mapped_column(Integer) #pending, running, finished, stopped
+    status: Mapped[int] = mapped_column(Integer) #Queued, Running, Finished, Failed, Cancelled
     priority: Mapped[int] = mapped_column(Integer)
-    submit_time: Mapped[DateTime] = mapped_column(DateTime) #date
-    start_time: Mapped[DateTime] = mapped_column(DateTime)
-    finish_time: Mapped[DateTime] = mapped_column(DateTime)
+
+    submit_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    start_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    finish_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    
     author: Mapped[str] = mapped_column(String, nullable=True)
     notes: Mapped[str] = mapped_column(String, nullable=True)
+    messages: Mapped[str] = mapped_column(String, nullable=True)
 
     # Parent of:
+    subjob_: Mapped["SubJob"] = relationship(backref="job")
     calib_: Mapped["Calib"] = relationship(backref="job")
     recon_: Mapped["Recon"] = relationship(backref="job")
     wirerecon_: Mapped["WireRecon"] = relationship(backref="job")
     peakindex_: Mapped["PeakIndex"] = relationship(backref="job")
+
+
+class SubJob(Base):
+    __tablename__ = "subjob"
+
+    subjob_id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"))
+
+    computer_name: Mapped[str] = mapped_column(String)
+    status: Mapped[int] = mapped_column(Integer) #Queued, Running, Finished, Failed, Cancelled
+    priority: Mapped[int] = mapped_column(Integer)
+
+    start_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    finish_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    
+    messages: Mapped[str] = mapped_column(String, nullable=True)
+
 
 
 class Calib(Base):
