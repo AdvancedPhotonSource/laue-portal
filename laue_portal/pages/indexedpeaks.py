@@ -34,19 +34,18 @@ Callbacks
 """
 VISIBLE_COLS = [
     db_schema.PeakIndex.peakindex_id,
-    # db_schema.PeakIndex.dataset_id,
     db_schema.PeakIndex.scanNumber,
+    db_schema.PeakIndex.author,
+    db_schema.PeakIndex.notes,
     db_schema.PeakIndex.recon_id,
     db_schema.PeakIndex.wirerecon_id,
-    # db_schema.PeakIndexResults.structure,
     db_schema.PeakIndex.boxsize,
     db_schema.PeakIndex.threshold,
+    # db_schema.PeakIndexResults.structure,
     db_schema.Job.submit_time,
     db_schema.Job.start_time,
     db_schema.Job.finish_time,
     db_schema.Job.status,
-    db_schema.Job.author,
-    db_schema.Job.notes,
 ]
 
 CUSTOM_HEADER_NAMES = {

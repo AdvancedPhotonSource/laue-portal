@@ -82,7 +82,20 @@ layout = html.Div([
                                 disabled=True
                             )
                         )
-                    ], className="mb-3 mt-3", align="start")
+                    ], className="mb-3 mt-3", align="start"),
+                    
+                    dbc.Row([
+                        dbc.Col([
+                            html.P(html.Strong("Messages:")),
+                        ], width="auto", align="start"),
+                        dbc.Col(
+                            dbc.Textarea(
+                                id="Messages_print",
+                                style={"width": "100%", "minHeight": "150px"},
+                                disabled=True
+                            )
+                        )
+                    ], className="mb-3", align="start")
                 ])
             ], className="mb-4 shadow-sm border",
             style={"width": "100%"}),
@@ -132,6 +145,7 @@ Callbacks
      Output('FinishTime_print', 'children'),
      Output('Duration_print', 'children'),
      Output('Notes_print', 'value'),
+     Output('Messages_print', 'value'),
      Output('related-entities-content', 'children'),
      Output('cancel-job-btn', 'disabled')],
     Input('url-job-page', 'href'),
@@ -249,6 +263,7 @@ def load_job_data(href):
                         finish_time,
                         duration,
                         job.notes or "",
+                        job.messages or "",
                         related_entities,
                         not can_cancel
                     )
@@ -258,6 +273,7 @@ def load_job_data(href):
                         "Not found",
                         "—", "—", "—", "—", "—", "—", "—",
                         "Job not found in database",
+                        "",
                         [html.P("Job not found.", className="text-danger")],
                         True
                     )
@@ -269,6 +285,7 @@ def load_job_data(href):
                 "Error",
                 "—", "—", "—", "—", "—", "—", "—",
                 f"Error: {str(e)}",
+                "",
                 [html.P(f"Error loading job data: {str(e)}", className="text-danger")],
                 True
             )
@@ -277,6 +294,7 @@ def load_job_data(href):
         "—",
         "—",
         "—", "—", "—", "—", "—", "—", "—",
+        "",
         "",
         [html.P("No job ID provided.", className="text-muted")],
         True

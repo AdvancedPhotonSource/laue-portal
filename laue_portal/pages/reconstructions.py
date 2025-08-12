@@ -37,15 +37,15 @@ VISIBLE_COLS = [
     db_schema.Recon.recon_id,
     db_schema.Recon.scanNumber,
     db_schema.Recon.calib_id,
+    db_schema.Recon.author,
+    db_schema.Recon.notes,
+    #db_schema.Recon.pxl_recon,
     db_schema.Catalog.sample_name,
     db_schema.Catalog.aperture,
-    #db_schema.Recon.pxl_recon,
     db_schema.Job.submit_time,
     db_schema.Job.start_time,
     db_schema.Job.finish_time,
     db_schema.Job.status,
-    db_schema.Job.author,
-    db_schema.Job.notes,
 ]
 
 CUSTOM_HEADER_NAMES = {

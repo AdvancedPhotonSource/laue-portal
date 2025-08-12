@@ -60,6 +60,9 @@ def enqueue_job(job_id: int, job_type: str, execute_func, at_front: bool = False
     Returns:
         RQ job ID
     """
+    # Extract timeout from kwargs if present
+    timeout = kwargs.get('timeout', 7200)  # Default to 2 hours if not specified
+    
     # Add job metadata
     job_meta = {
         'db_job_id': job_id,
@@ -91,11 +94,12 @@ def enqueue_job(job_id: int, job_type: str, execute_func, at_front: bool = False
         meta=job_meta,
         at_front=at_front,  # Use at_front parameter
         depends_on=depends_on,  # Add dependency support
+        job_timeout=timeout,  # Set the job timeout
         result_ttl=86400,  # Keep result for 24 hours
         failure_ttl=86400  # Keep failed job info for 24 hours
     )
     
-    logger.info(f"Enqueued {job_type} job {job_id} with RQ ID: {rq_job.id}")
+    logger.info(f"Enqueued {job_type} job {job_id} with RQ ID: {rq_job.id} (timeout: {timeout}s)")
     
     return rq_job.id
 
@@ -154,7 +158,9 @@ def execute_batch_coordinator(job_id: int):
 
 
 # Generic batch handler
-def _enqueue_batch(job_id: int, job_type: str, execute_func, at_front: bool = False, *args, **kwargs) -> str:
+def _enqueue_batch(job_id: int, job_type: str, execute_func, at_front: bool = False, 
+                   input_files: List[str] = None, output_files: List[str] = None, 
+                   *args, **kwargs) -> str:
     """
     Generic batch handler that enqueues subjobs in parallel with a coordinator.
     
@@ -163,6 +169,8 @@ def _enqueue_batch(job_id: int, job_type: str, execute_func, at_front: bool = Fa
         job_type: Type of job (e.g., 'wire_reconstruction', 'reconstruction')
         execute_func: The execution function to call for each subjob
         at_front: Whether to add jobs at front of queue (default: False)
+        input_files: Optional list of input files (one per subjob)
+        output_files: Optional list of output files (one per subjob)
         *args, **kwargs: Arguments to pass to the execution function
     
     Returns:
@@ -172,16 +180,34 @@ def _enqueue_batch(job_id: int, job_type: str, execute_func, at_front: bool = Fa
     with Session(db_utils.ENGINE) as session:
         subjobs = session.query(db_schema.SubJob).filter(
             db_schema.SubJob.job_id == job_id
-        ).all()
+        ).order_by(db_schema.SubJob.subjob_id).all()
         
         if not subjobs:
             raise ValueError(f"No subjobs found for job_id {job_id}. "
                            f"{job_type} requires subjobs to be created first.")
     
+    # Validate file lists if provided
+    if input_files is not None:
+        if len(input_files) != len(subjobs):
+            raise ValueError(f"Number of input files ({len(input_files)}) "
+                           f"does not match number of subjobs ({len(subjobs)})")
+    if output_files is not None:
+        if len(output_files) != len(subjobs):
+            raise ValueError(f"Number of output files ({len(output_files)}) "
+                           f"does not match number of subjobs ({len(subjobs)})")
+    
     rq_job_ids = []
     
     # Enqueue each subjob in parallel (no dependencies between them)
-    for subjob in subjobs:
+    for i, subjob in enumerate(subjobs):
+        # Build subjob-specific args based on what file lists are provided
+        subjob_args = []
+        if input_files is not None:
+            subjob_args.append(input_files[i])
+        if output_files is not None:
+            subjob_args.append(output_files[i])
+        subjob_args.extend(args)
+            
         rq_job_id = enqueue_job(
             subjob.subjob_id,
             job_type,
@@ -189,7 +215,7 @@ def _enqueue_batch(job_id: int, job_type: str, execute_func, at_front: bool = Fa
             at_front,
             None,  # No dependencies - run in parallel
             db_schema.SubJob,  # Specify SubJob table
-            *args,
+            *subjob_args,
             **kwargs
         )
         rq_job_ids.append(rq_job_id)
@@ -208,7 +234,7 @@ def _enqueue_batch(job_id: int, job_type: str, execute_func, at_front: bool = Fa
     return coordinator_id
 
 
-def enqueue_wire_reconstruction(job_id: int, input_file: str, output_file: str,
+def enqueue_wire_reconstruction(job_id: int, input_files: List[str], output_files: List[str],
                                geometry_file: str, depth_range: tuple, 
                                resolution: float = 1.0, at_front: bool = False, **kwargs) -> str:
     """
@@ -217,8 +243,8 @@ def enqueue_wire_reconstruction(job_id: int, input_file: str, output_file: str,
     
     Args:
         job_id: Database job ID
-        input_file: Path to input file
-        output_file: Path to output file
+        input_files: List of paths to input files (one per subjob)
+        output_files: List of paths to output files (one per subjob)
         geometry_file: Path to geometry file
         depth_range: Tuple of (start, end) depths
         resolution: Resolution parameter (default: 1.0)
@@ -245,8 +271,8 @@ def enqueue_wire_reconstruction(job_id: int, input_file: str, output_file: str,
         'wire_reconstruction',
         execute_wire_reconstruction_job,
         at_front,
-        input_file,
-        output_file,
+        input_files,
+        output_files,
         geometry_file,
         depth_range,
         resolution,
@@ -529,6 +555,41 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
             if job:
                 job.status = STATUS_REVERSE_MAPPING["Finished"]
                 job.finish_time = datetime.now()
+                
+                # Store the job result directly
+                if hasattr(job, 'messages'):
+                    # Format the result for display
+                    if result is not None:
+                        # Handle wire reconstruction results specially
+                        if job_type == 'Wire reconstruction':
+                            result_str = ''
+
+                            if result.success:
+                                result_str += "\n".join([
+                                    "Reconstruction successful!",
+                                    "\nOutput files created:",
+                                    "".join([f"- {f}" for f in result.output_files])
+                                ])
+                            else:
+                                result_str += "\n".join([
+                                    "Reconstruction failed.",
+                                    f"Error: {result.error}"
+                                ])
+
+                            if result.log:
+                                result_str += "\n".join([
+                                    "\nLog:",
+                                    result.log
+                                ])
+
+                        else: #This might not work
+                            result_str = str(result)
+                        
+                        if job.messages:
+                            job.messages += f"\n\n{result_str}"
+                        else:
+                            job.messages = result_str
+                
                 session.commit()
         
         publish_job_update(job_id, 'finished', f'{job_type} completed successfully')
@@ -572,10 +633,10 @@ def execute_wire_reconstruction_job(job_id: int, input_file: str, output_file: s
                                    resolution: float, **kwargs):
     """Execute a wire reconstruction job (subjob)."""
     def _do_wire_reconstruction():
-        # return wire_reconstruct(input_file, output_file, geometry_file, depth_range, resolution, **kwargs)
-        # Testing: sleep for 5 seconds instead
-        time.sleep(5)
-        return {"status": "test_completed", "message": "Slept for 5 seconds instead of running wire reconstruction"}
+        return wire_reconstruct(input_file, output_file, geometry_file, depth_range, resolution, **kwargs)
+        # # Testing: sleep for 5 seconds instead
+        # time.sleep(5)
+        # return {"status": "test_completed", "message": "Slept for 5 seconds instead of running wire reconstruction"}
     
     return execute_with_status_updates(
         job_id,
@@ -588,10 +649,10 @@ def execute_wire_reconstruction_job(job_id: int, input_file: str, output_file: s
 def execute_peak_indexing_job(job_id: int, config_dict: Dict[str, Any]):
     """Execute a peak indexing job."""
     def _do_peak_indexing():
-        # return pyLaueGo(config_dict).run(0, 1)  # rank=0, size=1 for single process
-        # Testing: sleep for 5 seconds instead
-        time.sleep(5)
-        return {"status": "test_completed", "message": "Slept for 5 seconds instead of running peak indexing"}
+        return pyLaueGo(config_dict).run(0, 1)  # rank=0, size=1 for single process
+        # # Testing: sleep for 5 seconds instead
+        # time.sleep(5)
+        # return {"status": "test_completed", "message": "Slept for 5 seconds instead of running peak indexing"}
     
     return execute_with_status_updates(
         job_id,

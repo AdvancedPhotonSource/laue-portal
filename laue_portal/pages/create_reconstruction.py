@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 import laue_portal.components.navbar as navbar
 from laue_portal.components.recon_form import recon_form, set_recon_form_props
 from laue_portal.processing.redis_utils import enqueue_reconstruction, STATUS_REVERSE_MAPPING
+from config import DEFAULT_VARIABLES
 
 JOB_DEFAULTS = {
     "computer_name": 'example_computer',
@@ -20,13 +21,16 @@ JOB_DEFAULTS = {
     "submit_time": datetime.datetime.now(),
     "start_time": datetime.datetime.now(),
     "finish_time": datetime.datetime.now(),
-    "author": '',
-    "notes": '',
 }
 
 RECON_DEFAULTS = {
     'calib_id': 0,
 }
+
+# DEFAULT_VARIABLES = {
+#     "author": "",
+#     "notes": "",
+# }
 
 dash.register_page(__name__)
 
@@ -117,7 +121,7 @@ def upload_config(contents):
     State('y_end', 'value'),
     State('depth_start', 'value'),
     State('depth_end', 'value'),
-    State('depth_step', 'value'),
+    State('depth_resolution', 'value'),
     State('recon_name', 'value'),
     
     State('file_path', 'value'),
@@ -181,6 +185,10 @@ def upload_config(contents):
     State('ene_max', 'value'),
     State('ene_step', 'value'),
     
+    # User text
+    State('author', 'value'),
+    State('notes', 'value'),
+    
     prevent_initial_call=True,
 )
 def submit_config(n,
@@ -194,7 +202,7 @@ def submit_config(n,
     y_end,
     depth_start,
     depth_end,
-    depth_step,
+    depth_resolution,
     recon_name,
 
     file_path,
@@ -258,6 +266,9 @@ def submit_config(n,
     ene_max,
     ene_step,
     
+    # User text
+    author,
+    notes,
 ):
     # TODO: Input validation and reponse
      for scanNumber in str(scanNumbers).split(','):
@@ -274,9 +285,6 @@ def submit_config(n,
             submit_time=JOB_DEFAULTS['submit_time'],
             start_time=JOB_DEFAULTS['start_time'],
             finish_time=JOB_DEFAULTS['finish_time'],
-            
-            author=JOB_DEFAULTS['author'],
-            notes=JOB_DEFAULTS['notes'],
         )
 
         with Session(db_utils.ENGINE) as session:
@@ -307,6 +315,10 @@ def submit_config(n,
                 scanNumber=scanNumber,
                 calib_id = RECON_DEFAULTS['calib_id'],
                 job_id = job_id,
+                
+                # User text
+                author=author,
+                notes=notes,
 
                 file_path=file_path,
                 file_output=file_output,
@@ -354,7 +366,7 @@ def submit_config(n,
                 geo_detector_rot=[det_rot_a, det_rot_b, det_rot_c],
                 geo_detector_pos=[det_pos_x, det_pos_y, det_pos_z],
                 geo_source_offset=source_offset,
-                geo_source_grid=[depth_start, depth_end, depth_step],
+                geo_source_grid=[depth_start, depth_end, depth_resolution],
 
                 algo_iter=iters,
                 algo_pos_method=pos_method,

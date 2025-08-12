@@ -14,10 +14,8 @@ from laue_portal.components.catalog_form import catalog_form, set_catalog_form_p
 
 CATALOG_DEFAULTS = {#temporary
     # 'scanNumber':log['scanNumber'],
-    'filefolder':'example/file/folder',
-    'filenamePrefix':'example_filename_prefix',
-    'outputFolder':'example/output/folder',
-    'geoFile':'example_geo_file',
+    'filefolder':'/net/s34data/export/s34data1/LauePortal/portal_workspace/Run1/data/scan_1', #'example/file/folder',
+    'filenamePrefix': 'Si-wire_%d', #'example_filename_prefix',
 
     'aperture':{'options':'wire'},
     'sample_name':'Si',
@@ -250,8 +248,6 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
     
     State('filefolder', 'value'),
     State('filenamePrefix', 'value'),
-    State('outputFolder', 'value'),
-    State('geoFile', 'value'),
 
     State('aperture', 'value'),
     State('sample_name', 'value'),
@@ -263,8 +259,6 @@ def submit_catalog(n,
 
     filefolder,
     filenamePrefix,
-    outputFolder,
-    geoFile,
 
     aperture,
     sample_name,
@@ -298,8 +292,6 @@ def submit_catalog(n,
                 # Update existing catalog entry
                 existing_catalog.filefolder = filefolder
                 existing_catalog.filenamePrefix = filenamePrefix
-                existing_catalog.outputFolder = outputFolder
-                existing_catalog.geoFile = geoFile
                 existing_catalog.aperture = aperture
                 existing_catalog.sample_name = sample_name
                 
@@ -314,8 +306,6 @@ def submit_catalog(n,
                     scanNumber=scanNumber,
                     filefolder=filefolder,
                     filenamePrefix=filenamePrefix,
-                    outputFolder=outputFolder,
-                    geoFile=geoFile,
                     aperture=aperture,
                     sample_name=sample_name,
                 )

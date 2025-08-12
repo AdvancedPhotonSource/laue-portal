@@ -27,6 +27,7 @@ layout = html.Div([
                     "domLayout": 'autoHeight', 
                     "rowHeight": 32,
                     "animateRows": True,
+                    "enableCellTextSelection": True,  # Enable text selection for copying
                     # Custom row styling for subjobs
                     "getRowClass": {"function": "params => params.data.row_type === 'subjob' ? 'subjob-row' : ''"}
                 },

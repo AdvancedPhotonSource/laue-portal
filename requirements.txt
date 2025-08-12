@@ -23,5 +23,3 @@ rq
 git+https://github.com/dgursoy/cold.git
 git+https://github.com/data-exchange/dxchange.git
 git+https://github.com/data-exchange/dxfile.git
-git+https://github.com/Linked-Liszt/laue-indexing.git
-git+https://github.com/Linked-Liszt/laue-analysis.git
