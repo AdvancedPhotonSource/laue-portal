@@ -19,7 +19,6 @@ from sqlalchemy.inspection import inspect
 # Import Laue Analysis functions
 from laue_portal.recon import analysis_recon
 from laueanalysis.reconstruct import reconstruct as wire_reconstruct  # This is actually for wire reconstruction
-from laueanalysis.indexing import pyLaueGo
 
 logger = logging.getLogger(__name__)
 
