@@ -273,27 +273,27 @@ def submit_catalog(n,
             
         with Session(db_utils.ENGINE) as session:
             # Check if metadata record exists for this scanNumber
-            metadata_exists = session.query(db_schema.Metadata).filter(
+            metadata_data = session.query(db_schema.Metadata).filter(
                 db_schema.Metadata.scanNumber == scanNumber
             ).first()
             
-            if not metadata_exists:
+            if not metadata_data:
                 set_props("alert-submit", {'is_open': True, 
                                             'children': f'Cannot create catalog entry: No metadata found for scan {scanNumber}. Please import the scan metadata first.',
                                             'color': 'danger'})
                 return
             
             # Check if catalog entry already exists
-            existing_catalog = session.query(db_schema.Catalog).filter(
+            catalog_data = session.query(db_schema.Catalog).filter(
                 db_schema.Catalog.scanNumber == scanNumber
             ).first()
             
-            if existing_catalog:
+            if catalog_data:
                 # Update existing catalog entry
-                existing_catalog.filefolder = filefolder
-                existing_catalog.filenamePrefix = filenamePrefix
-                existing_catalog.aperture = aperture
-                existing_catalog.sample_name = sample_name
+                catalog_data.filefolder = filefolder
+                catalog_data.filenamePrefix = filenamePrefix
+                catalog_data.aperture = aperture
+                catalog_data.sample_name = sample_name
                 
                 session.commit()
                 

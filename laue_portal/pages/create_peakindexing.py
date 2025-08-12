@@ -15,7 +15,7 @@ from dash.exceptions import PreventUpdate
 import logging
 logger = logging.getLogger(__name__)
 import os
-from laue_portal.processing.redis_utils import enqueue_peak_indexing
+from laue_portal.processing.redis_utils import enqueue_peakindexing
 from config import DEFAULT_VARIABLES
 
 JOB_DEFAULTS = {
@@ -79,7 +79,7 @@ dash.register_page(__name__)
 layout = dbc.Container(
     [html.Div([
         navbar.navbar,
-        dcc.Location(id='url-create-indexedpeaks', refresh=False),
+        dcc.Location(id='url-create-peakindexing', refresh=False),
         dbc.Alert(
             "Hello! I am an alert",
             id="alert-upload",
@@ -104,14 +104,14 @@ layout = dbc.Container(
             html.Div(
                 [
                     html.Div([
-                            dcc.Upload(dbc.Button('Upload Config'), id='upload-peakindex-config'),
+                            dcc.Upload(dbc.Button('Upload Config'), id='upload-peakindexing-config'),
                     ], style={'display':'inline-block'}),
                 ],
             )
         ),
         html.Hr(),
         html.Center(
-            dbc.Button('Submit', id='submit_peakindex', color='primary'),
+            dbc.Button('Submit', id='submit_peakindexing', color='primary'),
         ),
         html.Hr(),
         peakindex_form,
@@ -128,7 +128,7 @@ Callbacks
 =======================
 """
 @dash.callback(
-    Input('upload-peakindex-config', 'contents'),
+    Input('upload-peakindexing-config', 'contents'),
     prevent_initial_call=True,
 )
 def upload_config(contents):
@@ -158,7 +158,7 @@ def upload_config(contents):
 
 
 @dash.callback(
-    Input('submit_peakindex', 'n_clicks'),
+    Input('submit_peakindexing', 'n_clicks'),
     
     State('scanNumber', 'value'),
     State('author', 'value'),
@@ -359,8 +359,8 @@ def submit_config(n,
 
             # Enqueue the job to Redis
             try:
-                rq_job_id = enqueue_peak_indexing(job_id, config_dict)
-                logger.info(f"Peak indexing job {job_id} enqueued with RQ ID: {rq_job_id}")
+                rq_job_id = enqueue_peakindexing(job_id, config_dict)
+                logger.info(f"Peakindexing job {job_id} enqueued with RQ ID: {rq_job_id}")
                 
                 set_props("alert-submit", {'is_open': True, 
                                           'children': f'Job {job_id} submitted to queue',
@@ -373,7 +373,7 @@ def submit_config(n,
 
 
 @dash.callback(
-    Input('url-create-indexedpeaks', 'href'),
+    Input('url-create-peakindexing', 'href'),
     prevent_initial_call=True,
 )
 def load_scan_data_from_url(href):
@@ -397,15 +397,15 @@ def load_scan_data_from_url(href):
             scan_id = int(scan_id)
             with Session(db_utils.ENGINE) as session:
                 # Query metadata and scan data
-                metadata = session.query(db_schema.Metadata).filter(
+                metadata_data = session.query(db_schema.Metadata).filter(
                     db_schema.Metadata.scanNumber == scan_id
                 ).first()
                 
-                scans = session.query(db_schema.Scan).filter(
+                scan_data = session.query(db_schema.Scan).filter(
                     db_schema.Scan.scanNumber == scan_id
                 ).all()
 
-                if metadata:
+                if metadata_data:
                     # Create a PeakIndex object with populated defaults from metadata/scan
                     peakindex_defaults = db_schema.PeakIndex(
                         # # Metadata fields
@@ -424,13 +424,13 @@ def load_scan_data_from_url(href):
                         wirerecon_id = wirerecon_id,
                                         
                         # File-related fields derived from metadata
-                        filefolder=os.path.dirname(metadata.mda_file) if metadata.mda_file else PEAKINDEX_DEFAULTS["filefolder"],
-                        filenamePrefix=os.path.splitext(os.path.basename(metadata.mda_file))[0] if metadata.mda_file else PEAKINDEX_DEFAULTS["filenamePrefix"],
+                        filefolder=os.path.dirname(metadata_data.mda_file) if metadata_data.mda_file else PEAKINDEX_DEFAULTS["filefolder"],
+                        filenamePrefix=os.path.splitext(os.path.basename(metadata_data.mda_file))[0] if metadata_data.mda_file else PEAKINDEX_DEFAULTS["filenamePrefix"],
                         
                         # Energy-related fields from source
-                        indexKeVmaxCalc=metadata.source_energy or PEAKINDEX_DEFAULTS["indexKeVmaxCalc"],
-                        indexKeVmaxTest=metadata.source_energy or PEAKINDEX_DEFAULTS["indexKeVmaxTest"],
-                        energyUnit=metadata.source_energy_unit or PEAKINDEX_DEFAULTS["energyUnit"],
+                        indexKeVmaxCalc=metadata_data.source_energy or PEAKINDEX_DEFAULTS["indexKeVmaxCalc"],
+                        indexKeVmaxTest=metadata_data.source_energy or PEAKINDEX_DEFAULTS["indexKeVmaxTest"],
+                        energyUnit=metadata_data.source_energy_unit or PEAKINDEX_DEFAULTS["energyUnit"],
                         
                         # Scan point range from scan data
                         scanPointStart=PEAKINDEX_DEFAULTS["scanPointStart"],
@@ -467,7 +467,7 @@ def load_scan_data_from_url(href):
                         outputFolder=PEAKINDEX_DEFAULTS["outputFolder"],
                         geoFile=PEAKINDEX_DEFAULTS["geoFile"],
                         crystFile=PEAKINDEX_DEFAULTS["crystFile"],
-                        depth=f"{len(scans)}D" if scans else PEAKINDEX_DEFAULTS["depth"],
+                        depth=f"{len(scan_data)}D" if scan_data else PEAKINDEX_DEFAULTS["depth"],
                         beamline=PEAKINDEX_DEFAULTS["beamline"]
                     )
                     
@@ -477,7 +477,7 @@ def load_scan_data_from_url(href):
                     # Show success message
                     set_props("alert-scan-loaded", {
                         'is_open': True, 
-                        'children': f'Scan {scan_id} data loaded successfully. Scan Number: {metadata.scanNumber}, Energy: {metadata.source_energy} {metadata.source_energy_unit}',
+                        'children': f'Scan {scan_id} data loaded successfully. Scan Number: {metadata_data.scanNumber}, Energy: {metadata_data.source_energy} {metadata_data.source_energy_unit}',
                         'color': 'success'
                     })
                 else:

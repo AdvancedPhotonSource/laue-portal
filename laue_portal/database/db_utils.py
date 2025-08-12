@@ -662,20 +662,20 @@ def get_catalog_data(session, scan_number, root_path="", CATALOG_DEFAULTS=None):
     Returns:
         dict with catalog data including computed data_path
     """
-    catalog = session.query(db_schema.Catalog).filter(
+    catalog_data = session.query(db_schema.Catalog).filter(
         db_schema.Catalog.scanNumber == scan_number
     ).first()
     
-    if catalog:
+    if catalog_data:
         # Compute data_path as the portion of filefolder after root_path
-        filefolder = catalog.filefolder
+        filefolder = catalog_data.filefolder
         
         # Use the utility function to remove root_path prefix
         data_path = remove_root_path_prefix(filefolder, root_path)
         
         return {
             "filefolder": filefolder,
-            "filenamePrefix": catalog.filenamePrefix,
+            "filenamePrefix": catalog_data.filenamePrefix,
             "data_path": data_path
         }
     else:

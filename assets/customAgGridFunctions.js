@@ -204,7 +204,7 @@ dagcomponentfuncs.DateFormatter = function (params) {
 
 dagcomponentfuncs.ScanLinkRenderer = function (props) {
     // props.value will be the scanNumber for the current row
-    const url = `/scan?id=${props.value}`;
+    const url = `/scan?scan_id=${props.value}`;
     return React.createElement(
         'a',
         { href: url },
@@ -214,7 +214,7 @@ dagcomponentfuncs.ScanLinkRenderer = function (props) {
 
 dagcomponentfuncs.PeakIndexLinkRenderer = function (props) {
     // props.value will be the peakindex_id for the current row
-    const url = `/indexedpeak?indexid=${props.value}`;
+    const url = `/peakindexing?peakindex_id=${props.value}`;
     return React.createElement(
         'a',
         { href: url },
@@ -224,7 +224,7 @@ dagcomponentfuncs.PeakIndexLinkRenderer = function (props) {
 
 dagcomponentfuncs.ReconLinkRenderer = function (props) {
     // props.value will be the recon_id for the current row
-    const url = `/reconstruction?reconid=${props.value}`;
+    const url = `/reconstruction?recon_id=${props.value}`;
     return React.createElement(
         'a',
         { href: url },
@@ -234,7 +234,7 @@ dagcomponentfuncs.ReconLinkRenderer = function (props) {
 
 dagcomponentfuncs.WireReconLinkRenderer = function (props) {
     // props.value will be the wirerecon_id for the current row
-    const url = `/wire_reconstruction?wirereconid=${props.value}`;
+    const url = `/wire_reconstruction?wirerecon_id=${props.value}`;
     return React.createElement(
         'a',
         { href: url },
@@ -251,7 +251,7 @@ dagcomponentfuncs.JobIdLinkRenderer = function (props) {
         // This is a group row (job row)
         // Extract job_id from the grouped value
         const jobId = props.value || props.node.key;
-        const url = `/job?id=${jobId}`;
+        const url = `/job?job_id=${jobId}`;
         return React.createElement(
             'a',
             { href: url },
@@ -266,7 +266,7 @@ dagcomponentfuncs.JobIdLinkRenderer = function (props) {
     }
     
     // Default case - render as link
-    const url = `/job?id=${props.value}`;
+    const url = `/job?job_id=${props.value}`;
     return React.createElement(
         'a',
         { href: url },
@@ -308,7 +308,7 @@ dagcomponentfuncs.JobRefsRenderer = function (props) {
             }
             else if (field_key === 'peakindex_id') {
                 id_link = dagcomponentfuncs.PeakIndexLinkRenderer({ value: value });
-                table_link = make_table_link('PeakIndex', `/indexedpeaks`)
+                table_link = make_table_link('Peak Indexing', `/peakindexings`)
             }
             
             job_refs.push(table_link, `: `, id_link);
@@ -456,7 +456,7 @@ dagcomponentfuncs.SubJobDetailRenderer = function (props) {
 //         return null; // Or return an empty span or placeholder
 //     }
 
-//     const viewScanUrl = `/create-indexedpeaks?scan_id=${scanNumber}`; 
+//     const viewScanUrl = `/create-peakindexing?scan_id=${scanNumber}`;
 //     const viewReconstructionUrl = `/view_reconstruction?scan_id=${scanNumber}`;
 
 //     function handleScanClick() {
@@ -509,9 +509,9 @@ dagcomponentfuncs.ActionButtonsRenderer = function (props) {
         .join("&");
 
     // Construct URL with optional recon_id-related fields
-    let createIndexedPeaksUrl = `/create-indexedpeaks?scan_id=${scanNumber}`;
+    let createPeakIndexingUrl = `/create-peakindexing?scan_id=${scanNumber}`;
     if (reconParams) {
-        createIndexedPeaksUrl += `&${reconParams}`;
+        createPeakIndexingUrl += `&${reconParams}`;
     }
 
     // Determine reconstruction URL based on aperture
@@ -520,8 +520,8 @@ dagcomponentfuncs.ActionButtonsRenderer = function (props) {
         createReconstructionUrl = `/create-wire-reconstruction?scan_id=${scanNumber}`;
     }
 
-    function handleIndexedPeaksClick() {
-        window.location.href = createIndexedPeaksUrl;
+    function handlePeakIndexingClick() {
+        window.location.href = createPeakIndexingUrl;
     }
 
     function handleReconstructClick() {
@@ -533,7 +533,7 @@ dagcomponentfuncs.ActionButtonsRenderer = function (props) {
             window.dash_bootstrap_components.Button,
             {
                 key: 'indexBtn-' + scanNumber,
-                onClick: handleIndexedPeaksClick,
+                onClick: handlePeakIndexingClick,
                 color: 'primary', 
                 size: 'sm',
                 style: { marginRight: '5px' }

@@ -428,7 +428,7 @@ def load_scan_data_from_url(href):
             try:
                 scan_id = int(scan_id)
                 # Query metadata and scan data
-                metadata = session.query(db_schema.Metadata).filter(
+                metadata_data = session.query(db_schema.Metadata).filter(
                     db_schema.Metadata.scanNumber == scan_id
                 ).first()
                 
@@ -436,7 +436,7 @@ def load_scan_data_from_url(href):
                 #     db_schema.Scan.scanNumber == scan_id
                 # ).all()
 
-                if metadata:
+                if metadata_data:
                     # Create a WireRecon object with populated defaults from metadata/scan
                     wirerecon_defaults = db_schema.WireRecon(
                         scanNumber=scan_id,
@@ -484,7 +484,7 @@ def load_scan_data_from_url(href):
                     # Show success message
                     set_props("alert-scan-loaded", {
                         'is_open': True, 
-                        'children': f'Scan {scan_id} data loaded successfully. Scan Number: {metadata.dataset_id}, Energy: {metadata.source_energy} {metadata.source_energy_unit}',
+                        'children': f'Scan {scan_id} data loaded successfully. Scan Number: {metadata_data.dataset_id}, Energy: {metadata_data.source_energy} {metadata_data.source_energy_unit}',
                         'color': 'success'
                     })
                 else:

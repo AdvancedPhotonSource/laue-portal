@@ -10,14 +10,14 @@ from sqlalchemy.orm import Session
 import pandas as pd
 import laue_portal.components.navbar as navbar
 
-dash.register_page(__name__)
+dash.register_page(__name__, path="/peakindexings")
 
 layout = html.Div([
         navbar.navbar,
         dcc.Location(id='url', refresh=False),
         dbc.Container(fluid=True, className="p-0", children=[
             dag.AgGrid(
-                id='peakindex-table',
+                id='peakindexing-table',
                 columnSize="responsiveSizeToFit",
                 dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight', "rowHeight": 32},
                 style={'height': 'calc(100vh - 150px)', 'width': '100%'},
@@ -49,18 +49,18 @@ VISIBLE_COLS = [
 ]
 
 CUSTOM_HEADER_NAMES = {
-    'peakindex_id': 'Peak Index ID',
+    'peakindex_id': 'Peak Indexing ID',
     'scanNumber': 'Scan ID',
     'recon_id': 'Recon ID', #'ReconID',
     'wirerecon_id': 'Wire Recon ID', #'ReconID',
-        #'': 'Points',
+    #'': 'Points',
     'boxsize': 'Box',
     'submit_time,': 'Date',
 }
 
-def _get_peakindexs():
+def _get_peakindexings():
     with Session(db_utils.ENGINE) as session:
-        peakindexs = pd.read_sql(session.query(*VISIBLE_COLS)
+        peakindexings = pd.read_sql(session.query(*VISIBLE_COLS)
             .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
             .statement, session.bind)
 
@@ -94,17 +94,17 @@ def _get_peakindexs():
             col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
         cols.append(col_def)
 
-    return cols, peakindexs.to_dict('records')
+    return cols, peakindexings.to_dict('records')
 
 @dash.callback(
-    Output('peakindex-table', 'columnDefs'),
-    Output('peakindex-table', 'rowData'),
+    Output('peakindexing-table', 'columnDefs'),
+    Output('peakindexing-table', 'rowData'),
     Input('url','pathname'),
     prevent_initial_call=True,
 )
-def get_peakindexs(path):
-       if path == '/indexedpeaks':
-            cols, peakindexs_records = _get_peakindexs()
-            return cols, peakindexs_records
+def get_peakindexings(path):
+       if path == '/peakindexings':
+            cols, peakindexings_records = _get_peakindexings()
+            return cols, peakindexings_records
        else:
             raise PreventUpdate

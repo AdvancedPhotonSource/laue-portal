@@ -19,7 +19,7 @@ from sqlalchemy.inspection import inspect
 # Import Laue Analysis functions
 from laue_portal.recon import analysis_recon
 from laueanalysis.reconstruct import reconstruct as wire_reconstruct  # This is actually for wire reconstruction
-from laueanalysis.indexing import pyLaueGo
+from laueanalysis.indexing import index #pyLaueGo
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ def enqueue_job(job_id: int, job_type: str, execute_func, at_front: bool = False
     
     Args:
         job_id: Database job ID (can be Job.job_id or SubJob.subjob_id)
-        job_type: Type of job (e.g., 'wire_reconstruction', 'reconstruction', 'peak_indexing')
+        job_type: Type of job (e.g., 'wire_reconstruction', 'reconstruction', 'peakindexing')
         execute_func: The execution function to call
         at_front: Whether to add job at front of queue (default: False)
         depends_on: Optional RQ job ID or Job object to depend on
@@ -79,9 +79,9 @@ def enqueue_job(job_id: int, job_type: str, execute_func, at_front: bool = False
             mapper = inspect(table)
             pk_col = list(mapper.primary_key)[0]  # Get first primary key column
             # Query using the primary key
-            job = session.query(table).filter(pk_col == job_id).first()
-            if job:
-                job.status = STATUS_REVERSE_MAPPING["Queued"]
+            job_data = session.query(table).filter(pk_col == job_id).first()
+            if job_data:
+                job_data.status = STATUS_REVERSE_MAPPING["Queued"]
                 session.commit()
     
     # Enqueue the job with optional dependency
@@ -112,40 +112,40 @@ def execute_batch_coordinator(job_id: int):
     try:
         with Session(db_utils.ENGINE) as session:
             # Query for all subjobs of this job
-            subjobs = session.query(db_schema.SubJob).filter(
+            subjob_data = session.query(db_schema.SubJob).filter(
                 db_schema.SubJob.job_id == job_id
             ).all()
             
-            if not subjobs:
+            if not subjob_data:
                 logger.error(f"No subjobs found for job {job_id} in batch coordinator")
                 return
             
-            all_finished = all(s.status == STATUS_REVERSE_MAPPING["Finished"] for s in subjobs)
-            any_failed = any(s.status == STATUS_REVERSE_MAPPING["Failed"] for s in subjobs)
+            all_finished = all(s.status == STATUS_REVERSE_MAPPING["Finished"] for s in subjob_data)
+            any_failed = any(s.status == STATUS_REVERSE_MAPPING["Failed"] for s in subjob_data)
             
             # Update job status
-            job = session.query(db_schema.Job).filter(
+            job_data = session.query(db_schema.Job).filter(
                 db_schema.Job.job_id == job_id
             ).first()
             
-            if job:
+            if job_data:
                 if all_finished:
-                    job.status = STATUS_REVERSE_MAPPING["Finished"]
-                    message = f"All {len(subjobs)} subjobs completed successfully"
+                    job_data.status = STATUS_REVERSE_MAPPING["Finished"]
+                    message = f"All {len(subjob_data)} subjobs completed successfully"
                 elif any_failed:
-                    job.status = STATUS_REVERSE_MAPPING["Failed"]
-                    failed_count = sum(1 for s in subjobs if s.status == STATUS_REVERSE_MAPPING["Failed"])
-                    message = f"{failed_count} of {len(subjobs)} subjobs failed"
+                    job_data.status = STATUS_REVERSE_MAPPING["Failed"]
+                    failed_count = sum(1 for s in subjob_data if s.status == STATUS_REVERSE_MAPPING["Failed"])
+                    message = f"{failed_count} of {len(subjob_data)} subjobs failed"
                 else:
                     # This shouldn't happen if dependencies work correctly
-                    job.status = STATUS_REVERSE_MAPPING["Failed"]
+                    job_data.status = STATUS_REVERSE_MAPPING["Failed"]
                     message = "Batch completed with unknown status"
                 
-                job.finish_time = datetime.now()
-                if job.messages:
-                    job.messages += f"\n{message}"
+                job_data.finish_time = datetime.now()
+                if job_data.messages:
+                    job_data.messages += f"\n{message}"
                 else:
-                    job.messages = message
+                    job_data.messages = message
                 
                 session.commit()
                 
@@ -178,28 +178,28 @@ def _enqueue_batch(job_id: int, job_type: str, execute_func, at_front: bool = Fa
     """
     # Query for subjobs
     with Session(db_utils.ENGINE) as session:
-        subjobs = session.query(db_schema.SubJob).filter(
+        subjob_data = session.query(db_schema.SubJob).filter(
             db_schema.SubJob.job_id == job_id
         ).order_by(db_schema.SubJob.subjob_id).all()
         
-        if not subjobs:
+        if not subjob_data:
             raise ValueError(f"No subjobs found for job_id {job_id}. "
                            f"{job_type} requires subjobs to be created first.")
     
     # Validate file lists if provided
     if input_files is not None:
-        if len(input_files) != len(subjobs):
+        if len(input_files) != len(subjob_data):
             raise ValueError(f"Number of input files ({len(input_files)}) "
-                           f"does not match number of subjobs ({len(subjobs)})")
+                           f"does not match number of subjobs ({len(subjob_data)})")
     if output_files is not None:
-        if len(output_files) != len(subjobs):
+        if len(output_files) != len(subjob_data):
             raise ValueError(f"Number of output files ({len(output_files)}) "
-                           f"does not match number of subjobs ({len(subjobs)})")
+                           f"does not match number of subjobs ({len(subjob_data)})")
     
     rq_job_ids = []
     
     # Enqueue each subjob in parallel (no dependencies between them)
-    for i, subjob in enumerate(subjobs):
+    for i, subjob in enumerate(subjob_data):
         # Build subjob-specific args based on what file lists are provided
         subjob_args = []
         if input_files is not None:
@@ -230,7 +230,7 @@ def _enqueue_batch(job_id: int, job_type: str, execute_func, at_front: bool = Fa
         db_schema.Job  # Coordinator updates the main Job
     )
     
-    logger.info(f"Enqueued batch {job_type} job {job_id} with {len(subjobs)} parallel subjobs")
+    logger.info(f"Enqueued batch {job_type} job {job_id} with {len(subjob_data)} parallel subjobs")
     return coordinator_id
 
 
@@ -302,9 +302,9 @@ def enqueue_reconstruction(job_id: int, config_dict: Dict[str, Any], at_front: b
     )
 
 
-def enqueue_peak_indexing(job_id: int, config_dict: Dict[str, Any], at_front: bool = False) -> str:
+def enqueue_peakindexing(job_id: int, config_dict: Dict[str, Any], at_front: bool = False) -> str:
     """
-    Enqueue a peak indexing job.
+    Enqueue a peakindexing job.
     
     Args:
         job_id: Database job ID
@@ -316,8 +316,8 @@ def enqueue_peak_indexing(job_id: int, config_dict: Dict[str, Any], at_front: bo
     """
     return enqueue_job(
         job_id,
-        'peak_indexing',
-        execute_peak_indexing_job,
+        'peakindexing',
+        execute_peakindexing_job,
         at_front,
         None,  # depends_on
         db_schema.Job,  # table
@@ -443,14 +443,14 @@ def cancel_job(rq_job_id: str) -> bool:
         if job.meta and 'db_job_id' in job.meta:
             db_job_id = job.meta['db_job_id']
             with Session(db_utils.ENGINE) as session:
-                db_job = session.query(db_schema.Job).filter(db_schema.Job.job_id == db_job_id).first()
-                if db_job:
-                    db_job.status = STATUS_REVERSE_MAPPING["Cancelled"]
-                    db_job.finish_time = datetime.now()
-                    if not db_job.messages:
-                        db_job.messages = "Job cancelled by user"
+                job_data = session.query(db_schema.Job).filter(db_schema.Job.job_id == db_job_id).first()
+                if job_data:
+                    job_data.status = STATUS_REVERSE_MAPPING["Cancelled"]
+                    job_data.finish_time = datetime.now()
+                    if not job_data.messages:
+                        job_data.messages = "Job cancelled by user"
                     else:
-                        db_job.messages += "\nJob cancelled by user"
+                        job_data.messages += "\nJob cancelled by user"
                     session.commit()
             
             publish_job_update(db_job_id, 'cancelled', 'Job cancelled by user')
@@ -525,21 +525,21 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
         # Update job status to running
         with Session(db_utils.ENGINE) as session:
             # Query using the primary key
-            job = session.query(table).filter(pk_col == job_id).first()
-            if job:
-                job.status = STATUS_REVERSE_MAPPING["Running"]
+            job_data = session.query(table).filter(pk_col == job_id).first()
+            if job_data:
+                job_data.status = STATUS_REVERSE_MAPPING["Running"]
                 job_start_time = datetime.now()
-                job.start_time = job_start_time
+                job_data.start_time = job_start_time
                 
                 # If this is a subjob, also update the parent job status if it's still queued
-                if table == db_schema.SubJob and hasattr(job, 'job_id'):
-                    parent_job = session.query(db_schema.Job).filter(
-                        db_schema.Job.job_id == job.job_id
+                if table == db_schema.SubJob and hasattr(job_data, 'job_id'):
+                    parent_job_data = session.query(db_schema.Job).filter(
+                        db_schema.Job.job_id == job_data.job_id
                     ).first()
-                    if parent_job and parent_job.status == STATUS_REVERSE_MAPPING["Queued"]:
-                        parent_job.status = STATUS_REVERSE_MAPPING["Running"]
-                        parent_job.start_time = job_start_time
-                        logger.info(f"Updated parent job {job.job_id} status to Running")
+                    if parent_job_data and parent_job_data.status == STATUS_REVERSE_MAPPING["Queued"]:
+                        parent_job_data.status = STATUS_REVERSE_MAPPING["Running"]
+                        parent_job_data.start_time = job_start_time
+                        logger.info(f"Updated parent job {job_data.job_id} status to Running")
                 
                 session.commit()
         
@@ -551,13 +551,13 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
         # Update job status to finished
         with Session(db_utils.ENGINE) as session:
             # Query using the primary key
-            job = session.query(table).filter(pk_col == job_id).first()
-            if job:
-                job.status = STATUS_REVERSE_MAPPING["Finished"]
-                job.finish_time = datetime.now()
+            job_data = session.query(table).filter(pk_col == job_id).first()
+            if job_data:
+                job_data.status = STATUS_REVERSE_MAPPING["Finished"]
+                job_data.finish_time = datetime.now()
                 
                 # Store the job result directly
-                if hasattr(job, 'messages'):
+                if hasattr(job_data, 'messages'):
                     # Format the result for display
                     if result is not None:
                         # Handle wire reconstruction results specially
@@ -585,10 +585,10 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
                         else: #This might not work
                             result_str = str(result)
                         
-                        if job.messages:
-                            job.messages += f"\n\n{result_str}"
+                        if job_data.messages:
+                            job_data.messages += f"\n\n{result_str}"
                         else:
-                            job.messages = result_str
+                            job_data.messages = result_str
                 
                 session.commit()
         
@@ -599,12 +599,12 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
         # Update job status to failed
         with Session(db_utils.ENGINE) as session:
             # Query using the primary key
-            job = session.query(table).filter(pk_col == job_id).first()
-            if job:
-                job.status = STATUS_REVERSE_MAPPING["Failed"]
-                job.finish_time = datetime.now()
-                if hasattr(job, 'messages'):  # Both Job and SubJob have messages field
-                    job.messages = f"Error: {str(e)}"
+            job_data = session.query(table).filter(pk_col == job_id).first()
+            if job_data:
+                job_data.status = STATUS_REVERSE_MAPPING["Failed"]
+                job_data.finish_time = datetime.now()
+                if hasattr(job_data, 'messages'):  # Both Job and SubJob have messages field
+                    job_data.messages = f"Error: {str(e)}"
                 session.commit()
         
         publish_job_update(job_id, 'failed', f'{job_type} failed: {str(e)}')
@@ -622,7 +622,7 @@ def execute_reconstruction_job(job_id: int, config_dict: Dict[str, Any]):
     
     return execute_with_status_updates(
         job_id,
-        'Reconstruction analysis',
+        'CA Reconstruction',
         _do_reconstruction,
         db_schema.SubJob  # This is called for subjobs
     )
@@ -646,9 +646,9 @@ def execute_wire_reconstruction_job(job_id: int, input_file: str, output_file: s
     )
 
 
-def execute_peak_indexing_job(job_id: int, config_dict: Dict[str, Any]):
-    """Execute a peak indexing job."""
-    def _do_peak_indexing():
+def execute_peakindexing_job(job_id: int, config_dict: Dict[str, Any]):
+    """Execute a peakindexing job."""
+    def _do_peakindexing():
         return pyLaueGo(config_dict).run(0, 1)  # rank=0, size=1 for single process
         # # Testing: sleep for 5 seconds instead
         # time.sleep(5)
@@ -656,7 +656,7 @@ def execute_peak_indexing_job(job_id: int, config_dict: Dict[str, Any]):
     
     return execute_with_status_updates(
         job_id,
-        'Peak indexing',
-        _do_peak_indexing,
+        'Peakindexing',
+        _do_peakindexing,
         db_schema.Job  # This is called for regular jobs (default)
     )
