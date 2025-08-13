@@ -37,4 +37,4 @@ app.layout = dash.page_container
 
 if __name__ == '__main__':
     ensure_database_exists()
-    app.run(debug=True, port=2052, host='0.0.0.0')
+    app.run(debug=config.DASH_CONFIG['debug'], port=config.DASH_CONFIG['port'], host=config.DASH_CONFIG['host'])
