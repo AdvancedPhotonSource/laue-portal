@@ -16,6 +16,7 @@ import logging
 logger = logging.getLogger(__name__)
 import os
 from laue_portal.processing.redis_utils import enqueue_peak_indexing
+from config import DEFAULT_VARIABLES
 
 JOB_DEFAULTS = {
     "computer_name": 'example_computer',
@@ -24,8 +25,6 @@ JOB_DEFAULTS = {
     "submit_time": datetime.datetime.now(),
     "start_time": datetime.datetime.now(),
     "finish_time": datetime.datetime.now(),
-    "author": '',
-    "notes": '',
 }
 
 PEAKINDEX_DEFAULTS = {
@@ -69,6 +68,11 @@ PEAKINDEX_DEFAULTS = {
     "depth": float('nan'), # Representing YAML nan
     "beamline": "34ID-E"
 }
+
+# DEFAULT_VARIABLES = {
+#     "author": "",
+#     "notes": "",
+# }
 
 dash.register_page(__name__)
 
@@ -157,6 +161,8 @@ def upload_config(contents):
     Input('submit_peakindex', 'n_clicks'),
     
     State('scanNumber', 'value'),
+    State('author', 'value'),
+    State('notes', 'value'),
     State('recon_id', 'value'),
     State('wirerecon_id', 'value'),
     # State('peakProgram', 'value'),
@@ -208,6 +214,8 @@ def upload_config(contents):
 )
 def submit_config(n,
     scanNumbers, #Pooled scanNumbers
+    author,
+    notes,
     recon_id,
     wirerecon_id,
     # peakProgram,
@@ -271,9 +279,6 @@ def submit_config(n,
             submit_time=JOB_DEFAULTS['submit_time'],
             start_time=JOB_DEFAULTS['start_time'],
             finish_time=JOB_DEFAULTS['finish_time'],
-            
-            author=JOB_DEFAULTS['author'],
-            notes=JOB_DEFAULTS['notes'],
         )
 
         with Session(db_utils.ENGINE) as session:
@@ -291,9 +296,11 @@ def submit_config(n,
                 # notes='TODO', 
 
                 scanNumber = scanNumber,
+                job_id = job_id,
+                author = author,
+                notes = notes,
                 recon_id = recon_id,
                 wirerecon_id = wirerecon_id,
-                job_id = job_id,
 
                 # peakProgram=peakProgram,
                 threshold=threshold,
@@ -411,6 +418,8 @@ def load_scan_data_from_url(href):
                         # notes=f"Auto-populated from scan {scan_id}. Original notes: {metadata.notes or ''}",
 
                         scanNumber = scan_id,
+                        author = DEFAULT_VARIABLES['author'],
+                        notes = DEFAULT_VARIABLES['notes'],
                         recon_id = recon_id,
                         wirerecon_id = wirerecon_id,
                                         

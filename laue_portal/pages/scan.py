@@ -453,13 +453,13 @@ Recon Table
 
 VISIBLE_COLS_Recon = [
     db_schema.Recon.recon_id,
+    db_schema.Recon.author,
+    db_schema.Recon.notes,
     #db_schema.Recon.pxl_recon,
     db_schema.Job.submit_time,
     db_schema.Job.start_time,
     db_schema.Job.finish_time,
     db_schema.Job.status,
-    db_schema.Job.author,
-    db_schema.Job.notes,
 ]
 
 CUSTOM_HEADER_NAMES_Recon = {
@@ -491,13 +491,13 @@ ALL_COLS_Recon = VISIBLE_COLS_Recon + [ii for i in CUSTOM_COLS_Recon_dict.values
 
 VISIBLE_COLS_WireRecon = [
     db_schema.WireRecon.wirerecon_id,
+    db_schema.WireRecon.author,
+    db_schema.WireRecon.notes,
     #db_schema.WireRecon.pxl_recon,
     db_schema.Job.submit_time,
     db_schema.Job.start_time,
     db_schema.Job.finish_time,
     db_schema.Job.status,
-    db_schema.Job.author,
-    db_schema.Job.notes,
 ]
 
 CUSTOM_HEADER_NAMES_WireRecon = {
@@ -774,15 +774,15 @@ Peak Index Table
 VISIBLE_COLS_PeakIndex = [
     db_schema.PeakIndex.peakindex_id,
     db_schema.PeakIndex.recon_id,
-    # db_schema.PeakIndexResults.structure,
+    db_schema.PeakIndex.author,
+    db_schema.PeakIndex.notes,
     db_schema.PeakIndex.boxsize,
     db_schema.PeakIndex.threshold,
+    # db_schema.PeakIndexResults.structure,
     db_schema.Job.submit_time,
     db_schema.Job.start_time,
     db_schema.Job.finish_time,
     db_schema.Job.status,
-    db_schema.Job.author,
-    db_schema.Job.notes,
 ]
 
 CUSTOM_HEADER_NAMES_PeakIndex = {

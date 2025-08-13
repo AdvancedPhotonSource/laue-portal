@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import callback, Input, Output, State, set_props
+from dash import html, callback, Input, Output, State, set_props
 from laue_portal.components.form_base import _stack, _field, _ckbx
 
 
@@ -84,7 +84,7 @@ peakindex_form = dbc.Row(
                                                 {"label": "Lorentzian", "value": "Lorentzian"},
                                                 {"label": "Gaussian", "value": "Gaussian"},
                                             ],
-                                            style={'width':200},
+                                            style={'width':200}, #size='sm'
                                             id="peakShape",
                                         ),
                                         _ckbx("Smooth peak before fitting", "smooth", size='md'),
@@ -191,6 +191,27 @@ peakindex_form = dbc.Row(
                             ],
                             title="Labels",
                         ),
+                        dbc.AccordionItem(
+                            [
+                                _stack(
+                                    [
+                                        _field("Author", "author", size='md', kwargs={'placeholder': 'Required'}),
+                                    ]
+                                ),
+                                dbc.Row([
+                                    dbc.Col([
+                                        html.P(html.Strong("Notes:")),
+                                    ], width="auto", align="start"),
+                                    dbc.Col(
+                                        dbc.Textarea(
+                                            id="notes",
+                                            style={"width": "100%", "minHeight": "100px"},
+                                        )
+                                    )
+                                ], className="mb-3", align="start")
+                            ],
+                            title="User Text",
+                        ),
                         ],
                         always_open=True
                     ),
@@ -253,6 +274,9 @@ def set_peakindex_form_props(peakindex, read_only=False):
     set_props("beamline", {'value':peakindex.beamline, 'readonly':read_only})
     # set_props("cosmicFilter", {'value':peakindex.cosmicFilter, 'readonly':read_only})
 
+    # User text
+    set_props("author", {'value':peakindex.author, 'readonly':read_only})
+    set_props("notes", {'value':peakindex.notes, 'readonly':read_only})
 
 @callback(
     Output("collapse1", "is_open"),

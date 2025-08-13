@@ -33,7 +33,7 @@ recon_form = dbc.Row(
                                     [
                                         _field("Depth Start", 'depth_start', size='sm'),
                                         _field("Depth End", 'depth_end', size='sm'),
-                                        _field("Depth Step", 'depth_step', size='sm'),
+                                        _field("Depth Step", 'depth_resolution', size='sm'),
                                     ]
                                 ),
                                 _stack(
@@ -238,6 +238,27 @@ recon_form = dbc.Row(
                             ],
                             title="Algorithm Parameters",
                         ),
+                        dbc.AccordionItem(
+                            [
+                                _stack(
+                                    [
+                                        _field("Author", "author", size='md', kwargs={'placeholder': 'Required'}),
+                                    ]
+                                ),
+                                dbc.Row([
+                                    dbc.Col([
+                                        html.P(html.Strong("Notes:")),
+                                    ], width="auto", align="start"),
+                                    dbc.Col(
+                                        dbc.Textarea(
+                                            id="notes",
+                                            style={"width": "100%", "minHeight": "100px"},
+                                        )
+                                    )
+                                ], className="mb-3", align="start")
+                            ],
+                            title="User Text",
+                        ),
                         ],
                         always_open=True
                     ),
@@ -257,7 +278,7 @@ def set_recon_form_props(recon, read_only=False):
     set_props("y_end", {'value':recon.file_frame[3], 'readonly':read_only})
     set_props("depth_start", {'value':recon.geo_source_grid[0], 'readonly':read_only})
     set_props("depth_end", {'value':recon.geo_source_grid[1], 'readonly':read_only})
-    set_props("depth_step", {'value':recon.geo_source_grid[2], 'readonly':read_only})
+    set_props("depth_resolution", {'value':recon.geo_source_grid[2], 'readonly':read_only})
     
     set_props("file_path", {'value':recon.file_path, 'readonly':read_only})
     set_props("file_output", {'value':recon.file_output, 'readonly':read_only})
@@ -319,3 +340,7 @@ def set_recon_form_props(recon, read_only=False):
     set_props("ene_min", {'value':recon.algo_ene_range[0], 'readonly':read_only})
     set_props("ene_max", {'value':recon.algo_ene_range[1], 'readonly':read_only})
     set_props("ene_step", {'value':recon.algo_ene_range[2], 'readonly':read_only})
+    
+    # User text
+    set_props("author", {'value':recon.author, 'readonly':read_only})
+    set_props("notes", {'value':recon.notes, 'readonly':read_only})

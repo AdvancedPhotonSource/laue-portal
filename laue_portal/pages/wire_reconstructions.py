@@ -36,15 +36,15 @@ VISIBLE_COLS = [
     db_schema.WireRecon.wirerecon_id,
     db_schema.WireRecon.scanNumber,
     # db_schema.WireRecon.calib_id,
+    db_schema.WireRecon.author,
+    db_schema.WireRecon.notes,
+    #db_schema.WireRecon.pxl_recon,
     db_schema.Catalog.sample_name,
     db_schema.Catalog.aperture,
-    #db_schema.WireRecon.pxl_recon,
     db_schema.Job.submit_time,
     db_schema.Job.start_time,
     db_schema.Job.finish_time,
     db_schema.Job.status,
-    db_schema.Job.author,
-    db_schema.Job.notes,
 ]
 
 CUSTOM_HEADER_NAMES = {

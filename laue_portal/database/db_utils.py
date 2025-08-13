@@ -188,6 +188,32 @@ def convert_epoch_string_to_int(epoch_string):
     except ValueError:
         return None
 
+def remove_root_path_prefix(file_path, root_path):
+    """
+    Remove root_path prefix from a file path and any leading slash.
+    
+    Args:
+        file_path: The full file path
+        root_path: The root path prefix to remove
+        
+    Returns:
+        str: The file path with root_path prefix removed
+    """
+    if not file_path:
+        return ""
+    
+    result_path = file_path
+    
+    # Remove root_path from file_path if it starts with it
+    if root_path and file_path.startswith(root_path):
+        result_path = file_path[len(root_path):]
+        
+    # Remove leading slash if present
+    if result_path.startswith('/'):
+        result_path = result_path[1:]
+        
+    return result_path
+
 def import_metadata_row(metadata_object):
     """
     Reads a yaml file and creates a new Metadata ORM object with 
@@ -280,7 +306,7 @@ def import_scan_row(scan_object):
         # scan_beforePV_wait=scan_object['scan_beforePV_wait'],
         # scan_beforePV=scan_object['scan_beforePV'],
         # scan_afterPV_VAL=scan_object['scan_afterPV_VAL'],
-        # ascan_fterPV_wait=scan_object['scan_afterPV_wait'],
+        # scan_afterPV_wait=scan_object['scan_afterPV_wait'],
         # scan_afterPV=scan_object['scan_afterPV'],
         scan_positioner1_PV=scan_object['scan_positioner1_PV'],
         scan_positioner1_ar=scan_object['scan_positioner1_ar'],
@@ -319,8 +345,6 @@ def import_catalog_row(catalog_object):
 
         filefolder=catalog_object['filefolder'],
         filenamePrefix=catalog_object['filenamePrefix'],
-        outputFolder=catalog_object['outputFolder'],
-        geoFile=catalog_object['geoFile'],
 
         aperture=catalog_object['aperture']['options'],
         sample_name=catalog_object['sample_name'],
@@ -623,3 +647,77 @@ def create_peakindex_config_obj(peakindex):
             # 'cosmicFilter':peakindex.cosmicFilter,
             }
     return config_dict
+
+
+def get_catalog_data(session, scan_number, root_path="", CATALOG_DEFAULTS=None):
+    """
+    Helper function to get catalog data for a scan and compute data_path
+    
+    Args:
+        session: SQLAlchemy session object
+        scan_number: The scan number to look up
+        root_path: The root path to use for computing relative data_path (default: "")
+        CATALOG_DEFAULTS: Dictionary with default values (default: None)
+        
+    Returns:
+        dict with catalog data including computed data_path
+    """
+    catalog = session.query(db_schema.Catalog).filter(
+        db_schema.Catalog.scanNumber == scan_number
+    ).first()
+    
+    if catalog:
+        # Compute data_path as the portion of filefolder after root_path
+        filefolder = catalog.filefolder
+        
+        # Use the utility function to remove root_path prefix
+        data_path = remove_root_path_prefix(filefolder, root_path)
+        
+        return {
+            "filefolder": filefolder,
+            "filenamePrefix": catalog.filenamePrefix,
+            "data_path": data_path
+        }
+    else:
+        # Return defaults if no catalog entry found
+        # Use CATALOG_DEFAULTS if provided, otherwise empty strings
+        if CATALOG_DEFAULTS:
+            filefolder = CATALOG_DEFAULTS.get("filefolder", "")
+            return {
+                "filefolder": filefolder,
+                "filenamePrefix": CATALOG_DEFAULTS.get("filenamePrefix", ""),
+                "data_path": filefolder  # Use full path as data_path for defaults
+            }
+        else:
+            return {
+                "filefolder": "",
+                "filenamePrefix": "",
+                "data_path": ""
+            }
+
+
+def get_next_id(session, table_class):
+    """
+    Get the next available ID for a given table by finding the maximum ID and incrementing it.
+    
+    Args:
+        session: SQLAlchemy session object
+        table_class: The SQLAlchemy table class (e.g., db_schema.WireRecon)
+        
+    Returns:
+        int: The next available ID (max_id + 1, or 1 if table is empty)
+    """
+    # Get the primary key column dynamically
+    primary_key_columns = list(table_class.__table__.primary_key.columns)
+    
+    if not primary_key_columns:
+        raise ValueError(f"Table {table_class.__name__} has no primary key")
+    
+    # Assume single column primary key
+    primary_key_column = primary_key_columns[0]
+    
+    # Query for the maximum value of the primary key
+    max_id = session.query(sqlalchemy.func.max(primary_key_column)).scalar()
+    
+    # Return next ID (1 if table is empty, otherwise max_id + 1)
+    return 1 if max_id is None else max_id + 1

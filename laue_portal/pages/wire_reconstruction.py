@@ -1,14 +1,14 @@
 import dash
-from dash import html, dcc, callback, Input, Output
 import dash_bootstrap_components as dbc
+from dash import html, dcc, callback, Input, Output
+from dash.exceptions import PreventUpdate
+from sqlalchemy.orm import Session
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
-from dash.exceptions import PreventUpdate
-from sqlalchemy import asc # Import asc for ordering
+from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix
 from laue_portal.components.wire_recon_form import wire_recon_form, set_wire_recon_form_props
+from laue_portal.pages.create_wire_reconstruction import DEFAULT_VARIABLES
 import urllib.parse
 
 dash.register_page(__name__, path="/wire_reconstruction")
@@ -119,6 +119,21 @@ def load_wire_recon_data(href):
             with Session(db_utils.ENGINE) as session:
                 wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == wirerecon_id).first()
                 if wirerecon_data:
+                    # Add root_path from DEFAULT_VARIABLES
+                    root_path = DEFAULT_VARIABLES["root_path"]
+                    wirerecon_data.root_path = root_path
+                    
+                    # Retrieve data_path and filenamePrefix from catalog data
+                    catalog_data = get_catalog_data(session, wirerecon_data.scanNumber, root_path)
+                    wirerecon_data.data_path = catalog_data["data_path"]
+                    wirerecon_data.filenamePrefix = catalog_data["filenamePrefix"]
+                    
+                    # Convert full paths back to relative paths for display
+                    if wirerecon_data.geoFile:
+                        wirerecon_data.geoFile = remove_root_path_prefix(wirerecon_data.geoFile, root_path)
+                    if wirerecon_data.outputFolder:
+                        wirerecon_data.outputFolder = remove_root_path_prefix(wirerecon_data.outputFolder, root_path)
+                    
                     set_wire_recon_form_props(wirerecon_data, read_only=True)
                     return f"Wire Recon | ID: {wirerecon_id}"
 
@@ -127,4 +142,3 @@ def load_wire_recon_data(href):
             return f"Error loading data for Wire Recon ID: {wirerecon_id}"
     
     return "No Wire Recon ID provided"
-    

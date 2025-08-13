@@ -171,8 +171,6 @@ class Catalog(Base):
 
     filefolder: Mapped[str] = mapped_column(String) #infile
     filenamePrefix: Mapped[str] = mapped_column(String) #infile
-    outputFolder: Mapped[str] = mapped_column(String) #outfile
-    geoFile: Mapped[str] = mapped_column(String, nullable=True) #geofile
     
     aperture: Mapped[str] = mapped_column(String)
     sample_name: Mapped[str] = mapped_column(String, nullable=True)
@@ -192,8 +190,6 @@ class Job(Base):
     start_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
     finish_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
     
-    author: Mapped[str] = mapped_column(String, nullable=True)
-    notes: Mapped[str] = mapped_column(String, nullable=True)
     messages: Mapped[str] = mapped_column(String, nullable=True)
 
     # Parent of:
@@ -228,6 +224,9 @@ class Calib(Base):
     scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
     job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"), unique=True)
 
+    author: Mapped[str] = mapped_column(String, nullable=True)
+    notes: Mapped[str] = mapped_column(String, nullable=True)
+
     calib_config: Mapped[str] = mapped_column(String)
 
     cenx: Mapped[float] = mapped_column(Float)
@@ -254,6 +253,12 @@ class Recon(Base):
     scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
     calib_id: Mapped[int] = mapped_column(ForeignKey("calib.calib_id"))
     job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"), unique=True)
+
+    author: Mapped[str] = mapped_column(String, nullable=True)
+    notes: Mapped[str] = mapped_column(String, nullable=True)
+
+    #outputFolder: Mapped[str] = mapped_column(String) #outfile
+    geoFile: Mapped[str] = mapped_column(String, nullable=True) #geofile
 
     # Recon Parameters
     file_path: Mapped[str] = mapped_column(String)
@@ -303,7 +308,7 @@ class Recon(Base):
     geo_detector_pos: Mapped[list[float]] = mapped_column(JSON)
 
     geo_source_offset: Mapped[float] = mapped_column(Float)
-    geo_source_grid: Mapped[list[float]] = mapped_column(JSON) # Consider splitting into components
+    geo_source_grid: Mapped[list[float]] = mapped_column(JSON) # Consider splitting into components # depth-start; depth-end; resolution
 
     algo_iter: Mapped[int] = mapped_column(Integer)
 
@@ -341,22 +346,29 @@ class WireRecon(Base):
     # calib_id: Mapped[int] = mapped_column(ForeignKey("calib.calib_id"))
     job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"), unique=True)
     
-    # Wire Recon Parameters
+    author: Mapped[str] = mapped_column(String, nullable=True)
+    notes: Mapped[str] = mapped_column(String, nullable=True)
+    
+    # Recon constraints
+    geoFile: Mapped[str] = mapped_column(String)
+    percent_brightest: Mapped[float] = mapped_column(Float)
+    wire_edges: Mapped[str] = mapped_column(String)
+
+    # Depth Parameters
     depth_start: Mapped[float] = mapped_column(Float) #depth-start
     depth_end: Mapped[float] = mapped_column(Float) #depth-end
     depth_resolution: Mapped[float] = mapped_column(Float) #resolution
 
-    # filefolder: Mapped[str] = mapped_column(String) #infile
-    # filenamePrefix: Mapped[str] = mapped_column(String) #infile
-    # outputFolder: Mapped[str] = mapped_column(String) #outfile
-    # geoFile: Mapped[str] = mapped_column(String) #geofile
-
-    # outputFolder: Mapped[str] = mapped_column(String) #outfile
-    # filefolder: Mapped[str] = mapped_column(String) #infile
-    # filenamePrefix: Mapped[str] = mapped_column(String) #infile
-    # geoFile: Mapped[str] = mapped_column(String) #geofile
-    # # geo_source_offset: Mapped[float] = mapped_column(Float)
-    # geo_source_grid: Mapped[list[float]] = mapped_column(JSON) # depth-start; depth-end; resolution
+    # Compute parameters
+    num_threads: Mapped[int] = mapped_column(Integer)
+    memory_limit_mb: Mapped[int] = mapped_column(Integer)
+    
+    # Files
+    files: Mapped[str] = mapped_column(String)
+    
+    # Output
+    outputFolder: Mapped[str] = mapped_column(String)
+    verbose: Mapped[int] = mapped_column(Integer)
 
     # Parent of:
     peakindex_: Mapped["PeakIndex"] = relationship(backref="wirerecon")
@@ -371,6 +383,9 @@ class PeakIndex(Base):
     peakindex_id: Mapped[int] = mapped_column(primary_key=True)
     scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
     job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"), unique=True)
+
+    author: Mapped[str] = mapped_column(String, nullable=True)
+    notes: Mapped[str] = mapped_column(String, nullable=True)
 
     recon_id: Mapped[int] = mapped_column(ForeignKey("recon.recon_id"),nullable=True)
     wirerecon_id: Mapped[int] = mapped_column(ForeignKey("wirerecon.wirerecon_id"),nullable=True)
