@@ -22,7 +22,7 @@ wire_recon_form = dbc.Row(
                                 ),
                                 _stack(
                                     [
-                                        _field("Range of Files", "files", size='md'),
+                                        _field("Range of Files", "scanPoints", size='md'),
                                         dbc.Button("Load file indices as list", id="load-file-indices-btn", color="secondary", size="sm"),
                                     ]
                                 ),
@@ -125,7 +125,7 @@ def set_wire_recon_form_props(wirerecon, read_only=False):
     set_props("outputFolder", {'value':wirerecon.outputFolder, 'readonly':read_only})
     
     # Additional form fields
-    set_props("files", {'value':wirerecon.files, 'readonly':read_only})  # Range of files field
+    set_props("scanPoints", {'value':wirerecon.scanPoints, 'readonly':read_only})  # Range of files field
     set_props("wire_edges", {'value':wirerecon.wire_edges, 'readonly':read_only})  # Wire edge field
     set_props("detector", {'value': '0 or auto', 'readonly':True})  # Default detector number
     

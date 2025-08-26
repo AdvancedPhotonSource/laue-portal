@@ -33,9 +33,9 @@ WIRERECON_DEFAULTS = {
     "percent_brightest": 100,
     "depth_start": -50,
     "depth_end": 150,
-    "depth_resolution": 50,#1,
-    "outputFolder": "analysis/scan_%d/rec_%d",#"wire_recons",
-    "files": 7,#"1",
+    "depth_resolution": 1,
+    "outputFolder": "analysis/scan_%d/rec_%d/data",#"wire_recons",
+    "scanPoints": "7",#"1",  # String field for srange parsing
     "wire_edges": "leading",
 }
 
@@ -142,80 +142,86 @@ Callbacks
 
 @dash.callback(
     Input('submit_wire', 'n_clicks'),
-
+    
     State('next-wire-recon-id', 'value'),
-
+    
     State('scanNumber', 'value'),
+    
+    # User text
+    State('author', 'value'),
+    State('notes', 'value'),
     
     # Recon constraints
     State('geoFile', 'value'),
     State('percent_brightest', 'value'),
+    State('wire_edges', 'value'),
     
     # Depth parameters
     State('depth_start', 'value'),
     State('depth_end', 'value'),
     State('depth_resolution', 'value'),
     
+    # Files
+    State('scanPoints', 'value'),
+    State('data_path', 'value'),
+    State('filenamePrefix', 'value'),
+    
     # Output
     State('outputFolder', 'value'),
     
-    # Additional fields
-    State('files', 'value'),
-    State('wire_edges', 'value'),
-    
-    # User text
-    State('author', 'value'),
-    State('notes', 'value'),
-
     prevent_initial_call=True,
 )
 def submit_parameters(n, rec_id,
     scanNumbers, #Pooled scanNumbers
+    
+    # User text
+    author,
+    notes,
 
     # Recon constraints
     geometry_file,
     percent_brightest,
+    wire_edges,
 
     # Depth parameters
     depth_start,
     depth_end,
     depth_resolution,
     
+    # Files
+    scanPoints,
+    data_path,
+    filenamePrefix,
+    
     # Output
     output_folder,
-    
-    # Additional fields
-    files,
-    wire_edges,
-    
-    # User text
-    author,
-    notes,
 ):
     # TODO: Input validation and response
 
-    root_path = DEFAULT_VARIABLES["root_path"]
     num_threads = DEFAULT_VARIABLES["num_threads"]
     memory_limit_mb = DEFAULT_VARIABLES["memory_limit_mb"]
     verbose = DEFAULT_VARIABLES["verbose"]
 
+    root_path = DEFAULT_VARIABLES["root_path"]
     # Convert relative paths to full paths # Strip leading slashes to ensure paths are treated as relative
     full_geometry_file = os.path.join(root_path, geometry_file.lstrip('/'))
-    full_output_folder = os.path.join(root_path, output_folder.lstrip('/'))
-
-    for scanNumber in str(scanNumbers).split(','):
-
-        try:
-            scan_full_output_folder = full_output_folder % (int(scanNumber), rec_id)
-        except:
-            scan_full_output_folder = full_output_folder
+    
+    # Parse scan_numbers, data paths, filename prefixes, and output folders if they are semicolon-separated (for pooled scans)
+    scan_numbers = str(scanNumbers).split('; ')
+    data_paths = data_path.split('; ')
+    filename_prefixes = filenamePrefix.split('; ')
+    output_folders = output_folder.split('; ')
+    
+    for i, scanNumber in enumerate(scan_numbers):
+        # Use the corresponding output folder
+        full_output_folder = os.path.join(root_path, output_folders[i].lstrip('/'))
         
         # Create output directory if it doesn't exist
         try:
-            os.makedirs(scan_full_output_folder, exist_ok=True)
-            logger.info(f"Output directory: {scan_full_output_folder}")
+            os.makedirs(full_output_folder, exist_ok=True)
+            logger.info(f"Output directory: {full_output_folder}")
         except Exception as e:
-            logger.error(f"Failed to create output directory {scan_full_output_folder}: {e}")
+            logger.error(f"Failed to create output directory {full_output_folder}: {e}")
             set_props("alert-submit", {'is_open': True, 
                                       'children': f'Failed to create output directory: {str(e)}',
                                       'color': 'danger'})
@@ -242,10 +248,10 @@ def submit_parameters(n, rec_id,
             job_id = job.job_id
             
             # Create subjobs for parallel processing
-            # Parse files string using srange
-            files_srange = srange(files)
-            file_nums = files_srange.list()
-            for file_num in file_nums:
+            # Parse scanPoints string using srange
+            scanPoints_srange = srange(scanPoints)
+            scanPoint_nums = scanPoints_srange.list()
+            for scanPoint_num in scanPoint_nums:
                 subjob = db_schema.SubJob(
                     job_id=job_id,
                     computer_name=JOB_DEFAULTS['computer_name'],
@@ -285,10 +291,10 @@ def submit_parameters(n, rec_id,
                 memory_limit_mb=memory_limit_mb,
                 
                 # Files
-                files=files,
+                scanPoints=scanPoints,
                 
                 # Output
-                outputFolder=scan_full_output_folder,  # Store full path in database
+                outputFolder=full_output_folder,  # Store full path in database
                 verbose=verbose,
             )
 
@@ -299,25 +305,25 @@ def submit_parameters(n, rec_id,
             session.commit()
         
         set_props("alert-submit", {'is_open': True, 
-                                    'children': 'Config Added to Database',
+                                    'children': 'Entry Added to Database',
                                     'color': 'success'})
 
         # Enqueue the job to Redis
         try:
-            # Get catalog data from database
-            catalog_data = get_catalog_data(session, int(scanNumber), root_path, CATALOG_DEFAULTS)
-            
             # Prepare lists of input and output files for all subjobs
             input_files = []
             output_files = []
             
-            for file_num in file_nums:
+            # Construct full data path from form values
+            full_data_path = os.path.join(root_path, data_paths[i].lstrip('/'))
+            
+            for scanPoint_num in scanPoint_nums:
                 # Prepare parameters for wire reconstruction
-                file_str = catalog_data['filenamePrefix'] % file_num
+                file_str = filename_prefixes[i] % scanPoint_num
                 input_filename = file_str + ".h5"
-                input_file = os.path.join(catalog_data['filefolder'], input_filename)
+                input_file = os.path.join(full_data_path, input_filename)
                 output_base_name = file_str + "_"
-                output_file_base = os.path.join(scan_full_output_folder, output_base_name)
+                output_file_base = os.path.join(full_output_folder, output_base_name)
                 
                 input_files.append(input_file)
                 output_files.append(output_file_base)
@@ -339,10 +345,10 @@ def submit_parameters(n, rec_id,
                 detector_number=0  # Default detector number
             )
             
-            logger.info(f"Wire reconstruction batch job {job_id} enqueued with RQ ID: {rq_job_id} for {len(file_nums)} files")
+            logger.info(f"Wire reconstruction batch job {job_id} enqueued with RQ ID: {rq_job_id} for {len(scanPoint_nums)} files")
             
             set_props("alert-submit", {'is_open': True, 
-                                      'children': f'Job {job_id} submitted to queue with {files_srange.len()} file(s)',
+                                      'children': f'Job {job_id} submitted to queue with {scanPoints_srange.len()} file(s)',
                                       'color': 'info'})
         except Exception as e:
             logger.error(f"Failed to enqueue job: {e}")
@@ -381,7 +387,7 @@ def get_wirerecons(path):
             memory_limit_mb=DEFAULT_VARIABLES["memory_limit_mb"],
             
             # Files
-            files=WIRERECON_DEFAULTS["files"],
+            scanPoints=WIRERECON_DEFAULTS["scanPoints"],
             
             # Output
             outputFolder=WIRERECON_DEFAULTS["outputFolder"],
@@ -390,8 +396,9 @@ def get_wirerecons(path):
         # Add root_path from DEFAULT_VARIABLES
         wirerecon_defaults.root_path = root_path
         with Session(db_utils.ENGINE) as session:
-            # Get next wirerecon_id and update title
+            # Get next wirerecon_id
             next_wirerecon_id = db_utils.get_next_id(session, db_schema.WireRecon)
+            # Store next_wirerecon_id and update title
             set_props('next-wire-recon-id', {'value': next_wirerecon_id})
             set_props('wirerecon-title', {'children': f"New wire recon {next_wirerecon_id}"})
             
@@ -410,9 +417,11 @@ def get_wirerecons(path):
 )
 def load_scan_data_from_url(href):
     """
-    Load scan data when scan_id is provided in URL query parameter
-    URL format: /create-wirerecons?scan_id={scan_id}
-    Pooled URL format: /create-wirerecons?scan_id={(scan_ids)}
+    Load scan data and optionally existing wirerecon data when provided in URL query parameters
+    URL format: /create-wire-reconstruction?scan_id={scan_id}
+    Pooled URL format: /create-wire-reconstruction?scan_id=${scan_ids}
+    With wirerecon_id: /create-wire-reconstruction?scan_id={scan_id}&wirerecon_id={wirerecon_id}
+    Pooled with wirerecon_id: /create-wire-reconstruction?scan_id=${scan_ids}&wirerecon_id=${wirerecon_ids}
     """
     if not href:
         raise PreventUpdate
@@ -421,10 +430,17 @@ def load_scan_data_from_url(href):
     query_params = urllib.parse.parse_qs(parsed_url.query)
     
     scan_id = query_params.get('scan_id', [None])[0]
-    root_path = DEFAULT_VARIABLES["root_path"]
+    wirerecon_id = query_params.get('wirerecon_id', [None])[0]
+    root_path = DEFAULT_VARIABLES.get("root_path", "")
 
     if scan_id:
         with Session(db_utils.ENGINE) as session:
+            # Get next wirerecon_id
+            next_wirerecon_id = db_utils.get_next_id(session, db_schema.WireRecon)
+            # Store next_wirerecon_id and update title
+            set_props('next-wire-recon-id', {'value': next_wirerecon_id})
+            set_props('wirerecon-title', {'children': f"New wire recon {next_wirerecon_id}"})
+            
             try:
                 scan_id = int(scan_id)
                 # Query metadata and scan data
@@ -432,51 +448,91 @@ def load_scan_data_from_url(href):
                     db_schema.Metadata.scanNumber == scan_id
                 ).first()
                 
-                # scans = session.query(db_schema.Scan).filter(
+                # scan_data = session.query(db_schema.Scan).filter(
                 #     db_schema.Scan.scanNumber == scan_id
                 # ).all()
 
                 if metadata_data:
-                    # Create a WireRecon object with populated defaults from metadata/scan
-                    wirerecon_defaults = db_schema.WireRecon(
-                        scanNumber=scan_id,
-                        
-                        # User text
-                        author=DEFAULT_VARIABLES["author"],
-                        notes=DEFAULT_VARIABLES["notes"],
-                        
-                        # Recon constraints
-                        geoFile=WIRERECON_DEFAULTS["geoFile"],
-                        percent_brightest=WIRERECON_DEFAULTS["percent_brightest"],
-                        wire_edges=WIRERECON_DEFAULTS["wire_edges"],
-                        
-                        # Depth parameters
-                        depth_start=WIRERECON_DEFAULTS["depth_start"],
-                        depth_end=WIRERECON_DEFAULTS["depth_end"],
-                        depth_resolution=WIRERECON_DEFAULTS["depth_resolution"],
-                        
-                        # Compute parameters
-                        num_threads=DEFAULT_VARIABLES["num_threads"],
-                        memory_limit_mb=DEFAULT_VARIABLES["memory_limit_mb"],
-                        
-                        # Files
-                        files=WIRERECON_DEFAULTS["files"],
-                        
-                        # Output
-                        outputFolder=WIRERECON_DEFAULTS["outputFolder"],
-                        verbose=DEFAULT_VARIABLES["verbose"],
-                    )
+                    
+                    # Format output folder with scan number and wirerecon_id
+                    output_folder = WIRERECON_DEFAULTS["outputFolder"]
+                    try:
+                        output_folder = output_folder % (scan_id, next_wirerecon_id)
+                    except:
+                        # If formatting fails, use the original string
+                        pass
+                    
+                    # Check if wirerecon_id is provided to load existing record
+                    if wirerecon_id:
+                        try:
+                            wirerecon_id = int(wirerecon_id)
+                            wirerecon_data = session.query(db_schema.WireRecon).filter(
+                                db_schema.WireRecon.wirerecon_id == wirerecon_id
+                            ).first()
+                            
+                            if wirerecon_data:
+                                # Use existing wirerecon data as the base
+                                wirerecon_defaults = wirerecon_data
+                                
+                                # Update only the necessary fields
+                                # wirerecon_defaults.scanNumber = scan_id
+                                wirerecon_defaults.author = DEFAULT_VARIABLES["author"]
+                                wirerecon_defaults.notes = DEFAULT_VARIABLES["notes"]
+                                wirerecon_defaults.outputFolder = output_folder
+                                
+                                # Convert file path to relative path
+                                wirerecon_defaults.geoFile = remove_root_path_prefix(wirerecon_data.geoFile, root_path)
+                            else:
+                                # Show warning if wirerecon not found
+                                set_props("alert-scan-loaded", {
+                                    'is_open': True, 
+                                    'children': f'Wire reconstruction {wirerecon_id} not found in database',
+                                    'color': 'warning'
+                                })
+                                raise ValueError("WireRecon not found")
+                                
+                        except (ValueError, Exception):
+                            # If wirerecon_id is not valid or not found, create defaults
+                            wirerecon_id = None
+                    
+                    # Create defaults if no wirerecon_id or if loading failed
+                    if not wirerecon_id:
+                        # Create a WireRecon object with populated defaults from metadata/scan
+                        wirerecon_defaults = db_schema.WireRecon(
+                            scanNumber=scan_id,
+                            
+                            # User text
+                            author=DEFAULT_VARIABLES["author"],
+                            notes=DEFAULT_VARIABLES["notes"],
+                            
+                            # Recon constraints
+                            geoFile=WIRERECON_DEFAULTS["geoFile"],
+                            percent_brightest=WIRERECON_DEFAULTS["percent_brightest"],
+                            wire_edges=WIRERECON_DEFAULTS["wire_edges"],
+                            
+                            # Depth parameters
+                            depth_start=WIRERECON_DEFAULTS["depth_start"],
+                            depth_end=WIRERECON_DEFAULTS["depth_end"],
+                            depth_resolution=WIRERECON_DEFAULTS["depth_resolution"],
+                            
+                            # Compute parameters
+                            num_threads=DEFAULT_VARIABLES["num_threads"],
+                            memory_limit_mb=DEFAULT_VARIABLES["memory_limit_mb"],
+                            
+                            # Files
+                            scanPoints=WIRERECON_DEFAULTS["scanPoints"],
+                            
+                            # Output
+                            outputFolder=output_folder,
+                            verbose=DEFAULT_VARIABLES["verbose"],
+                        )
+                    
                     # Add root_path from DEFAULT_VARIABLES
                     wirerecon_defaults.root_path = root_path
                     # Retrieve data_path and filenamePrefix from catalog data
                     catalog_data = get_catalog_data(session, scan_id, root_path, CATALOG_DEFAULTS)
                     wirerecon_defaults.data_path = catalog_data["data_path"]
                     wirerecon_defaults.filenamePrefix = catalog_data["filenamePrefix"]
-                    
-                    # Get next wirerecon_id and update title
-                    next_wirerecon_id = db_utils.get_next_id(session, db_schema.WireRecon)
-                    set_props('next-wire-recon-id', {'value': next_wirerecon_id})
-                    set_props('wirerecon-title', {'children': f"New wire recon {next_wirerecon_id}"})
                     
                     # Populate the form with the defaults
                     set_wire_recon_form_props(wirerecon_defaults)#,read_only=True)
@@ -498,30 +554,41 @@ def load_scan_data_from_url(href):
             except Exception:
                 try:
                     # This section handles multiple/pooled scan numbers
-                    scan_numbers = str(scan_id).replace('$','').replace(',',', ').split(',')
+                    scan_numbers = str(scan_id).replace('$','').split(',')
                     
-                    # Find common path among all scans and collect filename prefixes
-                    common_path = None
+                    # Collect data paths and filename prefixes for each scan
+                    data_paths = []
                     filename_prefixes = []
                     for scan_num in scan_numbers:
                         try:
-                            catalog_data = get_catalog_data(session, int(scan_num.strip()), root_path, CATALOG_DEFAULTS)
+                            catalog_data = get_catalog_data(session, int(scan_num), root_path, CATALOG_DEFAULTS)
                             if catalog_data:
-                                if 'filefolder' in catalog_data:
-                                    if common_path is None:
-                                        common_path = catalog_data['filefolder']
-                                    else:
-                                        # Find common prefix
-                                        common_path = os.path.commonpath([common_path, catalog_data['filefolder']])
+                                # Collect data path
+                                data_paths.append(catalog_data.get('data_path', ''))
                                 
-                                # Collect filename prefix if available
-                                if catalog_data.get('filenamePrefix'):
-                                    filename_prefixes.append(catalog_data['filenamePrefix'])
+                                # Collect filename prefix
+                                filename_prefixes.append(catalog_data.get('filenamePrefix', ''))
                         except:
-                            continue
+                            # If error, add empty strings to maintain alignment
+                            data_paths.append("")
+                            filename_prefixes.append("")
+                    
+                    # For pooled scans, create a joined set of output folders
+                    output_folders = []
+                    for scan_num in scan_numbers:
+                        try:
+                            formatted_folder = WIRERECON_DEFAULTS["outputFolder"] % (int(scan_num), next_wirerecon_id)
+                            output_folders.append(formatted_folder)
+                        except:
+                            # If formatting fails, use the original string
+                            output_folders.append(WIRERECON_DEFAULTS["outputFolder"])
+                        next_wirerecon_id += 1
+                    
+                    # Join all output folders with semicolon separator
+                    pooled_output_folders = "; ".join(output_folders)
                     
                     wirerecon_defaults = db_schema.WireRecon(
-                        scanNumber=str(scan_id).replace('$','').replace(',',', '),
+                        scanNumber=str(scan_id).replace('$','').replace(',','; '),
                         
                         # User text
                         author=DEFAULT_VARIABLES["author"],
@@ -542,37 +609,17 @@ def load_scan_data_from_url(href):
                         memory_limit_mb=DEFAULT_VARIABLES["memory_limit_mb"],
                         
                         # Files
-                        files=WIRERECON_DEFAULTS["files"],
+                        scanPoints=WIRERECON_DEFAULTS["scanPoints"],
                         
                         # Output
-                        outputFolder=WIRERECON_DEFAULTS["outputFolder"],
+                        outputFolder=pooled_output_folders,
                         verbose=DEFAULT_VARIABLES["verbose"],
                     )
                     
-                    # Determine root_path and data_path based on common path
-                    if common_path:
-                        if common_path.startswith(root_path):
-                            # Common path is within default root
-                            wirerecon_defaults.root_path = root_path
-                            wirerecon_defaults.data_path = remove_root_path_prefix(common_path, root_path)
-                        else:
-                            # Common path is outside default root, update root_path
-                            wirerecon_defaults.root_path = common_path
-                            wirerecon_defaults.data_path = ""
-                    else:
-                        # No common path found, use defaults
-                        wirerecon_defaults.root_path = root_path
-                        wirerecon_defaults.data_path = ""
-                    
-                    # Set filenamePrefix as comma-separated string of unique prefixes
-                    # unique_prefixes = list(dict.fromkeys(filename_prefixes))  # Remove duplicates while preserving order
-                    # wirerecon_defaults.filenamePrefix = ", ".join(unique_prefixes) if unique_prefixes else ""
-                    wirerecon_defaults.filenamePrefix = ", ".join(filename_prefixes) if filename_prefixes else ""
-
-                    # Get next wirerecon_id and update title
-                    next_wirerecon_id = db_utils.get_next_id(session, db_schema.WireRecon)
-                    set_props('next-wire-recon-id', {'value': next_wirerecon_id})
-                    set_props('wirerecon-title', {'children': f"New wire recon {next_wirerecon_id}"})
+                    # Set root_path and join data_paths and filename_prefixes with semicolons
+                    wirerecon_defaults.root_path = root_path
+                    wirerecon_defaults.data_path = "; ".join(data_paths)
+                    wirerecon_defaults.filenamePrefix = "; ".join(filename_prefixes) if filename_prefixes else ""
                     
                     # Populate the form with the defaults
                     set_wire_recon_form_props(wirerecon_defaults)#,read_only=True)

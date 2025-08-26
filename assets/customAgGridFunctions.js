@@ -519,6 +519,9 @@ dagcomponentfuncs.ActionButtonsRenderer = function (props) {
     if (data.aperture.includes('wire')) {
         createReconstructionUrl = `/create-wire-reconstruction?scan_id=${scanNumber}`;
     }
+    if (reconParams) {
+        createReconstructionUrl += `&${reconParams}`;
+    }
 
     function handlePeakIndexingClick() {
         window.location.href = createPeakIndexingUrl;

@@ -10,16 +10,22 @@ peakindex_form = dbc.Row(
                         dbc.AccordionItem(
                             [
                                 _stack(
+                                    [
+                                        _field("Scan Number(s)", "scanNumber", size='md'),
+                                        _field("Root Path", "root_path", size='md'),
+                                    ]
+                                ),
+                                _stack(
                                     [   
                                         # _field("Dataset", "dataset", size='lg'),
-                                        _field("Scan Number", "scanNumber", size='md'),
+                                        # _field("Scan Number", "scanNumber", size='md'),
                                         _field("Recon ID", "recon_id", size='md', kwargs={'value':None}),
                                         _field("Wire Recon ID", "wirerecon_id", size='md', kwargs={'value':None}),
                                     ]
                                 ),
                                 _stack(
                                     [
-                                        _field("Files Path", "filefolder", size='hg'),
+                                        _field("Data Path", "data_path", size='hg'),
                                     ]
                                 ),
                                 _stack(
@@ -29,8 +35,8 @@ peakindex_form = dbc.Row(
                                 ),
                                 _stack(
                                     [
-                                        _field("Scan Point (Inner Index) Range Start", "scanPointStart", size='md'),
-                                        _field("Scan Point (Inner Index) Range End", "scanPointEnd", size='md'),
+                                        _field("Scan Points", "scanPoints", size='md', kwargs={'placeholder': 'e.g. 1-10,12,15-20'}),
+                                        _field("Depth Range", "depthRange", size='md', kwargs={'placeholder': 'e.g. 0-200'}),
                                     ]
                                 ),
                                 _stack(
@@ -109,21 +115,21 @@ peakindex_form = dbc.Row(
                                         _field("Mask File", "maskFile", size='hg'),
                                     ]
                                 ),
-                                dbc.Button(
-                                    "Show Paths to Programs",
-                                    id="collapse1-button",
-                                    className="mb-3",
-                                    color="primary",
-                                    n_clicks=0,
-                                ),
-                                dbc.Collapse(
-                                    [
-                                        _field("peaksearch Path", "peaksearchPath", size='hg'),
-                                        _field("p2q Path", "p2qPath", size='hg'),
-                                    ],
-                                id="collapse1",
-                                is_open=False,
-                                ),
+                                # dbc.Button(
+                                #     "Show Paths to Programs",
+                                #     id="collapse1-button",
+                                #     className="mb-3",
+                                #     color="primary",
+                                #     n_clicks=0,
+                                # ),
+                                # dbc.Collapse(
+                                #     [
+                                #         _field("peaksearch Path", "peaksearchPath", size='hg'),
+                                #         _field("p2q Path", "p2qPath", size='hg'),
+                                #     ],
+                                # id="collapse1",
+                                # is_open=False,
+                                # ),
                             ],
                             title="Peak Search",
                         ),
@@ -151,20 +157,20 @@ peakindex_form = dbc.Row(
                                         _field("Max Peaks", "max_peaks", size='md'),
                                     ]
                                 ),
-                                dbc.Button(
-                                    "Show Path to Program",
-                                    id="collapse2-button",
-                                    className="mb-3",
-                                    color="primary",
-                                    n_clicks=0,
-                                ),
-                                dbc.Collapse(
-                                    [
-                                        _field("Indexing Path", "indexingPath", size='hg'),
-                                    ],
-                                id="collapse2",
-                                is_open=False,
-                                ),
+                                # dbc.Button(
+                                #     "Show Path to Program",
+                                #     id="collapse2-button",
+                                #     className="mb-3",
+                                #     color="primary",
+                                #     n_clicks=0,
+                                # ),
+                                # dbc.Collapse(
+                                #     [
+                                #         _field("Indexing Path", "indexingPath", size='hg'),
+                                #     ],
+                                # id="collapse2",
+                                # is_open=False,
+                                # ),
                             ],
                             title="Indexing",
                         ),
@@ -223,6 +229,7 @@ peakindex_form = dbc.Row(
 def set_peakindex_form_props(peakindex, read_only=False):
     #set_props("dataset", {'value':peakindex.dataset_id, 'readonly':read_only})
     set_props("scanNumber", {'value':peakindex.scanNumber, 'readonly':read_only})
+    set_props("root_path", {'value':peakindex.root_path, 'readonly':True})
     set_props("recon_id", {'value':peakindex.recon_id, 'readonly':read_only})
     set_props("wirerecon_id", {'value':peakindex.wirerecon_id, 'readonly':read_only})
     
@@ -234,10 +241,8 @@ def set_peakindex_form_props(peakindex, read_only=False):
     set_props("max_number", {'value':peakindex.max_number, 'readonly':read_only})
     set_props("min_separation", {'value':peakindex.min_separation, 'readonly':read_only})
     set_props("peakShape", {'value':peakindex.peakShape, 'readonly':read_only})
-    set_props("scanPointStart", {'value':peakindex.scanPointStart, 'readonly':read_only})
-    set_props("scanPointEnd", {'value':peakindex.scanPointEnd, 'readonly':read_only})
-    # set_props("depthRangeStart", {'value':peakindex.depthRangeStart, 'readonly':read_only})
-    # set_props("depthRangeEnd", {'value':peakindex.depthRangeEnd, 'readonly':read_only})
+    set_props("scanPoints", {'value':peakindex.scanPoints, 'readonly':read_only})
+    set_props("depthRange", {'value':peakindex.depthRange, 'readonly':read_only})
     set_props("detectorCropX1", {'value':peakindex.detectorCropX1, 'readonly':read_only})
     set_props("detectorCropX2", {'value':peakindex.detectorCropX2, 'readonly':read_only})
     set_props("detectorCropY1", {'value':peakindex.detectorCropY1, 'readonly':read_only})
@@ -262,12 +267,12 @@ def set_peakindex_form_props(peakindex, read_only=False):
     set_props("cosmicFilter", {'value':peakindex.cosmicFilter, 'readonly':read_only})
     set_props("recipLatticeUnit", {'value':peakindex.recipLatticeUnit, 'readonly':read_only})
     set_props("latticeParametersUnit", {'value':peakindex.latticeParametersUnit, 'readonly':read_only})
-    set_props("peaksearchPath", {'value':peakindex.peaksearchPath, 'readonly':read_only})
-    set_props("p2qPath", {'value':peakindex.p2qPath, 'readonly':read_only})
-    set_props("indexingPath", {'value':peakindex.indexingPath, 'readonly':read_only})
+    # set_props("peaksearchPath", {'value':peakindex.peaksearchPath, 'readonly':read_only})
+    # set_props("p2qPath", {'value':peakindex.p2qPath, 'readonly':read_only})
+    # set_props("indexingPath", {'value':peakindex.indexingPath, 'readonly':read_only})
+    set_props("data_path", {'value':peakindex.data_path, 'readonly':True})
+    set_props("filenamePrefix", {'value':peakindex.filenamePrefix, 'readonly':True})
     set_props("outputFolder", {'value':peakindex.outputFolder, 'readonly':read_only})
-    set_props("filefolder", {'value':peakindex.filefolder, 'readonly':read_only})
-    set_props("filenamePrefix", {'value':peakindex.filenamePrefix, 'readonly':read_only})
     set_props("geoFile", {'value':peakindex.geoFile, 'readonly':read_only})
     set_props("crystFile", {'value':peakindex.crystFile, 'readonly':read_only})
     set_props("depth", {'value':peakindex.depth, 'readonly':read_only})
@@ -278,22 +283,22 @@ def set_peakindex_form_props(peakindex, read_only=False):
     set_props("author", {'value':peakindex.author, 'readonly':read_only})
     set_props("notes", {'value':peakindex.notes, 'readonly':read_only})
 
-@callback(
-    Output("collapse1", "is_open"),
-    [Input("collapse1-button", "n_clicks")],
-    [State("collapse1", "is_open")],
-)
-def toggle_collapse12(n, is_open):
-    if n:
-        return not is_open
-    return is_open
+# @callback(
+#     Output("collapse1", "is_open"),
+#     [Input("collapse1-button", "n_clicks")],
+#     [State("collapse1", "is_open")],
+# )
+# def toggle_collapse12(n, is_open):
+#     if n:
+#         return not is_open
+#     return is_open
 
-@callback(
-    Output("collapse2", "is_open"),
-    [Input("collapse2-button", "n_clicks")],
-    [State("collapse2", "is_open")],
-)
-def toggle_collapse2(n, is_open):
-    if n:
-        return not is_open
-    return is_open
+# @callback(
+#     Output("collapse2", "is_open"),
+#     [Input("collapse2-button", "n_clicks")],
+#     [State("collapse2", "is_open")],
+# )
+# def toggle_collapse2(n, is_open):
+#     if n:
+#         return not is_open
+#     return is_open

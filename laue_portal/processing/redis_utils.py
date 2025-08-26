@@ -236,7 +236,7 @@ def _enqueue_batch(job_id: int, job_type: str, execute_func, at_front: bool = Fa
 
 def enqueue_wire_reconstruction(job_id: int, input_files: List[str], output_files: List[str],
                                geometry_file: str, depth_range: tuple, 
-                               resolution: float = 1.0, at_front: bool = False, **kwargs) -> str:
+                               resolution: float, at_front: bool = False, **kwargs) -> str:
     """
     Enqueue a wire reconstruction batch job.
     Always expects subjobs to exist for the given job_id.
@@ -247,7 +247,7 @@ def enqueue_wire_reconstruction(job_id: int, input_files: List[str], output_file
         output_files: List of paths to output files (one per subjob)
         geometry_file: Path to geometry file
         depth_range: Tuple of (start, end) depths
-        resolution: Resolution parameter (default: 1.0)
+        resolution: Resolution parameter
         at_front: Whether to add job at front of queue (default: False)
         **kwargs: Additional optional arguments for wire reconstruction:
             - image_range: Optional[Tuple[int, int]] - Range of images to process
@@ -302,26 +302,68 @@ def enqueue_reconstruction(job_id: int, config_dict: Dict[str, Any], at_front: b
     )
 
 
-def enqueue_peakindexing(job_id: int, config_dict: Dict[str, Any], at_front: bool = False) -> str:
+def enqueue_peakindexing(job_id: int, input_files: List[str], output_files: List[str],
+                        geometry_file: str, crystal_file: str, boxsize: int, max_rfactor: float, 
+                        min_size: int, min_separation: int, threshold: int, peak_shape: str,
+                        max_peaks: int, smooth: bool, index_kev_max_calc: float, 
+                        index_kev_max_test: float, index_angle_tolerance: float, index_cone: float,
+                        index_h: int, index_k: int, index_l: int, at_front: bool = False, **kwargs) -> str:
     """
-    Enqueue a peakindexing job.
+    Enqueue a peakindexing batch job.
+    Always expects subjobs to exist for the given job_id.
     
     Args:
         job_id: Database job ID
-        config_dict: Configuration dictionary for peak indexing
+        input_files: List of paths to input files (one per subjob)
+        output_files: List of output directories (one per subjob)
+        geometry_file: Path to geometry file
+        crystal_file: Path to crystal file
+        boxsize: Box size for peak detection
+        max_rfactor: Maximum R-factor
+        min_size: Minimum peak size
+        min_separation: Minimum separation between peaks
+        threshold: Threshold for peak detection
+        peak_shape: Peak shape ('L' for Lorentzian, 'G' for Gaussian)
+        max_peaks: Maximum number of peaks to find
+        smooth: Whether to smooth the image
+        index_kev_max_calc: Maximum keV for indexing calculation
+        index_kev_max_test: Maximum keV for indexing test
+        index_angle_tolerance: Angle tolerance for indexing
+        index_cone: Cone angle for indexing
+        index_h: H index
+        index_k: K index
+        index_l: L index
         at_front: Whether to add job at front of queue (default: False)
+        **kwargs: Additional optional arguments
     
     Returns:
-        RQ job ID
+        RQ job ID of the batch coordinator
     """
-    return enqueue_job(
+    return _enqueue_batch(
         job_id,
         'peakindexing',
         execute_peakindexing_job,
         at_front,
-        None,  # depends_on
-        db_schema.Job,  # table
-        config_dict
+        input_files,
+        output_files,
+        geometry_file,
+        crystal_file,
+        boxsize,
+        max_rfactor,
+        min_size,
+        min_separation,
+        threshold,
+        peak_shape,
+        max_peaks,
+        smooth,
+        index_kev_max_calc,
+        index_kev_max_test,
+        index_angle_tolerance,
+        index_cone,
+        index_h,
+        index_k,
+        index_l,
+        **kwargs
     )
 
 
@@ -646,10 +688,37 @@ def execute_wire_reconstruction_job(job_id: int, input_file: str, output_file: s
     )
 
 
-def execute_peakindexing_job(job_id: int, config_dict: Dict[str, Any]):
-    """Execute a peakindexing job."""
+def execute_peakindexing_job(job_id: int, input_file: str, output_dir: str,
+                            geometry_file: str, crystal_file: str, boxsize: int, 
+                            max_rfactor: float, min_size: int, min_separation: int, 
+                            threshold: int, peak_shape: str, max_peaks: int, smooth: bool,
+                            index_kev_max_calc: float, index_kev_max_test: float,
+                            index_angle_tolerance: float, index_cone: float,
+                            index_h: int, index_k: int, index_l: int, **kwargs):
+    """Execute a peakindexing job (subjob)."""
     def _do_peakindexing():
-        return pyLaueGo(config_dict).run(0, 1)  # rank=0, size=1 for single process
+        return index( #pyLaueGo(config_dict).run(0, 1)  # rank=0, size=1 for single process
+            input_image=input_file,
+            output_dir=output_dir,
+            geo_file=geometry_file,
+            crystal_file=crystal_file,
+            boxsize=boxsize,
+            max_rfactor=max_rfactor,
+            min_size=min_size,
+            min_separation=min_separation,
+            threshold=threshold,
+            peak_shape=peak_shape,
+            max_peaks=max_peaks,
+            smooth=smooth,
+            index_kev_max_calc=index_kev_max_calc,
+            index_kev_max_test=index_kev_max_test,
+            index_angle_tolerance=index_angle_tolerance,
+            index_cone=index_cone,
+            index_h=index_h,
+            index_k=index_k,
+            index_l=index_l,
+            **kwargs
+        )
         # # Testing: sleep for 5 seconds instead
         # time.sleep(5)
         # return {"status": "test_completed", "message": "Slept for 5 seconds instead of running peak indexing"}
@@ -658,5 +727,5 @@ def execute_peakindexing_job(job_id: int, config_dict: Dict[str, Any]):
         job_id,
         'Peakindexing',
         _do_peakindexing,
-        db_schema.Job  # This is called for regular jobs (default)
+        db_schema.SubJob  # This is called for subjobs
     )

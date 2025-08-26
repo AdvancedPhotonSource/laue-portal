@@ -1,5 +1,5 @@
 import dash
-from dash import html, dcc, Input, Output
+from dash import html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
 import dash_ag_grid as dag
 from dash.exceptions import PreventUpdate
@@ -15,11 +15,56 @@ dash.register_page(__name__)
 layout = html.Div([
         navbar.navbar,
         dcc.Location(id='url', refresh=False),
+        
+        # Secondary action bar aligned to right
+        dbc.Row([
+            dbc.Col([
+                dbc.Nav([
+                    dbc.NavItem(
+                        dbc.NavLink(
+                            "New Recon",
+                            href="/create-wire-reconstruction",
+                            active=False,
+                            id="wire-recons-page-wire-recon"
+                        )
+                    ),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(
+                        dbc.NavLink(
+                            "New Index",
+                            href="/create-peakindexing",
+                            active=False,
+                            id="wire-recons-page-peakindex"
+                        )
+                    ),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("New Recon with selected (only 1 sel)", href="#", active=False)),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("Stop ALL", href="#", active=False)),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("Stop Selected", href="#", active=False)),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("Set high Priority for selected (only 1 sel)", href="#", active=False)),
+                ],
+                className="bg-light px-2 py-2 d-flex justify-content-end w-100")
+            ], width=12)
+        ], className="mb-3 mt-0"),
+
         dbc.Container(fluid=True, className="p-0", children=[
             dag.AgGrid(
                 id='wire-recon-table',
                 columnSize="responsiveSizeToFit",
-                dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight', "rowHeight": 32},
+                defaultColDef={
+                    "filter": True,
+                    "checkboxSelection": {
+                        "function": 'params.column == params.columnApi.getAllDisplayedColumns()[0]'
+                    },
+                    "headerCheckboxSelection": {
+                        "function": 'params.column == params.columnApi.getAllDisplayedColumns()[0]'
+                    },
+                },
+                dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight',
+                                 "rowSelection": 'multiple', "suppressRowClickSelection": True, "animateRows": False, "rowHeight": 32},
                 style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                 className="ag-theme-alpine"
             )
@@ -118,3 +163,31 @@ def get_recons(path):
         return cols, recons
     else:
         raise PreventUpdate
+
+
+@dash.callback(
+    Output('wire-recons-page-wire-recon', 'href'),
+    Input('wire-recon-table','selectedRows'),
+    State('wire-recons-page-wire-recon', 'href'),
+    prevent_initial_call=True,
+)
+def selected_wirerecon_href(rows,href,id_query="?scan_id=$"):
+    href = href.split(id_query)[0]
+    if rows:
+        href += "?scan_id=$" + ','.join([str(row['scanNumber']) for row in rows])
+        href += "&wirerecon_id=" + ','.join([str(row['wirerecon_id']) for row in rows])
+    return href
+
+
+@dash.callback(
+    Output('wire-recons-page-peakindex', 'href'),
+    Input('wire-recon-table','selectedRows'),
+    State('wire-recons-page-peakindex', 'href'),
+    prevent_initial_call=True,
+)
+def selected_peakindex_href(rows,href,id_query="?scan_id=$"):
+    href = href.split(id_query)[0]
+    if rows:
+        href += "?scan_id=$" + ','.join([str(row['scanNumber']) for row in rows])
+        href += "&wirerecon_id=" + ','.join([str(row['wirerecon_id']) for row in rows])
+    return href

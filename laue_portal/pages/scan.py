@@ -7,10 +7,11 @@ import laue_portal.database.db_schema as db_schema
 from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 from dash.exceptions import PreventUpdate
-from sqlalchemy import asc # Import asc for ordering
+from sqlalchemy import asc, func # Import asc for ordering and func for aggregation
 from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, make_scan_accordion, set_scaninfo_form_props
 import urllib.parse
 import pandas as pd
+from srange import srange
 
 dash.register_page(__name__, path="/scan") # Simplified path
 
@@ -536,13 +537,20 @@ def _get_scan_recons(scan_id):
         with Session(db_utils.ENGINE) as session:
             aperture = pd.read_sql(session.query(db_schema.Catalog.aperture).filter(db_schema.Catalog.scanNumber == scan_id).statement, session.bind).at[0,'aperture']
             if 'wire' in aperture:
-                scan_recons = pd.read_sql(session.query(*ALL_COLS_WireRecon)
+                # Query with subjob count
+                scan_recons = pd.read_sql(session.query(
+                                *ALL_COLS_WireRecon,
+                                func.count(db_schema.SubJob.subjob_id).label('subjob_count')
+                                )
                                 .join(db_schema.Metadata.catalog_)
                                 .join(db_schema.Metadata.wirerecon_)
                                 # .join(db_schema.Catalog, db_schema.Metadata.scanNumber == db_schema.Catalog.scanNumber)
                                 # .join(db_schema.WireRecon, db_schema.Metadata.scanNumber == db_schema.WireRecon.scanNumber)
                                 .join(db_schema.Job, db_schema.WireRecon.job_id == db_schema.Job.job_id)
-                                .filter(db_schema.Metadata.scanNumber == scan_id).statement, session.bind)
+                                .outerjoin(db_schema.SubJob, db_schema.Job.job_id == db_schema.SubJob.job_id)
+                                .filter(db_schema.Metadata.scanNumber == scan_id)
+                                .group_by(*ALL_COLS_WireRecon)
+                                .statement, session.bind)
                 
                 # Format columns for ag-grid
                 cols = []
@@ -597,9 +605,7 @@ def _get_scan_recons(scan_id):
                         col_def = {
                             'headerName': 'Points', #'points_to_index'
                             'valueGetter': {"function":
-                                "50 + ' / ' + '2000'"
-                                #"50*(params.data.scanPointEnd - params.data.scanPointStart) + ' / ' + '2000'"
-                                # "f'{params.data.scanPointEnd - params.data.scanPointStart} out of 2000'", #len(Path(db_schema.PeakIndex.filefolder).glob("*"))
+                                "params.data.subjob_count + ' / ' + '2000'"
                             },
                         }
                     elif col_num == 3:
@@ -630,13 +636,20 @@ def _get_scan_recons(scan_id):
                 
                 return cols, scan_recons.to_dict('records')
             else:
-                scan_recons = pd.read_sql(session.query(*ALL_COLS_Recon)
+                # Query with subjob count
+                scan_recons = pd.read_sql(session.query(
+                                *ALL_COLS_Recon,
+                                func.count(db_schema.SubJob.subjob_id).label('subjob_count')
+                                )
                                 .join(db_schema.Metadata.catalog_)
                                 .join(db_schema.Metadata.recon_)
                                 # .join(db_schema.Catalog, db_schema.Metadata.scanNumber == db_schema.Catalog.scanNumber)
                                 # .join(db_schema.Recon, db_schema.Metadata.scanNumber == db_schema.Recon.scanNumber)
                                 .join(db_schema.Job, db_schema.Recon.job_id == db_schema.Job.job_id)
-                                .filter(db_schema.Metadata.scanNumber == scan_id).statement, session.bind)
+                                .outerjoin(db_schema.SubJob, db_schema.Job.job_id == db_schema.SubJob.job_id)
+                                .filter(db_schema.Metadata.scanNumber == scan_id)
+                                .group_by(*ALL_COLS_Recon)
+                                .statement, session.bind)
                 # Format columns for ag-grid
                 cols = []
                 for col in VISIBLE_COLS_Recon:
@@ -690,9 +703,7 @@ def _get_scan_recons(scan_id):
                         col_def = {
                             'headerName': 'Points', #'points_to_index'
                             'valueGetter': {"function":
-                                "50 + ' / ' + '2000'"
-                                #"50*(params.data.scanPointEnd - params.data.scanPointStart) + ' / ' + '2000'"
-                                # "f'{params.data.scanPointEnd - params.data.scanPointStart} out of 2000'", #len(Path(db_schema.PeakIndex.filefolder).glob("*"))
+                                "params.data.subjob_count + ' / ' + '2000'"
                             },
                         }
                     elif col_num == 4:
@@ -796,9 +807,7 @@ CUSTOM_HEADER_NAMES_PeakIndex = {
 
 CUSTOM_COLS_PeakIndex_dict = {
     4:[
-        db_schema.PeakIndex.scanPointEnd,
-        db_schema.PeakIndex.scanPointStart,
-        db_schema.PeakIndex.filefolder,
+        db_schema.PeakIndex.scanPoints,
     ],
 }
 
@@ -812,13 +821,20 @@ def _get_scan_peakindexings(scan_id):
             if 'wire' in aperture:
                 VISIBLE_COLS_PeakIndex[1] = db_schema.PeakIndex.wirerecon_id
                 ALL_COLS_PeakIndex = VISIBLE_COLS_PeakIndex + [ii for i in CUSTOM_COLS_PeakIndex_dict.values() for ii in i]
-            scan_peakindexings = pd.read_sql(session.query(*ALL_COLS_PeakIndex)
+            # Query with subjob count
+            scan_peakindexings = pd.read_sql(session.query(
+                            *ALL_COLS_PeakIndex,
+                            func.count(db_schema.SubJob.subjob_id).label('subjob_count')
+                            )
                             .join(db_schema.Metadata.peakindex_)
                             # .join(db_schema.PeakIndex.peakindexresults_)
                             # .join(db_schema.PeakIndex, db_schema.Metadata.scanNumber == db_schema.PeakIndex.scanNumber)
                             # .join(db_schema.PeakIndexResults, db_schema.PeakIndex.scanNumber == db_schema.PeakIndexResults.scanNumber)
                             .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
-                            .filter(db_schema.Metadata.scanNumber == scan_id).statement, session.bind)
+                            .outerjoin(db_schema.SubJob, db_schema.Job.job_id == db_schema.SubJob.job_id)
+                            .filter(db_schema.Metadata.scanNumber == scan_id)
+                            .group_by(*ALL_COLS_PeakIndex)
+                            .statement, session.bind)
             # Format columns for ag-grid
             cols = []
             for col in VISIBLE_COLS_PeakIndex:
@@ -869,8 +885,7 @@ def _get_scan_peakindexings(scan_id):
                     col_def = {
                         'headerName': 'Points', #'points_to_index'
                         'valueGetter': {"function":
-                            "50*(params.data.scanPointEnd - params.data.scanPointStart) + ' / ' + '2000'"
-                            # "f'{params.data.scanPointEnd - params.data.scanPointStart} out of 2000'", #len(Path(db_schema.PeakIndex.filefolder).glob("*"))
+                            "params.data.subjob_count + ' / ' + '2000'"
                         },
                     }
                 col_def.update({

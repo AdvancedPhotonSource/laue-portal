@@ -364,7 +364,7 @@ class WireRecon(Base):
     memory_limit_mb: Mapped[int] = mapped_column(Integer)
     
     # Files
-    files: Mapped[str] = mapped_column(String)
+    scanPoints: Mapped[str] = mapped_column(String)  # String field for srange parsing
     
     # Output
     outputFolder: Mapped[str] = mapped_column(String)
@@ -399,10 +399,12 @@ class PeakIndex(Base):
     max_number: Mapped[int] = mapped_column(Integer)
     min_separation: Mapped[int] = mapped_column(Integer)
     peakShape: Mapped[str] = mapped_column(String)
-    scanPointStart: Mapped[int] = mapped_column(Integer)
-    scanPointEnd: Mapped[int] = mapped_column(Integer)
+    # scanPointStart: Mapped[int] = mapped_column(Integer)
+    # scanPointEnd: Mapped[int] = mapped_column(Integer)
     # depthRangeStart: Mapped[int] = mapped_column(Integer)
     # depthRangeEnd: Mapped[int] = mapped_column(Integer)
+    scanPoints: Mapped[str] = mapped_column(String)  # String field for srange parsing
+    depthRange: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # String field for srange parsing
     detectorCropX1: Mapped[int] = mapped_column(Integer)
     detectorCropX2: Mapped[int] = mapped_column(Integer)
     detectorCropY1: Mapped[int] = mapped_column(Integer)
@@ -423,15 +425,15 @@ class PeakIndex(Base):
     cosmicFilter: Mapped[bool] = mapped_column(Boolean)
     recipLatticeUnit: Mapped[str] = mapped_column(String)
     latticeParametersUnit: Mapped[str] = mapped_column(String)
-    peaksearchPath: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    p2qPath: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    indexingPath: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # peaksearchPath: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # p2qPath: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # indexingPath: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     outputFolder: Mapped[str] = mapped_column(String)
-    filefolder: Mapped[str] = mapped_column(String)
-    filenamePrefix: Mapped[str] = mapped_column(String)
+    # filefolder: Mapped[str] = mapped_column(String)
+    # filenamePrefix: Mapped[str] = mapped_column(String)
     geoFile: Mapped[str] = mapped_column(String)
     crystFile: Mapped[str] = mapped_column(String)
-    depth: Mapped[str] = mapped_column(String)
+    depth: Mapped[str] = mapped_column(String, nullable=True)
     beamline: Mapped[str] = mapped_column(String)
     # cosmicFilter: Mapped[bool] = mapped_column(Boolean)
     def __repr__(self) -> str:

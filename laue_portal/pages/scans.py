@@ -25,7 +25,16 @@ layout = html.Div([
                             "New Recon",
                             href="/create-wire-reconstruction",
                             active=False,
-                            id="create-wire-recons"
+                            id="scans-page-wire-recon"
+                        )
+                    ),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(
+                        dbc.NavLink(
+                            "New Index",
+                            href="/create-peakindexing",
+                            active=False,
+                            id="scans-page-peakindex"
                         )
                     ),
                     html.Span("|", className="mx-2 text-muted"),
@@ -164,12 +173,25 @@ def get_metadatas(path):
 
 
 @dash.callback(
-    Output('create-wire-recons', 'href'),
+    Output('scans-page-wire-recon', 'href'),
     Input('metadata-table','selectedRows'),
-    State('create-wire-recons', 'href'),
+    State('scans-page-wire-recon', 'href'),
     prevent_initial_call=True,
 )
-def selected_scans_href(rows,href,id_query="?scan_id=$"):
+def selected_wirerecon_href(rows,href,id_query="?scan_id=$"):
+    href = href.split(id_query)[0]
+    if rows:
+        href += "?scan_id=$" + ','.join([str(row['scanNumber']) for row in rows]) 
+    return href
+
+
+@dash.callback(
+    Output('scans-page-peakindex', 'href'),
+    Input('metadata-table','selectedRows'),
+    State('scans-page-peakindex', 'href'),
+    prevent_initial_call=True,
+)
+def selected_peakindex_href(rows,href,id_query="?scan_id=$"):
     href = href.split(id_query)[0]
     if rows:
         href += "?scan_id=$" + ','.join([str(row['scanNumber']) for row in rows]) 
