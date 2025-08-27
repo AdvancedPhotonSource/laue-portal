@@ -169,8 +169,6 @@ def create_test_catalog(scan_number: int = 1) -> Any:
         scanNumber=scan_number,
         filefolder='/test/folder',
         filenamePrefix='test_prefix',
-        outputFolder='/test/output',
-        geoFile='/test/geo.yaml',
         aperture='50um',
         sample_name='test_sample'
     )
@@ -302,8 +300,7 @@ def create_test_job(scan_number: int = 1) -> Any:
         submit_time=datetime.datetime(2022, 1, 1, 0, 0, 0),
         start_time=datetime.datetime(2022, 1, 1, 0, 1, 0),
         finish_time=datetime.datetime(2022, 1, 1, 0, 2, 0),
-        author='test_user',
-        notes='Test job for smoke test'
+        messages='Test job for smoke test'
     )
 
 

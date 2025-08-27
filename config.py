@@ -8,3 +8,15 @@ DEFAULT_VARIABLES = {
     "memory_limit_mb": 50000,
     "verbose": 1,
 }
+
+REDIS_CONFIG = {
+    "host": "localhost",
+    #"port": 6379,
+    "port": 6379,
+}
+
+DASH_CONFIG = {
+    "host": "localhost",
+    "port": 2052,
+    "debug": True,
+}
