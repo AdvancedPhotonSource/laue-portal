@@ -11,7 +11,7 @@ peakindex_form = dbc.Row(
                             [
                                 _stack(
                                     [
-                                        _field("Scan Number(s)", "scanNumber", size='md'),
+                                        _field("Scan Number", "scanNumber", size='md'),
                                         _field("Root Path", "root_path", size='md'),
                                     ]
                                 ),
