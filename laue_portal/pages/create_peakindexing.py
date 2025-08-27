@@ -29,7 +29,7 @@ JOB_DEFAULTS = {
 
 PEAKINDEX_DEFAULTS = {
     "scanNumber": 276994,
-    "peakProgram": "peaksearch",
+    # "peakProgram": "peaksearch",
     "threshold": 100, #250
     "thresholdRatio": -1,
     "maxRfactor": 2.0, #0.5
