@@ -245,8 +245,7 @@ def create_test_peakindex(scan_number: int = 1, recon_id: Optional[int] = None) 
         max_number=50,  # maps to max_peaks from defaults
         min_separation=40,
         peakShape='Lorentzian',
-        scanPointStart=1,
-        scanPointEnd=2,
+        scanPoints='1-2',
         detectorCropX1=0,
         detectorCropX2=2047,
         detectorCropY1=0,
@@ -267,12 +266,7 @@ def create_test_peakindex(scan_number: int = 1, recon_id: Optional[int] = None) 
         cosmicFilter=True,  # Boolean field
         recipLatticeUnit='1/nm',
         latticeParametersUnit='nm',
-        peaksearchPath=None,  # Optional field
-        p2qPath=None,  # Optional field
-        indexingPath=None,  # Optional field
         outputFolder='tests/data/output',
-        filefolder='tests/data/gdata',
-        filenamePrefix='HAs_long_laue1_',
         geoFile='tests/data/geo/geoN_2022-03-29_14-15-05.xml',
         crystFile='tests/data/crystal/Al.xtal',
         depth='2D',  # String field, using '2D' instead of NaN
