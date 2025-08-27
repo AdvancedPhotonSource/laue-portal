@@ -158,91 +158,91 @@ def load_job_data(href):
     parsed_url = urllib.parse.urlparse(href)
     query_params = urllib.parse.parse_qs(parsed_url.query)
     
-    job_id = query_params.get('id', [None])[0]
+    job_id = query_params.get('job_id', [None])[0]
 
     if job_id:
         try:
             job_id = int(job_id)
             with Session(db_utils.ENGINE) as session:
                 # Get job data with related entities
-                job = session.query(db_schema.Job).filter(db_schema.Job.job_id == job_id).first()
+                job_data = session.query(db_schema.Job).filter(db_schema.Job.job_id == job_id).first()
                 
-                if job:
+                if job_data:
                     # Calculate duration if both start and finish times exist
                     duration = "—"
-                    if job.start_time and job.finish_time:
-                        delta = job.finish_time - job.start_time
+                    if job_data.start_time and job_data.finish_time:
+                        delta = job_data.finish_time - job_data.start_time
                         hours, remainder = divmod(delta.total_seconds(), 3600)
                         minutes, seconds = divmod(remainder, 60)
                         duration = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
-                    elif job.start_time and job.status == 1:  # Running
+                    elif job_data.start_time and job_data.status == 1:  # Running
                         from datetime import datetime
-                        delta = datetime.now() - job.start_time
+                        delta = datetime.now() - job_data.start_time
                         hours, remainder = divmod(delta.total_seconds(), 3600)
                         minutes, seconds = divmod(remainder, 60)
                         duration = f"{int(hours)}h {int(minutes)}m {int(seconds)}s (running)"
                     
                     # Format status with color
-                    status_text = STATUS_MAPPING.get(job.status, f"Unknown ({job.status})")
+                    status_text = STATUS_MAPPING.get(job_data.status, f"Unknown ({job_data.status})")
                     status_color = {
                         0: "warning",  # Queued
                         1: "info",     # Running
                         2: "success",  # Finished
                         3: "danger",   # Failed
                         4: "secondary" # Cancelled
-                    }.get(job.status, "secondary")
+                    }.get(job_data.status, "secondary")
                     
                     status_badge = dbc.Badge(status_text, color=status_color)
                     
                     # Format times
-                    submit_time = job.submit_time.strftime("%Y-%m-%d %H:%M:%S") if job.submit_time else "—"
-                    start_time = job.start_time.strftime("%Y-%m-%d %H:%M:%S") if job.start_time else "—"
-                    finish_time = job.finish_time.strftime("%Y-%m-%d %H:%M:%S") if job.finish_time else "—"
+                    submit_time = job_data.submit_time.strftime("%Y-%m-%d %H:%M:%S") if job_data.submit_time else "—"
+                    start_time = job_data.start_time.strftime("%Y-%m-%d %H:%M:%S") if job_data.start_time else "—"
+                    finish_time = job_data.finish_time.strftime("%Y-%m-%d %H:%M:%S") if job_data.finish_time else "—"
                     
                     # Get related entities
                     related_entities = []
                     
                     # Check for Calibration
-                    calib = session.query(db_schema.Calib).filter(db_schema.Calib.job_id == job_id).first()
-                    if calib:
+                    calib_data = session.query(db_schema.Calib).filter(db_schema.Calib.job_id == job_id).first()
+                    if calib_data:
                         related_entities.append(
                             html.Div([
                                 html.Strong("Calibration: "),
-                                html.A(f"Calib ID {calib.calib_id}", href=f"/calibration?id={calib.calib_id}"),
-                                f" (Scan {calib.scanNumber})"
+                                html.A(f"Calib ID {calib_data.calib_id}", href=f"/calibration?calib_id={calib_data.calib_id}"),
+                                f" (Scan {calib_data.scanNumber})"
                             ], className="mb-2")
                         )
                     
                     # Check for Reconstruction
-                    recon = session.query(db_schema.Recon).filter(db_schema.Recon.job_id == job_id).first()
-                    if recon:
+                    recon_data = session.query(db_schema.Recon).filter(db_schema.Recon.job_id == job_id).first()
+                    if recon_data:
                         related_entities.append(
                             html.Div([
                                 html.Strong("Reconstruction: "),
-                                html.A(f"Recon ID {recon.recon_id}", href=f"/reconstruction?reconid={recon.recon_id}"),
-                                f" (Scan {recon.scanNumber})"
+                                html.A(f"Recon ID {recon_data.recon_id}", href=f"/reconstruction?recon_id={recon_data.recon_id}"),
+                                f" (Scan {recon_data.scanNumber})"
                             ], className="mb-2")
                         )
                     
                     # Check for Wire Reconstruction
-                    wirerecon = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.job_id == job_id).first()
-                    if wirerecon:
+                    wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.job_id == job_id).first()
+                    if wirerecon_data:
                         related_entities.append(
                             html.Div([
                                 html.Strong("Wire Reconstruction: "),
-                                html.A(f"Wire Recon ID {wirerecon.wirerecon_id}", href=f"/wire_reconstruction?wirereconid={wirerecon.wirerecon_id}"),
-                                f" (Scan {wirerecon.scanNumber})"
+                                html.A(f"Wire Recon ID {wirerecon_data.wirerecon_id}", href=f"/wire_reconstruction?wirerecon_id={wirerecon_data.wirerecon_id}"),
+                                f" (Scan {wirerecon_data.scanNumber})"
                             ], className="mb-2")
                         )
                     
                     # Check for Peak Index
-                    peakindex = session.query(db_schema.PeakIndex).filter(db_schema.PeakIndex.job_id == job_id).first()
-                    if peakindex:
+                    peakindex_data = session.query(db_schema.PeakIndex).filter(db_schema.PeakIndex.job_id == job_id).first()
+                    if peakindex_data:
                         related_entities.append(
-                            html.Div([
-                                html.Strong("Peak Index: "),
-                                html.A(f"Peak Index ID {peakindex.peakindex_id}", href=f"/indexedpeak?indexid={peakindex.peakindex_id}"),
-                                f" (Scan {peakindex.scanNumber})"
+                            html.P([
+                                html.Strong("Peak Indexing: "),
+                                html.A(f"Peak Indexing ID {peakindex_data.peakindex_id}", href=f"/peakindexing?peakindex_id={peakindex_data.peakindex_id}"),
+                                f" (Scan {peakindex_data.scanNumber})"
                             ], className="mb-2")
                         )
                     
@@ -250,20 +250,20 @@ def load_job_data(href):
                         related_entities = [html.P("No related entities found.", className="text-muted")]
                     
                     # Enable cancel button only for pending or running jobs
-                    can_cancel = job.status in [0, 1]
+                    can_cancel = job_data.status in [0, 1]
                     
                     return (
                         str(job_id),
                         status_badge,
-                        str(job.priority),
-                        job.author or "—",
-                        job.computer_name,
+                        str(job_data.priority),
+                        job_data.author or "—",
+                        job_data.computer_name,
                         submit_time,
                         start_time,
                         finish_time,
                         duration,
-                        job.notes or "",
-                        job.messages or "",
+                        job_data.notes or "",
+                        job_data.messages or "",
                         related_entities,
                         not can_cancel
                     )

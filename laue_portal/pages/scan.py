@@ -7,10 +7,11 @@ import laue_portal.database.db_schema as db_schema
 from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 from dash.exceptions import PreventUpdate
-from sqlalchemy import asc # Import asc for ordering
+from sqlalchemy import asc, func # Import asc for ordering and func for aggregation
 from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, make_scan_accordion, set_scaninfo_form_props
 import urllib.parse
 import pandas as pd
+from srange import srange
 
 dash.register_page(__name__, path="/scan") # Simplified path
 
@@ -92,8 +93,8 @@ layout = html.Div([
                                 dbc.Col(html.H4("Reconstructions", className="mb-0"), width="auto"),
                                 dbc.Col(
                                     html.Div([
-                                        dbc.Button("New Recon+Index", id="scanlog-plot-btn", color="success", size="sm", className="me-2"),
-                                        dbc.Button("New Recon", id="show-more-btn", color="success", size="sm")
+                                        dbc.Button("New Recon+Index", id="new-recon-index-btn", color="success", size="sm", className="me-2"),
+                                        dbc.Button("New Recon", id="new-recon-btn", color="success", size="sm")
                                     ], className="d-flex justify-content-end"),
                                     width=True
                                 )
@@ -111,14 +112,14 @@ layout = html.Div([
                         ])
                     ], className="mb-4 shadow-sm border"),
 
-                    # Peak Index Table
+                    # Peak Indexing Table
                     dbc.Card([
                         dbc.CardHeader(
                             dbc.Row([
-                                dbc.Col(html.H4("Indexing", className="mb-0"), width="auto"),
+                                dbc.Col(html.H4("Peak Indexing", className="mb-0"), width="auto"),
                                 dbc.Col(
                                     html.Div([
-                                        dbc.Button("New Index", id="show-more-btn", color="success", size="sm")
+                                        dbc.Button("New Peak Indexing", id="new-peakindexing-btn", color="success", size="sm")
                                     ], className="d-flex justify-content-end"),
                                     width=True
                                 )
@@ -163,11 +164,11 @@ layout = html.Div([
                     #         ],
                     #         title="Reconstructions",
                     #     ),
-                    #     dbc.Button("New Indexation", id="new-peakindex_button", className="me-2", n_clicks=0),
+                    #     dbc.Button("New Peak Indexing", id="new-peakindexing_button", className="me-2", n_clicks=0),
                     #     dbc.AccordionItem(
                     #         [
                     #             dash_table.DataTable(
-                    #                 id='peakindex-table',
+                    #                 id='scan-peakindex-table',
                     #                 filter_action="native",
                     #                 sort_action="native",
                     #                 sort_mode="multi",
@@ -176,7 +177,7 @@ layout = html.Div([
                     #                 page_size= 20,
                     #             )
                     #         ],
-                    #         title="Indexations",
+                    #         title="Peak Indexings",
                     #     ),
                     #     ],
                     #     always_open=True
@@ -276,20 +277,20 @@ def load_scan_metadata(href):
     parsed_url = urllib.parse.urlparse(href)
     query_params = urllib.parse.parse_qs(parsed_url.query)
     
-    scan_id = query_params.get('id', [None])[0]
+    scan_id = query_params.get('scan_id', [None])[0]
 
     if scan_id:
         try:
             scan_id = int(scan_id)
             with Session(db_utils.ENGINE) as session:
-                metadata = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == scan_id).first()
-                scans = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_id)
-                catalog = session.query(db_schema.Catalog).filter(db_schema.Catalog.scanNumber == scan_id).first()
-                if metadata:
-                    scan_accordions = [make_scan_accordion(i) for i,_ in enumerate(scans)]
+                metadata_data = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == scan_id).first()
+                scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_id)
+                catalog_data = session.query(db_schema.Catalog).filter(db_schema.Catalog.scanNumber == scan_id).first()
+                if metadata_data:
+                    scan_accordions = [make_scan_accordion(i) for i,_ in enumerate(scan_data)]
                     set_props("scan_accordions", {'children': scan_accordions})
-                    set_metadata_form_props(metadata, scans, read_only=True)
-                    set_scaninfo_form_props(metadata, scans, catalog, read_only=True)
+                    set_metadata_form_props(metadata_data, scan_data, read_only=True)
+                    set_scaninfo_form_props(metadata_data, scan_data, catalog_data, read_only=True)
         except Exception as e:
             print(f"Error loading scan data: {e}")
 
@@ -388,7 +389,7 @@ def load_scan_metadata(href):
 #             scan = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == row_id)
 
 #         set_props("modal-details", {'is_open':True})
-#         set_props("modal-details-header", {'children':dbc.ModalTitle(f"Details for Peak Index {row_id} (Read Only)")})
+#         set_props("modal-details-header", {'children':dbc.ModalTitle(f"Details for Peak Indexing {row_id} (Read Only)")})
         
 #         set_metadata_form_props(metadata, scan, read_only=True)
 
@@ -422,7 +423,7 @@ def load_scan_metadata(href):
 
 
 # @dash.callback(
-#     Output("example-output2", "children"), [Input("new-peakindex_button", "n_clicks")]
+#     Output("example-output2", "children"), [Input("new-peakindexing_button", "n_clicks")]
 # )
 # def on_button_click(n):
 #     if n is None:
@@ -536,13 +537,20 @@ def _get_scan_recons(scan_id):
         with Session(db_utils.ENGINE) as session:
             aperture = pd.read_sql(session.query(db_schema.Catalog.aperture).filter(db_schema.Catalog.scanNumber == scan_id).statement, session.bind).at[0,'aperture']
             if 'wire' in aperture:
-                scan_recons = pd.read_sql(session.query(*ALL_COLS_WireRecon)
+                # Query with subjob count
+                scan_recons = pd.read_sql(session.query(
+                                *ALL_COLS_WireRecon,
+                                func.count(db_schema.SubJob.subjob_id).label('subjob_count')
+                                )
                                 .join(db_schema.Metadata.catalog_)
                                 .join(db_schema.Metadata.wirerecon_)
                                 # .join(db_schema.Catalog, db_schema.Metadata.scanNumber == db_schema.Catalog.scanNumber)
                                 # .join(db_schema.WireRecon, db_schema.Metadata.scanNumber == db_schema.WireRecon.scanNumber)
                                 .join(db_schema.Job, db_schema.WireRecon.job_id == db_schema.Job.job_id)
-                                .filter(db_schema.Metadata.scanNumber == scan_id).statement, session.bind)
+                                .outerjoin(db_schema.SubJob, db_schema.Job.job_id == db_schema.SubJob.job_id)
+                                .filter(db_schema.Metadata.scanNumber == scan_id)
+                                .group_by(*ALL_COLS_WireRecon)
+                                .statement, session.bind)
                 
                 # Format columns for ag-grid
                 cols = []
@@ -597,9 +605,7 @@ def _get_scan_recons(scan_id):
                         col_def = {
                             'headerName': 'Points', #'points_to_index'
                             'valueGetter': {"function":
-                                "50 + ' / ' + '2000'"
-                                #"50*(params.data.scanPointEnd - params.data.scanPointStart) + ' / ' + '2000'"
-                                # "f'{params.data.scanPointEnd - params.data.scanPointStart} out of 2000'", #len(Path(db_schema.PeakIndex.filefolder).glob("*"))
+                                "params.data.subjob_count + ' / ' + '2000'"
                             },
                         }
                     elif col_num == 3:
@@ -630,13 +636,20 @@ def _get_scan_recons(scan_id):
                 
                 return cols, scan_recons.to_dict('records')
             else:
-                scan_recons = pd.read_sql(session.query(*ALL_COLS_Recon)
+                # Query with subjob count
+                scan_recons = pd.read_sql(session.query(
+                                *ALL_COLS_Recon,
+                                func.count(db_schema.SubJob.subjob_id).label('subjob_count')
+                                )
                                 .join(db_schema.Metadata.catalog_)
                                 .join(db_schema.Metadata.recon_)
                                 # .join(db_schema.Catalog, db_schema.Metadata.scanNumber == db_schema.Catalog.scanNumber)
                                 # .join(db_schema.Recon, db_schema.Metadata.scanNumber == db_schema.Recon.scanNumber)
                                 .join(db_schema.Job, db_schema.Recon.job_id == db_schema.Job.job_id)
-                                .filter(db_schema.Metadata.scanNumber == scan_id).statement, session.bind)
+                                .outerjoin(db_schema.SubJob, db_schema.Job.job_id == db_schema.SubJob.job_id)
+                                .filter(db_schema.Metadata.scanNumber == scan_id)
+                                .group_by(*ALL_COLS_Recon)
+                                .statement, session.bind)
                 # Format columns for ag-grid
                 cols = []
                 for col in VISIBLE_COLS_Recon:
@@ -690,9 +703,7 @@ def _get_scan_recons(scan_id):
                         col_def = {
                             'headerName': 'Points', #'points_to_index'
                             'valueGetter': {"function":
-                                "50 + ' / ' + '2000'"
-                                #"50*(params.data.scanPointEnd - params.data.scanPointStart) + ' / ' + '2000'"
-                                # "f'{params.data.scanPointEnd - params.data.scanPointStart} out of 2000'", #len(Path(db_schema.PeakIndex.filefolder).glob("*"))
+                                "params.data.subjob_count + ' / ' + '2000'"
                             },
                         }
                     elif col_num == 4:
@@ -742,7 +753,7 @@ def get_scan_recons(href):
     
     if path == '/scan':
         query_params = urllib.parse.parse_qs(parsed_url.query)
-        scan_id = query_params.get('id', [None])[0]
+        scan_id = query_params.get('scan_id', [None])[0]
 
         if scan_id:
             cols, recons = _get_scan_recons(scan_id)
@@ -752,7 +763,7 @@ def get_scan_recons(href):
 
 """
 =======================
-Peak Index Table
+Peak Indexing Table
 =======================
 """
 
@@ -796,15 +807,13 @@ CUSTOM_HEADER_NAMES_PeakIndex = {
 
 CUSTOM_COLS_PeakIndex_dict = {
     4:[
-        db_schema.PeakIndex.scanPointEnd,
-        db_schema.PeakIndex.scanPointStart,
-        db_schema.PeakIndex.filefolder,
+        db_schema.PeakIndex.scanPoints,
     ],
 }
 
 ALL_COLS_PeakIndex = VISIBLE_COLS_PeakIndex + [ii for i in CUSTOM_COLS_PeakIndex_dict.values() for ii in i]
 
-def _get_scan_peakindexs(scan_id):
+def _get_scan_peakindexings(scan_id):
     try:
         scan_id = int(scan_id)
         with Session(db_utils.ENGINE) as session:
@@ -812,13 +821,20 @@ def _get_scan_peakindexs(scan_id):
             if 'wire' in aperture:
                 VISIBLE_COLS_PeakIndex[1] = db_schema.PeakIndex.wirerecon_id
                 ALL_COLS_PeakIndex = VISIBLE_COLS_PeakIndex + [ii for i in CUSTOM_COLS_PeakIndex_dict.values() for ii in i]
-            scan_peakindexs = pd.read_sql(session.query(*ALL_COLS_PeakIndex)
+            # Query with subjob count
+            scan_peakindexings = pd.read_sql(session.query(
+                            *ALL_COLS_PeakIndex,
+                            func.count(db_schema.SubJob.subjob_id).label('subjob_count')
+                            )
                             .join(db_schema.Metadata.peakindex_)
                             # .join(db_schema.PeakIndex.peakindexresults_)
                             # .join(db_schema.PeakIndex, db_schema.Metadata.scanNumber == db_schema.PeakIndex.scanNumber)
                             # .join(db_schema.PeakIndexResults, db_schema.PeakIndex.scanNumber == db_schema.PeakIndexResults.scanNumber)
                             .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
-                            .filter(db_schema.Metadata.scanNumber == scan_id).statement, session.bind)
+                            .outerjoin(db_schema.SubJob, db_schema.Job.job_id == db_schema.SubJob.job_id)
+                            .filter(db_schema.Metadata.scanNumber == scan_id)
+                            .group_by(*ALL_COLS_PeakIndex)
+                            .statement, session.bind)
             # Format columns for ag-grid
             cols = []
             for col in VISIBLE_COLS_PeakIndex:
@@ -869,8 +885,7 @@ def _get_scan_peakindexs(scan_id):
                     col_def = {
                         'headerName': 'Points', #'points_to_index'
                         'valueGetter': {"function":
-                            "50*(params.data.scanPointEnd - params.data.scanPointStart) + ' / ' + '2000'"
-                            # "f'{params.data.scanPointEnd - params.data.scanPointStart} out of 2000'", #len(Path(db_schema.PeakIndex.filefolder).glob("*"))
+                            "params.data.subjob_count + ' / ' + '2000'"
                         },
                     }
                 col_def.update({
@@ -881,12 +896,12 @@ def _get_scan_peakindexs(scan_id):
                 })
                 cols.insert(col_num,col_def)
 
-            # peakindexs['id'] = peakindexs['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
+            # peakindexings['id'] = peakindexings['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
             
-            return cols, scan_peakindexs.to_dict('records')
+            return cols, scan_peakindexings.to_dict('records')
     
     except Exception as e:
-        print(f"Error loading peak index data: {e}")
+        print(f"Error loading peak indexing data: {e}")
 
 
 @callback(
@@ -895,7 +910,7 @@ def _get_scan_peakindexs(scan_id):
     Input('url-scan-page', 'href'),
     prevent_initial_call=True,
 )
-def get_scan_peakindexs(href):
+def get_scan_peakindexings(href):
     if not href:
         raise PreventUpdate
 
@@ -904,10 +919,10 @@ def get_scan_peakindexs(href):
     
     if path == '/scan':
         query_params = urllib.parse.parse_qs(parsed_url.query)
-        scan_id = query_params.get('id', [None])[0]
+        scan_id = query_params.get('scan_id', [None])[0]
 
         if scan_id:
-            cols, peakindexs = _get_scan_peakindexs(scan_id)
-            return cols, peakindexs
+            cols, peakindexings = _get_scan_peakindexings(scan_id)
+            return cols, peakindexings
     else:
         raise PreventUpdate

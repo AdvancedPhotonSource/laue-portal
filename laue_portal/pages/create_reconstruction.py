@@ -1,8 +1,11 @@
 import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, set_props, State
+from dash.exceptions import PreventUpdate
 import dash
 import base64
 import yaml
+import os
+import urllib.parse
 import laue_portal.database.db_utils as db_utils
 import datetime
 import laue_portal.database.db_schema as db_schema
@@ -10,6 +13,7 @@ from sqlalchemy.orm import Session
 import logging
 logger = logging.getLogger(__name__)
 import laue_portal.components.navbar as navbar
+from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix
 from laue_portal.components.recon_form import recon_form, set_recon_form_props
 from laue_portal.processing.redis_utils import enqueue_reconstruction, STATUS_REVERSE_MAPPING
 from config import DEFAULT_VARIABLES
@@ -37,6 +41,7 @@ dash.register_page(__name__)
 layout = dbc.Container(
     [html.Div([
         navbar.navbar,
+        dcc.Location(id='url-create-recon', refresh=False),
         dbc.Alert(
             id="alert-upload",
             dismissable=True,
@@ -51,6 +56,13 @@ layout = dbc.Container(
             id="alert-submit-job",
             dismissable=True,
             is_open=False,
+        ),
+        dbc.Alert(
+            "Scan data loaded successfully",
+            id="alert-scan-loaded",
+            dismissable=True,
+            is_open=False,
+            color="success",
         ),
         html.Hr(),
         html.Center(
@@ -408,3 +420,75 @@ def submit_config(n,
                 set_props("alert-submit-job", {'is_open': True, 
                                                'children': f'Failed to queue job: {str(e)}',
                                                'color': 'danger'})
+
+
+@dash.callback(
+    Input('url-create-recon', 'href'),
+    prevent_initial_call=True,
+)
+def load_scan_data_from_url(href):
+    """
+    Load scan data and optionally existing recon data when provided in URL query parameters
+    URL format: /create-reconstruction?scan_id={scan_id}
+    Pooled URL format: /create-reconstruction?scan_id=${scan_ids}
+    With recon_id: /create-reconstruction?scan_id={scan_id}&recon_id={recon_id}
+    Pooled with recon_id: /create-reconstruction?scan_id=${scan_ids}&recon_id={recon_ids}
+    """
+    if not href:
+        raise PreventUpdate
+
+    parsed_url = urllib.parse.urlparse(href)
+    query_params = urllib.parse.parse_qs(parsed_url.query)
+    
+    scan_id = query_params.get('scan_id', [None])[0]
+    recon_id = query_params.get('recon_id', [None])[0]
+    root_path = DEFAULT_VARIABLES.get("root_path", "")
+
+    if scan_id:
+        with Session(db_utils.ENGINE) as session:
+            try:
+                scan_id = int(scan_id)
+                
+                # Check if recon_id is provided to load existing record
+                if recon_id:
+                    try:
+                        recon_id = int(recon_id)
+                        recon_data = session.query(db_schema.Recon).filter(
+                            db_schema.Recon.recon_id == recon_id
+                        ).first()
+                        
+                        if recon_data:
+                            # Use existing recon values
+                            # Convert file paths from absolute to relative
+                            recon_data.file_path = remove_root_path_prefix(recon_data.file_path, root_path) if recon_data.file_path else ""
+                            recon_data.file_output = remove_root_path_prefix(recon_data.file_output, root_path) if recon_data.file_output else ""
+                            recon_data.geo_mask_path = remove_root_path_prefix(recon_data.geo_mask_path, root_path) if recon_data.geo_mask_path else ""
+                            
+                            # Set the form with existing values
+                            set_recon_form_props(recon_data)
+                            
+                            # Show success message
+                            set_props("alert-scan-loaded", {
+                                'is_open': True, 
+                                'children': f'Loaded existing reconstruction {recon_id} data for scan {scan_id}',
+                                'color': 'success'
+                            })
+                            return
+                    except Exception as e:
+                        logger.warning(f"Failed to load recon {recon_id}: {e}")
+                        # Fall back to just loading scan data
+                
+                # If no recon_id or loading failed, just load scan data
+                # You might want to load default values or scan-specific data here
+                set_props("alert-scan-loaded", {
+                    'is_open': True, 
+                    'children': f'Loaded scan {scan_id} data',
+                    'color': 'info'
+                })
+                
+            except Exception as e:
+                set_props("alert-scan-loaded", {
+                    'is_open': True, 
+                    'children': f'Error loading data: {str(e)}',
+                    'color': 'danger'
+                })

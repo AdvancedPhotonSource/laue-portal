@@ -27,7 +27,7 @@ class TestPeakIndexRetrievers:
         with patch('config.db_file', test_db_file):
             # Import after patching config
             import lau_dash
-            from laue_portal.pages.indexedpeaks import _get_peakindexs
+            from laue_portal.pages.peakindexings import _get_peakindexings
             import laue_portal.database.db_utils as db_utils
             from sqlalchemy.orm import Session
             
@@ -45,8 +45,8 @@ class TestPeakIndexRetrievers:
                     session.add(test_peakindex)
                     session.commit()
                 
-                # Test the _get_peakindexs function
-                cols, peakindexs = _get_peakindexs()
+                # Test the _get_peakindexings function
+                cols, peakindexs = _get_peakindexings()
             
             # Verify that the function returns the expected structure
             assert isinstance(cols, list), "Columns should be returned as a list"
@@ -77,7 +77,7 @@ class TestPeakIndexRetrievers:
         with patch('config.db_file', test_db_file):
             # Import after patching config
             import lau_dash
-            from laue_portal.pages.indexedpeaks import get_peakindexs
+            from laue_portal.pages.peakindexings import get_peakindexings
             import laue_portal.database.db_utils as db_utils
             from sqlalchemy.orm import Session
             
@@ -96,7 +96,7 @@ class TestPeakIndexRetrievers:
                     session.commit()
                 
                 # Test the callback with correct path
-                cols, peakindexs = get_peakindexs('/indexedpeaks')
+                cols, peakindexs = get_peakindexings('/peakindexings')
             
             # Verify that the callback returns the expected structure
             assert isinstance(cols, list), "Callback should return columns as a list"
@@ -105,7 +105,7 @@ class TestPeakIndexRetrievers:
             
             # Test the callback with incorrect path (should raise PreventUpdate)
             with pytest.raises(PreventUpdate):
-                get_peakindexs('/wrong_path')
+                get_peakindexings('/wrong_path')
 
     def test_get_peakindexs_empty_database_smoke(self, empty_peakindex_database):
         """Test that _get_peakindexs function handles empty database gracefully."""
@@ -115,13 +115,13 @@ class TestPeakIndexRetrievers:
         with patch('config.db_file', test_db_file):
             # Import after patching config
             import lau_dash
-            from laue_portal.pages.indexedpeaks import _get_peakindexs
+            from laue_portal.pages.peakindexings import _get_peakindexings
             import laue_portal.database.db_utils as db_utils
             
             # Patch the ENGINE in db_utils to use our test engine
             with patch.object(db_utils, 'ENGINE', test_engine):
-                # Test the _get_peakindexs function with empty database
-                cols, peakindexs = _get_peakindexs()
+                # Test the _get_peakindexings function with empty database
+                cols, peakindexs = _get_peakindexings()
             
             # Verify that the function handles empty database gracefully
             assert isinstance(cols, list), "Columns should be returned as a list even with empty database"

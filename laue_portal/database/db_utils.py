@@ -662,20 +662,20 @@ def get_catalog_data(session, scan_number, root_path="", CATALOG_DEFAULTS=None):
     Returns:
         dict with catalog data including computed data_path
     """
-    catalog = session.query(db_schema.Catalog).filter(
+    catalog_data = session.query(db_schema.Catalog).filter(
         db_schema.Catalog.scanNumber == scan_number
     ).first()
     
-    if catalog:
+    if catalog_data:
         # Compute data_path as the portion of filefolder after root_path
-        filefolder = catalog.filefolder
+        filefolder = catalog_data.filefolder
         
         # Use the utility function to remove root_path prefix
         data_path = remove_root_path_prefix(filefolder, root_path)
         
         return {
             "filefolder": filefolder,
-            "filenamePrefix": catalog.filenamePrefix,
+            "filenamePrefix": catalog_data.filenamePrefix,
             "data_path": data_path
         }
     else:
@@ -721,3 +721,57 @@ def get_next_id(session, table_class):
     
     # Return next ID (1 if table is empty, otherwise max_id + 1)
     return 1 if max_id is None else max_id + 1
+
+
+def parse_parameter(parameter_value, num_scans=None):
+    """
+    Parse a single parameter, splitting semicolon-separated values into a list.
+    Optionally expand single values to match the number of scans.
+    
+    This function is used to handle pooled scan submissions where multiple
+    scans are submitted together with their parameters separated by semicolons.
+    
+    Args:
+        parameter_value: The parameter value (can be None, single value, or semicolon-separated string)
+        num_scans: Optional number of scans to expand single values to match
+        
+    Returns:
+        list: A list of values for this parameter
+        
+    Raises:
+        ValueError: If the parameter has multiple values that don't match num_scans
+    """
+    if parameter_value is None:
+        values = [None]
+    else:
+        # Convert to string and check for semicolons
+        str_value = str(parameter_value)
+        if '; ' in str_value:
+            # Split and handle 'None' strings
+            values = []
+            for v in str_value.split('; '):
+                if v.lower() in ['none', '']:
+                    values.append(None)
+                else:
+                    # v is a string from the split operation
+                    # SQLAlchemy will handle type conversion when inserting
+                    values.append(v)
+        else:
+            # Single value - check if it's a 'None' string
+            if str_value.lower() in ['none', '']:
+                values = [None]
+            else:
+                # Keep the original value (before string conversion)
+                # This preserves the original type for single values
+                values = [parameter_value]
+    
+    # If num_scans is provided, handle expansion or validation
+    if num_scans is not None:
+        if len(values) == 1 and num_scans > 1:
+            # Expand single value to match number of scans
+            values = values * num_scans
+        elif len(values) != num_scans and len(values) != 1:
+            # Error: mismatched lengths
+            raise ValueError(f"Parameter has {len(values)} values but there are {num_scans} scans")
+    
+    return values
