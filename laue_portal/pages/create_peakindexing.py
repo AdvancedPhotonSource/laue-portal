@@ -34,6 +34,7 @@ PEAKINDEX_DEFAULTS = {
     "thresholdRatio": -1,
     "maxRfactor": 2.0, #0.5
     "boxsize": 5, #18
+    "max_number": 300,
     "min_separation": 10, #40
     "peakShape": "L", #"Lorentzian"
     # "scanPointStart": 1,
@@ -766,7 +767,7 @@ def load_scan_data_from_url(href):
                                 thresholdRatio=PEAKINDEX_DEFAULTS["thresholdRatio"],
                                 maxRfactor=PEAKINDEX_DEFAULTS["maxRfactor"],
                                 boxsize=PEAKINDEX_DEFAULTS["boxsize"],
-                                max_number=PEAKINDEX_DEFAULTS["max_peaks"], # Assuming max_peaks from YAML maps to max_number
+                                max_number=PEAKINDEX_DEFAULTS["max_number"],
                                 min_separation=PEAKINDEX_DEFAULTS["min_separation"],
                                 peakShape=PEAKINDEX_DEFAULTS["peakShape"],
                                 detectorCropX1=PEAKINDEX_DEFAULTS["detectorCropX1"],
@@ -999,7 +1000,7 @@ def load_scan_data_from_url(href):
                             thresholdRatio=PEAKINDEX_DEFAULTS["thresholdRatio"],
                             maxRfactor=PEAKINDEX_DEFAULTS["maxRfactor"],
                             boxsize=PEAKINDEX_DEFAULTS["boxsize"],
-                            max_number=PEAKINDEX_DEFAULTS["max_peaks"],
+                            max_number=PEAKINDEX_DEFAULTS["max_number"],
                             min_separation=PEAKINDEX_DEFAULTS["min_separation"],
                             peakShape=PEAKINDEX_DEFAULTS["peakShape"],
                             scanPoints=PEAKINDEX_DEFAULTS["scanPoints"],
