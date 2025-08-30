@@ -557,6 +557,7 @@ def load_scan_data_from_url(href):
                         
                         # Add root_path from DEFAULT_VARIABLES
                         wirerecon_defaults.root_path = root_path
+                        
                         # Retrieve data_path and filenamePrefix from catalog data
                         catalog_data = get_catalog_data(session, scan_id, root_path, CATALOG_DEFAULTS)
                         wirerecon_defaults.data_path = catalog_data["data_path"]
@@ -645,6 +646,7 @@ def load_scan_data_from_url(href):
                             
                             # Add root_path from DEFAULT_VARIABLES
                             wirerecon_defaults.root_path = root_path
+                            
                             # Retrieve data_path and filenamePrefix from catalog data
                             catalog_data = get_catalog_data(session, current_scan_id, root_path, CATALOG_DEFAULTS)
                             wirerecon_defaults.data_path = catalog_data["data_path"]

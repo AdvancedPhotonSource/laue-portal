@@ -64,45 +64,13 @@ layout = html.Div([
                         id="integrated-lau",
                     ),
                 ]),
-    ],
-)
+])
 
 """
 =======================
 Callbacks
 =======================
 """
-# @dash.callback(
-#     Output('recon-table', 'columns', allow_duplicate=True),
-#     Output('recon-table', 'data', allow_duplicate=True),
-#     Input('upload-config', 'contents'),
-#     prevent_initial_call=True,
-# )
-# def upload_config(contents):
-#     try:
-#         content_type, content_string = contents.split(',')
-#         decoded = base64.b64decode(content_string)
-#         config = yaml.safe_load(decoded)
-#         recon_row = db_utils.import_recon_row(config)
-#         recon_row.date = datetime.datetime.now()
-#         recon_row.commit_id = 'TEST'
-#         recon_row.calib_id = 'TEST'
-#         recon_row.runtime = 'TEST'
-#         recon_row.computer_name = 'TEST'
-#         recon_row.dataset_id = 0
-#         recon_row.notes = 'TEST'
-
-#         with Session(db_utils.ENGINE) as session:
-#             session.add(recon_row)
-#             session.commit()
-
-#     except Exception as e:
-#         print('Unable to parse config')
-#         print(e)
-    
-#     cols, recons = _get_recons()
-#     return cols, recons
-
 
 @dash.callback(
         Input('integrated-lau', 'value'),
@@ -237,7 +205,7 @@ def load_recon_data(href):
     parsed_url = urllib.parse.urlparse(href)
     query_params = urllib.parse.parse_qs(parsed_url.query)
     
-    recon_id = query_params.get('reconid', [None])[0]
+    recon_id = query_params.get('recon_id', [None])[0]
 
     if recon_id:
         try:

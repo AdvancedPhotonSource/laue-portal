@@ -6,8 +6,9 @@ import laue_portal.database.db_schema as db_schema
 from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 from dash.exceptions import PreventUpdate
-from sqlalchemy import asc # Import asc for ordering
+from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix
 from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
+from config import DEFAULT_VARIABLES
 import urllib.parse
 
 dash.register_page(__name__, path="/peakindexing") # Simplified path
@@ -22,6 +23,12 @@ layout = html.Div([
                   ]),
 ])
 
+"""
+=======================
+Callbacks
+=======================
+"""
+
 @callback(
     Output('peakindex-id-header', 'children'),
     Input('url-peakindexing-page', 'href'),
@@ -34,14 +41,51 @@ def load_peakindexing_data(href):
     parsed_url = urllib.parse.urlparse(href)
     query_params = urllib.parse.parse_qs(parsed_url.query)
     
-    peakindex_id = query_params.get('peakindex_id', [None])[0]
+    peakindex_id_str = query_params.get('peakindex_id', [None])[0]
 
-    if peakindex_id:
+    root_path = DEFAULT_VARIABLES.get("root_path", "")
+
+    if peakindex_id_str:
         try:
-            peakindex_id = int(peakindex_id)
+            peakindex_id = int(peakindex_id_str) if peakindex_id_str else None
             with Session(db_utils.ENGINE) as session:
                 peakindex_data = session.query(db_schema.PeakIndex).filter(db_schema.PeakIndex.peakindex_id == peakindex_id).first()
                 if peakindex_data:
+                    # Add root_path from DEFAULT_VARIABLES
+                    peakindex_data.root_path = root_path
+                    
+                    # Retrieve data_path and filenamePrefix from catalog data
+                    catalog_data = get_catalog_data(session, peakindex_data.scanNumber, root_path)
+                    
+                    # Convert full paths back to relative paths for display
+                    if peakindex_data.geoFile:
+                        peakindex_data.geoFile = remove_root_path_prefix(peakindex_data.geoFile, root_path)
+                    if peakindex_data.crystFile:
+                        peakindex_data.crystFile = remove_root_path_prefix(peakindex_data.crystFile, root_path)
+                    if peakindex_data.outputFolder:
+                        peakindex_data.outputFolder = remove_root_path_prefix(peakindex_data.outputFolder, root_path)
+                    
+                    # If processing reconstruction data, use the reconstruction output folder as data path
+                    if peakindex_data.wirerecon_id:
+                        wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == peakindex_data.wirerecon_id).first()
+                        if wirerecon_data.outputFolder:
+                            # Use the wire reconstruction output folder as the data path
+                            peakindex_data.data_path = remove_root_path_prefix(wirerecon_data.outputFolder, root_path)
+                        else:
+                            peakindex_data.data_path = catalog_data["data_path"]
+                    elif peakindex_data.recon_id:
+                        recon_data = session.query(db_schema.Recon).filter(db_schema.Recon.recon_id == peakindex_data.recon_id).first()
+                        if recon_data.file_output:
+                            # Use the reconstruction output folder as the data path
+                            peakindex_data.data_path = remove_root_path_prefix(recon_data.file_output, root_path)
+                        else:
+                            peakindex_data.data_path = catalog_data["data_path"]
+                    else:
+                        peakindex_data.data_path = catalog_data["data_path"]
+                    
+                    peakindex_data.filenamePrefix = catalog_data["filenamePrefix"]
+                    
+                    # Populate the form with the data
                     set_peakindex_form_props(peakindex_data, read_only=True)
                     return f"Peak Indexing | ID: {peakindex_id}"
         except Exception as e:

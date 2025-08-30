@@ -662,7 +662,7 @@ def load_scan_data_from_url(href):
     wirerecon_id_str = query_params.get('wirerecon_id', [None])[0]
     peakindex_id_str = query_params.get('peakindex_id', [None])[0]
 
-    root_path = DEFAULT_VARIABLES["root_path"]
+    root_path = DEFAULT_VARIABLES.get("root_path", "")
     
     if scan_id_str:
         with Session(db_utils.ENGINE) as session:
@@ -799,6 +799,7 @@ def load_scan_data_from_url(href):
                         
                         # Add root_path from DEFAULT_VARIABLES
                         peakindex_defaults.root_path = root_path
+                        
                         # Retrieve data_path and filenamePrefix from catalog data
                         catalog_data = get_catalog_data(session, scan_id, root_path, CATALOG_DEFAULTS)
                         
@@ -928,8 +929,10 @@ def load_scan_data_from_url(href):
 
                             # Add root_path from DEFAULT_VARIABLES
                             peakindex_defaults.root_path = root_path
+
                             # Retrieve data_path and filenamePrefix from catalog data
                             catalog_data = get_catalog_data(session, current_scan_id, root_path, CATALOG_DEFAULTS)
+                            
                             # If processing reconstruction data, use the reconstruction output folder as data path
                             if current_wirerecon_id:
                                 wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == current_wirerecon_id).first()

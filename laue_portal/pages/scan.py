@@ -277,11 +277,11 @@ def load_scan_metadata(href):
     parsed_url = urllib.parse.urlparse(href)
     query_params = urllib.parse.parse_qs(parsed_url.query)
     
-    scan_id = query_params.get('scan_id', [None])[0]
+    scan_id_str = query_params.get('scan_id', [None])[0]
 
-    if scan_id:
+    if scan_id_str:
         try:
-            scan_id = int(scan_id)
+            scan_id = int(scan_id_str) if scan_id_str else None
             with Session(db_utils.ENGINE) as session:
                 metadata_data = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == scan_id).first()
                 scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_id)
