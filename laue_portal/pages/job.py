@@ -216,7 +216,7 @@ def load_job_data(href):
                             ])
                         )
                     
-                    # Build the complete header with Job ID and inline links
+                    # Build header with links
                     header_content = [html.Span(f"Job ID: {job_id}")]
                     
                     if related_links:

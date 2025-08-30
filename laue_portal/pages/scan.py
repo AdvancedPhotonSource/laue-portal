@@ -21,8 +21,8 @@ layout = html.Div([
         html.Div(
                 [
                     # Scan Info
-                    html.H1(children=["Scan ID: ", html.Div(id="ScanID_print")],
-                            style={"display":"flex", "gap":"10px", "align-items":"flex-end"},
+                    html.H1(id="scan-header",
+                            style={"display":"flex", "gap":"10px", "align-items":"baseline", "flexWrap":"wrap"},
                             className="mb-4"
                     ),
                     # html.H1(

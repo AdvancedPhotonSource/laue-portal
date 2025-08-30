@@ -18,7 +18,9 @@ layout = html.Div([
         dcc.Location(id='url-wire-recon-page', refresh=False),
         dbc.Container(id='wire-recon-content-container', fluid=True, className="mt-4",
                   children=[
-                        html.H2(id='wire-recon-id-header', className="mb-3"),
+                        html.H1(id='wire-recon-id-header', 
+                               style={"display":"flex", "gap":"10px", "align-items":"baseline", "flexWrap":"wrap"},
+                               className="mb-4"),
                         wire_recon_form
                   ]),
 ])
@@ -68,7 +70,38 @@ def load_wire_recon_data(href):
                     
                     # Populate the form with the data
                     set_wire_recon_form_props(wirerecon_data, read_only=True)
-                    return f"Wire Recon | ID: {wirerecon_id}"
+                    
+                    # Get related links
+                    related_links = []
+                    
+                    # Add job link if it exists
+                    if wirerecon_data.job_id:
+                        related_links.append(
+                            html.A(f"Job ID: {wirerecon_data.job_id}", 
+                                   href=f"/job?job_id={wirerecon_data.job_id}")
+                        )
+                    
+                    # Add scan link
+                    if wirerecon_data.scanNumber:
+                        related_links.append(
+                            html.A(f"Scan ID: {wirerecon_data.scanNumber}", 
+                                   href=f"/scan?scan_id={wirerecon_data.scanNumber}")
+                        )
+                    
+                    # Build header with links
+                    header_content = [html.Span(f"Wire Reconstruction ID: {wirerecon_id}")]
+                    
+                    if related_links:
+                        # Add separator before links
+                        header_content.append(html.Span(" • ", className="mx-2", style={"color": "#6c757d"}))
+                        
+                        # Add each link with separators
+                        for i, link in enumerate(related_links):
+                            if i > 0:
+                                header_content.append(html.Span(" | ", className="mx-2", style={"color": "#6c757d"}))
+                            header_content.append(html.Span(link, style={"fontSize": "0.7em"}))
+                    
+                    return header_content
 
         except Exception as e:
             print(f"Error loading wire reconstruction data: {e}")

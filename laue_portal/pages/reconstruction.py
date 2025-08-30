@@ -23,7 +23,9 @@ layout = html.Div([
         dcc.Location(id='url-recon-page', refresh=False),
         dbc.Container(id='recon-content-container', fluid=True, className="mt-4",
                   children=[
-                        html.H2(id='recon-id-header', className="mb-3"),
+                        html.H1(id='recon-id-header', 
+                               style={"display":"flex", "gap":"10px", "align-items":"baseline", "flexWrap":"wrap"},
+                               className="mb-4"),
                         recon_form
                   ]),
         html.Div(children=[
@@ -229,7 +231,38 @@ def load_recon_data(href):
                         ind = loahdh5(file_output,'ind')
                     pixel_selections = [{"label": f'{i}', "value": i} for i in ind]
                     set_props("pixels",{"options":pixel_selections})
-                    return f"Recon | ID: {recon_id}"
+                    
+                    # Get related links
+                    related_links = []
+                    
+                    # Add job link if it exists
+                    if recon_data.job_id:
+                        related_links.append(
+                            html.A(f"Job ID: {recon_data.job_id}", 
+                                   href=f"/job?job_id={recon_data.job_id}")
+                        )
+                    
+                    # Add scan link
+                    if recon_data.scanNumber:
+                        related_links.append(
+                            html.A(f"Scan ID: {recon_data.scanNumber}", 
+                                   href=f"/scan?scan_id={recon_data.scanNumber}")
+                        )
+                    
+                    # Build header with links
+                    header_content = [html.Span(f"Reconstruction ID: {recon_id}")]
+                    
+                    if related_links:
+                        # Add separator before links
+                        header_content.append(html.Span(" • ", className="mx-2", style={"color": "#6c757d"}))
+                        
+                        # Add each link with separators
+                        for i, link in enumerate(related_links):
+                            if i > 0:
+                                header_content.append(html.Span(" | ", className="mx-2", style={"color": "#6c757d"}))
+                            header_content.append(html.Span(link, style={"fontSize": "0.7em"}))
+                    
+                    return header_content
 
         except Exception as e:
             print(f"Error loading reconstruction data: {e}")

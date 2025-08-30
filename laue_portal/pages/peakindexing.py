@@ -18,7 +18,9 @@ layout = html.Div([
     dcc.Location(id='url-peakindexing-page', refresh=False),
     dbc.Container(id='peakindexing-content-container', fluid=True, className="mt-4",
                   children=[
-                        html.H2(id='peakindex-id-header', className="mb-3"),
+                        html.H1(id='peakindex-id-header', 
+                               style={"display":"flex", "gap":"10px", "align-items":"baseline", "flexWrap":"wrap"},
+                               className="mb-4"),
                         peakindex_form
                   ]),
 ])
@@ -87,7 +89,49 @@ def load_peakindexing_data(href):
                     
                     # Populate the form with the data
                     set_peakindex_form_props(peakindex_data, read_only=True)
-                    return f"Peak Indexing | ID: {peakindex_id}"
+                    
+                    # Get related links for header
+                    related_links = []
+                    
+                    # Add job link if it exists
+                    if peakindex_data.job_id:
+                        related_links.append(
+                            html.A(f"Job ID: {peakindex_data.job_id}", 
+                                   href=f"/job?job_id={peakindex_data.job_id}")
+                        )
+                    
+                    if peakindex_data.recon_id:
+                        related_links.append(
+                            html.A(f"Reconstruction ID: {peakindex_data.recon_id}", 
+                                   href=f"/reconstruction?recon_id={peakindex_data.recon_id}")
+                        )
+                    elif peakindex_data.wirerecon_id:
+                        related_links.append(
+                            html.A(f"Wire Reconstruction ID: {peakindex_data.wirerecon_id}", 
+                                   href=f"/wire_reconstruction?wirerecon_id={peakindex_data.wirerecon_id}")
+                        )
+                    
+                    # Add scan link
+                    if peakindex_data.scanNumber:
+                        related_links.append(
+                            html.A(f"Scan ID: {peakindex_data.scanNumber}", 
+                                   href=f"/scan?scan_id={peakindex_data.scanNumber}")
+                        )
+                    
+                    # Build header with links
+                    header_content = [html.Span(f"Peak Indexing ID: {peakindex_id}")]
+
+                    if related_links:
+                        # Add separator before links
+                        header_content.append(html.Span(" • ", className="mx-2", style={"color": "#6c757d"}))
+                        
+                        # Add each link with separators
+                        for i, link in enumerate(related_links):
+                            if i > 0:
+                                header_content.append(html.Span(" | ", className="mx-2", style={"color": "#6c757d"}))
+                            header_content.append(html.Span(link, style={"fontSize": "0.7em"}))
+                    
+                    return header_content
         except Exception as e:
             print(f"Error loading peak indexing data: {e}")
             return f"Error loading data for Peak Indexing ID: {peakindex_id}"
