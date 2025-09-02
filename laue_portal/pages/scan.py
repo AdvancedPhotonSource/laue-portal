@@ -21,8 +21,8 @@ layout = html.Div([
         html.Div(
                 [
                     # Scan Info
-                    html.H1(children=["Scan ID: ", html.Div(id="ScanID_print")],
-                            style={"display":"flex", "gap":"10px", "align-items":"flex-end"},
+                    html.H1(id="scan-header",
+                            style={"display":"flex", "gap":"10px", "align-items":"baseline", "flexWrap":"wrap"},
                             className="mb-4"
                     ),
                     # html.H1(
@@ -277,20 +277,21 @@ def load_scan_metadata(href):
     parsed_url = urllib.parse.urlparse(href)
     query_params = urllib.parse.parse_qs(parsed_url.query)
     
-    scan_id = query_params.get('scan_id', [None])[0]
+    scan_id_str = query_params.get('scan_id', [None])[0]
 
-    if scan_id:
+    if scan_id_str:
         try:
-            scan_id = int(scan_id)
+            scan_id = int(scan_id_str) if scan_id_str else None
             with Session(db_utils.ENGINE) as session:
                 metadata_data = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == scan_id).first()
                 scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_id)
                 catalog_data = session.query(db_schema.Catalog).filter(db_schema.Catalog.scanNumber == scan_id).first()
                 if metadata_data:
-                    scan_accordions = [make_scan_accordion(i) for i,_ in enumerate(scan_data)]
+                    scan_rows = list(scan_data)  # Convert query to list
+                    scan_accordions = [make_scan_accordion(i, scan_row) for i, scan_row in enumerate(scan_rows)]
                     set_props("scan_accordions", {'children': scan_accordions})
-                    set_metadata_form_props(metadata_data, scan_data, read_only=True)
-                    set_scaninfo_form_props(metadata_data, scan_data, catalog_data, read_only=True)
+                    set_metadata_form_props(metadata_data, read_only=True)
+                    set_scaninfo_form_props(metadata_data, scan_rows, catalog_data, read_only=True)
         except Exception as e:
             print(f"Error loading scan data: {e}")
 

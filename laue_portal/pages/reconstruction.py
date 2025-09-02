@@ -23,7 +23,9 @@ layout = html.Div([
         dcc.Location(id='url-recon-page', refresh=False),
         dbc.Container(id='recon-content-container', fluid=True, className="mt-4",
                   children=[
-                        html.H2(id='recon-id-header', className="mb-3"),
+                        html.H1(id='recon-id-header', 
+                               style={"display":"flex", "gap":"10px", "align-items":"baseline", "flexWrap":"wrap"},
+                               className="mb-4"),
                         recon_form
                   ]),
         html.Div(children=[
@@ -64,45 +66,13 @@ layout = html.Div([
                         id="integrated-lau",
                     ),
                 ]),
-    ],
-)
+])
 
 """
 =======================
 Callbacks
 =======================
 """
-# @dash.callback(
-#     Output('recon-table', 'columns', allow_duplicate=True),
-#     Output('recon-table', 'data', allow_duplicate=True),
-#     Input('upload-config', 'contents'),
-#     prevent_initial_call=True,
-# )
-# def upload_config(contents):
-#     try:
-#         content_type, content_string = contents.split(',')
-#         decoded = base64.b64decode(content_string)
-#         config = yaml.safe_load(decoded)
-#         recon_row = db_utils.import_recon_row(config)
-#         recon_row.date = datetime.datetime.now()
-#         recon_row.commit_id = 'TEST'
-#         recon_row.calib_id = 'TEST'
-#         recon_row.runtime = 'TEST'
-#         recon_row.computer_name = 'TEST'
-#         recon_row.dataset_id = 0
-#         recon_row.notes = 'TEST'
-
-#         with Session(db_utils.ENGINE) as session:
-#             session.add(recon_row)
-#             session.commit()
-
-#     except Exception as e:
-#         print('Unable to parse config')
-#         print(e)
-    
-#     cols, recons = _get_recons()
-#     return cols, recons
-
 
 @dash.callback(
         Input('integrated-lau', 'value'),
@@ -237,7 +207,7 @@ def load_recon_data(href):
     parsed_url = urllib.parse.urlparse(href)
     query_params = urllib.parse.parse_qs(parsed_url.query)
     
-    recon_id = query_params.get('reconid', [None])[0]
+    recon_id = query_params.get('recon_id', [None])[0]
 
     if recon_id:
         try:
@@ -261,7 +231,38 @@ def load_recon_data(href):
                         ind = loahdh5(file_output,'ind')
                     pixel_selections = [{"label": f'{i}', "value": i} for i in ind]
                     set_props("pixels",{"options":pixel_selections})
-                    return f"Recon | ID: {recon_id}"
+                    
+                    # Get related links
+                    related_links = []
+                    
+                    # Add job link if it exists
+                    if recon_data.job_id:
+                        related_links.append(
+                            html.A(f"Job ID: {recon_data.job_id}", 
+                                   href=f"/job?job_id={recon_data.job_id}")
+                        )
+                    
+                    # Add scan link
+                    if recon_data.scanNumber:
+                        related_links.append(
+                            html.A(f"Scan ID: {recon_data.scanNumber}", 
+                                   href=f"/scan?scan_id={recon_data.scanNumber}")
+                        )
+                    
+                    # Build header with links
+                    header_content = [html.Span(f"Reconstruction ID: {recon_id}")]
+                    
+                    if related_links:
+                        # Add separator before links
+                        header_content.append(html.Span(" • ", className="mx-2", style={"color": "#6c757d"}))
+                        
+                        # Add each link with separators
+                        for i, link in enumerate(related_links):
+                            if i > 0:
+                                header_content.append(html.Span(" | ", className="mx-2", style={"color": "#6c757d"}))
+                            header_content.append(html.Span(link, style={"fontSize": "0.7em"}))
+                    
+                    return header_content
 
         except Exception as e:
             print(f"Error loading reconstruction data: {e}")

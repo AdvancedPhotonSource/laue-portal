@@ -8,7 +8,7 @@ import laue_portal.database.db_schema as db_schema
 import laue_portal.components.navbar as navbar
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix
 from laue_portal.components.wire_recon_form import wire_recon_form, set_wire_recon_form_props
-from laue_portal.pages.create_wire_reconstruction import DEFAULT_VARIABLES
+from config import DEFAULT_VARIABLES
 import urllib.parse
 
 dash.register_page(__name__, path="/wire_reconstruction")
@@ -18,86 +18,18 @@ layout = html.Div([
         dcc.Location(id='url-wire-recon-page', refresh=False),
         dbc.Container(id='wire-recon-content-container', fluid=True, className="mt-4",
                   children=[
-                        html.H2(id='wire-recon-id-header', className="mb-3"),
+                        html.H1(id='wire-recon-id-header', 
+                               style={"display":"flex", "gap":"10px", "align-items":"baseline", "flexWrap":"wrap"},
+                               className="mb-4"),
                         wire_recon_form
                   ]),
-        # html.Div(children=[
-        #             dbc.Select(
-        #                 placeholder="Select Detector Pixel",
-        #                 id="pixels",
-        #             ),
-        #             dcc.Graph(
-        #                 #style={'height': 300},
-        #                 style={'display': 'inline-block'},
-        #                 id="lineout-graph",
-        #             ),
-        #             dcc.Graph(
-        #                 #style={'height': 300},
-        #                 style={'display': 'inline-block', 'height': 300},
-        #                 id="detector-graph",
-        #             ),
-        #             dcc.Store(id='zoom_info'),
-        #             dcc.Store(id='index_pointer'),
-        #             dbc.Alert(
-        #                 "No data found here",
-        #                 is_open=False,
-        #                 duration=2400,
-        #                 color="warning",
-        #                 id="alert-auto-no-data",
-        #             ),
-        #             dbc.Alert(
-        #                 "Updating depth-profile plot",
-        #                 is_open=False,
-        #                 duration=2400,
-        #                 color="success",
-        #                 id="alert-auto-update-plot",
-        #             ),
-        #             dcc.Store(
-        #                 id="results-path",
-        #             ),
-        #             dcc.Store(
-        #                 id="integrated-lau",
-        #             ),
-        #         ]),
-    ],
-)
+])
 
 """
 =======================
 Callbacks
 =======================
 """
-# @dash.callback(
-#     Output('recon-table', 'columns', allow_duplicate=True),
-#     Output('recon-table', 'data', allow_duplicate=True),
-#     Input('upload-config', 'contents'),
-#     prevent_initial_call=True,
-# )
-# def upload_config(contents):
-#     try:
-#         content_type, content_string = contents.split(',')
-#         decoded = base64.b64decode(content_string)
-#         config = yaml.safe_load(decoded)
-#         recon_row = db_utils.import_recon_row(config)
-#         recon_row.date = datetime.datetime.now()
-#         recon_row.commit_id = 'TEST'
-#         recon_row.calib_id = 'TEST'
-#         recon_row.runtime = 'TEST'
-#         recon_row.computer_name = 'TEST'
-#         recon_row.dataset_id = 0
-#         recon_row.notes = 'TEST'
-
-#         with Session(db_utils.ENGINE) as session:
-#             session.add(recon_row)
-#             session.commit()
-
-#     except Exception as e:
-#         print('Unable to parse config')
-#         print(e)
-    
-#     cols, recons = _get_recons()
-#     return cols, recons
-
 
 @callback(
     Output('wire-recon-id-header', 'children'),
@@ -111,16 +43,18 @@ def load_wire_recon_data(href):
     parsed_url = urllib.parse.urlparse(href)
     query_params = urllib.parse.parse_qs(parsed_url.query)
     
-    wirerecon_id = query_params.get('wirereconid', [None])[0]
+    wirerecon_id_str = query_params.get('wirerecon_id', [None])[0]
 
-    if wirerecon_id:
+    root_path = DEFAULT_VARIABLES.get("root_path", "")
+
+    if wirerecon_id_str:
         try:
-            wirerecon_id = int(wirerecon_id)
+            wirerecon_id = int(wirerecon_id_str) if wirerecon_id_str else None
             with Session(db_utils.ENGINE) as session:
                 wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == wirerecon_id).first()
                 if wirerecon_data:
                     # Add root_path from DEFAULT_VARIABLES
-                    root_path = DEFAULT_VARIABLES["root_path"]
+                    root_path = DEFAULT_VARIABLES.get("root_path", "")
                     wirerecon_data.root_path = root_path
                     
                     # Retrieve data_path and filenamePrefix from catalog data
@@ -134,8 +68,40 @@ def load_wire_recon_data(href):
                     if wirerecon_data.outputFolder:
                         wirerecon_data.outputFolder = remove_root_path_prefix(wirerecon_data.outputFolder, root_path)
                     
+                    # Populate the form with the data
                     set_wire_recon_form_props(wirerecon_data, read_only=True)
-                    return f"Wire Recon | ID: {wirerecon_id}"
+                    
+                    # Get related links
+                    related_links = []
+                    
+                    # Add job link if it exists
+                    if wirerecon_data.job_id:
+                        related_links.append(
+                            html.A(f"Job ID: {wirerecon_data.job_id}", 
+                                   href=f"/job?job_id={wirerecon_data.job_id}")
+                        )
+                    
+                    # Add scan link
+                    if wirerecon_data.scanNumber:
+                        related_links.append(
+                            html.A(f"Scan ID: {wirerecon_data.scanNumber}", 
+                                   href=f"/scan?scan_id={wirerecon_data.scanNumber}")
+                        )
+                    
+                    # Build header with links
+                    header_content = [html.Span(f"Wire Reconstruction ID: {wirerecon_id}")]
+                    
+                    if related_links:
+                        # Add separator before links
+                        header_content.append(html.Span(" • ", className="mx-2", style={"color": "#6c757d"}))
+                        
+                        # Add each link with separators
+                        for i, link in enumerate(related_links):
+                            if i > 0:
+                                header_content.append(html.Span(" | ", className="mx-2", style={"color": "#6c757d"}))
+                            header_content.append(html.Span(link, style={"fontSize": "0.7em"}))
+                    
+                    return header_content
 
         except Exception as e:
             print(f"Error loading wire reconstruction data: {e}")

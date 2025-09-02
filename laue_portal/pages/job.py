@@ -19,8 +19,8 @@ layout = html.Div([
     html.Div(
         [
             # Job Info
-            html.H1(children=["Job ID: ", html.Div(id="JobID_print")],
-                    style={"display":"flex", "gap":"10px", "align-items":"flex-end"},
+            html.H1(id="job-header",
+                    style={"display":"flex", "gap":"10px", "align-items":"baseline", "flexWrap":"wrap"},
                     className="mb-4"
             ),
 
@@ -48,9 +48,6 @@ layout = html.Div([
                             html.P(children=[html.Strong("Priority: "), html.Div(id="Priority_print")],
                                    style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
                             ),
-                            html.P(children=[html.Strong("Author: "), html.Div(id="Author_print")],
-                                   style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
-                            ),
                             html.P(children=[html.Strong("Computer: "), html.Div(id="Computer_print")],
                                    style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
                             ),
@@ -73,19 +70,6 @@ layout = html.Div([
                     
                     dbc.Row([
                         dbc.Col([
-                            html.P(html.Strong("Notes:")),
-                        ], width="auto", align="start"),
-                        dbc.Col(
-                            dbc.Textarea(
-                                id="Notes_print",
-                                style={"width": "100%", "minHeight": "100px"},
-                                disabled=True
-                            )
-                        )
-                    ], className="mb-3 mt-3", align="start"),
-                    
-                    dbc.Row([
-                        dbc.Col([
                             html.P(html.Strong("Messages:")),
                         ], width="auto", align="start"),
                         dbc.Col(
@@ -95,30 +79,19 @@ layout = html.Div([
                                 disabled=True
                             )
                         )
-                    ], className="mb-3", align="start")
+                    ], className="mb-3 mt-3", align="start")
                 ])
             ], className="mb-4 shadow-sm border",
             style={"width": "100%"}),
 
-            # Related Entities Card
+            # SubJob Output Card
             dbc.Card([
                 dbc.CardHeader(
-                    html.H4("Related Entities", className="mb-0"),
+                    html.H4("SubJob Output", className="mb-0"),
                     className="bg-light"
                 ),
                 dbc.CardBody([
-                    html.Div(id="related-entities-content")
-                ])
-            ], className="mb-4 shadow-sm border"),
-
-            # Job Logs/Output Card (if applicable)
-            dbc.Card([
-                dbc.CardHeader(
-                    html.H4("Job Output", className="mb-0"),
-                    className="bg-light"
-                ),
-                dbc.CardBody([
-                    html.Div(id="job-output-content", children=[
+                    html.Div(id="subjob-output-content", children=[
                         html.P("No output available for this job.", className="text-muted")
                     ])
                 ])
@@ -135,19 +108,17 @@ Callbacks
 """
 
 @callback(
-    [Output('JobID_print', 'children'),
+    [Output('job-header', 'children'),
      Output('Status_print', 'children'),
      Output('Priority_print', 'children'),
-     Output('Author_print', 'children'),
      Output('Computer_print', 'children'),
      Output('SubmitTime_print', 'children'),
      Output('StartTime_print', 'children'),
      Output('FinishTime_print', 'children'),
      Output('Duration_print', 'children'),
-     Output('Notes_print', 'value'),
      Output('Messages_print', 'value'),
-     Output('related-entities-content', 'children'),
-     Output('cancel-job-btn', 'disabled')],
+     Output('cancel-job-btn', 'disabled'),
+     Output('subjob-output-content', 'children')],
     Input('url-job-page', 'href'),
     prevent_initial_call=True
 )
@@ -164,7 +135,6 @@ def load_job_data(href):
         try:
             job_id = int(job_id)
             with Session(db_utils.ENGINE) as session:
-                # Get job data with related entities
                 job_data = session.query(db_schema.Job).filter(db_schema.Job.job_id == job_id).first()
                 
                 if job_data:
@@ -199,105 +169,174 @@ def load_job_data(href):
                     start_time = job_data.start_time.strftime("%Y-%m-%d %H:%M:%S") if job_data.start_time else "—"
                     finish_time = job_data.finish_time.strftime("%Y-%m-%d %H:%M:%S") if job_data.finish_time else "—"
                     
-                    # Get related entities
-                    related_entities = []
+                    # Get related links for header
+                    related_links = []
                     
                     # Check for Calibration
                     calib_data = session.query(db_schema.Calib).filter(db_schema.Calib.job_id == job_id).first()
                     if calib_data:
-                        related_entities.append(
-                            html.Div([
-                                html.Strong("Calibration: "),
-                                html.A(f"Calib ID {calib_data.calib_id}", href=f"/calibration?calib_id={calib_data.calib_id}"),
-                                f" (Scan {calib_data.scanNumber})"
-                            ], className="mb-2")
+                        related_links.append(
+                            html.Span([
+                                html.A(f"Calibration ID: {calib_data.calib_id}", href=f"/calibration?calib_id={calib_data.calib_id}"),
+                                " | ",
+                                html.A(f"Scan ID: {calib_data.scanNumber}", href=f"/scan?scan_id={calib_data.scanNumber}")
+                            ])
                         )
                     
                     # Check for Reconstruction
                     recon_data = session.query(db_schema.Recon).filter(db_schema.Recon.job_id == job_id).first()
                     if recon_data:
-                        related_entities.append(
-                            html.Div([
-                                html.Strong("Reconstruction: "),
-                                html.A(f"Recon ID {recon_data.recon_id}", href=f"/reconstruction?recon_id={recon_data.recon_id}"),
-                                f" (Scan {recon_data.scanNumber})"
-                            ], className="mb-2")
+                        related_links.append(
+                            html.Span([
+                                html.A(f"Reconstruction ID: {recon_data.recon_id}", href=f"/reconstruction?recon_id={recon_data.recon_id}"),
+                                " | ",
+                                html.A(f"Scan ID: {recon_data.scanNumber}", href=f"/scan?scan_id={recon_data.scanNumber}")
+                            ])
                         )
                     
                     # Check for Wire Reconstruction
                     wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.job_id == job_id).first()
                     if wirerecon_data:
-                        related_entities.append(
-                            html.Div([
-                                html.Strong("Wire Reconstruction: "),
-                                html.A(f"Wire Recon ID {wirerecon_data.wirerecon_id}", href=f"/wire_reconstruction?wirerecon_id={wirerecon_data.wirerecon_id}"),
-                                f" (Scan {wirerecon_data.scanNumber})"
-                            ], className="mb-2")
+                        related_links.append(
+                            html.Span([
+                                html.A(f"Wire Reconstruction ID: {wirerecon_data.wirerecon_id}", href=f"/wire_reconstruction?wirerecon_id={wirerecon_data.wirerecon_id}"),
+                                " | ",
+                                html.A(f"Scan ID: {wirerecon_data.scanNumber}", href=f"/scan?scan_id={wirerecon_data.scanNumber}")
+                            ])
                         )
                     
                     # Check for Peak Index
                     peakindex_data = session.query(db_schema.PeakIndex).filter(db_schema.PeakIndex.job_id == job_id).first()
                     if peakindex_data:
-                        related_entities.append(
-                            html.P([
-                                html.Strong("Peak Indexing: "),
-                                html.A(f"Peak Indexing ID {peakindex_data.peakindex_id}", href=f"/peakindexing?peakindex_id={peakindex_data.peakindex_id}"),
-                                f" (Scan {peakindex_data.scanNumber})"
-                            ], className="mb-2")
+                        related_links.append(
+                            html.Span([
+                                html.A(f"Peak Indexing ID: {peakindex_data.peakindex_id}", href=f"/peakindexing?peakindex_id={peakindex_data.peakindex_id}"),
+                                " | ",
+                                html.A(f"Scan ID: {peakindex_data.scanNumber}", href=f"/scan?scan_id={peakindex_data.scanNumber}")
+                            ])
                         )
                     
-                    if not related_entities:
-                        related_entities = [html.P("No related entities found.", className="text-muted")]
+                    # Build header with links
+                    header_content = [html.Span(f"Job ID: {job_id}")]
+                    
+                    if related_links:
+                        # Add separator before links
+                        header_content.append(html.Span(" • ", className="mx-2", style={"color": "#6c757d"}))
+                        
+                        # Add each link group with separators
+                        for i, link in enumerate(related_links):
+                            if i > 0:
+                                header_content.append(html.Span(" • ", className="mx-2", style={"color": "#6c757d"}))
+                            header_content.append(html.Span(link, style={"fontSize": "0.7em"}))
+                    
+                    # Get subjob messages for SubJob Output section
+                    subjob_output = []
+                    subjobs_data = session.query(db_schema.SubJob).filter(db_schema.SubJob.job_id == job_id).order_by(db_schema.SubJob.subjob_id).all()
+                    
+                    if subjobs_data:
+                        for subjob in subjobs_data:
+                            # Format subjob status
+                            subjob_status_text = STATUS_MAPPING.get(subjob.status, f"Unknown ({subjob.status})")
+                            subjob_status_color = {
+                                0: "warning",  # Queued
+                                1: "info",     # Running
+                                2: "success",  # Finished
+                                3: "danger",   # Failed
+                                4: "secondary" # Cancelled
+                            }.get(subjob.status, "secondary")
+                            
+                            subjob_badge = dbc.Badge(subjob_status_text, color=subjob_status_color, className="me-2")
+                            
+                            # Create subjob output card
+                            subjob_card = dbc.Card([
+                                dbc.CardHeader([
+                                    html.Span([
+                                        html.Strong(f"SubJob {subjob.subjob_id}"),
+                                        " - ",
+                                        subjob_badge,
+                                        html.Small(f"Computer: {subjob.computer_name}", className="text-muted ms-2")
+                                    ])
+                                ], className="py-2"),
+                                dbc.CardBody([
+                                    html.Pre(
+                                        subjob.messages or "No output available",
+                                        style={
+                                            "whiteSpace": "pre-wrap",
+                                            "wordBreak": "break-word",
+                                            "backgroundColor": "#f8f9fa",
+                                            "padding": "10px",
+                                            "borderRadius": "4px",
+                                            "fontSize": "0.875rem",
+                                            "maxHeight": "300px",
+                                            "overflowY": "auto"
+                                        }
+                                    )
+                                ], className="py-2")
+                            ], className="mb-2")
+                            
+                            subjob_output.append(subjob_card)
+                    else:
+                        subjob_output = [html.P("No subjobs found for this job.", className="text-muted")]
                     
                     # Enable cancel button only for pending or running jobs
                     can_cancel = job_data.status in [0, 1]
                     
                     return (
-                        str(job_id),
+                        header_content,
                         status_badge,
                         str(job_data.priority),
-                        job_data.author or "—",
                         job_data.computer_name,
                         submit_time,
                         start_time,
                         finish_time,
                         duration,
-                        job_data.notes or "",
                         job_data.messages or "",
-                        related_entities,
-                        not can_cancel
+                        not can_cancel,
+                        subjob_output
                     )
                 else:
                     return (
-                        str(job_id),
+                        [html.Span(f"Job ID: {job_id}")],
                         "Not found",
-                        "—", "—", "—", "—", "—", "—", "—",
+                        "—",
+                        "—",
+                        "—",
+                        "—",
+                        "—",
+                        "—",
                         "Job not found in database",
-                        "",
-                        [html.P("Job not found.", className="text-danger")],
-                        True
+                        True,
+                        [html.P("No output available for this job.", className="text-muted")]
                     )
                     
         except Exception as e:
             print(f"Error loading job data: {e}")
             return (
-                str(job_id),
+                [html.Span(f"Job ID: {job_id}")],
                 "Error",
-                "—", "—", "—", "—", "—", "—", "—",
+                "—",
+                "—",
+                "—",
+                "—",
+                "—",
+                "—",
                 f"Error: {str(e)}",
-                "",
-                [html.P(f"Error loading job data: {str(e)}", className="text-danger")],
-                True
+                True,
+                [html.P("No output available for this job.", className="text-muted")]
             )
     
     return (
+        [html.Span("Job ID: —")],
         "—",
         "—",
-        "—", "—", "—", "—", "—", "—", "—",
+        "—",
+        "—",
+        "—",
+        "—",
+        "—",
         "",
-        "",
-        [html.P("No job ID provided.", className="text-muted")],
-        True
+        True,
+        [html.P("No output available for this job.", className="text-muted")]
     )
 
 @callback(

@@ -34,6 +34,7 @@ PEAKINDEX_DEFAULTS = {
     "thresholdRatio": -1,
     "maxRfactor": 2.0, #0.5
     "boxsize": 5, #18
+    "max_number": 300,
     "min_separation": 10, #40
     "peakShape": "L", #"Lorentzian"
     # "scanPointStart": 1,
@@ -661,7 +662,7 @@ def load_scan_data_from_url(href):
     wirerecon_id_str = query_params.get('wirerecon_id', [None])[0]
     peakindex_id_str = query_params.get('peakindex_id', [None])[0]
 
-    root_path = DEFAULT_VARIABLES["root_path"]
+    root_path = DEFAULT_VARIABLES.get("root_path", "")
     
     if scan_id_str:
         with Session(db_utils.ENGINE) as session:
@@ -766,7 +767,7 @@ def load_scan_data_from_url(href):
                                 thresholdRatio=PEAKINDEX_DEFAULTS["thresholdRatio"],
                                 maxRfactor=PEAKINDEX_DEFAULTS["maxRfactor"],
                                 boxsize=PEAKINDEX_DEFAULTS["boxsize"],
-                                max_number=PEAKINDEX_DEFAULTS["max_peaks"], # Assuming max_peaks from YAML maps to max_number
+                                max_number=PEAKINDEX_DEFAULTS["max_number"],
                                 min_separation=PEAKINDEX_DEFAULTS["min_separation"],
                                 peakShape=PEAKINDEX_DEFAULTS["peakShape"],
                                 detectorCropX1=PEAKINDEX_DEFAULTS["detectorCropX1"],
@@ -798,6 +799,7 @@ def load_scan_data_from_url(href):
                         
                         # Add root_path from DEFAULT_VARIABLES
                         peakindex_defaults.root_path = root_path
+                        
                         # Retrieve data_path and filenamePrefix from catalog data
                         catalog_data = get_catalog_data(session, scan_id, root_path, CATALOG_DEFAULTS)
                         
@@ -927,8 +929,10 @@ def load_scan_data_from_url(href):
 
                             # Add root_path from DEFAULT_VARIABLES
                             peakindex_defaults.root_path = root_path
+
                             # Retrieve data_path and filenamePrefix from catalog data
                             catalog_data = get_catalog_data(session, current_scan_id, root_path, CATALOG_DEFAULTS)
+                            
                             # If processing reconstruction data, use the reconstruction output folder as data path
                             if current_wirerecon_id:
                                 wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == current_wirerecon_id).first()
@@ -999,7 +1003,7 @@ def load_scan_data_from_url(href):
                             thresholdRatio=PEAKINDEX_DEFAULTS["thresholdRatio"],
                             maxRfactor=PEAKINDEX_DEFAULTS["maxRfactor"],
                             boxsize=PEAKINDEX_DEFAULTS["boxsize"],
-                            max_number=PEAKINDEX_DEFAULTS["max_peaks"],
+                            max_number=PEAKINDEX_DEFAULTS["max_number"],
                             min_separation=PEAKINDEX_DEFAULTS["min_separation"],
                             peakShape=PEAKINDEX_DEFAULTS["peakShape"],
                             scanPoints=PEAKINDEX_DEFAULTS["scanPoints"],

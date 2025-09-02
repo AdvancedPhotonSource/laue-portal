@@ -5,7 +5,7 @@ Provides functions for enqueueing jobs, checking status, and managing the job qu
 
 from redis import Redis
 from rq import Queue, Worker
-from rq.job import Job
+from rq.job import Job, Dependency
 from rq.registry import StartedJobRegistry, FinishedJobRegistry, FailedJobRegistry
 import logging
 from datetime import datetime
@@ -19,12 +19,13 @@ from sqlalchemy.inspection import inspect
 # Import Laue Analysis functions
 from laue_portal.recon import analysis_recon
 from laueanalysis.reconstruct import reconstruct as wire_reconstruct  # This is actually for wire reconstruction
+from laueanalysis.indexing import index #pyLaueGo
 from config import REDIS_CONFIG
 
 logger = logging.getLogger(__name__)
 
 # Redis connection
-redis_conn = Redis(host=REDIS_CONFIG["host"], port=REDIS_CONFIG["port"], decode_responses=False)
+redis_conn = Redis(host='localhost', port=6379, decode_responses=False)
 
 # Single queue for all job types
 job_queue = Queue('laue_jobs', connection=redis_conn)
@@ -120,8 +121,16 @@ def execute_batch_coordinator(job_id: int):
                 logger.error(f"No subjobs found for job {job_id} in batch coordinator")
                 return
             
-            all_finished = all(s.status == STATUS_REVERSE_MAPPING["Finished"] for s in subjob_data)
-            any_failed = any(s.status == STATUS_REVERSE_MAPPING["Failed"] for s in subjob_data)
+            # Count subjob statuses
+            finished_count = sum(1 for s in subjob_data if s.status == STATUS_REVERSE_MAPPING["Finished"])
+            failed_count = sum(1 for s in subjob_data if s.status == STATUS_REVERSE_MAPPING["Failed"])
+            running_count = sum(1 for s in subjob_data if s.status == STATUS_REVERSE_MAPPING["Running"])
+            queued_count = sum(1 for s in subjob_data if s.status == STATUS_REVERSE_MAPPING["Queued"])
+            cancelled_count = sum(1 for s in subjob_data if s.status == STATUS_REVERSE_MAPPING["Cancelled"])
+            
+            all_finished = finished_count == len(subjob_data)
+            any_failed = failed_count > 0
+            all_complete = (finished_count + failed_count + cancelled_count) == len(subjob_data)
             
             # Update job status
             job_data = session.query(db_schema.Job).filter(
@@ -132,14 +141,17 @@ def execute_batch_coordinator(job_id: int):
                 if all_finished:
                     job_data.status = STATUS_REVERSE_MAPPING["Finished"]
                     message = f"All {len(subjob_data)} subjobs completed successfully"
-                elif any_failed:
+                elif any_failed and all_complete:
                     job_data.status = STATUS_REVERSE_MAPPING["Failed"]
-                    failed_count = sum(1 for s in subjob_data if s.status == STATUS_REVERSE_MAPPING["Failed"])
-                    message = f"{failed_count} of {len(subjob_data)} subjobs failed"
+                    message = f"Batch failed: {failed_count} failed, {finished_count} succeeded out of {len(subjob_data)} subjobs"
+                elif cancelled_count > 0 and all_complete:
+                    job_data.status = STATUS_REVERSE_MAPPING["Cancelled"]
+                    message = f"Batch cancelled: {cancelled_count} cancelled, {finished_count} succeeded, {failed_count} failed"
                 else:
-                    # This shouldn't happen if dependencies work correctly
+                    # This shouldn't happen with allow_failure=True, but handle it gracefully
                     job_data.status = STATUS_REVERSE_MAPPING["Failed"]
-                    message = "Batch completed with unknown status"
+                    message = f"Batch coordinator error: {finished_count} finished, {failed_count} failed, {running_count} running, {queued_count} queued"
+                    logger.warning(f"Unexpected state in batch coordinator for job {job_id}: {message}")
                 
                 job_data.finish_time = datetime.now()
                 if job_data.messages:
@@ -220,13 +232,20 @@ def _enqueue_batch(job_id: int, job_type: str, execute_func, at_front: bool = Fa
         )
         rq_job_ids.append(rq_job_id)
     
+    # Create a Dependency object that allows failure
+    dependency = Dependency(
+        jobs=rq_job_ids,  # List of all subjob RQ IDs
+        allow_failure=True,  # This ensures coordinator runs even if subjobs fail
+        enqueue_at_front=True  # Put coordinator at front of queue
+    )
+    
     # Enqueue coordinator that depends on all subjobs
     coordinator_id = enqueue_job(
         job_id,
         'batch_coordinator',
         execute_batch_coordinator,
         True,  # Put coordinator at front since it depends on subjobs
-        rq_job_ids,  # Depends on ALL subjobs
+        dependency,  # Pass the Dependency object instead of job list
         db_schema.Job  # Coordinator updates the main Job
     )
     
