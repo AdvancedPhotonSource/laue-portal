@@ -164,6 +164,7 @@ def convert_time_string_to_datetime(time_string):
     time_formats = [
         '%Y-%m-%dT%H:%M:%S',  # ISO format: 2023-02-01T18:46:06
         '%Y-%m-%d %H:%M:%S',  # Alternative format
+        '%Y-%m-%d, %H:%M:%S',  # Format with comma: 2023-02-25, 04:00:38
         '%Y-%m-%dT%H:%M:%S.%f',  # With microseconds
     ]
     

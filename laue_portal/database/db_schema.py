@@ -22,48 +22,48 @@ class Metadata(Base):
 
     time_epoch: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     time: Mapped[DateTime] = mapped_column(DateTime)
-    user_name: Mapped[str] = mapped_column(String)
+    user_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
-    source_beamBad: Mapped[str] = mapped_column(String) # Mapped[bool] = mapped_column(Boolean)
-    source_CCDshutter: Mapped[str] = mapped_column(String) #bool?
-    source_monoTransStatus: Mapped[str] = mapped_column(String) #bool?
-    source_energy_unit: Mapped[str] = mapped_column(String)
+    source_beamBad: Mapped[Optional[str]] = mapped_column(String, nullable=True) # Mapped[bool] = mapped_column(Boolean)
+    source_CCDshutter: Mapped[Optional[str]] = mapped_column(String, nullable=True) #bool?
+    source_monoTransStatus: Mapped[Optional[str]] = mapped_column(String, nullable=True) #bool?
+    source_energy_unit: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     source_energy: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    source_IDgap_unit: Mapped[str] = mapped_column(String)
+    source_IDgap_unit: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     source_IDgap: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    source_IDtaper_unit: Mapped[str] = mapped_column(String) 
+    source_IDtaper_unit: Mapped[Optional[str]] = mapped_column(String, nullable=True) 
     source_IDtaper: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    source_ringCurrent_unit: Mapped[str] = mapped_column(String)
+    source_ringCurrent_unit: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     source_ringCurrent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
-    sample_XYZ_unit: Mapped[str] = mapped_column(String)
-    sample_XYZ_desc: Mapped[str] = mapped_column(String)
-    sample_XYZ: Mapped[str] = mapped_column(String)
+    sample_XYZ_unit: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sample_XYZ_desc: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sample_XYZ: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     # sample_X: Mapped[float] = mapped_column(Float)
     # sample_Y: Mapped[float] = mapped_column(Float)
     # sample_Z: Mapped[float] = mapped_column(Float)
 
-    knifeEdge_XYZ_unit: Mapped[str] = mapped_column(String)
-    knifeEdge_XYZ_desc: Mapped[str] = mapped_column(String)
-    knifeEdge_XYZ: Mapped[str] = mapped_column(String)
+    knifeEdge_XYZ_unit: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    knifeEdge_XYZ_desc: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    knifeEdge_XYZ: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     # knifeEdge_X: Mapped[float] = mapped_column(Float)
     # knifeEdge_Y: Mapped[float] = mapped_column(Float)
     # knifeEdge_Z: Mapped[float] = mapped_column(Float)
-    knifeEdge_knifeScan_unit: Mapped[str] = mapped_column(String)
+    knifeEdge_knifeScan_unit: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     knifeEdge_knifeScan: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     #scan:
 
-    mda_file: Mapped[str] = mapped_column(String)
+    mda_file: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     
-    scanEnd_abort: Mapped[str] = mapped_column(String) # Mapped[bool] = mapped_column(Boolean)
+    scanEnd_abort: Mapped[Optional[str]] = mapped_column(String, nullable=True) # Mapped[bool] = mapped_column(Boolean)
     scanEnd_time_epoch: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    scanEnd_time: Mapped[str] = mapped_column(String) # DateTime?
-    scanEnd_scanDuration_unit: Mapped[str] = mapped_column(String)
+    scanEnd_time: Mapped[Optional[str]] = mapped_column(String, nullable=True) # DateTime?
+    scanEnd_scanDuration_unit: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     scanEnd_scanDuration: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     # scanEnd_cpt: Mapped[int] = mapped_column(Integer)
-    scanEnd_source_beamBad: Mapped[str] = mapped_column(String) # Mapped[bool] = mapped_column(Boolean)
-    scanEnd_source_ringCurrent_unit: Mapped[str] = mapped_column(String)
+    scanEnd_source_beamBad: Mapped[Optional[str]] = mapped_column(String, nullable=True) # Mapped[bool] = mapped_column(Boolean)
+    scanEnd_source_ringCurrent_unit: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     scanEnd_source_ringCurrent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     
     # dataset_path: Mapped[str] = mapped_column(String)

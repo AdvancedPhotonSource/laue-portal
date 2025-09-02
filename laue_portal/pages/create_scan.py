@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, State, set_props
+from dash import html, dcc, Input, State, set_props, ALL
 import dash
 import base64
 import yaml
@@ -54,7 +54,7 @@ layout = dbc.Container(
         ),
         html.Hr(),
         html.Center(
-            dbc.Button('Submit to Catalog', id='submit_catalog', color='primary'),
+            dbc.Button('Submit to Database', id='submit_catalog_and_metadata', color='primary'),
         ),
         html.Hr(),
         catalog_form,
@@ -197,14 +197,10 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
             
             set_catalog_form_props(catalog_row)
 
-            scan_cards = []; scan_rows = []
+            scan_rows = []
             for i, scan in enumerate(scans):
-                #scan_card = ui_shared.make_scan_card(i)
-                #scan_cards.append(scan_card)
                 scan_row = db_utils.import_scan_row(scan)
                 scan_rows.append(scan_row)
-                
-            set_props("scan_cards", {'children': scan_cards})
             
             metadata_row.date = datetime.datetime.now()
             metadata_row.commit_id = ''
@@ -214,21 +210,28 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
             metadata_row.dataset_id = 0
             metadata_row.notes = ''
             
-            set_metadata_form_props(metadata_row, scan_rows)
+            # Create and add scan accordions to the form with pre-populated data
+            scan_accordions = []
+            for i, scan_row in enumerate(scan_rows):
+                scan_accordions.append(make_scan_accordion(i, scan_row))
+            set_props("scan_accordions", {'children': scan_accordions})
             
-            # Add to database
-            with Session(db_utils.ENGINE) as session:
-                session.add(metadata_row)
-                # session.add(catalog_row)
-                scan_row_count = session.query(Scan).count()
-                for id, scan_row in enumerate(scan_rows):
-                    scan_row.id = scan_row_count + id
-                    session.add(scan_row)
-                
-                session.commit()
+            # Set the form properties
+            set_metadata_form_props(metadata_row)#, scan_rows)
+            
+            # # Add to database
+            # with Session(db_utils.ENGINE) as session:
+            #     session.add(metadata_row)
+            #     # session.add(catalog_row)
+            #     scan_row_count = session.query(Scan).count()
+            #     for id, scan_row in enumerate(scan_rows):
+            #         scan_row.id = scan_row_count + id
+            #         session.add(scan_row)
+            #
+            #     session.commit()
             
             # Close modal and show success
-            return False, True, 'Scan imported to database successfully!', 'success'
+            return False, True, 'Scan data loaded successfully! Please review the forms and click "Submit to Database" to save.', 'success'
             
         except Exception as e:
             # Close modal and show error
@@ -242,29 +245,154 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
 
 
 @dash.callback(
-    Input('submit_catalog', 'n_clicks'),
+    Input('submit_catalog_and_metadata', 'n_clicks'),
 
+    # Catalog form fields
     State('scanNumber', 'value'),
-    
     State('filefolder', 'value'),
     State('filenamePrefix', 'value'),
-
     State('aperture', 'value'),
     State('sample_name', 'value'),
+    State('notes', 'value'),
+    
+    # Metadata form fields
+    State('time_epoch', 'value'),
+    State('time', 'value'),
+    State('user_name', 'value'),
+    State('source_beamBad', 'value'),
+    State('source_CCDshutter', 'value'),
+    State('source_monoTransStatus', 'value'),
+    State('source_energy_unit', 'value'),
+    State('source_energy', 'value'),
+    State('source_IDgap_unit', 'value'),
+    State('source_IDgap', 'value'),
+    State('source_IDtaper_unit', 'value'),
+    State('source_IDtaper', 'value'),
+    State('source_ringCurrent_unit', 'value'),
+    State('source_ringCurrent', 'value'),
+    State('sample_XYZ_unit', 'value'),
+    State('sample_XYZ_desc', 'value'),
+    State('sample_XYZ', 'value'),
+    State('knife-edge_XYZ_unit', 'value'),
+    State('knife-edge_XYZ_desc', 'value'),
+    State('knife-edge_XYZ', 'value'),
+    State('knife-edge_knifeScan_unit', 'value'),
+    State('knife-edge_knifeScan', 'value'),
+    State('mda_file', 'value'),
+    State('scanEnd_abort', 'value'),
+    State('scanEnd_time_epoch', 'value'),
+    State('scanEnd_time', 'value'),
+    State('scanEnd_scanDuration_unit', 'value'),
+    State('scanEnd_scanDuration', 'value'),
+    State('scanEnd_source_beamBad', 'value'),
+    State('scanEnd_source_ringCurrent_unit', 'value'),
+    State('scanEnd_source_ringCurrent', 'value'),
+    
+    # Scan form fields using ALL pattern
+    State({"type": "scan_dim", "index": ALL}, 'value'),
+    State({"type": "scan_npts", "index": ALL}, 'value'),
+    State({"type": "scan_after", "index": ALL}, 'value'),
+    State({"type": "scan_positioner1_PV", "index": ALL}, 'value'),
+    State({"type": "scan_positioner1_ar", "index": ALL}, 'value'),
+    State({"type": "scan_positioner1_mode", "index": ALL}, 'value'),
+    State({"type": "scan_positioner1", "index": ALL}, 'value'),
+    State({"type": "scan_positioner2_PV", "index": ALL}, 'value'),
+    State({"type": "scan_positioner2_ar", "index": ALL}, 'value'),
+    State({"type": "scan_positioner2_mode", "index": ALL}, 'value'),
+    State({"type": "scan_positioner2", "index": ALL}, 'value'),
+    State({"type": "scan_positioner3_PV", "index": ALL}, 'value'),
+    State({"type": "scan_positioner3_ar", "index": ALL}, 'value'),
+    State({"type": "scan_positioner3_mode", "index": ALL}, 'value'),
+    State({"type": "scan_positioner3", "index": ALL}, 'value'),
+    State({"type": "scan_positioner4_PV", "index": ALL}, 'value'),
+    State({"type": "scan_positioner4_ar", "index": ALL}, 'value'),
+    State({"type": "scan_positioner4_mode", "index": ALL}, 'value'),
+    State({"type": "scan_positioner4", "index": ALL}, 'value'),
+    State({"type": "scan_detectorTrig1_PV", "index": ALL}, 'value'),
+    State({"type": "scan_detectorTrig1_VAL", "index": ALL}, 'value'),
+    State({"type": "scan_detectorTrig2_PV", "index": ALL}, 'value'),
+    State({"type": "scan_detectorTrig2_VAL", "index": ALL}, 'value'),
+    State({"type": "scan_detectorTrig3_PV", "index": ALL}, 'value'),
+    State({"type": "scan_detectorTrig3_VAL", "index": ALL}, 'value'),
+    State({"type": "scan_detectorTrig4_PV", "index": ALL}, 'value'),
+    State({"type": "scan_detectorTrig4_VAL", "index": ALL}, 'value'),
+    State({"type": "scan_cpt", "index": ALL}, 'value'),
 
     prevent_initial_call=True,
 )
-def submit_catalog(n,
+def submit_catalog_and_metadata(n,
+    # Catalog parameters
     scanNumber,
-
     filefolder,
     filenamePrefix,
-
     aperture,
     sample_name,
+    notes,
     
+    # Metadata parameters
+    time_epoch,
+    time,
+    user_name,
+    source_beamBad,
+    source_CCDshutter,
+    source_monoTransStatus,
+    source_energy_unit,
+    source_energy,
+    source_IDgap_unit,
+    source_IDgap,
+    source_IDtaper_unit,
+    source_IDtaper,
+    source_ringCurrent_unit,
+    source_ringCurrent,
+    sample_XYZ_unit,
+    sample_XYZ_desc,
+    sample_XYZ,
+    knifeEdge_XYZ_unit,
+    knifeEdge_XYZ_desc,
+    knifeEdge_XYZ,
+    knifeEdge_knifeScan_unit,
+    knifeEdge_knifeScan,
+    mda_file,
+    scanEnd_abort,
+    scanEnd_time_epoch,
+    scanEnd_time,
+    scanEnd_scanDuration_unit,
+    scanEnd_scanDuration,
+    scanEnd_source_beamBad,
+    scanEnd_source_ringCurrent_unit,
+    scanEnd_source_ringCurrent,
+    
+    # Scan parameters (ALL pattern returns lists)
+    scan_dims,
+    scan_npts_list,
+    scan_afters,
+    scan_positioner1_PVs,
+    scan_positioner1_ars,
+    scan_positioner1_modes,
+    scan_positioner1s,
+    scan_positioner2_PVs,
+    scan_positioner2_ars,
+    scan_positioner2_modes,
+    scan_positioner2s,
+    scan_positioner3_PVs,
+    scan_positioner3_ars,
+    scan_positioner3_modes,
+    scan_positioner3s,
+    scan_positioner4_PVs,
+    scan_positioner4_ars,
+    scan_positioner4_modes,
+    scan_positioner4s,
+    scan_detectorTrig1_PVs,
+    scan_detectorTrig1_VALs,
+    scan_detectorTrig2_PVs,
+    scan_detectorTrig2_VALs,
+    scan_detectorTrig3_PVs,
+    scan_detectorTrig3_VALs,
+    scan_detectorTrig4_PVs,
+    scan_detectorTrig4_VALs,
+    scan_cpts,
 ):
-    # TODO: Input validation and reponse
+    # TODO: Input validation and response
     
     try:
         # Convert scanNumber to int if it's a string
@@ -277,11 +405,95 @@ def submit_catalog(n,
                 db_schema.Metadata.scanNumber == scanNumber
             ).first()
             
-            if not metadata_data:
+            if metadata_data:
                 set_props("alert-submit", {'is_open': True, 
-                                            'children': f'Cannot create catalog entry: No metadata found for scan {scanNumber}. Please import the scan metadata first.',
+                                            'children': f'Error: Scan {scanNumber} already exists in the database.',
                                             'color': 'danger'})
-                return
+            else:
+                # Create new metadata entry
+                metadata = db_schema.Metadata(
+                    scanNumber=scanNumber,
+                    time_epoch=time_epoch,
+                    time=db_utils.convert_time_string_to_datetime(time) if time else None,
+                    user_name=user_name,
+                    source_beamBad=source_beamBad,
+                    source_CCDshutter=source_CCDshutter,
+                    source_monoTransStatus=source_monoTransStatus,
+                    source_energy_unit=source_energy_unit,
+                    source_energy=source_energy,
+                    source_IDgap_unit=source_IDgap_unit,
+                    source_IDgap=source_IDgap,
+                    source_IDtaper_unit=source_IDtaper_unit,
+                    source_IDtaper=source_IDtaper,
+                    source_ringCurrent_unit=source_ringCurrent_unit,
+                    source_ringCurrent=source_ringCurrent,
+                    sample_XYZ_unit=sample_XYZ_unit,
+                    sample_XYZ_desc=sample_XYZ_desc,
+                    sample_XYZ=sample_XYZ,
+                    knifeEdge_XYZ_unit=knifeEdge_XYZ_unit,
+                    knifeEdge_XYZ_desc=knifeEdge_XYZ_desc,
+                    knifeEdge_XYZ=knifeEdge_XYZ,
+                    knifeEdge_knifeScan_unit=knifeEdge_knifeScan_unit,
+                    knifeEdge_knifeScan=knifeEdge_knifeScan,
+                    mda_file=mda_file,
+                    scanEnd_abort=scanEnd_abort,
+                    scanEnd_time_epoch=scanEnd_time_epoch,
+                    scanEnd_time=db_utils.convert_time_string_to_datetime(scanEnd_time) if scanEnd_time else None,
+                    scanEnd_scanDuration_unit=scanEnd_scanDuration_unit,
+                    scanEnd_scanDuration=scanEnd_scanDuration,
+                    scanEnd_source_beamBad=scanEnd_source_beamBad,
+                    scanEnd_source_ringCurrent_unit=scanEnd_source_ringCurrent_unit,
+                    scanEnd_source_ringCurrent=scanEnd_source_ringCurrent,
+                )
+                session.add(metadata)
+                
+                set_props("alert-submit", {'is_open': True, 
+                                            'children': f'Metadata Entry Added to Database for scan {scanNumber}',
+                                            'color': 'success'})
+                
+                # Add scan rows from the form data
+                if scan_dims and len(scan_dims) > 0:
+                    scan_row_count = session.query(Scan).count()
+                    
+                    # Reconstruct scan objects from form values
+                    for i in range(len(scan_dims)):
+                        scan = Scan(
+                            id=scan_row_count + i,
+                            scanNumber=scanNumber,
+                            scan_dim=scan_dims[i],
+                            scan_npts=scan_npts_list[i],
+                            scan_after=scan_afters[i],
+                            scan_positioner1_PV=scan_positioner1_PVs[i],
+                            scan_positioner1_ar=scan_positioner1_ars[i],
+                            scan_positioner1_mode=scan_positioner1_modes[i],
+                            scan_positioner1=scan_positioner1s[i],
+                            scan_positioner2_PV=scan_positioner2_PVs[i],
+                            scan_positioner2_ar=scan_positioner2_ars[i],
+                            scan_positioner2_mode=scan_positioner2_modes[i],
+                            scan_positioner2=scan_positioner2s[i],
+                            scan_positioner3_PV=scan_positioner3_PVs[i],
+                            scan_positioner3_ar=scan_positioner3_ars[i],
+                            scan_positioner3_mode=scan_positioner3_modes[i],
+                            scan_positioner3=scan_positioner3s[i],
+                            scan_positioner4_PV=scan_positioner4_PVs[i],
+                            scan_positioner4_ar=scan_positioner4_ars[i],
+                            scan_positioner4_mode=scan_positioner4_modes[i],
+                            scan_positioner4=scan_positioner4s[i],
+                            scan_detectorTrig1_PV=scan_detectorTrig1_PVs[i],
+                            scan_detectorTrig1_VAL=scan_detectorTrig1_VALs[i],
+                            scan_detectorTrig2_PV=scan_detectorTrig2_PVs[i],
+                            scan_detectorTrig2_VAL=scan_detectorTrig2_VALs[i],
+                            scan_detectorTrig3_PV=scan_detectorTrig3_PVs[i],
+                            scan_detectorTrig3_VAL=scan_detectorTrig3_VALs[i],
+                            scan_detectorTrig4_PV=scan_detectorTrig4_PVs[i],
+                            scan_detectorTrig4_VAL=scan_detectorTrig4_VALs[i],
+                            scan_cpt=scan_cpts[i],
+                        )
+                        session.add(scan)
+                    
+                    set_props("alert-submit", {'is_open': True, 
+                                                'children': f'{len(scan_dims)} Scan entries added to database',
+                                                'color': 'success'})
             
             # Check if catalog entry already exists
             catalog_data = session.query(db_schema.Catalog).filter(
@@ -294,8 +506,7 @@ def submit_catalog(n,
                 catalog_data.filenamePrefix = filenamePrefix
                 catalog_data.aperture = aperture
                 catalog_data.sample_name = sample_name
-                
-                session.commit()
+                catalog_data.notes = notes
                 
                 set_props("alert-submit", {'is_open': True, 
                                             'children': f'Catalog Entry Updated for scan {scanNumber}',
@@ -308,14 +519,17 @@ def submit_catalog(n,
                     filenamePrefix=filenamePrefix,
                     aperture=aperture,
                     sample_name=sample_name,
+                    notes=notes,
                 )
                 
                 session.add(catalog)
-                session.commit()
                 
                 set_props("alert-submit", {'is_open': True, 
                                             'children': f'Catalog Entry Added to Database for scan {scanNumber}',
                                             'color': 'success'})
+            
+            # Commit all changes
+            session.commit()
                                             
     except ValueError as e:
         set_props("alert-submit", {'is_open': True, 

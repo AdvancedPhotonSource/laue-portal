@@ -287,10 +287,11 @@ def load_scan_metadata(href):
                 scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_id)
                 catalog_data = session.query(db_schema.Catalog).filter(db_schema.Catalog.scanNumber == scan_id).first()
                 if metadata_data:
-                    scan_accordions = [make_scan_accordion(i) for i,_ in enumerate(scan_data)]
+                    scan_rows = list(scan_data)  # Convert query to list
+                    scan_accordions = [make_scan_accordion(i, scan_row) for i, scan_row in enumerate(scan_rows)]
                     set_props("scan_accordions", {'children': scan_accordions})
-                    set_metadata_form_props(metadata_data, scan_data, read_only=True)
-                    set_scaninfo_form_props(metadata_data, scan_data, catalog_data, read_only=True)
+                    set_metadata_form_props(metadata_data, read_only=True)
+                    set_scaninfo_form_props(metadata_data, scan_rows, catalog_data, read_only=True)
         except Exception as e:
             print(f"Error loading scan data: {e}")
 
