@@ -2,6 +2,7 @@ import dash_bootstrap_components as dbc
 from dash import html, set_props
 from laue_portal.components.form_base import _stack, _field
 
+
 wire_recon_form = dbc.Row(
                 [
                     dbc.Accordion(
