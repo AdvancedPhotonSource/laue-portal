@@ -1,5 +1,5 @@
 import dash
-from dash import html, dcc, callback, Input, Output, State, set_props
+from dash import html, dcc, callback, Input, Output, set_props
 import dash_bootstrap_components as dbc
 import dash_ag_grid as dag
 import laue_portal.database.db_utils as db_utils
@@ -7,24 +7,25 @@ import laue_portal.database.db_schema as db_schema
 from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 from dash.exceptions import PreventUpdate
-from sqlalchemy import asc, func # Import asc for ordering and func for aggregation
-from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, make_scan_accordion, set_scaninfo_form_props
+from sqlalchemy import func # Import func for aggregation
+from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, set_scan_accordions
+from laue_portal.components.catalog_form import catalog_form, set_catalog_form_props
 import urllib.parse
 import pandas as pd
-from srange import srange
+from datetime import datetime
 
 dash.register_page(__name__, path="/scan") # Simplified path
 
 layout = html.Div([
         navbar.navbar,
         dcc.Location(id='url-scan-page', refresh=False),
-        html.Div(
-                [
-                    # Scan Info
-                    html.H1(id="scan-header",
-                            style={"display":"flex", "gap":"10px", "align-items":"baseline", "flexWrap":"wrap"},
-                            className="mb-4"
-                    ),
+        dbc.Container(id='scan-content-container', fluid=True, className="mt-4",
+                  children=[
+                        html.H1(id='scan-header', 
+                               style={"display":"flex", "gap":"10px", "align-items":"baseline", "flexWrap":"wrap"},
+                               className="mb-4"),
+                        html.Div(
+                            [
                     # html.H1(
                     #     html.Div(id="ScanID_print"),
                     #     className="mb-4"
@@ -136,6 +137,14 @@ layout = html.Div([
                             )
                         ])
                     ], className="mb-4 shadow-sm border"),
+
+                    # Metadata Form
+                    html.H2("Metadata Details", className="mt-4 mb-3"),
+                    metadata_form,
+
+                    # Catalog Form
+                    html.H2("Catalog Details", className="mt-4 mb-3"),
+                    catalog_form,
                     #####
                     # dbc.Accordion(
                     #     [
@@ -182,9 +191,10 @@ layout = html.Div([
                     #     ],
                     #     always_open=True
                     # ),
-                ],
-            style={'width': '100%', 'overflow-x': 'auto'}
-        ),
+                            ],
+                            style={'width': '100%', 'overflow-x': 'auto'}
+                        ),
+                  ]),
 #         dbc.Modal(
 #             [
 #                 dbc.ModalHeader(dbc.ModalTitle("Header"), id="modal-details-header"),
@@ -223,6 +233,19 @@ layout = html.Div([
 Scan Info
 =======================
 """
+
+def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
+    set_props('ScanID_print', {'children':[metadata.scanNumber]})
+    set_props('User_print', {'children':[metadata.user_name]})
+    # Format datetime for display
+    time_value = metadata.time
+    if isinstance(time_value, datetime):
+        time_value = time_value.strftime('%Y-%m-%d, %H:%M:%S')
+    set_props('Date_print', {'children':[time_value]})
+    set_props('ScanType_print', {'children':[f"{len([i for i,scan in enumerate(scans)])}D"]})
+    set_props('Technique_print', {'children':[catalog.aperture.title()]}) #"depth"
+    set_props('Sample_print', {'children':[catalog.sample_name]}) #"Si"
+    set_props('Comment_print', {'value':"submit indexing"})
 
 # VISIBLE_COLS_Metadata = [
 #     db_schema.Metadata.scanNumber,
@@ -287,11 +310,18 @@ def load_scan_metadata(href):
                 scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_id)
                 catalog_data = session.query(db_schema.Catalog).filter(db_schema.Catalog.scanNumber == scan_id).first()
                 if metadata_data:
-                    scan_rows = list(scan_data)  # Convert query to list
-                    scan_accordions = [make_scan_accordion(i, scan_row) for i, scan_row in enumerate(scan_rows)]
-                    set_props("scan_accordions", {'children': scan_accordions})
-                    set_metadata_form_props(metadata_data, read_only=True)
-                    set_scaninfo_form_props(metadata_data, scan_rows, catalog_data, read_only=True)
+                    if scan_data:
+                        scan_rows = list(scan_data)  # Convert query to list
+                        set_scan_accordions(scan_rows, read_only=True)
+                        set_metadata_form_props(metadata_data, scan_rows, read_only=True)
+                        if catalog_data:
+                            set_catalog_form_props(catalog_data, read_only=True)
+                            set_scaninfo_form_props(metadata_data, scan_rows, catalog_data, read_only=True)
+                    else:
+                        set_metadata_form_props(metadata_data, read_only=True)
+                        if catalog_data:
+                            set_catalog_form_props(catalog_data, read_only=True)
+
         except Exception as e:
             print(f"Error loading scan data: {e}")
 
@@ -913,6 +943,19 @@ def _get_scan_peakindexings(scan_id):
 )
 def get_scan_peakindexings(href):
     if not href:
+        raise PreventUpdate
+
+    parsed_url = urllib.parse.urlparse(href)
+    path = parsed_url.path
+    
+    if path == '/scan':
+        query_params = urllib.parse.parse_qs(parsed_url.query)
+        scan_id = query_params.get('scan_id', [None])[0]
+
+        if scan_id:
+            cols, peakindexings = _get_scan_peakindexings(scan_id)
+            return cols, peakindexings
+    else:
         raise PreventUpdate
 
     parsed_url = urllib.parse.urlparse(href)

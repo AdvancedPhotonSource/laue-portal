@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import html, callback, Input, Output, State, set_props
+from dash import html, set_props
 from laue_portal.components.form_base import _stack, _field, _ckbx
 
 

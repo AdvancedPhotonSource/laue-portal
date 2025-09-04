@@ -2,14 +2,12 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, State, set_props, ALL
 import dash
 import base64
-import yaml
 import laue_portal.database.db_utils as db_utils
-import datetime
 import laue_portal.database.db_schema as db_schema
 from sqlalchemy.orm import Session
 from laue_portal.database.db_schema import Scan
 import laue_portal.components.navbar as navbar
-from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, make_scan_accordion
+from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, set_scan_accordions
 from laue_portal.components.catalog_form import catalog_form, set_catalog_form_props
 
 CATALOG_DEFAULTS = {#temporary
@@ -197,27 +195,13 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
             
             set_catalog_form_props(catalog_row)
 
-            scan_rows = []
-            for i, scan in enumerate(scans):
-                scan_row = db_utils.import_scan_row(scan)
-                scan_rows.append(scan_row)
-            
-            metadata_row.date = datetime.datetime.now()
-            metadata_row.commit_id = ''
-            metadata_row.calib_id = ''
-            metadata_row.runtime = ''
-            metadata_row.computer_name = ''
-            metadata_row.dataset_id = 0
-            metadata_row.notes = ''
+            scan_rows = [db_utils.import_scan_row(scan) for scan in scans]
             
             # Create and add scan accordions to the form with pre-populated data
-            scan_accordions = []
-            for i, scan_row in enumerate(scan_rows):
-                scan_accordions.append(make_scan_accordion(i, scan_row))
-            set_props("scan_accordions", {'children': scan_accordions})
+            set_scan_accordions(scan_rows, read_only=True)
             
-            # Set the form properties
-            set_metadata_form_props(metadata_row)#, scan_rows)
+            # Set the form properties, including scan data
+            set_metadata_form_props(metadata_row, scan_rows, read_only=True)
             
             # # Add to database
             # with Session(db_utils.ENGINE) as session:
@@ -288,35 +272,35 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
     State('scanEnd_source_ringCurrent_unit', 'value'),
     State('scanEnd_source_ringCurrent', 'value'),
     
-    # Scan form fields using ALL pattern
-    State({"type": "scan_dim", "index": ALL}, 'value'),
-    State({"type": "scan_npts", "index": ALL}, 'value'),
-    State({"type": "scan_after", "index": ALL}, 'value'),
-    State({"type": "scan_positioner1_PV", "index": ALL}, 'value'),
-    State({"type": "scan_positioner1_ar", "index": ALL}, 'value'),
-    State({"type": "scan_positioner1_mode", "index": ALL}, 'value'),
-    State({"type": "scan_positioner1", "index": ALL}, 'value'),
-    State({"type": "scan_positioner2_PV", "index": ALL}, 'value'),
-    State({"type": "scan_positioner2_ar", "index": ALL}, 'value'),
-    State({"type": "scan_positioner2_mode", "index": ALL}, 'value'),
-    State({"type": "scan_positioner2", "index": ALL}, 'value'),
-    State({"type": "scan_positioner3_PV", "index": ALL}, 'value'),
-    State({"type": "scan_positioner3_ar", "index": ALL}, 'value'),
-    State({"type": "scan_positioner3_mode", "index": ALL}, 'value'),
-    State({"type": "scan_positioner3", "index": ALL}, 'value'),
-    State({"type": "scan_positioner4_PV", "index": ALL}, 'value'),
-    State({"type": "scan_positioner4_ar", "index": ALL}, 'value'),
-    State({"type": "scan_positioner4_mode", "index": ALL}, 'value'),
-    State({"type": "scan_positioner4", "index": ALL}, 'value'),
-    State({"type": "scan_detectorTrig1_PV", "index": ALL}, 'value'),
-    State({"type": "scan_detectorTrig1_VAL", "index": ALL}, 'value'),
-    State({"type": "scan_detectorTrig2_PV", "index": ALL}, 'value'),
-    State({"type": "scan_detectorTrig2_VAL", "index": ALL}, 'value'),
-    State({"type": "scan_detectorTrig3_PV", "index": ALL}, 'value'),
-    State({"type": "scan_detectorTrig3_VAL", "index": ALL}, 'value'),
-    State({"type": "scan_detectorTrig4_PV", "index": ALL}, 'value'),
-    State({"type": "scan_detectorTrig4_VAL", "index": ALL}, 'value'),
-    State({"type": "scan_cpt", "index": ALL}, 'value'),
+    # Scan form fields using ALL pattern with hidden_ prefix
+    State({"type": "hidden_scan_dim", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_npts", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_after", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_positioner1_PV", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_positioner1_ar", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_positioner1_mode", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_positioner1", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_positioner2_PV", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_positioner2_ar", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_positioner2_mode", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_positioner2", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_positioner3_PV", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_positioner3_ar", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_positioner3_mode", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_positioner3", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_positioner4_PV", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_positioner4_ar", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_positioner4_mode", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_positioner4", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_detectorTrig1_PV", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_detectorTrig1_VAL", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_detectorTrig2_PV", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_detectorTrig2_VAL", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_detectorTrig3_PV", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_detectorTrig3_VAL", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_detectorTrig4_PV", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_detectorTrig4_VAL", "index": ALL}, 'value'),
+    State({"type": "hidden_scan_cpt", "index": ALL}, 'value'),
 
     prevent_initial_call=True,
 )
@@ -453,47 +437,65 @@ def submit_catalog_and_metadata(n,
                 
                 # Add scan rows from the form data
                 if scan_dims and len(scan_dims) > 0:
-                    scan_row_count = session.query(Scan).count()
-                    
+                    valid_scans = 0
                     # Reconstruct scan objects from form values
                     for i in range(len(scan_dims)):
-                        scan = Scan(
-                            id=scan_row_count + i,
-                            scanNumber=scanNumber,
-                            scan_dim=scan_dims[i],
-                            scan_npts=scan_npts_list[i],
-                            scan_after=scan_afters[i],
-                            scan_positioner1_PV=scan_positioner1_PVs[i],
-                            scan_positioner1_ar=scan_positioner1_ars[i],
-                            scan_positioner1_mode=scan_positioner1_modes[i],
-                            scan_positioner1=scan_positioner1s[i],
-                            scan_positioner2_PV=scan_positioner2_PVs[i],
-                            scan_positioner2_ar=scan_positioner2_ars[i],
-                            scan_positioner2_mode=scan_positioner2_modes[i],
-                            scan_positioner2=scan_positioner2s[i],
-                            scan_positioner3_PV=scan_positioner3_PVs[i],
-                            scan_positioner3_ar=scan_positioner3_ars[i],
-                            scan_positioner3_mode=scan_positioner3_modes[i],
-                            scan_positioner3=scan_positioner3s[i],
-                            scan_positioner4_PV=scan_positioner4_PVs[i],
-                            scan_positioner4_ar=scan_positioner4_ars[i],
-                            scan_positioner4_mode=scan_positioner4_modes[i],
-                            scan_positioner4=scan_positioner4s[i],
-                            scan_detectorTrig1_PV=scan_detectorTrig1_PVs[i],
-                            scan_detectorTrig1_VAL=scan_detectorTrig1_VALs[i],
-                            scan_detectorTrig2_PV=scan_detectorTrig2_PVs[i],
-                            scan_detectorTrig2_VAL=scan_detectorTrig2_VALs[i],
-                            scan_detectorTrig3_PV=scan_detectorTrig3_PVs[i],
-                            scan_detectorTrig3_VAL=scan_detectorTrig3_VALs[i],
-                            scan_detectorTrig4_PV=scan_detectorTrig4_PVs[i],
-                            scan_detectorTrig4_VAL=scan_detectorTrig4_VALs[i],
-                            scan_cpt=scan_cpts[i],
-                        )
-                        session.add(scan)
+                        # Check if all required fields have values (not None)
+                        if all(field is not None for field in 
+                               [
+                                scan_afters[i],
+                                scan_positioner1_PVs[i], scan_positioner1_ars[i],
+                                scan_positioner1_modes[i], scan_positioner1s[i],
+                                scan_positioner2_PVs[i], scan_positioner2_ars[i],
+                                scan_positioner2_modes[i], scan_positioner2s[i],
+                                scan_positioner3_PVs[i], scan_positioner3_ars[i],
+                                scan_positioner3_modes[i], scan_positioner3s[i],
+                                scan_positioner4_PVs[i], scan_positioner4_ars[i],
+                                scan_positioner4_modes[i], scan_positioner4s[i],
+                                scan_detectorTrig1_PVs[i],scan_detectorTrig1_VALs[i],
+                                scan_detectorTrig2_PVs[i], scan_detectorTrig2_VALs[i],
+                                scan_detectorTrig3_PVs[i], scan_detectorTrig3_VALs[i],
+                                scan_detectorTrig4_PVs[i], scan_detectorTrig4_VALs[i],
+                                ]
+                        ):
+                            scan = Scan(
+                                scanNumber=scanNumber,
+                                scan_dim=scan_dims[i],
+                                scan_npts=scan_npts_list[i],
+                                scan_after=scan_afters[i],
+                                scan_positioner1_PV=scan_positioner1_PVs[i],
+                                scan_positioner1_ar=scan_positioner1_ars[i],
+                                scan_positioner1_mode=scan_positioner1_modes[i],
+                                scan_positioner1=scan_positioner1s[i],
+                                scan_positioner2_PV=scan_positioner2_PVs[i],
+                                scan_positioner2_ar=scan_positioner2_ars[i],
+                                scan_positioner2_mode=scan_positioner2_modes[i],
+                                scan_positioner2=scan_positioner2s[i],
+                                scan_positioner3_PV=scan_positioner3_PVs[i],
+                                scan_positioner3_ar=scan_positioner3_ars[i],
+                                scan_positioner3_mode=scan_positioner3_modes[i],
+                                scan_positioner3=scan_positioner3s[i],
+                                scan_positioner4_PV=scan_positioner4_PVs[i],
+                                scan_positioner4_ar=scan_positioner4_ars[i],
+                                scan_positioner4_mode=scan_positioner4_modes[i],
+                                scan_positioner4=scan_positioner4s[i],
+                                scan_detectorTrig1_PV=scan_detectorTrig1_PVs[i],
+                                scan_detectorTrig1_VAL=scan_detectorTrig1_VALs[i],
+                                scan_detectorTrig2_PV=scan_detectorTrig2_PVs[i],
+                                scan_detectorTrig2_VAL=scan_detectorTrig2_VALs[i],
+                                scan_detectorTrig3_PV=scan_detectorTrig3_PVs[i],
+                                scan_detectorTrig3_VAL=scan_detectorTrig3_VALs[i],
+                                scan_detectorTrig4_PV=scan_detectorTrig4_PVs[i],
+                                scan_detectorTrig4_VAL=scan_detectorTrig4_VALs[i],
+                                scan_cpt=scan_cpts[i],
+                            )
+                            session.add(scan)
+                            valid_scans += 1
                     
-                    set_props("alert-submit", {'is_open': True, 
-                                                'children': f'{len(scan_dims)} Scan entries added to database',
-                                                'color': 'success'})
+                    if valid_scans > 0:
+                        set_props("alert-submit", {'is_open': True, 
+                                                    'children': f'{valid_scans} Scan entries added to database',
+                                                    'color': 'success'})
             
             # Check if catalog entry already exists
             catalog_data = session.query(db_schema.Catalog).filter(

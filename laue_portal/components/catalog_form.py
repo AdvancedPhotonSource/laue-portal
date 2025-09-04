@@ -1,9 +1,6 @@
 import dash_bootstrap_components as dbc
 from dash import html, set_props
-from laue_portal.components.form_base import _stack, _field, _ckbx
-import laue_portal.database.db_utils as db_utils
-import laue_portal.database.db_schema as db_schema
-from sqlalchemy.orm import Session
+from laue_portal.components.form_base import _stack, _field
 
 catalog_form = dbc.Row(
                 [

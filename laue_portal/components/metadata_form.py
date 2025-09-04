@@ -1,6 +1,6 @@
 import dash_bootstrap_components as dbc
 from dash import html, set_props
-from laue_portal.components.form_base import _stack, _field, _ckbx
+from laue_portal.components.form_base import _stack, _field
 from datetime import datetime
 
 
@@ -140,6 +140,45 @@ metadata_form = dbc.Row(
                         ],
                         always_open=True
                     ),
+                    # Hidden container for scan fields that will be used for form submission
+                    html.Div(id="hidden-scan-fields", children=[
+                        # Pre-create hidden fields for up to 10 scans
+                        # These will be populated when scan data is loaded
+                        # Using "hidden_" prefix to avoid ID conflicts with accordion fields
+                        *[
+                            html.Div([
+                                dbc.Input(id={"type": "hidden_scan_dim", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_npts", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_after", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_positioner1_PV", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_positioner1_ar", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_positioner1_mode", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_positioner1", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_positioner2_PV", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_positioner2_ar", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_positioner2_mode", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_positioner2", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_positioner3_PV", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_positioner3_ar", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_positioner3_mode", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_positioner3", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_positioner4_PV", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_positioner4_ar", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_positioner4_mode", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_positioner4", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_detectorTrig1_PV", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_detectorTrig1_VAL", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_detectorTrig2_PV", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_detectorTrig2_VAL", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_detectorTrig3_PV", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_detectorTrig3_VAL", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_detectorTrig4_PV", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_detectorTrig4_VAL", "index": i}, type="hidden"),
+                                dbc.Input(id={"type": "hidden_scan_cpt", "index": i}, type="hidden"),
+                            ])
+                            for i in range(10)  # Support up to 10 scans
+                        ]
+                    ], style={'display': 'none'}),
                 ],
                 style={'width': '100%', 'overflow-x': 'auto'}
         )
@@ -487,35 +526,68 @@ def set_metadata_form_props(metadata, scans=None, read_only=True):
     set_props("scanEnd_source_ringCurrent_unit", {'value':metadata.scanEnd_source_ringCurrent_unit, 'readonly':read_only})
     set_props("scanEnd_source_ringCurrent", {'value':metadata.scanEnd_source_ringCurrent, 'readonly':read_only})
 
-    # for i,scan in enumerate(scans):
-    #     set_props({"type": "scan_dim", "index": i}, {'value':scan.scan_dim, 'readonly':read_only})
-    #     set_props({"type": "scan_npts", "index": i}, {'value':scan.scan_npts, 'readonly':read_only})
-    #     set_props({"type": "scan_after", "index": i}, {'value':scan.scan_after, 'readonly':read_only})
-    #     set_props({"type": "scan_positioner1_PV", "index": i}, {'value':scan.scan_positioner1_PV, 'readonly':read_only})
-    #     set_props({"type": "scan_positioner1_ar", "index": i}, {'value':scan.scan_positioner1_ar, 'readonly':read_only})
-    #     set_props({"type": "scan_positioner1_mode", "index": i}, {'value':scan.scan_positioner1_mode, 'readonly':read_only})
-    #     set_props({"type": "scan_positioner1", "index": i}, {'value':scan.scan_positioner1, 'readonly':read_only})
-    #     set_props({"type": "scan_positioner2_PV", "index": i}, {'value':scan.scan_positioner2_PV, 'readonly':read_only})
-    #     set_props({"type": "scan_positioner2_ar", "index": i}, {'value':scan.scan_positioner2_ar, 'readonly':read_only})
-    #     set_props({"type": "scan_positioner2_mode", "index": i}, {'value':scan.scan_positioner2_mode, 'readonly':read_only})
-    #     set_props({"type": "scan_positioner2", "index": i}, {'value':scan.scan_positioner2, 'readonly':read_only})
-    #     set_props({"type": "scan_positioner3_PV", "index": i}, {'value':scan.scan_positioner3_PV, 'readonly':read_only})
-    #     set_props({"type": "scan_positioner3_ar", "index": i}, {'value':scan.scan_positioner3_ar, 'readonly':read_only})
-    #     set_props({"type": "scan_positioner3_mode", "index": i}, {'value':scan.scan_positioner3_mode, 'readonly':read_only})
-    #     set_props({"type": "scan_positioner3", "index": i}, {'value':scan.scan_positioner3, 'readonly':read_only})
-    #     set_props({"type": "scan_positioner4_PV", "index": i}, {'value':scan.scan_positioner4_PV, 'readonly':read_only})
-    #     set_props({"type": "scan_positioner4_ar", "index": i}, {'value':scan.scan_positioner4_ar, 'readonly':read_only})
-    #     set_props({"type": "scan_positioner4_mode", "index": i}, {'value':scan.scan_positioner4_mode, 'readonly':read_only})
-    #     set_props({"type": "scan_positioner4", "index": i}, {'value':scan.scan_positioner4, 'readonly':read_only})
-    #     set_props({"type": "scan_detectorTrig1_PV", "index": i}, {'value':scan.scan_detectorTrig1_PV, 'readonly':read_only})
-    #     set_props({"type": "scan_detectorTrig1_VAL", "index": i}, {'value':scan.scan_detectorTrig1_VAL, 'readonly':read_only})
-    #     set_props({"type": "scan_detectorTrig2_PV", "index": i}, {'value':scan.scan_detectorTrig2_PV, 'readonly':read_only})
-    #     set_props({"type": "scan_detectorTrig2_VAL", "index": i}, {'value':scan.scan_detectorTrig2_VAL, 'readonly':read_only})
-    #     set_props({"type": "scan_detectorTrig3_PV", "index": i}, {'value':scan.scan_detectorTrig3_PV, 'readonly':read_only})
-    #     set_props({"type": "scan_detectorTrig3_VAL", "index": i}, {'value':scan.scan_detectorTrig3_VAL, 'readonly':read_only})
-    #     set_props({"type": "scan_detectorTrig4_PV", "index": i}, {'value':scan.scan_detectorTrig4_PV, 'readonly':read_only})
-    #     set_props({"type": "scan_detectorTrig4_VAL", "index": i}, {'value':scan.scan_detectorTrig4_VAL, 'readonly':read_only})
-    #     set_props({"type": "scan_cpt", "index": i}, {'value':scan.scan_cpt, 'readonly':read_only})
+    # Set scan field properties if scans are provided
+    if scans:
+        for i, scan in enumerate(scans):
+            # Update accordion fields (visible)
+            set_props({"type": "scan_dim", "index": i}, {'value':scan.scan_dim, 'readonly':read_only})
+            set_props({"type": "scan_npts", "index": i}, {'value':scan.scan_npts, 'readonly':read_only})
+            set_props({"type": "scan_after", "index": i}, {'value':scan.scan_after, 'readonly':read_only})
+            set_props({"type": "scan_positioner1_PV", "index": i}, {'value':scan.scan_positioner1_PV, 'readonly':read_only})
+            set_props({"type": "scan_positioner1_ar", "index": i}, {'value':scan.scan_positioner1_ar, 'readonly':read_only})
+            set_props({"type": "scan_positioner1_mode", "index": i}, {'value':scan.scan_positioner1_mode, 'readonly':read_only})
+            set_props({"type": "scan_positioner1", "index": i}, {'value':scan.scan_positioner1, 'readonly':read_only})
+            set_props({"type": "scan_positioner2_PV", "index": i}, {'value':scan.scan_positioner2_PV, 'readonly':read_only})
+            set_props({"type": "scan_positioner2_ar", "index": i}, {'value':scan.scan_positioner2_ar, 'readonly':read_only})
+            set_props({"type": "scan_positioner2_mode", "index": i}, {'value':scan.scan_positioner2_mode, 'readonly':read_only})
+            set_props({"type": "scan_positioner2", "index": i}, {'value':scan.scan_positioner2, 'readonly':read_only})
+            set_props({"type": "scan_positioner3_PV", "index": i}, {'value':scan.scan_positioner3_PV, 'readonly':read_only})
+            set_props({"type": "scan_positioner3_ar", "index": i}, {'value':scan.scan_positioner3_ar, 'readonly':read_only})
+            set_props({"type": "scan_positioner3_mode", "index": i}, {'value':scan.scan_positioner3_mode, 'readonly':read_only})
+            set_props({"type": "scan_positioner3", "index": i}, {'value':scan.scan_positioner3, 'readonly':read_only})
+            set_props({"type": "scan_positioner4_PV", "index": i}, {'value':scan.scan_positioner4_PV, 'readonly':read_only})
+            set_props({"type": "scan_positioner4_ar", "index": i}, {'value':scan.scan_positioner4_ar, 'readonly':read_only})
+            set_props({"type": "scan_positioner4_mode", "index": i}, {'value':scan.scan_positioner4_mode, 'readonly':read_only})
+            set_props({"type": "scan_positioner4", "index": i}, {'value':scan.scan_positioner4, 'readonly':read_only})
+            set_props({"type": "scan_detectorTrig1_PV", "index": i}, {'value':scan.scan_detectorTrig1_PV, 'readonly':read_only})
+            set_props({"type": "scan_detectorTrig1_VAL", "index": i}, {'value':scan.scan_detectorTrig1_VAL, 'readonly':read_only})
+            set_props({"type": "scan_detectorTrig2_PV", "index": i}, {'value':scan.scan_detectorTrig2_PV, 'readonly':read_only})
+            set_props({"type": "scan_detectorTrig2_VAL", "index": i}, {'value':scan.scan_detectorTrig2_VAL, 'readonly':read_only})
+            set_props({"type": "scan_detectorTrig3_PV", "index": i}, {'value':scan.scan_detectorTrig3_PV, 'readonly':read_only})
+            set_props({"type": "scan_detectorTrig3_VAL", "index": i}, {'value':scan.scan_detectorTrig3_VAL, 'readonly':read_only})
+            set_props({"type": "scan_detectorTrig4_PV", "index": i}, {'value':scan.scan_detectorTrig4_PV, 'readonly':read_only})
+            set_props({"type": "scan_detectorTrig4_VAL", "index": i}, {'value':scan.scan_detectorTrig4_VAL, 'readonly':read_only})
+            set_props({"type": "scan_cpt", "index": i}, {'value':scan.scan_cpt, 'readonly':read_only})
+            
+            # Also update hidden fields for form submission
+            set_props({"type": "hidden_scan_dim", "index": i}, {'value':scan.scan_dim})
+            set_props({"type": "hidden_scan_npts", "index": i}, {'value':scan.scan_npts})
+            set_props({"type": "hidden_scan_after", "index": i}, {'value':scan.scan_after})
+            set_props({"type": "hidden_scan_positioner1_PV", "index": i}, {'value':scan.scan_positioner1_PV})
+            set_props({"type": "hidden_scan_positioner1_ar", "index": i}, {'value':scan.scan_positioner1_ar})
+            set_props({"type": "hidden_scan_positioner1_mode", "index": i}, {'value':scan.scan_positioner1_mode})
+            set_props({"type": "hidden_scan_positioner1", "index": i}, {'value':scan.scan_positioner1})
+            set_props({"type": "hidden_scan_positioner2_PV", "index": i}, {'value':scan.scan_positioner2_PV})
+            set_props({"type": "hidden_scan_positioner2_ar", "index": i}, {'value':scan.scan_positioner2_ar})
+            set_props({"type": "hidden_scan_positioner2_mode", "index": i}, {'value':scan.scan_positioner2_mode})
+            set_props({"type": "hidden_scan_positioner2", "index": i}, {'value':scan.scan_positioner2})
+            set_props({"type": "hidden_scan_positioner3_PV", "index": i}, {'value':scan.scan_positioner3_PV})
+            set_props({"type": "hidden_scan_positioner3_ar", "index": i}, {'value':scan.scan_positioner3_ar})
+            set_props({"type": "hidden_scan_positioner3_mode", "index": i}, {'value':scan.scan_positioner3_mode})
+            set_props({"type": "hidden_scan_positioner3", "index": i}, {'value':scan.scan_positioner3})
+            set_props({"type": "hidden_scan_positioner4_PV", "index": i}, {'value':scan.scan_positioner4_PV})
+            set_props({"type": "hidden_scan_positioner4_ar", "index": i}, {'value':scan.scan_positioner4_ar})
+            set_props({"type": "hidden_scan_positioner4_mode", "index": i}, {'value':scan.scan_positioner4_mode})
+            set_props({"type": "hidden_scan_positioner4", "index": i}, {'value':scan.scan_positioner4})
+            set_props({"type": "hidden_scan_detectorTrig1_PV", "index": i}, {'value':scan.scan_detectorTrig1_PV})
+            set_props({"type": "hidden_scan_detectorTrig1_VAL", "index": i}, {'value':scan.scan_detectorTrig1_VAL})
+            set_props({"type": "hidden_scan_detectorTrig2_PV", "index": i}, {'value':scan.scan_detectorTrig2_PV})
+            set_props({"type": "hidden_scan_detectorTrig2_VAL", "index": i}, {'value':scan.scan_detectorTrig2_VAL})
+            set_props({"type": "hidden_scan_detectorTrig3_PV", "index": i}, {'value':scan.scan_detectorTrig3_PV})
+            set_props({"type": "hidden_scan_detectorTrig3_VAL", "index": i}, {'value':scan.scan_detectorTrig3_VAL})
+            set_props({"type": "hidden_scan_detectorTrig4_PV", "index": i}, {'value':scan.scan_detectorTrig4_PV})
+            set_props({"type": "hidden_scan_detectorTrig4_VAL", "index": i}, {'value':scan.scan_detectorTrig4_VAL})
+            set_props({"type": "hidden_scan_cpt", "index": i}, {'value':scan.scan_cpt})
 
     # set_props("dataset", {'value':metadata.dataset_id, 'readonly':read_only})
     
@@ -551,23 +623,18 @@ def set_metadata_form_props(metadata, scans=None, read_only=True):
     # set_props("sampleZini", {'value':metadata.sampleZini, 'readonly':read_only})
     # set_props("comment", {'value':metadata.comment, 'readonly':read_only})
 
-def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
-    set_props('ScanID_print', {'children':[metadata.scanNumber]})
-    set_props('User_print', {'children':[metadata.user_name]})
-    # Format datetime for display
-    time_value = metadata.time
-    if isinstance(time_value, datetime):
-        time_value = time_value.strftime('%Y-%m-%d, %H:%M:%S')
-    set_props('Date_print', {'children':[time_value]})
-    set_props('ScanType_print', {'children':[f"{len([i for i,scan in enumerate(scans)])}D"]})
-    set_props('Technique_print', {'children':[catalog.aperture.title()]}) #"depth"
-    set_props('Sample_print', {'children':[catalog.sample_name]}) #"Si"
-    set_props('Comment_print', {'children':["submit indexing"]})
-# def set_scaninfo_form_props(metadata, scans, read_only=True):
-#     set_props('ScanID_print', {'children':["Scan ID: ", metadata.scanNumber]})
-#     set_props('User_print', {'children':[html.Strong("User: "), metadata.user_name]})
-#     set_props('Date_print', {'children':[html.Strong("Date: "), metadata.time]})
-#     set_props('ScanType_print', {'children':[html.Strong("Scan Type: "), f"{len([i for i,scan in enumerate(scans)])}D"]})
-#     set_props('Technique_print', {'children':[html.Strong("Technique: "), "depth"]})
-#     set_props('Sample_print', {'children':[html.Strong("Sample: "), "Si"]})
-#     set_props('Comment_print', {'children':["submit indexing"]})
+def set_scan_accordions(scan_rows, read_only=True):
+    """
+    Create and add scan accordions to the form with pre-populated data
+    
+    Args:
+        scan_rows: List of scan row objects
+        read_only: Whether fields should be read-only (default: True)
+    """
+    scan_accordions = []
+    for i, scan_row in enumerate(scan_rows):
+        # Create visual accordion
+        scan_accordions.append(make_scan_accordion(i, scan_row, read_only))
+    
+    # Set visual accordions
+    set_props("scan_accordions", {'children': scan_accordions})
