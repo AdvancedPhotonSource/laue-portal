@@ -212,6 +212,41 @@ dagcomponentfuncs.ScanLinkRenderer = function (props) {
     );
 };
 
+dagcomponentfuncs.WireReconScanLinkRenderer = function (props) {
+    // Get the scan number from the data
+    const scanNumber = props.data.scanNumber;
+    const url = `/scan?scan_id=${scanNumber}`;
+    
+    // If we have a valueGetter result (multi-line content), display it
+    if (props.valueFormatted || props.value !== scanNumber) {
+        const lines = (props.valueFormatted || props.value).split('|');
+        
+        // Create a div for each line
+        const lineElements = lines.map((line, index) => {
+            if (index === 0) {
+                // First line contains "Scan ID: ######" - make just the number a link
+                const match = line.match(/Scan ID: (\d+)/);
+                if (match) {
+                    return React.createElement('div', { key: `line-${index}` }, [
+                        React.createElement('span', { key: `prefix-${index}` }, 'Scan ID: '),
+                        React.createElement('a', { key: `link-${index}`, href: url }, match[1])
+                    ]);
+                }
+            }
+            return React.createElement('div', { key: `line-${index}` }, line);
+        });
+        
+        return React.createElement('div', { style: { lineHeight: '1.5' } }, lineElements);
+    }
+    
+    // Fallback to simple link
+    return React.createElement(
+        'a',
+        { href: url },
+        scanNumber
+    );
+};
+
 dagcomponentfuncs.PeakIndexLinkRenderer = function (props) {
     // props.value will be the peakindex_id for the current row
     const url = `/peakindexing?peakindex_id=${props.value}`;
@@ -347,6 +382,11 @@ dagcomponentfuncs.SubJobProgressRenderer = function (props) {
     const data = props.data;
     const total = data.total_subjobs || 0;
     
+    if (data.row_type === 'subjob') {
+        const text = `${data.subjob_index}/${data.total_subjobs_for_job}, ID: ${data.subjob_id}`;
+        return React.createElement('span', {}, text);
+    }
+
     if (total === 0) {
         return React.createElement('span', { className: 'text-muted' }, 'No subjobs');
     }
@@ -551,7 +591,7 @@ dagcomponentfuncs.ActionButtonsRenderer = function (props) {
                 color: 'primary', 
                 size: 'sm'
             },
-            'Reconstruct'
+            'Recon' // 'Reconstruct'
         )
     ]);
 };

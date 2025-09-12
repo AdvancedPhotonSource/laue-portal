@@ -16,11 +16,57 @@ dash.register_page(__name__)
 layout = html.Div([
         navbar.navbar,
         dcc.Location(id='url', refresh=False),
-        dbc.Container(fluid=True, className="p-0", children=[
+        
+        # Secondary action bar aligned to right
+        dbc.Row([
+            dbc.Col([
+                dbc.Nav([
+                    dbc.NavItem(
+                        dbc.NavLink(
+                            "New Recon",
+                            href="/create-reconstruction",
+                            active=False,
+                            id="mask-recons-page-mask-recon"
+                        )
+                    ),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(
+                        dbc.NavLink(
+                            "New Index",
+                            href="/create-peakindexing",
+                            active=False,
+                            id="mask-recons-page-peakindex"
+                        )
+                    ),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("New Recon with selected (only 1 sel)", href="#", active=False)),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("Stop ALL", href="#", active=False)),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("Stop Selected", href="#", active=False)),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("Set high Priority for selected (only 1 sel)", href="#", active=False)),
+                ],
+                className="bg-light px-2 py-2 d-flex justify-content-end w-100")
+            ], width=12)
+        ], className="mb-3 mt-0"),
+
+        dbc.Container(fluid=True, className="p-0", children=[ 
             dag.AgGrid(
                 id='recon-table',
                 columnSize="responsiveSizeToFit",
-                dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight', "rowHeight": 32},
+                defaultColDef={
+                    "filter": True,
+            },
+                dashGridOptions={
+                    "pagination": True, 
+                    "paginationPageSize": 20, 
+                    "domLayout": 'autoHeight',
+                    "rowSelection": 'multiple', 
+                    "suppressRowClickSelection": True, 
+                    "animateRows": False, 
+                    "rowHeight": 32
+                },
                 style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                 className="ag-theme-alpine"
             )
@@ -65,6 +111,24 @@ def _get_recons():
 
     # Format columns for ag-grid
     cols = []
+    
+    # Add explicit checkbox column as the first column
+    cols.append({
+        'headerName': '',
+        'field': 'checkbox',
+        'checkboxSelection': True,
+        'headerCheckboxSelection': True,
+        'width': 60,
+        'pinned': 'left',
+        'sortable': False,
+        'filter': False,
+        'resizable': False,
+        'suppressMenu': True,
+        'floatingFilter': False,
+        'cellClass': 'ag-checkbox-cell',
+        'headerClass': 'ag-checkbox-header',
+    })
+    
     for col in VISIBLE_COLS:
         field_key = col.key
         if field_key != 'aperture':
@@ -76,7 +140,8 @@ def _get_recons():
                 'filter': True, 
                 'sortable': True, 
                 'resizable': True,
-                'suppressMenuHide': True
+                'floatingFilter': True,
+                'unSortIcon': True,
             }
 
             if field_key == 'recon_id':
@@ -119,3 +184,29 @@ def get_recons(path):
         return cols, recons
     else:
         raise PreventUpdate
+
+
+@dash.callback(
+    Output('mask-recons-page-mask-recon', 'href'),
+    Input('recon-table','selectedRows'),
+    State('mask-recons-page-mask-recon', 'href'),
+    prevent_initial_call=True,
+)
+def selected_recon_href(rows,href,id_query="?recon_id=$"):
+    href = href.split(id_query)[0]
+    if rows:
+        href += "?recon_id=$" + ','.join([str(row['recon_id']) for row in rows]) 
+    return href
+
+
+@dash.callback(
+    Output('mask-recons-page-peakindex', 'href'),
+    Input('recon-table','selectedRows'),
+    State('mask-recons-page-peakindex', 'href'),
+    prevent_initial_call=True,
+)
+def selected_peakindex_href(rows,href,id_query="?recon_id=$"):
+    href = href.split(id_query)[0]
+    if rows:
+        href += "?recon_id=$" + ','.join([str(row['recon_id']) for row in rows]) 
+    return href

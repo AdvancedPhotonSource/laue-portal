@@ -3,12 +3,12 @@ from dash import html, dcc, callback, Input, Output, set_props
 import dash_bootstrap_components as dbc
 import dash_ag_grid as dag
 import laue_portal.database.db_utils as db_utils
-import laue_portal.database.db_schema as db_schema
+from laue_portal.database import db_utils, db_schema
 from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 from dash.exceptions import PreventUpdate
 from sqlalchemy import func # Import func for aggregation
-from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, set_scan_accordions
+from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, set_scan_accordions, find_motor_group
 from laue_portal.components.catalog_form import catalog_form, set_catalog_form_props
 import urllib.parse
 import pandas as pd
@@ -34,7 +34,7 @@ layout = html.Div([
                     dbc.Card([
                         dbc.CardHeader(
                             dbc.Row([
-                                dbc.Col(html.H4("ScanLog Info", className="mb-0"), width="auto"),
+                                dbc.Col(html.H4("Scan Info", className="mb-0"), width="auto"),
                                 dbc.Col(
                                     html.Div([
                                         dbc.Button("ScanLogPlot", id="scanlog-plot-btn", color="success", size="sm", className="me-2"),
@@ -53,10 +53,13 @@ layout = html.Div([
                             html.P(children=[html.Strong("Date: "), html.Div(id="Date_print")],
                                    style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
                                    ),
-                            html.P(children=[html.Strong("Scan Type: "), html.Div(id="ScanType_print")],
+                            html.P(children=[html.Strong("Scan Dimensions: "), html.Div(id="ScanDims_print")],
                                    style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
                                    ),
                             html.P(children=[html.Strong("Technique: "), html.Div(id="Technique_print")],
+                                   style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
+                                   ),
+                            html.P(children=[html.Strong("Aperture: "), html.Div(id="Aperture_print")],
                                    style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
                                    ),
                             html.P(children=[html.Strong("Sample: "), html.Div(id="Sample_print")],
@@ -64,7 +67,7 @@ layout = html.Div([
                                    ),
                             # html.P(html.Div(id="User_print")),
                             # html.P(html.Div(id="Date_print")),
-                            # html.P(html.Div(id="ScanType_print")),
+                            # html.P(html.Div(id="ScanDims_print")),
                             # html.P(html.Div(id="Technique_print")),
                             # html.P(html.Div(id="Sample_print")),
 
@@ -234,6 +237,64 @@ Scan Info
 =======================
 """
 
+def build_technique_strings(scans, none="none"):
+    """
+    Build both filtered and all motor strings from scans.
+    
+    Returns a tuple of (filtered_str, all_motors_str)
+    
+    Rules for filtered string:
+    - Do not include the same string value twice
+    - Do not include any that are "none" unless all motor strings are "none"
+    - If there is only one string equal to "sample" include the string "line" instead
+    - If there are more than one strings equal to "sample" include the string "area" instead
+    """
+    # Extract motor groups from all scans
+    motor_groups = []
+    for scan in scans:
+        # Dynamically check all scan_positioner*_PV attributes
+        for attr_name in dir(scan):
+            if attr_name.startswith('scan_positioner') and attr_name.endswith('_PV'):
+                pv_value = getattr(scan, attr_name, None)
+                if pv_value:
+                    motor_group = find_motor_group(pv_value)
+                    motor_groups.append(motor_group)
+    
+    # Create all_motors_str - join all motor groups with "; "
+    all_motors_str = "; ".join(motor_groups) if motor_groups else none
+    
+    # Build filtered string
+    if not motor_groups:
+        return none, all_motors_str
+    
+    # Convert to lowercase
+    motor_groups_lower = [g.lower() for g in motor_groups]
+    
+    # Count "sample" occurrences before deduplication
+    sample_count = motor_groups_lower.count("sample")
+    
+    # Build final list with deduplication using a set
+    # Initialize with none so it gets skipped automatically
+    seen_groups = {none} #"none"
+    final_groups = []
+    
+    for group in motor_groups_lower:
+        if group not in seen_groups:
+            seen_groups.add(group)
+            
+            if group == "sample":
+                if sample_count == 1:
+                    final_groups.append("line")
+                elif sample_count > 1:
+                    final_groups.append("area")
+            else:
+                final_groups.append(group)
+    
+    filtered_str = " + ".join(final_groups) if final_groups else none
+    
+    return filtered_str, all_motors_str
+
+
 def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
     set_props('ScanID_print', {'children':[metadata.scanNumber]})
     set_props('User_print', {'children':[metadata.user_name]})
@@ -242,8 +303,16 @@ def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
     if isinstance(time_value, datetime):
         time_value = time_value.strftime('%Y-%m-%d, %H:%M:%S')
     set_props('Date_print', {'children':[time_value]})
-    set_props('ScanType_print', {'children':[f"{len([i for i,scan in enumerate(scans)])}D"]})
-    set_props('Technique_print', {'children':[catalog.aperture.title()]}) #"depth"
+    set_props('ScanDims_print', {'children':[f"{len([i for i,scan in enumerate(scans)])}D"]})
+    
+    # Construct Technique_print using the new function
+    filtered_str, all_motors_str = build_technique_strings(scans)
+    
+    # Combine filtered string and all_motors_str
+    technique_str = f"{filtered_str} ({all_motors_str})"
+    
+    set_props('Technique_print', {'children':[technique_str]}) #depth
+    set_props('Aperture_print', {'children':[catalog.aperture.title()]})
     set_props('Sample_print', {'children':[catalog.sample_name]}) #"Si"
     set_props('Comment_print', {'value':"submit indexing"})
 

@@ -160,7 +160,7 @@ class Scan(Base):
     scan_cpt: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     def __repr__(self) -> str:
-        pass # TODO: Consider implemeting for debugging
+        pass # TODO: Consider implementing for debugging
 
 
 class Catalog(Base):
