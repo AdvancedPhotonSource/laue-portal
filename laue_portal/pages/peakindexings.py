@@ -190,43 +190,51 @@ def get_peakindexings(path):
     State('peakindexing-page-wire-recon', 'href'),
     prevent_initial_call=True,
 )
-def selected_wirerecon_href(rows,href,id_query="?scan_id=$"):
-    href = href.split(id_query)[0]
-    if rows:
-        scan_ids = [str(row['scanNumber']) for row in rows]
-        wirerecon_ids = [str(row['wirerecon_id']) if row.get('wirerecon_id') else '' for row in rows]
-        recon_ids = [str(row['recon_id']) if row.get('recon_id') else '' for row in rows]
-        peakindex_ids = [str(row['peakindex_id']) for row in rows]
+def selected_recon_href(rows,href):
+    base_href = href.split("?")[0]
+    if not rows:
+        return base_href
 
-        wire_scans = any(wirerecon_ids)
-        nonwire_scans = any(recon_ids)
+    scan_ids, wirerecon_ids, recon_ids = [], [], []
+    any_wirerecon_scans, any_recon_scans = False, False
 
-        # Conflict condition: mixture of wirerecon_id and recon_id
-        if any(wirerecon_ids) and any(recon_ids):
-            return href
+    for row in rows:
+        if row.get('scanNumber'):
+            scan_ids.append(str(row['scanNumber']))
+        else:
+            return base_href
+        
+        wirerecon_ids.append(str(row['wirerecon_id']) if row.get('wirerecon_id') else '')
+        any_wirerecon_scans = any(wirerecon_ids)
+        recon_ids.append(str(row['recon_id']) if row.get('recon_id') else '')
+        any_recon_scans = any(recon_ids)
 
-        # Missing ID condition
-        if not all(wirerecon_ids) and not all(recon_ids):
-            for row in rows:
-                if not row.get('wirerecon_id') and not row.get('recon_id') and row.get('aperture'):
-                    if 'wire' in row['aperture'].lower():
-                        wire_scans = True
-                    else:
-                        nonwire_scans = True
+        # Conflict condition: mixture of wirerecon and recon
+        if any_wirerecon_scans and any_recon_scans:
+            return base_href
 
-        # Dynamic URL path
-        # Conflict condition: mixture of wirerecon_id and recon_id( copied from above)
-        if nonwire_scans and wire_scans:
-            return href
-        elif nonwire_scans:
-            href = "/create-reconstruction"
-         #else: pass # Use original href
+        # Missing Recon ID condition
+        if not any_wirerecon_scans and not any_recon_scans and row.get('aperture'):
+            aperture = str(row['aperture']).lower()
+            if aperture == 'none':
+                return base_href # Conflict condition: cannot be reconstructed
+            elif 'wire' in aperture:
+                any_wirerecon_scans = True
+            else:
+                any_recon_scans = True
+    
+            # Conflict condition: mixture of wirerecon and recon (copied from above)
+            if any_wirerecon_scans and any_recon_scans:
+                return base_href
+    
+    if any_recon_scans:
+        base_href = "/create-reconstruction"
 
-        href += f"?scan_id=${','.join(scan_ids)}"
-        if any(wirerecon_ids): href += f"&wirerecon_id={','.join(wirerecon_ids)}"
-        if any(recon_ids): href += f"&recon_id={','.join(recon_ids)}"
-        href += f"&peakindex_id={','.join(peakindex_ids)}"
-    return href
+    query_params = [f"scan_id=${','.join(scan_ids)}"]
+    if any_wirerecon_scans: query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
+    if any_recon_scans: query_params.append(f"recon_id={','.join(recon_ids)}")
+    
+    return f"{base_href}?{'&'.join(query_params)}"
 
 
 @dash.callback(
@@ -235,16 +243,26 @@ def selected_wirerecon_href(rows,href,id_query="?scan_id=$"):
     State('peakindexing-page-peakindex', 'href'),
     prevent_initial_call=True,
 )
-def selected_peakindex_href(rows,href,id_query="?scan_id=$"):
-    href = href.split(id_query)[0]
-    if rows:
-        scan_ids = [str(row['scanNumber']) for row in rows]
-        wirerecon_ids = [str(row['wirerecon_id']) if row['wirerecon_id'] else '' for row in rows]
-        recon_ids = [str(row['recon_id']) if row['recon_id'] else '' for row in rows]
-        peakindex_ids = [str(row['peakindex_id']) for row in rows]
+def selected_peakindex_href(rows,href):
+    base_href = href.split("?")[0]
+    if not rows:
+        return base_href
 
-        href += f"?scan_id=${','.join(scan_ids)}"
-        if any(wirerecon_ids): href += f"&wirerecon_id={','.join(wirerecon_ids)}"
-        if any(recon_ids): href += f"&recon_id={','.join(recon_ids)}"
-        href += f"&peakindex_id={','.join(peakindex_ids)}"
-    return href
+    scan_ids, wirerecon_ids, recon_ids, peakindex_ids = [], [], [], []
+
+    for row in rows:
+        if row.get('scanNumber'):
+            scan_ids.append(str(row['scanNumber']))
+        else:
+            return base_href
+        
+        wirerecon_ids.append(str(row['wirerecon_id']) if row.get('wirerecon_id') else '')
+        recon_ids.append(str(row['recon_id']) if row.get('recon_id') else '')
+        peakindex_ids.append(str(row['peakindex_id']) if row.get('peakindex_id') else '')
+
+    query_params = [f"scan_id=${','.join(scan_ids)}"]
+    if any(wirerecon_ids): query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
+    if any(recon_ids): query_params.append(f"recon_id={','.join(recon_ids)}")
+    if any(peakindex_ids): query_params.append(f"peakindex_id={','.join(peakindex_ids)}")
+
+    return f"{base_href}?{'&'.join(query_params)}"

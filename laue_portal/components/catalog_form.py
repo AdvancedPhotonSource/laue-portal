@@ -1,6 +1,6 @@
 import dash_bootstrap_components as dbc
 from dash import html, set_props
-from laue_portal.components.form_base import _stack, _field
+from laue_portal.components.form_base import _stack, _field, _select
 
 catalog_form = dbc.Row(
                 [
@@ -17,14 +17,13 @@ catalog_form = dbc.Row(
                                 _stack(
                                     [
                                         #_field("Aperture", 'aperture', size='lg'),
-                                        dbc.Select(
-                                            placeholder="Aperture",
-                                            options=[
+                                        _select("Aperture", 'aperture',
+                                            [
+                                                {"label": "None", "value": None},
                                                 {"label": "Wire", "value": "wire"},
                                                 {"label": "Coded Aperture", "value": "mask"},
                                             ],
-                                            style={'width':200},
-                                            id="aperture",
+                                            size='sm', kwargs={'placeholder':'Select:'}, 
                                         ),
                                     ]
                                 ),

@@ -225,24 +225,37 @@ def get_metadatas(path):
     State('scans-page-wire-recon', 'href'),
     prevent_initial_call=True,
 )
-def selected_wirerecon_href(rows,href,id_query="?scan_id=$"):
-    href = href.split(id_query)[0]
-    if rows:
-        scan_ids = [str(row['scanNumber']) for row in rows]
-        
-        wire_scans = any('wire' in row['aperture'].lower() for row in rows if row['aperture'])
-        nonwire_scans = any('wire' not in row['aperture'].lower() for row in rows if row['aperture'])
+def selected_recon_href(rows,href):
+    base_href = href.split("?")[0]
+    if not rows:
+        return base_href
 
-        # Dynamic URL path
-        # Conflict condition: mixture of wirerecon_id and recon_id
-        if nonwire_scans and wire_scans:
-            return href
-        elif nonwire_scans:
-            href = "/create-reconstruction"
-         #else: pass # Use original href
+    scan_ids = []
+    any_wire_scans, any_nonwire_scans = False, False
+
+    for row in rows:
+        if row.get('scanNumber'):
+            scan_ids.append(str(row['scanNumber']))
+        else:
+            return base_href
+
+        if row.get('aperture'):
+            aperture = str(row['aperture']).lower()
+            if aperture == 'none':
+                return base_href # Conflict condition: cannot be reconstructed
+            if 'wire' in aperture:
+                any_wire_scans = True
+            else:
+                any_nonwire_scans = True
         
-        href += f"?scan_id=${','.join(scan_ids)}"
-    return href
+            # Conflict condition: mixture of wirerecon and recon
+            if any_wire_scans and any_nonwire_scans:
+                return base_href
+
+    if any_nonwire_scans:
+        base_href = "/create-reconstruction"
+    
+    return f"{base_href}?scan_id=${','.join(scan_ids)}"
 
 
 @dash.callback(
@@ -251,8 +264,17 @@ def selected_wirerecon_href(rows,href,id_query="?scan_id=$"):
     State('scans-page-peakindex', 'href'),
     prevent_initial_call=True,
 )
-def selected_peakindex_href(rows,href,id_query="?scan_id=$"):
-    href = href.split(id_query)[0]
-    if rows:
-        href += "?scan_id=$" + ','.join([str(row['scanNumber']) for row in rows]) 
-    return href
+def selected_peakindex_href(rows,href):
+    base_href = href.split("?")[0]
+    if not rows:
+        return base_href
+
+    scan_ids = []
+
+    for row in rows:
+        if row.get('scanNumber'):
+            scan_ids.append(str(row['scanNumber']))
+        else:
+            return base_href
+
+    return f"{base_href}?scan_id=${','.join(scan_ids)}"

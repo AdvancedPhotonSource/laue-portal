@@ -188,25 +188,31 @@ def get_recons(path):
 
 @dash.callback(
     Output('mask-recons-page-mask-recon', 'href'),
-    Input('recon-table','selectedRows'),
-    State('mask-recons-page-mask-recon', 'href'),
-    prevent_initial_call=True,
-)
-def selected_recon_href(rows,href,id_query="?recon_id=$"):
-    href = href.split(id_query)[0]
-    if rows:
-        href += "?recon_id=$" + ','.join([str(row['recon_id']) for row in rows]) 
-    return href
-
-
-@dash.callback(
     Output('mask-recons-page-peakindex', 'href'),
     Input('recon-table','selectedRows'),
+    State('mask-recons-page-mask-recon', 'href'),
     State('mask-recons-page-peakindex', 'href'),
     prevent_initial_call=True,
 )
-def selected_peakindex_href(rows,href,id_query="?recon_id=$"):
-    href = href.split(id_query)[0]
-    if rows:
-        href += "?recon_id=$" + ','.join([str(row['recon_id']) for row in rows]) 
-    return href
+def selected_hrefs(rows, recon_href, peakindex_href):
+    base_recon_href = recon_href.split("?")[0]
+    base_peakindex_href = peakindex_href.split("?")[0]
+    if not rows:
+        return base_recon_href, base_peakindex_href
+
+    scan_ids, recon_ids = [], []
+
+    for row in rows:
+        if row.get('scanNumber'):
+            scan_ids.append(str(row['scanNumber']))
+        else:
+            return base_recon_href, base_peakindex_href
+        
+        recon_ids.append(str(row['recon_id']) if row.get('recon_id') else '')
+
+    query_params = [f"scan_id=${','.join(scan_ids)}"]
+    if any(recon_ids): query_params.append(f"recon_id={','.join(recon_ids)}")
+    
+    query_string = "&".join(query_params)
+    
+    return f"{base_recon_href}?{query_string}", f"{base_peakindex_href}?{query_string}"

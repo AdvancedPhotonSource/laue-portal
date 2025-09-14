@@ -220,27 +220,31 @@ def get_recons(path):
 
 @dash.callback(
     Output('wire-recons-page-wire-recon', 'href'),
-    Input('wire-recon-table','selectedRows'),
-    State('wire-recons-page-wire-recon', 'href'),
-    prevent_initial_call=True,
-)
-def selected_wirerecon_href(rows,href,id_query="?scan_id=$"):
-    href = href.split(id_query)[0]
-    if rows:
-        href += "?scan_id=$" + ','.join([str(row['scanNumber']) for row in rows])
-        href += "&wirerecon_id=" + ','.join([str(row['wirerecon_id']) for row in rows])
-    return href
-
-
-@dash.callback(
     Output('wire-recons-page-peakindex', 'href'),
     Input('wire-recon-table','selectedRows'),
+    State('wire-recons-page-wire-recon', 'href'),
     State('wire-recons-page-peakindex', 'href'),
     prevent_initial_call=True,
 )
-def selected_peakindex_href(rows,href,id_query="?scan_id=$"):
-    href = href.split(id_query)[0]
-    if rows:
-        href += "?scan_id=$" + ','.join([str(row['scanNumber']) for row in rows])
-        href += "&wirerecon_id=" + ','.join([str(row['wirerecon_id']) for row in rows])
-    return href
+def selected_hrefs(rows, wirerecon_href, peakindex_href):
+    base_wirerecon_href = wirerecon_href.split("?")[0]
+    base_peakindex_href = peakindex_href.split("?")[0]
+    if not rows:
+        return base_wirerecon_href, base_peakindex_href
+
+    scan_ids, wirerecon_ids = [], []
+
+    for row in rows:
+        if row.get('scanNumber'):
+            scan_ids.append(str(row['scanNumber']))
+        else:
+            return base_wirerecon_href, base_peakindex_href
+        
+        wirerecon_ids.append(str(row['wirerecon_id']) if row.get('wirerecon_id') else '')
+
+    query_params = [f"scan_id=${','.join(scan_ids)}"]
+    if any(wirerecon_ids): query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
+    
+    query_string = "&".join(query_params)
+    
+    return f"{base_wirerecon_href}?{query_string}", f"{base_peakindex_href}?{query_string}"
