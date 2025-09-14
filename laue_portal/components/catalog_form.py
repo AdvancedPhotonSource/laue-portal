@@ -23,7 +23,8 @@ catalog_form = dbc.Row(
                                                 {"label": "Wire", "value": "wire"},
                                                 {"label": "Coded Aperture", "value": "mask"},
                                             ],
-                                            size='sm', kwargs={'placeholder':'Select:'}, 
+                                            size='sm',
+                                            kwargs={'placeholder':'Select:'}, 
                                         ),
                                     ]
                                 ),
@@ -88,6 +89,6 @@ def set_catalog_form_props(catalog, read_only=False):
     set_props("filefolder", {'value':catalog.filefolder, 'readonly':read_only})
     set_props("filenamePrefix", {'value':catalog.filenamePrefix, 'readonly':read_only})
 
-    set_props("aperture", {'value':catalog.aperture, 'readonly':read_only})
+    set_props("aperture", {'value':catalog.aperture, 'disabled':read_only})
     set_props("sample_name", {'value':catalog.sample_name, 'readonly':read_only})
     set_props("notes", {'value':catalog.notes, 'readonly':read_only})

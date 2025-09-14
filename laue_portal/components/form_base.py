@@ -49,7 +49,7 @@ def _select(label, field_id, select_options, size='sm', kwargs={}):
         className="mb-3",
     )
 
-def _ckbx(label, field_id, size='sm'):
+def _ckbx(label, field_id, size='sm', kwargs={}):
     if size == 'sm':
         width='200px'
     elif size == 'md':
@@ -60,4 +60,5 @@ def _ckbx(label, field_id, size='sm'):
     return dbc.Checkbox(id=field_id, 
                         label=label,
                         className="mb-3",
-                        style={'width': width})
+                        style={'width': width},
+                        **kwargs)
