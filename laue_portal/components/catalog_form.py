@@ -1,6 +1,6 @@
 import dash_bootstrap_components as dbc
 from dash import html, set_props
-from laue_portal.components.form_base import _stack, _field
+from laue_portal.components.form_base import _stack, _field, _select
 
 catalog_form = dbc.Row(
                 [
@@ -17,14 +17,14 @@ catalog_form = dbc.Row(
                                 _stack(
                                     [
                                         #_field("Aperture", 'aperture', size='lg'),
-                                        dbc.Select(
-                                            placeholder="Aperture",
-                                            options=[
+                                        _select("Aperture", 'aperture',
+                                            [
+                                                {"label": "None", "value": None},
                                                 {"label": "Wire", "value": "wire"},
                                                 {"label": "Coded Aperture", "value": "mask"},
                                             ],
-                                            style={'width':200},
-                                            id="aperture",
+                                            size='sm',
+                                            kwargs={'placeholder':'Select:'}, 
                                         ),
                                     ]
                                 ),
@@ -59,7 +59,7 @@ catalog_form = dbc.Row(
                             title="File Parameters",
                             item_id="item-2",
                         ),
-dbc.AccordionItem(
+                        dbc.AccordionItem(
                             [
                                 _stack(
                                     [
@@ -89,6 +89,6 @@ def set_catalog_form_props(catalog, read_only=False):
     set_props("filefolder", {'value':catalog.filefolder, 'readonly':read_only})
     set_props("filenamePrefix", {'value':catalog.filenamePrefix, 'readonly':read_only})
 
-    set_props("aperture", {'value':catalog.aperture, 'readonly':read_only})
+    set_props("aperture", {'value':catalog.aperture, 'disabled':read_only})
     set_props("sample_name", {'value':catalog.sample_name, 'readonly':read_only})
     set_props("notes", {'value':catalog.notes, 'readonly':read_only})

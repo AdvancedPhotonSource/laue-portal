@@ -2,6 +2,7 @@ import dash_bootstrap_components as dbc
 from dash import html, set_props
 from laue_portal.components.form_base import _stack, _field
 from datetime import datetime
+from laue_portal.database.db_utils import find_motor_group
 
 
 metadata_form = dbc.Row(
@@ -313,14 +314,17 @@ def make_scan_accordion(i, scan_data, read_only=True):
     
     # General scan info
     general_fields = []
-    if should_display(scan_data.scan_dim):
-        general_fields.append(_field("Dimensions", {"type": "scan_dim", "index": i}, size='lg', 
-                                   kwargs={'value': scan_data.scan_dim, 'readonly': read_only}))
+    # if should_display(scan_data.scan_dim):
+    #     general_fields.append(_field("Dimensions", {"type": "scan_dim", "index": i}, size='md', 
+    #                                kwargs={'value': scan_data.scan_dim, 'readonly': read_only}))
     if should_display(scan_data.scan_npts):
-        general_fields.append(_field("No. Points", {"type": "scan_npts", "index": i}, size='lg', 
+        general_fields.append(_field("No. Points", {"type": "scan_npts", "index": i}, size='md', 
                                    kwargs={'value': scan_data.scan_npts, 'readonly': read_only}))
+    if should_display(scan_data.scan_cpt):
+        general_fields.append(_field("No. Points Completed", {"type": "scan_cpt", "index": i}, size='md', 
+                                   kwargs={'value': scan_data.scan_cpt, 'readonly': read_only}))
     if should_display(scan_data.scan_after):
-        general_fields.append(_field("After", {"type": "scan_after", "index": i}, size='lg', 
+        general_fields.append(_field("After", {"type": "scan_after", "index": i}, size='md', 
                                    kwargs={'value': scan_data.scan_after, 'readonly': read_only}))
     if general_fields:
         stacks.append(_stack(general_fields))
@@ -328,78 +332,90 @@ def make_scan_accordion(i, scan_data, read_only=True):
     # Positioner 1
     pos1_fields = []
     if should_display(scan_data.scan_positioner1_PV):
-        pos1_fields.append(_field("Positioner 1 PV", {"type": "scan_positioner1_PV", "index": i}, size='lg', 
+        pos1_fields.append(_field("Positioner 1 PV", {"type": "scan_positioner1_PV", "index": i}, size='md', 
                                 kwargs={'value': scan_data.scan_positioner1_PV, 'readonly': read_only}))
+        # Add motor group indicator
+        motor1_group = find_motor_group(scan_data.scan_positioner1_PV)
+        pos1_fields.append(html.Div(f"{motor1_group.capitalize()}", className="mb-3"))
+    if should_display(scan_data.scan_positioner1):
+        pos1_fields.append(_field("Positioner 1", {"type": "scan_positioner1", "index": i}, size='md', 
+                                kwargs={'value': scan_data.scan_positioner1, 'readonly': read_only}))
     if should_display(scan_data.scan_positioner1_ar):
-        pos1_fields.append(_field("Positioner 1 ar", {"type": "scan_positioner1_ar", "index": i}, size='lg', 
+        pos1_fields.append(_field("Positioner 1 ar", {"type": "scan_positioner1_ar", "index": i}, size='md', 
                                 kwargs={'value': scan_data.scan_positioner1_ar, 'readonly': read_only}))
     if should_display(scan_data.scan_positioner1_mode):
-        pos1_fields.append(_field("Positioner 1 mode", {"type": "scan_positioner1_mode", "index": i}, size='lg', 
+        pos1_fields.append(_field("Positioner 1 mode", {"type": "scan_positioner1_mode", "index": i}, size='md', 
                                 kwargs={'value': scan_data.scan_positioner1_mode, 'readonly': read_only}))
-    if should_display(scan_data.scan_positioner1):
-        pos1_fields.append(_field("Positioner 1", {"type": "scan_positioner1", "index": i}, size='lg', 
-                                kwargs={'value': scan_data.scan_positioner1, 'readonly': read_only}))
     if pos1_fields:
         stacks.append(_stack(pos1_fields))
     
     # Positioner 2
     pos2_fields = []
     if should_display(scan_data.scan_positioner2_PV):
-        pos2_fields.append(_field("Positioner 2 PV", {"type": "scan_positioner2_PV", "index": i}, size='lg', 
+        pos2_fields.append(_field("Positioner 2 PV", {"type": "scan_positioner2_PV", "index": i}, size='md', 
                                 kwargs={'value': scan_data.scan_positioner2_PV, 'readonly': read_only}))
+        # Add motor group indicator
+        motor2_group = find_motor_group(scan_data.scan_positioner2_PV)
+        pos2_fields.append(html.Div(f"{motor2_group.capitalize()}", className="mb-3"))
+    if should_display(scan_data.scan_positioner2):
+        pos2_fields.append(_field("Positioner 2", {"type": "scan_positioner2", "index": i}, size='md', 
+                                kwargs={'value': scan_data.scan_positioner2, 'readonly': read_only}))
     if should_display(scan_data.scan_positioner2_ar):
-        pos2_fields.append(_field("Positioner 2 ar", {"type": "scan_positioner2_ar", "index": i}, size='lg', 
+        pos2_fields.append(_field("Positioner 2 ar", {"type": "scan_positioner2_ar", "index": i}, size='md', 
                                 kwargs={'value': scan_data.scan_positioner2_ar, 'readonly': read_only}))
     if should_display(scan_data.scan_positioner2_mode):
-        pos2_fields.append(_field("Positioner 2 mode", {"type": "scan_positioner2_mode", "index": i}, size='lg', 
+        pos2_fields.append(_field("Positioner 2 mode", {"type": "scan_positioner2_mode", "index": i}, size='md', 
                                 kwargs={'value': scan_data.scan_positioner2_mode, 'readonly': read_only}))
-    if should_display(scan_data.scan_positioner2):
-        pos2_fields.append(_field("Positioner 2", {"type": "scan_positioner2", "index": i}, size='lg', 
-                                kwargs={'value': scan_data.scan_positioner2, 'readonly': read_only}))
     if pos2_fields:
         stacks.append(_stack(pos2_fields))
     
     # Positioner 3
     pos3_fields = []
     if should_display(scan_data.scan_positioner3_PV):
-        pos3_fields.append(_field("Positioner 3 PV", {"type": "scan_positioner3_PV", "index": i}, size='lg', 
+        pos3_fields.append(_field("Positioner 3 PV", {"type": "scan_positioner3_PV", "index": i}, size='md', 
                                 kwargs={'value': scan_data.scan_positioner3_PV, 'readonly': read_only}))
+        # Add motor group indicator
+        motor3_group = find_motor_group(scan_data.scan_positioner3_PV)
+        pos3_fields.append(html.Div(f"{motor3_group.capitalize()}", className="mb-3"))
+    if should_display(scan_data.scan_positioner3):
+        pos3_fields.append(_field("Positioner 3", {"type": "scan_positioner3", "index": i}, size='md', 
+                                kwargs={'value': scan_data.scan_positioner3, 'readonly': read_only}))
     if should_display(scan_data.scan_positioner3_ar):
-        pos3_fields.append(_field("Positioner 3 ar", {"type": "scan_positioner3_ar", "index": i}, size='lg', 
+        pos3_fields.append(_field("Positioner 3 ar", {"type": "scan_positioner3_ar", "index": i}, size='md', 
                                 kwargs={'value': scan_data.scan_positioner3_ar, 'readonly': read_only}))
     if should_display(scan_data.scan_positioner3_mode):
-        pos3_fields.append(_field("Positioner 3 mode", {"type": "scan_positioner3_mode", "index": i}, size='lg', 
+        pos3_fields.append(_field("Positioner 3 mode", {"type": "scan_positioner3_mode", "index": i}, size='md', 
                                 kwargs={'value': scan_data.scan_positioner3_mode, 'readonly': read_only}))
-    if should_display(scan_data.scan_positioner3):
-        pos3_fields.append(_field("Positioner 3", {"type": "scan_positioner3", "index": i}, size='lg', 
-                                kwargs={'value': scan_data.scan_positioner3, 'readonly': read_only}))
     if pos3_fields:
         stacks.append(_stack(pos3_fields))
     
     # Positioner 4
     pos4_fields = []
     if should_display(scan_data.scan_positioner4_PV):
-        pos4_fields.append(_field("Positioner 4 PV", {"type": "scan_positioner4_PV", "index": i}, size='lg', 
+        pos4_fields.append(_field("Positioner 4 PV", {"type": "scan_positioner4_PV", "index": i}, size='md', 
                                 kwargs={'value': scan_data.scan_positioner4_PV, 'readonly': read_only}))
+        # Add motor group indicator
+        motor4_group = find_motor_group(scan_data.scan_positioner4_PV)
+        pos4_fields.append(html.Div(f"{motor4_group.capitalize()}", className="mb-3"))
+    if should_display(scan_data.scan_positioner4):
+        pos4_fields.append(_field("Positioner 4", {"type": "scan_positioner4", "index": i}, size='md', 
+                                kwargs={'value': scan_data.scan_positioner4, 'readonly': read_only}))
     if should_display(scan_data.scan_positioner4_ar):
-        pos4_fields.append(_field("Positioner 4 ar", {"type": "scan_positioner4_ar", "index": i}, size='lg', 
+        pos4_fields.append(_field("Positioner 4 ar", {"type": "scan_positioner4_ar", "index": i}, size='md', 
                                 kwargs={'value': scan_data.scan_positioner4_ar, 'readonly': read_only}))
     if should_display(scan_data.scan_positioner4_mode):
-        pos4_fields.append(_field("Positioner 4 mode", {"type": "scan_positioner4_mode", "index": i}, size='lg', 
+        pos4_fields.append(_field("Positioner 4 mode", {"type": "scan_positioner4_mode", "index": i}, size='md', 
                                 kwargs={'value': scan_data.scan_positioner4_mode, 'readonly': read_only}))
-    if should_display(scan_data.scan_positioner4):
-        pos4_fields.append(_field("Positioner 4", {"type": "scan_positioner4", "index": i}, size='lg', 
-                                kwargs={'value': scan_data.scan_positioner4, 'readonly': read_only}))
     if pos4_fields:
         stacks.append(_stack(pos4_fields))
     
     # Detector Trigger 1
     det1_fields = []
     if should_display(scan_data.scan_detectorTrig1_PV):
-        det1_fields.append(_field("Detector Trig 1 PV", {"type": "scan_detectorTrig1_PV", "index": i}, size='lg', 
+        det1_fields.append(_field("Detector Trig 1 PV", {"type": "scan_detectorTrig1_PV", "index": i}, size='md', 
                                 kwargs={'value': scan_data.scan_detectorTrig1_PV, 'readonly': read_only}))
     if should_display(scan_data.scan_detectorTrig1_VAL):
-        det1_fields.append(_field("Detector Trig 1 VAL", {"type": "scan_detectorTrig1_VAL", "index": i}, size='lg', 
+        det1_fields.append(_field("Detector Trig 1 VAL", {"type": "scan_detectorTrig1_VAL", "index": i}, size='sm', 
                                 kwargs={'value': scan_data.scan_detectorTrig1_VAL, 'readonly': read_only}))
     if det1_fields:
         stacks.append(_stack(det1_fields))
@@ -407,10 +423,10 @@ def make_scan_accordion(i, scan_data, read_only=True):
     # Detector Trigger 2
     det2_fields = []
     if should_display(scan_data.scan_detectorTrig2_PV):
-        det2_fields.append(_field("Detector Trig 2 PV", {"type": "scan_detectorTrig2_PV", "index": i}, size='lg', 
+        det2_fields.append(_field("Detector Trig 2 PV", {"type": "scan_detectorTrig2_PV", "index": i}, size='md', 
                                 kwargs={'value': scan_data.scan_detectorTrig2_PV, 'readonly': read_only}))
     if should_display(scan_data.scan_detectorTrig2_VAL):
-        det2_fields.append(_field("Detector Trig 2 VAL", {"type": "scan_detectorTrig2_VAL", "index": i}, size='lg', 
+        det2_fields.append(_field("Detector Trig 2 VAL", {"type": "scan_detectorTrig2_VAL", "index": i}, size='sm', 
                                 kwargs={'value': scan_data.scan_detectorTrig2_VAL, 'readonly': read_only}))
     if det2_fields:
         stacks.append(_stack(det2_fields))
@@ -418,10 +434,10 @@ def make_scan_accordion(i, scan_data, read_only=True):
     # Detector Trigger 3
     det3_fields = []
     if should_display(scan_data.scan_detectorTrig3_PV):
-        det3_fields.append(_field("Detector Trig 3 PV", {"type": "scan_detectorTrig3_PV", "index": i}, size='lg', 
+        det3_fields.append(_field("Detector Trig 3 PV", {"type": "scan_detectorTrig3_PV", "index": i}, size='md', 
                                 kwargs={'value': scan_data.scan_detectorTrig3_PV, 'readonly': read_only}))
     if should_display(scan_data.scan_detectorTrig3_VAL):
-        det3_fields.append(_field("Detector Trig 3 VAL", {"type": "scan_detectorTrig3_VAL", "index": i}, size='lg', 
+        det3_fields.append(_field("Detector Trig 3 VAL", {"type": "scan_detectorTrig3_VAL", "index": i}, size='sm', 
                                 kwargs={'value': scan_data.scan_detectorTrig3_VAL, 'readonly': read_only}))
     if det3_fields:
         stacks.append(_stack(det3_fields))
@@ -429,20 +445,14 @@ def make_scan_accordion(i, scan_data, read_only=True):
     # Detector Trigger 4
     det4_fields = []
     if should_display(scan_data.scan_detectorTrig4_PV):
-        det4_fields.append(_field("Detector Trig 4 PV", {"type": "scan_detectorTrig4_PV", "index": i}, size='lg', 
+        det4_fields.append(_field("Detector Trig 4 PV", {"type": "scan_detectorTrig4_PV", "index": i}, size='md', 
                                 kwargs={'value': scan_data.scan_detectorTrig4_PV, 'readonly': read_only}))
     if should_display(scan_data.scan_detectorTrig4_VAL):
-        det4_fields.append(_field("Detector Trig 4 VAL", {"type": "scan_detectorTrig4_VAL", "index": i}, size='lg', 
+        det4_fields.append(_field("Detector Trig 4 VAL", {"type": "scan_detectorTrig4_VAL", "index": i}, size='sm', 
                                 kwargs={'value': scan_data.scan_detectorTrig4_VAL, 'readonly': read_only}))
     if det4_fields:
         stacks.append(_stack(det4_fields))
     
-    # Completed
-    if should_display(scan_data.scan_cpt):
-        stacks.append(_stack([
-            _field("Completed", {"type": "scan_cpt", "index": i}, size='lg', 
-                   kwargs={'value': scan_data.scan_cpt, 'readonly': read_only})
-        ]))
     
     # Only create accordion if there are fields to display
     if stacks:
@@ -450,7 +460,7 @@ def make_scan_accordion(i, scan_data, read_only=True):
             [
                 dbc.AccordionItem(
                     stacks,
-                    title=f"Scan {i + 1}",
+                    title=f"Scan {scan_data.scan_dim}",# if scan_data.scan_dim else f"Scan {i + 1}",
                 ),
             ],
             id={"type": "scan_accordion", "index": i},
@@ -529,35 +539,35 @@ def set_metadata_form_props(metadata, scans=None, read_only=True):
     # Set scan field properties if scans are provided
     if scans:
         for i, scan in enumerate(scans):
-            # Update accordion fields (visible)
-            set_props({"type": "scan_dim", "index": i}, {'value':scan.scan_dim, 'readonly':read_only})
-            set_props({"type": "scan_npts", "index": i}, {'value':scan.scan_npts, 'readonly':read_only})
-            set_props({"type": "scan_after", "index": i}, {'value':scan.scan_after, 'readonly':read_only})
-            set_props({"type": "scan_positioner1_PV", "index": i}, {'value':scan.scan_positioner1_PV, 'readonly':read_only})
-            set_props({"type": "scan_positioner1_ar", "index": i}, {'value':scan.scan_positioner1_ar, 'readonly':read_only})
-            set_props({"type": "scan_positioner1_mode", "index": i}, {'value':scan.scan_positioner1_mode, 'readonly':read_only})
-            set_props({"type": "scan_positioner1", "index": i}, {'value':scan.scan_positioner1, 'readonly':read_only})
-            set_props({"type": "scan_positioner2_PV", "index": i}, {'value':scan.scan_positioner2_PV, 'readonly':read_only})
-            set_props({"type": "scan_positioner2_ar", "index": i}, {'value':scan.scan_positioner2_ar, 'readonly':read_only})
-            set_props({"type": "scan_positioner2_mode", "index": i}, {'value':scan.scan_positioner2_mode, 'readonly':read_only})
-            set_props({"type": "scan_positioner2", "index": i}, {'value':scan.scan_positioner2, 'readonly':read_only})
-            set_props({"type": "scan_positioner3_PV", "index": i}, {'value':scan.scan_positioner3_PV, 'readonly':read_only})
-            set_props({"type": "scan_positioner3_ar", "index": i}, {'value':scan.scan_positioner3_ar, 'readonly':read_only})
-            set_props({"type": "scan_positioner3_mode", "index": i}, {'value':scan.scan_positioner3_mode, 'readonly':read_only})
-            set_props({"type": "scan_positioner3", "index": i}, {'value':scan.scan_positioner3, 'readonly':read_only})
-            set_props({"type": "scan_positioner4_PV", "index": i}, {'value':scan.scan_positioner4_PV, 'readonly':read_only})
-            set_props({"type": "scan_positioner4_ar", "index": i}, {'value':scan.scan_positioner4_ar, 'readonly':read_only})
-            set_props({"type": "scan_positioner4_mode", "index": i}, {'value':scan.scan_positioner4_mode, 'readonly':read_only})
-            set_props({"type": "scan_positioner4", "index": i}, {'value':scan.scan_positioner4, 'readonly':read_only})
-            set_props({"type": "scan_detectorTrig1_PV", "index": i}, {'value':scan.scan_detectorTrig1_PV, 'readonly':read_only})
-            set_props({"type": "scan_detectorTrig1_VAL", "index": i}, {'value':scan.scan_detectorTrig1_VAL, 'readonly':read_only})
-            set_props({"type": "scan_detectorTrig2_PV", "index": i}, {'value':scan.scan_detectorTrig2_PV, 'readonly':read_only})
-            set_props({"type": "scan_detectorTrig2_VAL", "index": i}, {'value':scan.scan_detectorTrig2_VAL, 'readonly':read_only})
-            set_props({"type": "scan_detectorTrig3_PV", "index": i}, {'value':scan.scan_detectorTrig3_PV, 'readonly':read_only})
-            set_props({"type": "scan_detectorTrig3_VAL", "index": i}, {'value':scan.scan_detectorTrig3_VAL, 'readonly':read_only})
-            set_props({"type": "scan_detectorTrig4_PV", "index": i}, {'value':scan.scan_detectorTrig4_PV, 'readonly':read_only})
-            set_props({"type": "scan_detectorTrig4_VAL", "index": i}, {'value':scan.scan_detectorTrig4_VAL, 'readonly':read_only})
-            set_props({"type": "scan_cpt", "index": i}, {'value':scan.scan_cpt, 'readonly':read_only})
+            # # Update accordion fields (visible)
+            # set_props({"type": "scan_dim", "index": i}, {'value':scan.scan_dim, 'readonly':read_only})
+            # set_props({"type": "scan_npts", "index": i}, {'value':scan.scan_npts, 'readonly':read_only})
+            # set_props({"type": "scan_after", "index": i}, {'value':scan.scan_after, 'readonly':read_only})
+            # set_props({"type": "scan_positioner1_PV", "index": i}, {'value':scan.scan_positioner1_PV, 'readonly':read_only})
+            # set_props({"type": "scan_positioner1_ar", "index": i}, {'value':scan.scan_positioner1_ar, 'readonly':read_only})
+            # set_props({"type": "scan_positioner1_mode", "index": i}, {'value':scan.scan_positioner1_mode, 'readonly':read_only})
+            # set_props({"type": "scan_positioner1", "index": i}, {'value':scan.scan_positioner1, 'readonly':read_only})
+            # set_props({"type": "scan_positioner2_PV", "index": i}, {'value':scan.scan_positioner2_PV, 'readonly':read_only})
+            # set_props({"type": "scan_positioner2_ar", "index": i}, {'value':scan.scan_positioner2_ar, 'readonly':read_only})
+            # set_props({"type": "scan_positioner2_mode", "index": i}, {'value':scan.scan_positioner2_mode, 'readonly':read_only})
+            # set_props({"type": "scan_positioner2", "index": i}, {'value':scan.scan_positioner2, 'readonly':read_only})
+            # set_props({"type": "scan_positioner3_PV", "index": i}, {'value':scan.scan_positioner3_PV, 'readonly':read_only})
+            # set_props({"type": "scan_positioner3_ar", "index": i}, {'value':scan.scan_positioner3_ar, 'readonly':read_only})
+            # set_props({"type": "scan_positioner3_mode", "index": i}, {'value':scan.scan_positioner3_mode, 'readonly':read_only})
+            # set_props({"type": "scan_positioner3", "index": i}, {'value':scan.scan_positioner3, 'readonly':read_only})
+            # set_props({"type": "scan_positioner4_PV", "index": i}, {'value':scan.scan_positioner4_PV, 'readonly':read_only})
+            # set_props({"type": "scan_positioner4_ar", "index": i}, {'value':scan.scan_positioner4_ar, 'readonly':read_only})
+            # set_props({"type": "scan_positioner4_mode", "index": i}, {'value':scan.scan_positioner4_mode, 'readonly':read_only})
+            # set_props({"type": "scan_positioner4", "index": i}, {'value':scan.scan_positioner4, 'readonly':read_only})
+            # set_props({"type": "scan_detectorTrig1_PV", "index": i}, {'value':scan.scan_detectorTrig1_PV, 'readonly':read_only})
+            # set_props({"type": "scan_detectorTrig1_VAL", "index": i}, {'value':scan.scan_detectorTrig1_VAL, 'readonly':read_only})
+            # set_props({"type": "scan_detectorTrig2_PV", "index": i}, {'value':scan.scan_detectorTrig2_PV, 'readonly':read_only})
+            # set_props({"type": "scan_detectorTrig2_VAL", "index": i}, {'value':scan.scan_detectorTrig2_VAL, 'readonly':read_only})
+            # set_props({"type": "scan_detectorTrig3_PV", "index": i}, {'value':scan.scan_detectorTrig3_PV, 'readonly':read_only})
+            # set_props({"type": "scan_detectorTrig3_VAL", "index": i}, {'value':scan.scan_detectorTrig3_VAL, 'readonly':read_only})
+            # set_props({"type": "scan_detectorTrig4_PV", "index": i}, {'value':scan.scan_detectorTrig4_PV, 'readonly':read_only})
+            # set_props({"type": "scan_detectorTrig4_VAL", "index": i}, {'value':scan.scan_detectorTrig4_VAL, 'readonly':read_only})
+            # set_props({"type": "scan_cpt", "index": i}, {'value':scan.scan_cpt, 'readonly':read_only})
             
             # Also update hidden fields for form submission
             set_props({"type": "hidden_scan_dim", "index": i}, {'value':scan.scan_dim})

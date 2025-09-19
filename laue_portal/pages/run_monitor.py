@@ -1,5 +1,5 @@
 import dash
-from dash import html, dcc, Input, Output
+from dash import html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
 import dash_ag_grid as dag
 from dash.exceptions import PreventUpdate
@@ -7,7 +7,7 @@ import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
 from laue_portal.processing.redis_utils import STATUS_MAPPING, STATUS_REVERSE_MAPPING
 from sqlalchemy import select, func, case
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 import pandas as pd 
 import laue_portal.components.navbar as navbar
 from datetime import datetime
@@ -17,15 +17,55 @@ dash.register_page(__name__)
 layout = html.Div([
         navbar.navbar,
         dcc.Location(id='url', refresh=False),
+        
+        # Secondary action bar aligned to right
+        dbc.Row([
+            dbc.Col([
+                dbc.Nav([
+                    dbc.NavItem(
+                        dbc.NavLink(
+                            "New Recon",
+                            href="/create-wire-reconstruction",
+                            active=False,
+                            id="run-monitor-page-wire-recon"
+                        )
+                    ),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(
+                        dbc.NavLink(
+                            "New Index",
+                            href="/create-peakindexing",
+                            active=False,
+                            id="run-monitor-page-peakindex"
+                        )
+                    ),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("New Recon with selected (only 1 sel)", href="#", active=False)),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("Stop ALL", href="#", active=False)),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("Stop Selected", href="#", active=False)),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("Set high Priority for selected (only 1 sel)", href="#", active=False)),
+                ],
+                className="bg-light px-2 py-2 d-flex justify-content-end w-100")
+            ], width=12)
+        ], className="mb-3 mt-0"),
+
         dbc.Container(fluid=True, className="p-0", children=[
             dag.AgGrid(
                 id='job-table',
                 columnSize="responsiveSizeToFit",
+                defaultColDef={
+                    "filter": True,
+            },
                 dashGridOptions={
                     "pagination": True, 
                     "paginationPageSize": 20, 
                     "domLayout": 'autoHeight', 
                     "rowHeight": 32,
+                    "rowSelection": 'multiple', 
+                    "suppressRowClickSelection": True,
                     "animateRows": True,
                     "enableCellTextSelection": True,  # Enable text selection for copying
                     # Custom row styling for subjobs
@@ -51,6 +91,7 @@ REFERENCE_COLS = [
 ]
 
 CUSTOM_HEADER_NAMES = {
+    'job_id': 'Job ID',
     'wirerecon_id': 'Recon ID (Wire)', #'Wire Recon ID', #'ReconID',
     'scanNumber': 'Scan ID',
     'calib_id': 'Calibration ID',
@@ -111,15 +152,26 @@ def _get_jobs():
                 'queued_subjobs': grouped_subjobs['status'].apply(lambda x: (x == STATUS_REVERSE_MAPPING["Queued"]).sum()).values
             })
         
+        catalog_calib = aliased(db_schema.Catalog)
+        catalog_recon = aliased(db_schema.Catalog)
+        catalog_wirerecon = aliased(db_schema.Catalog)
+        catalog_peakindex = aliased(db_schema.Catalog)
+
         # Main query for jobs with related entities
         jobs = pd.read_sql(session.query(
                 db_schema.Job,
-                *REFERENCE_COLS
+                *REFERENCE_COLS,
+                func.coalesce(db_schema.Calib.scanNumber, db_schema.Recon.scanNumber, db_schema.WireRecon.scanNumber, db_schema.PeakIndex.scanNumber).label('scanNumber'),
+                func.coalesce(catalog_calib.aperture, catalog_recon.aperture, catalog_wirerecon.aperture, catalog_peakindex.aperture).label('aperture')
             )
             .outerjoin(db_schema.Calib, db_schema.Job.job_id == db_schema.Calib.job_id)
             .outerjoin(db_schema.Recon, db_schema.Job.job_id == db_schema.Recon.job_id)
             .outerjoin(db_schema.WireRecon, db_schema.Job.job_id == db_schema.WireRecon.job_id)
             .outerjoin(db_schema.PeakIndex, db_schema.Job.job_id == db_schema.PeakIndex.job_id)
+            .outerjoin(catalog_calib, db_schema.Calib.scanNumber == catalog_calib.scanNumber)
+            .outerjoin(catalog_recon, db_schema.Recon.scanNumber == catalog_recon.scanNumber)
+            .outerjoin(catalog_wirerecon, db_schema.WireRecon.scanNumber == catalog_wirerecon.scanNumber)
+            .outerjoin(catalog_peakindex, db_schema.PeakIndex.scanNumber == catalog_peakindex.scanNumber)
             .order_by(db_schema.Job.job_id.desc())
             .statement, session.bind)
         
@@ -148,13 +200,16 @@ def _get_jobs():
         subjobs_dict = {}
         if not subjobs.empty:
             for job_id in jobs['job_id'].unique():
-                job_subjobs = subjobs[subjobs['job_id'] == job_id]
+                job_subjobs = subjobs[subjobs['job_id'] == job_id].iloc[::-1]
                 if not job_subjobs.empty:
+                    total_subjobs_for_job = len(job_subjobs)
                     subjobs_list = []
-                    for _, subjob in job_subjobs.iterrows():
+                    for i, (_, subjob) in enumerate(job_subjobs.iterrows()):
                         subjob_row = subjob.to_dict()
                         subjob_row['row_type'] = 'subjob'
                         subjob_row['parent_job_id'] = job_id
+                        subjob_row['subjob_index'] = total_subjobs_for_job - i
+                        subjob_row['total_subjobs_for_job'] = total_subjobs_for_job
                         subjobs_list.append(subjob_row)
                     subjobs_dict[str(job_id)] = subjobs_list
         
@@ -180,6 +235,23 @@ def _get_jobs():
     # Format columns for ag-grid
     cols = []
     
+    # Add explicit checkbox column as the first column
+    cols.append({
+        'headerName': '',
+        'field': 'checkbox',
+        'checkboxSelection': True,
+        'headerCheckboxSelection': True,
+        'width': 60,
+        'pinned': 'left',
+        'sortable': False,
+        'filter': False,
+        'resizable': False,
+        'suppressMenu': True,
+        'floatingFilter': False,
+        'cellClass': 'ag-checkbox-cell',
+        'headerClass': 'ag-checkbox-header',
+    })
+    
     # Add expand/collapse column as the first column
     cols.append({
         'headerName': '',
@@ -200,7 +272,7 @@ def _get_jobs():
     
     for field_key in all_columns:
         # Skip internal columns and special columns we'll add at specific positions
-        if field_key in ['row_type', 'parent_job_id', '_subjobs', '_should_auto_expand', 'completed_subjobs', 'failed_subjobs', 'running_subjobs', 'queued_subjobs', 'duration', 'total_subjobs', 'finish_time', 'submit_time', 'duration_display'] + [col.key for col in REFERENCE_COLS]:
+        if field_key in ['row_type', 'parent_job_id', '_subjobs', '_should_auto_expand', 'subjob_index', 'total_subjobs_for_job', 'completed_subjobs', 'failed_subjobs', 'running_subjobs', 'queued_subjobs', 'duration', 'total_subjobs', 'finish_time', 'submit_time', 'duration_display'] + [col.key for col in REFERENCE_COLS]:
             continue
             
         header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
@@ -211,7 +283,8 @@ def _get_jobs():
             'filter': True, 
             'sortable': True, 
             'resizable': True,
-            'suppressMenuHide': True
+            'floatingFilter': True,
+            'unSortIcon': True,
         }
 
         if field_key == 'job_id':
@@ -310,3 +383,87 @@ def get_jobs(path):
         return cols, jobs
     else:
         raise PreventUpdate
+
+
+@dash.callback(
+    Output('run-monitor-page-wire-recon', 'href'),
+    Input('job-table','selectedRows'),
+    State('run-monitor-page-wire-recon', 'href'),
+    prevent_initial_call=True,
+)
+def selected_recon_href(rows,href):
+    base_href = href.split("?")[0]
+    if not rows:
+        return base_href
+
+    scan_ids, wirerecon_ids, recon_ids = [], [], []
+    any_wirerecon_scans, any_recon_scans = False, False
+
+    for row in rows:
+        if row.get('scanNumber'):
+            scan_ids.append(str(row['scanNumber']))
+        else:
+            return base_href
+        
+        wirerecon_ids.append(str(row['wirerecon_id']) if row.get('wirerecon_id') else '')
+        any_wirerecon_scans = any(wirerecon_ids)
+        recon_ids.append(str(row['recon_id']) if row.get('recon_id') else '')
+        any_recon_scans = any(recon_ids)
+
+        # Conflict condition: mixture of wirerecon and recon
+        if any_wirerecon_scans and any_recon_scans:
+            return base_href
+
+        # Missing Recon ID condition
+        if not any_wirerecon_scans and not any_recon_scans and row.get('aperture'):
+            aperture = str(row['aperture']).lower()
+            if aperture == 'none':
+                return base_href # Conflict condition: cannot be reconstructed
+            elif 'wire' in aperture:
+                any_wirerecon_scans = True
+            else:
+                any_recon_scans = True
+    
+            # Conflict condition: mixture of wirerecon and recon (copied from above)
+            if any_wirerecon_scans and any_recon_scans:
+                return base_href
+    
+    if any_recon_scans:
+        base_href = "/create-reconstruction"
+
+    query_params = [f"scan_id=${','.join(scan_ids)}"]
+    if any_wirerecon_scans: query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
+    if any_recon_scans: query_params.append(f"recon_id={','.join(recon_ids)}")
+    
+    return f"{base_href}?{'&'.join(query_params)}"
+
+
+@dash.callback(
+    Output('run-monitor-page-peakindex', 'href'),
+    Input('job-table','selectedRows'),
+    State('run-monitor-page-peakindex', 'href'),
+    prevent_initial_call=True,
+)
+def selected_peakindex_href(rows,href):
+    base_href = href.split("?")[0]
+    if not rows:
+        return base_href
+
+    scan_ids, wirerecon_ids, recon_ids, peakindex_ids = [], [], [], []
+
+    for row in rows:
+        if row.get('scanNumber'):
+            scan_ids.append(str(row['scanNumber']))
+        else:
+            return base_href
+        
+        wirerecon_ids.append(str(row['wirerecon_id']) if row.get('wirerecon_id') else '')
+        recon_ids.append(str(row['recon_id']) if row.get('recon_id') else '')
+        peakindex_ids.append(str(row['peakindex_id']) if row.get('peakindex_id') else '')
+
+    query_params = [f"scan_id=${','.join(scan_ids)}"]
+    if any(wirerecon_ids): query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
+    if any(recon_ids): query_params.append(f"recon_id={','.join(recon_ids)}")
+    if any(peakindex_ids): query_params.append(f"peakindex_id={','.join(peakindex_ids)}")
+
+    return f"{base_href}?{'&'.join(query_params)}"

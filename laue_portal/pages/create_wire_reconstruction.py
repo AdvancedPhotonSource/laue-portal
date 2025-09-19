@@ -322,6 +322,7 @@ def submit_parameters(n,
                 
                 # Files
                 scanPoints=current_scanPoints,
+                scanPointslen=scanPoints_srange.len(),
                 
                 # Output
                 outputFolder=full_output_folder,  # Store full path in database
@@ -418,6 +419,7 @@ def get_wirerecons(path):
             
             # Files
             scanPoints=WIRERECON_DEFAULTS["scanPoints"],
+            scanPointslen=srange(WIRERECON_DEFAULTS["scanPoints"]).len(),
             
             # Output
             outputFolder=WIRERECON_DEFAULTS["outputFolder"],
@@ -549,6 +551,7 @@ def load_scan_data_from_url(href):
                                 
                                 # Files
                                 scanPoints=WIRERECON_DEFAULTS["scanPoints"],
+                                scanPointslen=srange(WIRERECON_DEFAULTS["scanPoints"]).len(),
                                 
                                 # Output
                                 outputFolder=output_folder,
@@ -721,6 +724,7 @@ def load_scan_data_from_url(href):
                             
                             # Files
                             scanPoints=WIRERECON_DEFAULTS["scanPoints"],
+                            scanPointslen=srange(WIRERECON_DEFAULTS["scanPoints"]).len(),
                             
                             # Output
                             outputFolder=WIRERECON_DEFAULTS["outputFolder"],

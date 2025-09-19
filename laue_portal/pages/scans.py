@@ -3,12 +3,12 @@ from dash import html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
 import dash_ag_grid as dag
 from dash.exceptions import PreventUpdate
-import laue_portal.database.db_utils as db_utils
-import laue_portal.database.db_schema as db_schema
+from laue_portal.database import db_utils, db_schema
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 import pandas as pd
 import laue_portal.components.navbar as navbar
+from laue_portal.pages.scan import build_technique_strings
 
 dash.register_page(__name__, path='/')
 
@@ -56,15 +56,17 @@ layout = html.Div([
                 columnSize="responsiveSizeToFit",
                 defaultColDef={
                     "filter": True,
-                    "checkboxSelection": {
-                        "function": 'params.column == params.columnApi.getAllDisplayedColumns()[0]'
-                    },
-                    "headerCheckboxSelection": {
-                        "function": 'params.column == params.columnApi.getAllDisplayedColumns()[0]'
-                    },
+                    "cellStyle": {"textAlign": "left"},
             },
-                dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight',
-                                 "rowSelection": 'multiple', "suppressRowClickSelection": True, "animateRows": False, "rowHeight": 32},
+                dashGridOptions={
+                    "pagination": True, 
+                    "paginationPageSize": 20, 
+                    "domLayout": 'autoHeight',
+                    "rowSelection": 'multiple', 
+                    "suppressRowClickSelection": True, 
+                    "animateRows": False, 
+                    "rowHeight": 32
+                },
                 style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                 className="ag-theme-alpine" 
             )
@@ -106,10 +108,44 @@ def _get_metadatas():
         ).group_by(db_schema.Metadata.scanNumber)
         
         metadatas = pd.read_sql(query.statement, session.bind)
+        
+        # Add technique column by computing it for each scan
+        techniques = []
+        for _, row in metadatas.iterrows():
+            scan_number = row['scanNumber']
+            # Get all scan records for this scan number
+            scans_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_number).all()
+            
+            if scans_data:
+                # Get the filtered technique string (first element of tuple)
+                filtered_str, _ = build_technique_strings(scans_data)
+                techniques.append(filtered_str)
+            else:
+                techniques.append("none")
+        
+        metadatas['technique'] = techniques
 
     # Format columns for ag-grid
     cols = []
-    # Process the visible columns first
+    
+    # Add explicit checkbox column as the first column
+    cols.append({
+        'headerName': '',
+        'field': 'checkbox',
+        'checkboxSelection': True,
+        'headerCheckboxSelection': True,
+        'width': 60,
+        'pinned': 'left',
+        'sortable': False,
+        'filter': False,
+        'resizable': False,
+        'suppressMenu': True,
+        'floatingFilter': False,
+        'cellClass': 'ag-checkbox-cell',
+        'headerClass': 'ag-checkbox-header',
+    })
+    
+    # Process the visible columns
     for col in VISIBLE_COLS:
         field_key = col.key
         header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
@@ -121,7 +157,7 @@ def _get_metadatas():
             'sortable': True, 
             'resizable': True,
             'floatingFilter': True,  
-            'unSortIcon': True, 
+            'unSortIcon': True,
         }
 
         if field_key == 'scanNumber':
@@ -132,9 +168,20 @@ def _get_metadatas():
         cols.append(col_def)
     
     # Add the scan count column
-    cols.insert(3, {
+    cols.insert(4, {
         'headerName': CUSTOM_HEADER_NAMES['scan_dim'],
         'field': 'scan_dim',
+        'filter': True,
+        'sortable': True,
+        'resizable': True,
+        'floatingFilter': True,
+        'unSortIcon': True,
+    })
+    
+    # Add the technique column
+    cols.insert(5, {
+        'headerName': 'Technique',
+        'field': 'technique',
         'filter': True,
         'sortable': True,
         'resizable': True,
@@ -151,7 +198,7 @@ def _get_metadatas():
         'filter': False,
         'resizable': True, # Or False, depending on preference
         'suppressMenu': True, # Or False
-        'width': 200 # Adjusted width for DBC buttons
+        'width': 200, # Adjusted width for DBC buttons
     })
 
     return cols, metadatas.to_dict('records')
@@ -178,11 +225,37 @@ def get_metadatas(path):
     State('scans-page-wire-recon', 'href'),
     prevent_initial_call=True,
 )
-def selected_wirerecon_href(rows,href,id_query="?scan_id=$"):
-    href = href.split(id_query)[0]
-    if rows:
-        href += "?scan_id=$" + ','.join([str(row['scanNumber']) for row in rows]) 
-    return href
+def selected_recon_href(rows,href):
+    base_href = href.split("?")[0]
+    if not rows:
+        return base_href
+
+    scan_ids = []
+    any_wire_scans, any_nonwire_scans = False, False
+
+    for row in rows:
+        if row.get('scanNumber'):
+            scan_ids.append(str(row['scanNumber']))
+        else:
+            return base_href
+
+        if row.get('aperture'):
+            aperture = str(row['aperture']).lower()
+            if aperture == 'none':
+                return base_href # Conflict condition: cannot be reconstructed
+            if 'wire' in aperture:
+                any_wire_scans = True
+            else:
+                any_nonwire_scans = True
+        
+            # Conflict condition: mixture of wirerecon and recon
+            if any_wire_scans and any_nonwire_scans:
+                return base_href
+
+    if any_nonwire_scans:
+        base_href = "/create-reconstruction"
+    
+    return f"{base_href}?scan_id=${','.join(scan_ids)}"
 
 
 @dash.callback(
@@ -191,8 +264,17 @@ def selected_wirerecon_href(rows,href,id_query="?scan_id=$"):
     State('scans-page-peakindex', 'href'),
     prevent_initial_call=True,
 )
-def selected_peakindex_href(rows,href,id_query="?scan_id=$"):
-    href = href.split(id_query)[0]
-    if rows:
-        href += "?scan_id=$" + ','.join([str(row['scanNumber']) for row in rows]) 
-    return href
+def selected_peakindex_href(rows,href):
+    base_href = href.split("?")[0]
+    if not rows:
+        return base_href
+
+    scan_ids = []
+
+    for row in rows:
+        if row.get('scanNumber'):
+            scan_ids.append(str(row['scanNumber']))
+        else:
+            return base_href
+
+    return f"{base_href}?scan_id=${','.join(scan_ids)}"

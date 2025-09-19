@@ -5,7 +5,6 @@ import base64
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
 from sqlalchemy.orm import Session
-from laue_portal.database.db_schema import Scan
 import laue_portal.components.navbar as navbar
 from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, set_scan_accordions
 from laue_portal.components.catalog_form import catalog_form, set_catalog_form_props
@@ -384,151 +383,177 @@ def submit_catalog_and_metadata(n,
             scanNumber = int(scanNumber)
             
         with Session(db_utils.ENGINE) as session:
-            # Check if metadata record exists for this scanNumber
-            metadata_data = session.query(db_schema.Metadata).filter(
-                db_schema.Metadata.scanNumber == scanNumber
-            ).first()
-            
-            if metadata_data:
-                set_props("alert-submit", {'is_open': True, 
-                                            'children': f'Error: Scan {scanNumber} already exists in the database.',
-                                            'color': 'danger'})
-            else:
-                # Create new metadata entry
-                metadata = db_schema.Metadata(
-                    scanNumber=scanNumber,
-                    time_epoch=time_epoch,
-                    time=db_utils.convert_time_string_to_datetime(time) if time else None,
-                    user_name=user_name,
-                    source_beamBad=source_beamBad,
-                    source_CCDshutter=source_CCDshutter,
-                    source_monoTransStatus=source_monoTransStatus,
-                    source_energy_unit=source_energy_unit,
-                    source_energy=source_energy,
-                    source_IDgap_unit=source_IDgap_unit,
-                    source_IDgap=source_IDgap,
-                    source_IDtaper_unit=source_IDtaper_unit,
-                    source_IDtaper=source_IDtaper,
-                    source_ringCurrent_unit=source_ringCurrent_unit,
-                    source_ringCurrent=source_ringCurrent,
-                    sample_XYZ_unit=sample_XYZ_unit,
-                    sample_XYZ_desc=sample_XYZ_desc,
-                    sample_XYZ=sample_XYZ,
-                    knifeEdge_XYZ_unit=knifeEdge_XYZ_unit,
-                    knifeEdge_XYZ_desc=knifeEdge_XYZ_desc,
-                    knifeEdge_XYZ=knifeEdge_XYZ,
-                    knifeEdge_knifeScan_unit=knifeEdge_knifeScan_unit,
-                    knifeEdge_knifeScan=knifeEdge_knifeScan,
-                    mda_file=mda_file,
-                    scanEnd_abort=scanEnd_abort,
-                    scanEnd_time_epoch=scanEnd_time_epoch,
-                    scanEnd_time=db_utils.convert_time_string_to_datetime(scanEnd_time) if scanEnd_time else None,
-                    scanEnd_scanDuration_unit=scanEnd_scanDuration_unit,
-                    scanEnd_scanDuration=scanEnd_scanDuration,
-                    scanEnd_source_beamBad=scanEnd_source_beamBad,
-                    scanEnd_source_ringCurrent_unit=scanEnd_source_ringCurrent_unit,
-                    scanEnd_source_ringCurrent=scanEnd_source_ringCurrent,
-                )
-                session.add(metadata)
+            try:
+                # Check if metadata record exists for this scanNumber
+                metadata_data = session.query(db_schema.Metadata).filter(
+                    db_schema.Metadata.scanNumber == scanNumber
+                ).first()
                 
-                set_props("alert-submit", {'is_open': True, 
-                                            'children': f'Metadata Entry Added to Database for scan {scanNumber}',
-                                            'color': 'success'})
-                
-                # Add scan rows from the form data
-                if scan_dims and len(scan_dims) > 0:
-                    valid_scans = 0
-                    # Reconstruct scan objects from form values
-                    for i in range(len(scan_dims)):
-                        # Check if all required fields have values (not None)
-                        if all(field is not None for field in 
-                               [
-                                scan_afters[i],
-                                scan_positioner1_PVs[i], scan_positioner1_ars[i],
-                                scan_positioner1_modes[i], scan_positioner1s[i],
-                                scan_positioner2_PVs[i], scan_positioner2_ars[i],
-                                scan_positioner2_modes[i], scan_positioner2s[i],
-                                scan_positioner3_PVs[i], scan_positioner3_ars[i],
-                                scan_positioner3_modes[i], scan_positioner3s[i],
-                                scan_positioner4_PVs[i], scan_positioner4_ars[i],
-                                scan_positioner4_modes[i], scan_positioner4s[i],
-                                scan_detectorTrig1_PVs[i],scan_detectorTrig1_VALs[i],
-                                scan_detectorTrig2_PVs[i], scan_detectorTrig2_VALs[i],
-                                scan_detectorTrig3_PVs[i], scan_detectorTrig3_VALs[i],
-                                scan_detectorTrig4_PVs[i], scan_detectorTrig4_VALs[i],
-                                ]
-                        ):
-                            scan = Scan(
-                                scanNumber=scanNumber,
-                                scan_dim=scan_dims[i],
-                                scan_npts=scan_npts_list[i],
-                                scan_after=scan_afters[i],
-                                scan_positioner1_PV=scan_positioner1_PVs[i],
-                                scan_positioner1_ar=scan_positioner1_ars[i],
-                                scan_positioner1_mode=scan_positioner1_modes[i],
-                                scan_positioner1=scan_positioner1s[i],
-                                scan_positioner2_PV=scan_positioner2_PVs[i],
-                                scan_positioner2_ar=scan_positioner2_ars[i],
-                                scan_positioner2_mode=scan_positioner2_modes[i],
-                                scan_positioner2=scan_positioner2s[i],
-                                scan_positioner3_PV=scan_positioner3_PVs[i],
-                                scan_positioner3_ar=scan_positioner3_ars[i],
-                                scan_positioner3_mode=scan_positioner3_modes[i],
-                                scan_positioner3=scan_positioner3s[i],
-                                scan_positioner4_PV=scan_positioner4_PVs[i],
-                                scan_positioner4_ar=scan_positioner4_ars[i],
-                                scan_positioner4_mode=scan_positioner4_modes[i],
-                                scan_positioner4=scan_positioner4s[i],
-                                scan_detectorTrig1_PV=scan_detectorTrig1_PVs[i],
-                                scan_detectorTrig1_VAL=scan_detectorTrig1_VALs[i],
-                                scan_detectorTrig2_PV=scan_detectorTrig2_PVs[i],
-                                scan_detectorTrig2_VAL=scan_detectorTrig2_VALs[i],
-                                scan_detectorTrig3_PV=scan_detectorTrig3_PVs[i],
-                                scan_detectorTrig3_VAL=scan_detectorTrig3_VALs[i],
-                                scan_detectorTrig4_PV=scan_detectorTrig4_PVs[i],
-                                scan_detectorTrig4_VAL=scan_detectorTrig4_VALs[i],
-                                scan_cpt=scan_cpts[i],
-                            )
-                            session.add(scan)
-                            valid_scans += 1
+                if metadata_data:
+                    set_props("alert-submit", {'is_open': True, 
+                                                'children': f'Error: Scan {scanNumber} already exists in the database.',
+                                                'color': 'danger'})
+                else:
+                    # Create new metadata entry
+                    metadata = db_schema.Metadata(
+                        scanNumber=scanNumber,
+                        time_epoch=time_epoch,
+                        time=db_utils.convert_time_string_to_datetime(time) if time else None,
+                        user_name=user_name,
+                        source_beamBad=source_beamBad,
+                        source_CCDshutter=source_CCDshutter,
+                        source_monoTransStatus=source_monoTransStatus,
+                        source_energy_unit=source_energy_unit,
+                        source_energy=source_energy,
+                        source_IDgap_unit=source_IDgap_unit,
+                        source_IDgap=source_IDgap,
+                        source_IDtaper_unit=source_IDtaper_unit,
+                        source_IDtaper=source_IDtaper,
+                        source_ringCurrent_unit=source_ringCurrent_unit,
+                        source_ringCurrent=source_ringCurrent,
+                        sample_XYZ_unit=sample_XYZ_unit,
+                        sample_XYZ_desc=sample_XYZ_desc,
+                        sample_XYZ=sample_XYZ,
+                        knifeEdge_XYZ_unit=knifeEdge_XYZ_unit,
+                        knifeEdge_XYZ_desc=knifeEdge_XYZ_desc,
+                        knifeEdge_XYZ=knifeEdge_XYZ,
+                        knifeEdge_knifeScan_unit=knifeEdge_knifeScan_unit,
+                        knifeEdge_knifeScan=knifeEdge_knifeScan,
+                        mda_file=mda_file,
+                        scanEnd_abort=scanEnd_abort,
+                        scanEnd_time_epoch=scanEnd_time_epoch,
+                        scanEnd_time=db_utils.convert_time_string_to_datetime(scanEnd_time) if scanEnd_time else None,
+                        scanEnd_scanDuration_unit=scanEnd_scanDuration_unit,
+                        scanEnd_scanDuration=scanEnd_scanDuration,
+                        scanEnd_source_beamBad=scanEnd_source_beamBad,
+                        scanEnd_source_ringCurrent_unit=scanEnd_source_ringCurrent_unit,
+                        scanEnd_source_ringCurrent=scanEnd_source_ringCurrent,
+                    )
                     
-                    if valid_scans > 0:
-                        set_props("alert-submit", {'is_open': True, 
-                                                    'children': f'{valid_scans} Scan entries added to database',
-                                                    'color': 'success'})
-            
-            # Check if catalog entry already exists
-            catalog_data = session.query(db_schema.Catalog).filter(
-                db_schema.Catalog.scanNumber == scanNumber
-            ).first()
-            
-            if catalog_data:
-                # Update existing catalog entry
-                catalog_data.filefolder = filefolder
-                catalog_data.filenamePrefix = filenamePrefix
-                catalog_data.aperture = aperture
-                catalog_data.sample_name = sample_name
-                catalog_data.notes = notes
-                
+                    # Add scan rows from the form data
+                    if scan_dims and len(scan_dims) > 0:
+                        motor_group_totals = {}
+                        valid_scans = 0
+                        # Reconstruct scan objects from form values
+                        for i in range(len(scan_dims)):
+                            # Check if all required fields have values (not None)
+                            if all(field is not None for field in 
+                                   [
+                                    scan_afters[i],
+                                    scan_positioner1_PVs[i], scan_positioner1_ars[i],
+                                    scan_positioner1_modes[i], scan_positioner1s[i],
+                                    scan_positioner2_PVs[i], scan_positioner2_ars[i],
+                                    scan_positioner2_modes[i], scan_positioner2s[i],
+                                    scan_positioner3_PVs[i], scan_positioner3_ars[i],
+                                    scan_positioner3_modes[i], scan_positioner3s[i],
+                                    scan_positioner4_PVs[i], scan_positioner4_ars[i],
+                                    scan_positioner4_modes[i], scan_positioner4s[i],
+                                    scan_detectorTrig1_PVs[i],scan_detectorTrig1_VALs[i],
+                                    scan_detectorTrig2_PVs[i], scan_detectorTrig2_VALs[i],
+                                    scan_detectorTrig3_PVs[i], scan_detectorTrig3_VALs[i],
+                                    scan_detectorTrig4_PVs[i], scan_detectorTrig4_VALs[i],
+                                    ]
+                            ):
+                                scan = db_schema.Scan(
+                                    scanNumber=scanNumber,
+                                    scan_dim=scan_dims[i],
+                                    scan_npts=scan_npts_list[i],
+                                    scan_after=scan_afters[i],
+                                    scan_positioner1_PV=scan_positioner1_PVs[i],
+                                    scan_positioner1_ar=scan_positioner1_ars[i],
+                                    scan_positioner1_mode=scan_positioner1_modes[i],
+                                    scan_positioner1=scan_positioner1s[i],
+                                    scan_positioner2_PV=scan_positioner2_PVs[i],
+                                    scan_positioner2_ar=scan_positioner2_ars[i],
+                                    scan_positioner2_mode=scan_positioner2_modes[i],
+                                    scan_positioner2=scan_positioner2s[i],
+                                    scan_positioner3_PV=scan_positioner3_PVs[i],
+                                    scan_positioner3_ar=scan_positioner3_ars[i],
+                                    scan_positioner3_mode=scan_positioner3_modes[i],
+                                    scan_positioner3=scan_positioner3s[i],
+                                    scan_positioner4_PV=scan_positioner4_PVs[i],
+                                    scan_positioner4_ar=scan_positioner4_ars[i],
+                                    scan_positioner4_mode=scan_positioner4_modes[i],
+                                    scan_positioner4=scan_positioner4s[i],
+                                    scan_detectorTrig1_PV=scan_detectorTrig1_PVs[i],
+                                    scan_detectorTrig1_VAL=scan_detectorTrig1_VALs[i],
+                                    scan_detectorTrig2_PV=scan_detectorTrig2_PVs[i],
+                                    scan_detectorTrig2_VAL=scan_detectorTrig2_VALs[i],
+                                    scan_detectorTrig3_PV=scan_detectorTrig3_PVs[i],
+                                    scan_detectorTrig3_VAL=scan_detectorTrig3_VALs[i],
+                                    scan_detectorTrig4_PV=scan_detectorTrig4_PVs[i],
+                                    scan_detectorTrig4_VAL=scan_detectorTrig4_VALs[i],
+                                    scan_cpt=scan_cpts[i],
+                                )
+                                session.add(scan)
+                                valid_scans += 1
+                                motor_group_totals = db_utils.update_motor_group_totals(motor_group_totals, scan)
+                        
+                        if valid_scans > 0:
+                            set_props("alert-submit", {'is_open': True, 
+                                                        'children': f'{valid_scans} Scan entries added to database',
+                                                        'color': 'success'})
+
+                        # Fallback value of 1 for 'sample' and 'depth' completed points if any motor has completed points
+                        if motor_group_totals:
+                            for specific_motor_group in ['sample', 'depth']:
+                                if specific_motor_group not in motor_group_totals:
+                                    if any(group.get('completed', 0) for group in motor_group_totals.values()):
+                                        motor_group_totals[specific_motor_group] = {'points': 0, 'completed': 1}
+
+                        for motor_group, totals in motor_group_totals.items():
+                            setattr(metadata, f'motorGroup_{motor_group}_npts_total', totals['points'])
+                            setattr(metadata, f'motorGroup_{motor_group}_cpt_total', totals['completed'])
+                    
+                    session.add(metadata)
+                    
+                    set_props("alert-submit", {'is_open': True, 
+                                                'children': f'Metadata Entry Added to Database for scan {scanNumber}',
+                                                'color': 'success'})
+            except Exception as e:
                 set_props("alert-submit", {'is_open': True, 
-                                            'children': f'Catalog Entry Updated for scan {scanNumber}',
-                                            'color': 'success'})
-            else:
-                # Create new catalog entry
-                catalog = db_schema.Catalog(
-                    scanNumber=scanNumber,
-                    filefolder=filefolder,
-                    filenamePrefix=filenamePrefix,
-                    aperture=aperture,
-                    sample_name=sample_name,
-                    notes=notes,
-                )
+                                            'children': f'Error creating metadata entry: {str(e)}',
+                                            'color': 'danger'})
+                return
+
+            try:
+                # Check if catalog entry already exists
+                catalog_data = session.query(db_schema.Catalog).filter(
+                    db_schema.Catalog.scanNumber == scanNumber
+                ).first()
                 
-                session.add(catalog)
-                
+                if catalog_data:
+                    # Update existing catalog entry
+                    catalog_data.filefolder = filefolder
+                    catalog_data.filenamePrefix = filenamePrefix
+                    catalog_data.aperture = aperture
+                    catalog_data.sample_name = sample_name
+                    catalog_data.notes = notes
+                    
+                    set_props("alert-submit", {'is_open': True, 
+                                                'children': f'Catalog Entry Updated for scan {scanNumber}',
+                                                'color': 'success'})
+                else:
+                    # Create new catalog entry
+                    catalog = db_schema.Catalog(
+                        scanNumber=scanNumber,
+                        filefolder=filefolder,
+                        filenamePrefix=filenamePrefix,
+                        aperture=aperture,
+                        sample_name=sample_name,
+                        notes=notes,
+                    )
+                    
+                    session.add(catalog)
+                    
+                    set_props("alert-submit", {'is_open': True, 
+                                                'children': f'Catalog Entry Added to Database for scan {scanNumber}',
+                                                'color': 'success'})
+            except Exception as e:
                 set_props("alert-submit", {'is_open': True, 
-                                            'children': f'Catalog Entry Added to Database for scan {scanNumber}',
-                                            'color': 'success'})
+                                            'children': f'Error creating catalog entry: {str(e)}',
+                                            'color': 'danger'})
+                return
             
             # Commit all changes
             session.commit()
@@ -536,8 +561,4 @@ def submit_catalog_and_metadata(n,
     except ValueError as e:
         set_props("alert-submit", {'is_open': True, 
                                     'children': f'Error: Invalid scan number format. Please enter a valid integer.',
-                                    'color': 'danger'})
-    except Exception as e:
-        set_props("alert-submit", {'is_open': True, 
-                                    'children': f'Error creating catalog entry: {str(e)}',
                                     'color': 'danger'})

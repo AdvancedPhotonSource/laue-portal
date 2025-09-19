@@ -1,6 +1,6 @@
 import dash_bootstrap_components as dbc
 from dash import html, set_props
-from laue_portal.components.form_base import _stack, _field
+from laue_portal.components.form_base import _stack, _field, _select
 
 
 wire_recon_form = dbc.Row(
@@ -54,15 +54,15 @@ wire_recon_form = dbc.Row(
                                 ),
                                 _stack(
                                     [
-                                        dbc.Select(
-                                            placeholder="Wire Edges",
-                                            options=[
+                                        _select("Wire Edges", 
+                                            "wire_edges",
+                                            [
                                                 {"label": "Leading Edge", "value": "leading"},
                                                 {"label": "Trailing Edge", "value": "trailing"},
                                                 {"label": "Both Edges", "value": "both"},
                                             ],
-                                            style={'width': 350}, #size='md'
-                                            id="wire_edges",
+                                            size='md',
+                                            kwargs={'placeholder':"Select:"}
                                         ),
                                         _field("Percentage of pixels to process", 'percent_brightest', size='md'),
                                         _field("Detector", 'detector', size='md'), # default to detector number 0, but never pass this argument. It will get this from geo file.
@@ -127,7 +127,7 @@ def set_wire_recon_form_props(wirerecon, read_only=False):
     
     # Additional form fields
     set_props("scanPoints", {'value':wirerecon.scanPoints, 'readonly':read_only})  # Range of files field
-    set_props("wire_edges", {'value':wirerecon.wire_edges, 'readonly':read_only})  # Wire edge field
+    set_props("wire_edges", {'value':wirerecon.wire_edges, 'disabled':read_only})  # Wire edge field
     set_props("detector", {'value': '0 or auto', 'readonly':True})  # Default detector number
     
     # User text

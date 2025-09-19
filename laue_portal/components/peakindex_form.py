@@ -1,6 +1,6 @@
 import dash_bootstrap_components as dbc
 from dash import html, set_props
-from laue_portal.components.form_base import _stack, _field, _ckbx
+from laue_portal.components.form_base import _stack, _field, _select, _ckbx
 
 
 peakindex_form = dbc.Row(
@@ -84,14 +84,13 @@ peakindex_form = dbc.Row(
                                 _stack(
                                     [
                                         #_field("Peak Shape", "peakShape", size='lg'),
-                                        dbc.Select(
-                                            placeholder="Peak Shape",
-                                            options=[
+                                        _select("Peak Shape", "peakShape",
+                                            [
                                                 {"label": "Lorentzian", "value": "Lorentzian"},
                                                 {"label": "Gaussian", "value": "Gaussian"},
                                             ],
-                                            style={'width':200}, #size='sm'
-                                            id="peakShape",
+                                            size='md',
+                                            kwargs={'placeholder':'Select:'}, 
                                         ),
                                         _ckbx("Smooth peak before fitting", "smooth", size='md'),
                                         _ckbx("Cosmic Filter", "cosmicFilter", size='md'),
@@ -240,7 +239,7 @@ def set_peakindex_form_props(peakindex, read_only=False):
     set_props("boxsize", {'value':peakindex.boxsize, 'readonly':read_only})
     set_props("max_number", {'value':peakindex.max_number, 'readonly':read_only})
     set_props("min_separation", {'value':peakindex.min_separation, 'readonly':read_only})
-    set_props("peakShape", {'value':peakindex.peakShape, 'readonly':read_only})
+    set_props("peakShape", {'value':peakindex.peakShape, 'disabled':read_only})
     set_props("scanPoints", {'value':peakindex.scanPoints, 'readonly':read_only})
     set_props("depthRange", {'value':peakindex.depthRange, 'readonly':read_only})
     set_props("detectorCropX1", {'value':peakindex.detectorCropX1, 'readonly':read_only})
@@ -249,7 +248,7 @@ def set_peakindex_form_props(peakindex, read_only=False):
     set_props("detectorCropY2", {'value':peakindex.detectorCropY2, 'readonly':read_only})
     set_props("min_size", {'value':peakindex.min_size, 'readonly':read_only})
     set_props("max_peaks", {'value':peakindex.max_peaks, 'readonly':read_only})
-    set_props("smooth", {'value':peakindex.smooth, 'readonly':read_only})
+    set_props("smooth", {'value':peakindex.smooth, 'disabled':read_only})
     set_props("maskFile", {'value':peakindex.maskFile, 'readonly':read_only})
     set_props("indexKeVmaxCalc", {'value':peakindex.indexKeVmaxCalc, 'readonly':read_only})
     set_props("indexKeVmaxTest", {'value':peakindex.indexKeVmaxTest, 'readonly':read_only})
@@ -264,7 +263,7 @@ def set_peakindex_form_props(peakindex, read_only=False):
     set_props("indexCone", {'value':peakindex.indexCone, 'readonly':read_only})
     set_props("energyUnit", {'value':peakindex.energyUnit, 'readonly':read_only})
     set_props("exposureUnit", {'value':peakindex.exposureUnit, 'readonly':read_only})
-    set_props("cosmicFilter", {'value':peakindex.cosmicFilter, 'readonly':read_only})
+    set_props("cosmicFilter", {'value':peakindex.cosmicFilter, 'disabled':read_only})
     set_props("recipLatticeUnit", {'value':peakindex.recipLatticeUnit, 'readonly':read_only})
     set_props("latticeParametersUnit", {'value':peakindex.latticeParametersUnit, 'readonly':read_only})
     # set_props("peaksearchPath", {'value':peakindex.peaksearchPath, 'readonly':read_only})

@@ -5,10 +5,11 @@ import dash_ag_grid as dag
 from dash.exceptions import PreventUpdate
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 import pandas as pd 
 import laue_portal.components.navbar as navbar
+from laue_portal.pages.scan import build_technique_strings
 
 dash.register_page(__name__)
 
@@ -56,15 +57,16 @@ layout = html.Div([
                 columnSize="responsiveSizeToFit",
                 defaultColDef={
                     "filter": True,
-                    "checkboxSelection": {
-                        "function": 'params.column == params.columnApi.getAllDisplayedColumns()[0]'
-                    },
-                    "headerCheckboxSelection": {
-                        "function": 'params.column == params.columnApi.getAllDisplayedColumns()[0]'
-                    },
                 },
-                dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight',
-                                 "rowSelection": 'multiple', "suppressRowClickSelection": True, "animateRows": False, "rowHeight": 32},
+                dashGridOptions={
+                    "pagination": True, 
+                    "paginationPageSize": 20, 
+                    "domLayout": 'autoHeight',
+                    "rowSelection": 'multiple', 
+                    "suppressRowClickSelection": True, 
+                    "animateRows": False, 
+                    "rowHeight": 64
+                },
                 style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                 className="ag-theme-alpine"
             )
@@ -94,7 +96,7 @@ VISIBLE_COLS = [
 
 CUSTOM_HEADER_NAMES = {
     'wirerecon_id': 'Recon ID (Wire)', #'Wire Recon ID', #'ReconID',
-    'scanNumber': 'Scan ID',
+    'scanNumber': 'Scan Info', #'Scan ID',
     'calib_id': 'Calibration ID',
     #'pxl_recon': 'Pixels'
     'submit_time': 'Date',
@@ -102,39 +104,92 @@ CUSTOM_HEADER_NAMES = {
 
 def _get_recons():
     with Session(db_utils.ENGINE) as session:
-        wirerecons = pd.read_sql(session.query(*VISIBLE_COLS)
-            .join(db_schema.Catalog, db_schema.WireRecon.scanNumber == db_schema.Catalog.scanNumber)
-            .join(db_schema.Job, db_schema.WireRecon.job_id == db_schema.Job.job_id)
-            .statement, session.bind)
+        # Query with JOINs to get scan count and catalog info for each wire reconstruction
+        query = session.query(
+            *VISIBLE_COLS,
+            func.concat(func.count(db_schema.Scan.id), 'D').label('scan_dim') # Count dimensions and label it as 'scan_dim'
+        ).join(
+            db_schema.Catalog, db_schema.WireRecon.scanNumber == db_schema.Catalog.scanNumber
+        ).join(
+            db_schema.Job, db_schema.WireRecon.job_id == db_schema.Job.job_id
+        ).outerjoin(
+            db_schema.Scan, db_schema.WireRecon.scanNumber == db_schema.Scan.scanNumber
+        ).group_by(*VISIBLE_COLS)
+        
+        wirerecons = pd.read_sql(query.statement, session.bind)
+        
+        # Add technique column by computing it for each wire reconstruction
+        techniques = []
+        for _, row in wirerecons.iterrows():
+            scan_number = row['scanNumber']
+            # Get all scan records for this scan number
+            scans_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_number).all()
+            
+            if scans_data:
+                # Get the filtered technique string (first element of tuple)
+                filtered_str, _ = build_technique_strings(scans_data)
+                techniques.append(filtered_str)
+            else:
+                techniques.append("none")
+        
+        wirerecons['technique'] = techniques
 
     # Format columns for ag-grid
     cols = []
+    
+    # Add explicit checkbox column as the first column
+    cols.append({
+        'headerName': '',
+        'field': 'checkbox',
+        'checkboxSelection': True,
+        'headerCheckboxSelection': True,
+        'width': 60,
+        'pinned': 'left',
+        'sortable': False,
+        'filter': False,
+        'resizable': False,
+        'suppressMenu': True,
+        'floatingFilter': False,
+        'cellClass': 'ag-checkbox-cell',
+        'headerClass': 'ag-checkbox-header',
+    })
+    
     for col in VISIBLE_COLS:
         field_key = col.key
-        if field_key != 'aperture':
-            header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
+        if field_key in ['aperture', 'sample_name']:
+            continue
             
-            col_def = {
-                'headerName': header_name,
-                'field': field_key,
-                'filter': True,
-                'sortable': True,
-                'resizable': True,
-                'suppressMenuHide': True
-            }
+        header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
+        
+        col_def = {
+            'headerName': header_name,
+            'field': field_key,
+            'filter': True,
+            'sortable': True,
+            'resizable': True,
+            'floatingFilter': True,
+            'unSortIcon': True,
+        }
 
-            if field_key == 'wirerecon_id':
-                col_def['cellRenderer'] = 'WireReconLinkRenderer'
-            elif field_key == 'dataset_id':
-                col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
-            elif field_key == 'scanNumber':
-                col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
-            elif field_key in ['submit_time', 'start_time', 'finish_time']:
-                col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
-            elif field_key == 'status':
-                col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
-            
-            cols.append(col_def)
+        if field_key == 'wirerecon_id':
+            col_def['cellRenderer'] = 'WireReconLinkRenderer'
+        elif field_key == 'dataset_id':
+            col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
+        elif field_key == 'scanNumber':
+            # Custom multi-line display for Scan ID column
+            col_def['cellRenderer'] = 'WireReconScanLinkRenderer'  # Use the wire recon specific renderer
+            col_def['valueGetter'] = {"function": """
+                'Scan ID: ' + params.data.scanNumber + '|' +
+                'Sample: ' + params.data.sample_name + '|' +
+                params.data.scan_dim + ': ' + params.data.technique + ' (' + 
+                (params.data.aperture.toLowerCase().includes('coded') ? 'CA' : params.data.aperture) + ')'
+            """}
+        elif field_key in ['submit_time', 'start_time', 'finish_time']:
+            col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+        elif field_key == 'status':
+            col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
+        
+        cols.append(col_def)
 
     # Add the custom actions column
     cols.append({
@@ -167,27 +222,31 @@ def get_recons(path):
 
 @dash.callback(
     Output('wire-recons-page-wire-recon', 'href'),
-    Input('wire-recon-table','selectedRows'),
-    State('wire-recons-page-wire-recon', 'href'),
-    prevent_initial_call=True,
-)
-def selected_wirerecon_href(rows,href,id_query="?scan_id=$"):
-    href = href.split(id_query)[0]
-    if rows:
-        href += "?scan_id=$" + ','.join([str(row['scanNumber']) for row in rows])
-        href += "&wirerecon_id=" + ','.join([str(row['wirerecon_id']) for row in rows])
-    return href
-
-
-@dash.callback(
     Output('wire-recons-page-peakindex', 'href'),
     Input('wire-recon-table','selectedRows'),
+    State('wire-recons-page-wire-recon', 'href'),
     State('wire-recons-page-peakindex', 'href'),
     prevent_initial_call=True,
 )
-def selected_peakindex_href(rows,href,id_query="?scan_id=$"):
-    href = href.split(id_query)[0]
-    if rows:
-        href += "?scan_id=$" + ','.join([str(row['scanNumber']) for row in rows])
-        href += "&wirerecon_id=" + ','.join([str(row['wirerecon_id']) for row in rows])
-    return href
+def selected_hrefs(rows, wirerecon_href, peakindex_href):
+    base_wirerecon_href = wirerecon_href.split("?")[0]
+    base_peakindex_href = peakindex_href.split("?")[0]
+    if not rows:
+        return base_wirerecon_href, base_peakindex_href
+
+    scan_ids, wirerecon_ids = [], []
+
+    for row in rows:
+        if row.get('scanNumber'):
+            scan_ids.append(str(row['scanNumber']))
+        else:
+            return base_wirerecon_href, base_peakindex_href
+        
+        wirerecon_ids.append(str(row['wirerecon_id']) if row.get('wirerecon_id') else '')
+
+    query_params = [f"scan_id=${','.join(scan_ids)}"]
+    if any(wirerecon_ids): query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
+    
+    query_string = "&".join(query_params)
+    
+    return f"{base_wirerecon_href}?{query_string}", f"{base_peakindex_href}?{query_string}"

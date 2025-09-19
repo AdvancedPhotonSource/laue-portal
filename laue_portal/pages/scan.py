@@ -3,13 +3,14 @@ from dash import html, dcc, callback, Input, Output, set_props
 import dash_bootstrap_components as dbc
 import dash_ag_grid as dag
 import laue_portal.database.db_utils as db_utils
-import laue_portal.database.db_schema as db_schema
+from laue_portal.database import db_utils, db_schema
 from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 from dash.exceptions import PreventUpdate
 from sqlalchemy import func # Import func for aggregation
 from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, set_scan_accordions
 from laue_portal.components.catalog_form import catalog_form, set_catalog_form_props
+from laue_portal.components.form_base import _stack, _field
 import urllib.parse
 import pandas as pd
 from datetime import datetime
@@ -34,7 +35,7 @@ layout = html.Div([
                     dbc.Card([
                         dbc.CardHeader(
                             dbc.Row([
-                                dbc.Col(html.H4("ScanLog Info", className="mb-0"), width="auto"),
+                                dbc.Col(html.H4("Scan Info", className="mb-0"), width="auto"),
                                 dbc.Col(
                                     html.Div([
                                         dbc.Button("ScanLogPlot", id="scanlog-plot-btn", color="success", size="sm", className="me-2"),
@@ -46,28 +47,24 @@ layout = html.Div([
                             className="bg-light"
                         ),
                         dbc.CardBody([
-                            
-                            html.P(children=[html.Strong("User: "), html.Div(id="User_print")],
-                                   style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
-                                   ),
-                            html.P(children=[html.Strong("Date: "), html.Div(id="Date_print")],
-                                   style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
-                                   ),
-                            html.P(children=[html.Strong("Scan Type: "), html.Div(id="ScanType_print")],
-                                   style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
-                                   ),
-                            html.P(children=[html.Strong("Technique: "), html.Div(id="Technique_print")],
-                                   style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
-                                   ),
-                            html.P(children=[html.Strong("Sample: "), html.Div(id="Sample_print")],
-                                   style={"display":"flex", "gap":"5px", "align-items":"flex-end"}
-                                   ),
-                            # html.P(html.Div(id="User_print")),
-                            # html.P(html.Div(id="Date_print")),
-                            # html.P(html.Div(id="ScanType_print")),
-                            # html.P(html.Div(id="Technique_print")),
-                            # html.P(html.Div(id="Sample_print")),
-
+                            dbc.Row([
+                                dbc.Col([
+                                    html.P(children=[html.Strong("User: "), html.Div(id="User_print")],
+                                           style={"display":"flex", "gap":"5px", "align-items":"flex-end"}),
+                                    html.P(children=[html.Strong("Date: "), html.Div(id="Date_print")],
+                                           style={"display":"flex", "gap":"5px", "align-items":"flex-end"}),
+                                    html.P(children=[html.Strong("Scan Dimensions: "), html.Div(id="ScanDims_print")],
+                                           style={"display":"flex", "gap":"5px", "align-items":"flex-end"}),
+                                    html.P(children=[html.Strong("Technique: "), html.Div(id="Technique_print")],
+                                           style={"display":"flex", "gap":"5px", "align-items":"flex-end"}),
+                                    dbc.Row(id='scan-totals-row', className="mt-3"),
+                                    html.P(children=[html.Strong("Aperture: "), html.Div(id="Aperture_print")],
+                                           style={"display":"flex", "gap":"5px", "align-items":"flex-end"}),
+                                    html.P(children=[html.Strong("Sample: "), html.Div(id="Sample_print")],
+                                           style={"display":"flex", "gap":"5px", "align-items":"flex-end"}),
+                                ], width=6),
+                                dbc.Col(id='positioner-info-div', width=6),
+                            ]),
                             dbc.Row([
                                 dbc.Col([
                                     html.P(html.Strong("Comment:")),
@@ -82,7 +79,6 @@ layout = html.Div([
                                     )
                                 )
                             ], className="mb-3", align="start")
-
                         ])
                     ], className="mb-4 shadow-sm border",
                     style={"width": "100%"}),
@@ -234,6 +230,64 @@ Scan Info
 =======================
 """
 
+def build_technique_strings(scans, none="none"):
+    """
+    Build both filtered and all motor strings from scans.
+    
+    Returns a tuple of (filtered_str, all_motors_str)
+    
+    Rules for filtered string:
+    - Do not include the same string value twice
+    - Do not include any that are "none" unless all motor strings are "none"
+    - If there is only one string equal to "sample" include the string "line" instead
+    - If there are more than one strings equal to "sample" include the string "area" instead
+    """
+    # Extract motor groups from all scans
+    motor_groups = []
+    for scan in scans:
+        # Dynamically check all scan_positioner*_PV attributes
+        for attr_name in dir(scan):
+            if attr_name.startswith('scan_positioner') and attr_name.endswith('_PV'):
+                pv_value = getattr(scan, attr_name, None)
+                if pv_value:
+                    motor_group = db_utils.find_motor_group(pv_value)
+                    motor_groups.append(motor_group)
+    
+    # Create all_motors_str - join all motor groups with "; "
+    all_motors_str = "; ".join(motor_groups) if motor_groups else none
+    
+    # Build filtered string
+    if not motor_groups:
+        return none, all_motors_str
+    
+    # Convert to lowercase
+    motor_groups_lower = [g.lower() for g in motor_groups]
+    
+    # Count "sample" occurrences before deduplication
+    sample_count = motor_groups_lower.count("sample")
+    
+    # Build final list with deduplication using a set
+    # Initialize with none so it gets skipped automatically
+    seen_groups = {none} #"none"
+    final_groups = []
+    
+    for group in motor_groups_lower:
+        if group not in seen_groups:
+            seen_groups.add(group)
+            
+            if group == "sample":
+                if sample_count == 1:
+                    final_groups.append("line")
+                elif sample_count > 1:
+                    final_groups.append("area")
+            else:
+                final_groups.append(group)
+    
+    filtered_str = " + ".join(final_groups) if final_groups else none
+    
+    return filtered_str, all_motors_str
+
+
 def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
     set_props('ScanID_print', {'children':[metadata.scanNumber]})
     set_props('User_print', {'children':[metadata.user_name]})
@@ -242,10 +296,81 @@ def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
     if isinstance(time_value, datetime):
         time_value = time_value.strftime('%Y-%m-%d, %H:%M:%S')
     set_props('Date_print', {'children':[time_value]})
-    set_props('ScanType_print', {'children':[f"{len([i for i,scan in enumerate(scans)])}D"]})
-    set_props('Technique_print', {'children':[catalog.aperture.title()]}) #"depth"
+    set_props('ScanDims_print', {'children':[f"{len([i for i,scan in enumerate(scans)])}D"]})
+    
+    # Construct Technique_print using the new function
+    filtered_str, all_motors_str = build_technique_strings(scans)
+    
+    # Combine filtered string and all_motors_str
+    technique_str = f"{filtered_str} ({all_motors_str})"
+    
+    set_props('Technique_print', {'children':[technique_str]}) #depth
+    set_props('Aperture_print', {'children':[catalog.aperture.title()]})
     set_props('Sample_print', {'children':[catalog.sample_name]}) #"Si"
     set_props('Comment_print', {'value':"submit indexing"})
+
+    npts_label = "Points"
+    cpt_label = "Completed"
+    positioner_info = []
+    motor_group_totals = {}
+    for i, scan in enumerate(scans):
+        motor_group_totals = db_utils.update_motor_group_totals(motor_group_totals, scan)
+        pos_fields = []
+        for PV_i in range(1, 5):
+            pv_attr = f'scan_positioner{PV_i}_PV'
+            pos_attr = f'scan_positioner{PV_i}'
+            if getattr(scan, pv_attr, None):
+                motor_group = db_utils.find_motor_group(getattr(scan, pv_attr))
+                
+                label = html.Div(f"{motor_group.capitalize()}:")
+                
+                start_val, stop_val, step_val = getattr(scan, pos_attr, '  ').split()
+
+                fields = [
+                    _field("Start", {"type": "pos_start", "index": i, "PV": PV_i}, size='sm', kwargs={'value': start_val, 'readonly': read_only}),
+                    _field("Stop", {"type": "pos_stop", "index": i, "PV": PV_i}, size='sm', kwargs={'value': stop_val, 'readonly': read_only}),
+                    _field("Step", {"type": "pos_step", "index": i, "PV": PV_i}, size='sm', kwargs={'value': step_val, 'readonly': read_only}),
+                ]
+                
+                pos_fields.append(html.Div([label, _stack(fields)], style={'margin-bottom': '10px'}))
+
+        if pos_fields:
+            points_fields = _stack([
+                _field(npts_label, {"type": "points", "index": i}, size='sm', kwargs={'value': scan.scan_npts, 'readonly': read_only}),
+                _field(cpt_label, {"type": "completed", "index": i}, size='sm', kwargs={'value': scan.scan_cpt, 'readonly': read_only})
+            ])
+
+            header = _stack([
+                html.Strong(f"Scan {scan.scan_dim} Positioners", className="mb-3"),
+                points_fields
+            ])
+            
+            positioner_info.append(html.Div([header, html.Div(pos_fields)]))
+
+    total_points_fields = []
+    for motor_group in db_utils.MOTOR_GROUPS:
+        db_points = getattr(metadata, f'motorGroup_{motor_group}_npts_total', None)
+        db_completed = getattr(metadata, f'motorGroup_{motor_group}_cpt_total', None)
+        
+        if db_points is not None:
+            total_points_fields.append(
+                _stack([#dbc.Col
+                    html.P(children=[html.Strong(f"{motor_group.capitalize()} {npts_label}: "), html.Div(db_points)],
+                           style={"display":"flex", "gap":"5px", "align-items":"flex-end"}),
+                    html.Span("|", className="mb-3"),
+                    html.P(children=[html.Strong(f"{motor_group.capitalize()} {cpt_label}: "), html.Div(db_completed)],
+                             style={"display":"flex", "gap":"5px", "align-items":"flex-end"})
+                ])#, width=6)
+            )
+            
+            # Check for mismatch
+            if motor_group in motor_group_totals:
+                if (motor_group_totals[motor_group]['points'] != db_points or
+                    motor_group_totals[motor_group]['completed'] != db_completed):
+                    set_props('alert-upload', {'is_open': True, 'children': f'Warning: Mismatch in {motor_group} totals.', 'color': 'warning'})
+
+    set_props('positioner-info-div', {'children': positioner_info})
+    set_props('scan-totals-row', {'children': total_points_fields})
 
 # VISIBLE_COLS_Metadata = [
 #     db_schema.Metadata.scanNumber,
@@ -486,17 +611,17 @@ Recon Table
 VISIBLE_COLS_Recon = [
     db_schema.Recon.recon_id,
     db_schema.Recon.author,
-    db_schema.Recon.notes,
-    #db_schema.Recon.pxl_recon,
+    db_schema.Recon.percent_brightest,
     db_schema.Job.submit_time,
     db_schema.Job.start_time,
     db_schema.Job.finish_time,
     db_schema.Job.status,
+    db_schema.Recon.notes,
 ]
 
 CUSTOM_HEADER_NAMES_Recon = {
     'recon_id': 'Recon ID', #'ReconID',
-    #'pxl_recon': 'Pixels'
+    'percent_brightest': 'Pixels',
     'submit_time': 'Date',
 }
 
@@ -505,17 +630,18 @@ CUSTOM_COLS_Recon_dict = {
         db_schema.Catalog.aperture, #db_schema.Recon.depth_technique, #presently does not exist
         db_schema.Recon.calib_id, #Calib.calib_id,
     ],
-    2:[#db_schema.Recon
-        #db_schema.PeakIndex.scanPointStart,
-        #db_schema.PeakIndex.scanPointEnd,
-        #db_schema.PeakIndex.filefolder,
+    2:[
+        db_schema.Recon.scanPointslen,
+        #db_schema.Metadata.motorGroup_sample_npts_total,
+        db_schema.Metadata.motorGroup_sample_cpt_total,
+        # db_schema.Metadata.motorGroup_energy_npts_total,
+        # db_schema.Metadata.motorGroup_energy_cpt_total,
+        # db_schema.Metadata.motorGroup_depth_npts_total,
+        # db_schema.Metadata.motorGroup_depth_cpt_total,
     ],
     3:[
         db_schema.Recon.geo_source_offset,
         db_schema.Recon.geo_source_grid,
-    ],
-    4:[
-        db_schema.Job.computer_name, #placeholder item
     ],
 }
 
@@ -524,17 +650,17 @@ ALL_COLS_Recon = VISIBLE_COLS_Recon + [ii for i in CUSTOM_COLS_Recon_dict.values
 VISIBLE_COLS_WireRecon = [
     db_schema.WireRecon.wirerecon_id,
     db_schema.WireRecon.author,
-    db_schema.WireRecon.notes,
-    #db_schema.WireRecon.pxl_recon,
+    db_schema.WireRecon.percent_brightest,
     db_schema.Job.submit_time,
     db_schema.Job.start_time,
     db_schema.Job.finish_time,
     db_schema.Job.status,
+    db_schema.WireRecon.notes,
 ]
 
 CUSTOM_HEADER_NAMES_WireRecon = {
     'wirerecon_id': 'Recon ID (Wire)', #'Wire Recon ID',
-    #'pxl_recon': 'Pixels'
+    'percent_brightest': 'Pixels',
     'submit_time': 'Date',
 }
 
@@ -543,20 +669,21 @@ CUSTOM_COLS_WireRecon_dict = {
         db_schema.Catalog.aperture, #db_schema.Recon.depth_technique, #presently does not exist
         # db_schema.WireRecon.calib_id, #Calib.calib_id,
     ],
-    2:[#db_schema.Recon
-        #db_schema.PeakIndex.scanPointStart,
-        #db_schema.PeakIndex.scanPointEnd,
-        #db_schema.PeakIndex.filefolder,
+    2:[
+        db_schema.WireRecon.scanPointslen,
+        #db_schema.Metadata.motorGroup_sample_npts_total,
+        db_schema.Metadata.motorGroup_sample_cpt_total,
+        # db_schema.Metadata.motorGroup_energy_npts_total,
+        # db_schema.Metadata.motorGroup_energy_cpt_total,
+        # db_schema.Metadata.motorGroup_depth_npts_total,
+        # db_schema.Metadata.motorGroup_depth_cpt_total,
     ],
     3:[
         # db_schema.Recon.geo_source_offset,
         # db_schema.Recon.geo_source_grid,
         db_schema.WireRecon.depth_start,
         db_schema.WireRecon.depth_end,
-        db_schema.WireRecon.depth_resolution,
-    ],
-    4:[
-        db_schema.Job.computer_name, #placeholder item
+        #db_schema.WireRecon.depth_resolution,
     ],
 }
 
@@ -571,7 +698,7 @@ def _get_scan_recons(scan_id):
                 # Query with subjob count
                 scan_recons = pd.read_sql(session.query(
                                 *ALL_COLS_WireRecon,
-                                func.count(db_schema.SubJob.subjob_id).label('subjob_count')
+                                # func.count(db_schema.SubJob.subjob_id).label('subjob_count')
                                 )
                                 .join(db_schema.Metadata.catalog_)
                                 .join(db_schema.Metadata.wirerecon_)
@@ -634,9 +761,10 @@ def _get_scan_recons(scan_id):
                         }
                     elif col_num == 2:
                         col_def = {
-                            'headerName': 'Points', #'points_to_index'
+                            'headerName': 'Points',
                             'valueGetter': {"function":
-                                "params.data.subjob_count + ' / ' + '2000'"
+                                # "params.data.subjob_count + ' / ' + params.data.total_sample_points"
+                                "params.data.scanPointslen + ' / ' + params.data.motorGroup_sample_cpt_total"
                             },
                         }
                     elif col_num == 3:
@@ -646,13 +774,6 @@ def _get_scan_recons(scan_id):
                                 "params.data.depth_start \
                                 + ' to ' + \
                                 params.data.depth_end"
-                            },
-                        }
-                    elif col_num == 4:
-                        col_def = {
-                            'headerName': 'Pixels',
-                            'valueGetter': {"function":
-                                "100" # "params.data.Recon.pxl_recon"
                             },
                         }
                     col_def.update({
@@ -670,10 +791,11 @@ def _get_scan_recons(scan_id):
                 # Query with subjob count
                 scan_recons = pd.read_sql(session.query(
                                 *ALL_COLS_Recon,
-                                func.count(db_schema.SubJob.subjob_id).label('subjob_count')
+                                # func.count(db_schema.SubJob.subjob_id).label('subjob_count')
                                 )
                                 .join(db_schema.Metadata.catalog_)
                                 .join(db_schema.Metadata.recon_)
+                                .join(db_schema.Metadata.scan_)
                                 # .join(db_schema.Catalog, db_schema.Metadata.scanNumber == db_schema.Catalog.scanNumber)
                                 # .join(db_schema.Recon, db_schema.Metadata.scanNumber == db_schema.Recon.scanNumber)
                                 .join(db_schema.Job, db_schema.Recon.job_id == db_schema.Job.job_id)
@@ -681,6 +803,7 @@ def _get_scan_recons(scan_id):
                                 .filter(db_schema.Metadata.scanNumber == scan_id)
                                 .group_by(*ALL_COLS_Recon)
                                 .statement, session.bind)
+                
                 # Format columns for ag-grid
                 cols = []
                 for col in VISIBLE_COLS_Recon:
@@ -723,34 +846,28 @@ def _get_scan_recons(scan_id):
 
                 # Add a combined fields columns
                 for col_num in CUSTOM_COLS_Recon_dict.keys():
-                    if col_num == 2:
+                    if col_num == 1:
                         col_def = {
                             'headerName': 'Method',
                             'valueGetter': {"function":
                                 "params.data.aperture + ', calib: ' + params.data.calib_id" # "'CA, calib: ' + params.data.calib_id"
                             },
                         }
-                    elif col_num == 3:
+                    elif col_num == 2:
                         col_def = {
-                            'headerName': 'Points', #'points_to_index'
+                            'headerName': 'Points',
                             'valueGetter': {"function":
-                                "params.data.subjob_count + ' / ' + '2000'"
+                                # "params.data.subjob_count + ' / ' + params.data.total_sample_points"
+                                "params.data.scanPointslen + ' / ' + params.data.motorGroup_sample_cpt_total"
                             },
                         }
-                    elif col_num == 4:
+                    elif col_num == 3:
                         col_def = {
                             'headerName': 'Depth [µm]', # 'Depth [${\mu}m$]',
                             'valueGetter': {"function":
                                 "1000*(params.data.geo_source_grid[0] + params.data.geo_source_offset) \
                                 + ' to ' + \
                                 1000*(params.data.geo_source_grid[1] + params.data.geo_source_offset)"
-                            },
-                        }
-                    elif col_num == 5:
-                        col_def = {
-                            'headerName': 'Pixels',
-                            'valueGetter': {"function":
-                                "100" # "params.data.Recon.pxl_recon"
                             },
                         }
                     col_def.update({
@@ -816,8 +933,8 @@ Peak Indexing Table
 VISIBLE_COLS_PeakIndex = [
     db_schema.PeakIndex.peakindex_id,
     db_schema.PeakIndex.recon_id,
+    db_schema.PeakIndex.wirerecon_id,
     db_schema.PeakIndex.author,
-    db_schema.PeakIndex.notes,
     db_schema.PeakIndex.boxsize,
     db_schema.PeakIndex.threshold,
     # db_schema.PeakIndexResults.structure,
@@ -825,6 +942,7 @@ VISIBLE_COLS_PeakIndex = [
     db_schema.Job.start_time,
     db_schema.Job.finish_time,
     db_schema.Job.status,
+    db_schema.PeakIndex.notes,
 ]
 
 CUSTOM_HEADER_NAMES_PeakIndex = {
@@ -838,7 +956,16 @@ CUSTOM_HEADER_NAMES_PeakIndex = {
 
 CUSTOM_COLS_PeakIndex_dict = {
     4:[
-        db_schema.PeakIndex.scanPoints,
+        db_schema.PeakIndex.scanPointslen.label('PeakIndex_scanPointslen'),
+        db_schema.PeakIndex.depthRangelen,
+        #db_schema.Metadata.motorGroup_sample_npts_total,
+        db_schema.Metadata.motorGroup_sample_cpt_total,
+        # db_schema.Metadata.motorGroup_energy_npts_total,
+        # db_schema.Metadata.motorGroup_energy_cpt_total,
+        #db_schema.Metadata.motorGroup_depth_npts_total,
+        db_schema.Metadata.motorGroup_depth_cpt_total,
+        db_schema.Recon.scanPointslen.label('Recon_scanPointslen'),
+        db_schema.WireRecon.scanPointslen.label('WireRecon_scanPointslen'),
     ],
 }
 
@@ -849,23 +976,21 @@ def _get_scan_peakindexings(scan_id):
         scan_id = int(scan_id)
         with Session(db_utils.ENGINE) as session:
             aperture = pd.read_sql(session.query(db_schema.Catalog.aperture).filter(db_schema.Catalog.scanNumber == scan_id).statement, session.bind).at[0,'aperture']
-            if 'wire' in aperture:
-                VISIBLE_COLS_PeakIndex[1] = db_schema.PeakIndex.wirerecon_id
-                ALL_COLS_PeakIndex = VISIBLE_COLS_PeakIndex + [ii for i in CUSTOM_COLS_PeakIndex_dict.values() for ii in i]
+            aperture = str(aperture).lower()
+
             # Query with subjob count
             scan_peakindexings = pd.read_sql(session.query(
                             *ALL_COLS_PeakIndex,
-                            func.count(db_schema.SubJob.subjob_id).label('subjob_count')
+                            # func.count(db_schema.SubJob.subjob_id).label('subjob_count')
                             )
-                            .join(db_schema.Metadata.peakindex_)
-                            # .join(db_schema.PeakIndex.peakindexresults_)
-                            # .join(db_schema.PeakIndex, db_schema.Metadata.scanNumber == db_schema.PeakIndex.scanNumber)
-                            # .join(db_schema.PeakIndexResults, db_schema.PeakIndex.scanNumber == db_schema.PeakIndexResults.scanNumber)
+                            .join(db_schema.Metadata, db_schema.PeakIndex.scanNumber == db_schema.Metadata.scanNumber)
                             .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
-                            .outerjoin(db_schema.SubJob, db_schema.Job.job_id == db_schema.SubJob.job_id)
-                            .filter(db_schema.Metadata.scanNumber == scan_id)
+                            .outerjoin(db_schema.Recon, db_schema.PeakIndex.recon_id == db_schema.Recon.recon_id)
+                            .outerjoin(db_schema.WireRecon, db_schema.PeakIndex.wirerecon_id == db_schema.WireRecon.wirerecon_id)
+                            .filter(db_schema.PeakIndex.scanNumber == scan_id)
                             .group_by(*ALL_COLS_PeakIndex)
                             .statement, session.bind)
+            
             # Format columns for ag-grid
             cols = []
             for col in VISIBLE_COLS_PeakIndex:
@@ -913,12 +1038,24 @@ def _get_scan_peakindexings(scan_id):
             # Add a combined fields columns
             for col_num in CUSTOM_COLS_PeakIndex_dict.keys():
                 if col_num == 4:
-                    col_def = {
-                        'headerName': 'Points', #'points_to_index'
-                        'valueGetter': {"function":
-                            "params.data.subjob_count + ' / ' + '2000'"
-                        },
-                    }
+                    if aperture == 'none':
+                        col_def = {
+                            'headerName': 'Frames', # frames from all points
+                            'valueGetter': {"function": "params.data.PeakIndex_scanPointslen * params.data.depthRangelen + ' / ' + params.data.motorGroup_sample_cpt_total * params.data.motorGroup_depth_cpt_total"},
+                            # "params.data.subjob_count + ' / ' + params.data.total_frames
+                        }
+                    elif 'wire' in aperture:
+                        col_def = {
+                            'headerName': 'Frames', # frames from all points
+                            'valueGetter': {"function": "params.data.PeakIndex_scanPointslen * params.data.depthRangelen + ' / ' + params.data.WireRecon_scanPointslen * params.data.motorGroup_depth_cpt_total"},
+                            # "params.data.subjob_count + ' / ' + params.data.total_frames
+                        }
+                    else:
+                        col_def = {
+                            'headerName': 'Frames', # frames from all points
+                            'valueGetter': {"function": "params.data.PeakIndex_scanPointslen * params.data.depthRangelen + ' / ' + params.data.Recon_scanPointslen * params.data.motorGroup_depth_cpt_total"},
+                            # "params.data.subjob_count + ' / ' + params.data.total_frames
+                        }
                 col_def.update({
                     'filter': True, 
                     'sortable': True, 

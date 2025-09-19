@@ -98,6 +98,15 @@ class Metadata(Base):
     # sampleZini: Mapped[float] = mapped_column(Float)
     # comment: Mapped[str] = mapped_column(String)
 
+    motorGroup_sample_npts_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    motorGroup_sample_cpt_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    motorGroup_energy_npts_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    motorGroup_energy_cpt_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    motorGroup_depth_npts_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    motorGroup_depth_cpt_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    motorGroup_other_npts_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    motorGroup_other_cpt_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
     # Parent of:
     scan_: Mapped["Scan"] = relationship(backref="metadata")
     catalog_: Mapped["Catalog"] = relationship(backref="metadata")
@@ -157,10 +166,10 @@ class Scan(Base):
     scan_detectorTrig4_PV: Mapped[str] = mapped_column(String)
     scan_detectorTrig4_VAL: Mapped[str] = mapped_column(String) #int?
     # scan_detectors: Mapped[str] = mapped_column(String) #list?
-    scan_cpt: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    scan_cpt: Mapped[int] = mapped_column(Integer)
 
     def __repr__(self) -> str:
-        pass # TODO: Consider implemeting for debugging
+        pass # TODO: Consider implementing for debugging
 
 
 class Catalog(Base):
@@ -258,10 +267,12 @@ class Recon(Base):
     notes: Mapped[str] = mapped_column(String, nullable=True)
 
     #outputFolder: Mapped[str] = mapped_column(String) #outfile
-    geoFile: Mapped[str] = mapped_column(String, nullable=True) #geofile
+    geoFile: Mapped[str] = mapped_column(String,default='') #geofile
+    percent_brightest: Mapped[float] = mapped_column(Float, default=0.0) #pxl_recon
 
     # Recon Parameters
     file_path: Mapped[str] = mapped_column(String)
+    scanPointslen: Mapped[str] = mapped_column(Integer,default=0)  # Cached value
     file_output: Mapped[str] = mapped_column(String)
     file_range: Mapped[list[int]] = mapped_column(JSON)
     file_threshold: Mapped[int] = mapped_column(Integer)
@@ -365,6 +376,7 @@ class WireRecon(Base):
     
     # Files
     scanPoints: Mapped[str] = mapped_column(String)  # String field for srange parsing
+    scanPointslen: Mapped[int] = mapped_column(Integer)  # Cached value
     
     # Output
     outputFolder: Mapped[str] = mapped_column(String)
@@ -404,7 +416,9 @@ class PeakIndex(Base):
     # depthRangeStart: Mapped[int] = mapped_column(Integer)
     # depthRangeEnd: Mapped[int] = mapped_column(Integer)
     scanPoints: Mapped[str] = mapped_column(String)  # String field for srange parsing
+    scanPointslen: Mapped[int] = mapped_column(Integer)  # Cached value
     depthRange: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # String field for srange parsing
+    depthRangelen: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Cached value
     detectorCropX1: Mapped[int] = mapped_column(Integer)
     detectorCropX2: Mapped[int] = mapped_column(Integer)
     detectorCropY1: Mapped[int] = mapped_column(Integer)
