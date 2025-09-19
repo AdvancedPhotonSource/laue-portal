@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 import sqlalchemy
 from sqlalchemy import event
 from datetime import datetime
+from config import MOTOR_GROUPS
 
 ENGINE = sqlalchemy.create_engine(f'sqlite:///{config.db_file}')
 
@@ -151,6 +152,43 @@ def parse_metadata(xml,xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog",sc
     #*****#
 
     return log_dict, dims_dict_list
+
+def find_motor_group(pv_value):
+    """
+    Find which motor group contains the given motor string.
+    
+    Args:
+        pv_value: The motor PV string to search for
+        
+    Returns:
+        The motor group key if found, "none" if pv_value is None, 
+        or "other" if pv_value is not None but not found
+    """
+    if pv_value is None:
+        return "none"
+    
+    motor_string = pv_value.split('.VAL')[0]
+    for group_key, motor_list in MOTOR_GROUPS.items():
+        if motor_string in motor_list:
+            return group_key
+    
+    return "other"
+
+def update_motor_group_totals(motor_group_totals, scan):
+    """
+    Updates the motor group total programmed points and completed points
+    with the data for each motor group from a single scan.
+    """
+    for PV_i in range(1, 5):
+        pv_attr = f'scan_positioner{PV_i}_PV'
+        if getattr(scan, pv_attr, None):
+            motor_group = find_motor_group(getattr(scan, pv_attr))
+            if motor_group not in motor_group_totals:
+                motor_group_totals[motor_group] = {'points': 1, 'completed': 1}
+            
+            motor_group_totals[motor_group]['points'] *= int(scan.scan_npts)
+            motor_group_totals[motor_group]['completed'] *= int(scan.scan_cpt)
+    return motor_group_totals
 
 def convert_time_string_to_datetime(time_string):
     """

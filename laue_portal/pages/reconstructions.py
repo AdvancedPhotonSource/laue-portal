@@ -131,31 +131,33 @@ def _get_recons():
     
     for col in VISIBLE_COLS:
         field_key = col.key
-        if field_key != 'aperture':
-            header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
+        if field_key in ['aperture']:
+            continue
             
-            col_def = {
-                'headerName': header_name,
-                'field': field_key,
-                'filter': True, 
-                'sortable': True, 
-                'resizable': True,
-                'floatingFilter': True,
-                'unSortIcon': True,
-            }
-
-            if field_key == 'recon_id':
-                col_def['cellRenderer'] = 'ReconLinkRenderer'
-            elif field_key == 'dataset_id':
-                col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
-            elif field_key == 'scanNumber':
-                col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
-            elif field_key in ['submit_time', 'start_time', 'finish_time']:
-                col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
-            elif field_key == 'status':
-                col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
+        header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
         
-            cols.append(col_def)
+        col_def = {
+            'headerName': header_name,
+            'field': field_key,
+            'filter': True, 
+            'sortable': True, 
+            'resizable': True,
+            'floatingFilter': True,
+            'unSortIcon': True,
+        }
+
+        if field_key == 'recon_id':
+            col_def['cellRenderer'] = 'ReconLinkRenderer'
+        elif field_key == 'dataset_id':
+            col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
+        elif field_key == 'scanNumber':
+            col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+        elif field_key in ['submit_time', 'start_time', 'finish_time']:
+            col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+        elif field_key == 'status':
+            col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
+    
+        cols.append(col_def)
 
     # Add the custom actions column
     cols.append({
