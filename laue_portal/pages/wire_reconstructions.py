@@ -156,38 +156,40 @@ def _get_recons():
     
     for col in VISIBLE_COLS:
         field_key = col.key
-        if field_key != 'aperture':
-            header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
+        if field_key in ['aperture', 'sample_name']:
+            continue
             
-            col_def = {
-                'headerName': header_name,
-                'field': field_key,
-                'filter': True,
-                'sortable': True,
-                'resizable': True,
-                'floatingFilter': True,
-                'unSortIcon': True,
-            }
+        header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
+        
+        col_def = {
+            'headerName': header_name,
+            'field': field_key,
+            'filter': True,
+            'sortable': True,
+            'resizable': True,
+            'floatingFilter': True,
+            'unSortIcon': True,
+        }
 
-            if field_key == 'wirerecon_id':
-                col_def['cellRenderer'] = 'WireReconLinkRenderer'
-            elif field_key == 'dataset_id':
-                col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
-            elif field_key == 'scanNumber':
-                # Custom multi-line display for Scan ID column
-                col_def['cellRenderer'] = 'WireReconScanLinkRenderer'  # Use the wire recon specific renderer
-                col_def['valueGetter'] = {"function": """
-                    'Scan ID: ' + params.data.scanNumber + '|' +
-                    'Sample: ' + params.data.sample_name + '|' +
-                    params.data.scan_dim + ': ' + params.data.technique + ' (' + 
-                    (params.data.aperture.toLowerCase().includes('coded') ? 'CA' : params.data.aperture) + ')'
-                """}
-            elif field_key in ['submit_time', 'start_time', 'finish_time']:
-                col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
-            elif field_key == 'status':
-                col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
-            
-            cols.append(col_def)
+        if field_key == 'wirerecon_id':
+            col_def['cellRenderer'] = 'WireReconLinkRenderer'
+        elif field_key == 'dataset_id':
+            col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
+        elif field_key == 'scanNumber':
+            # Custom multi-line display for Scan ID column
+            col_def['cellRenderer'] = 'WireReconScanLinkRenderer'  # Use the wire recon specific renderer
+            col_def['valueGetter'] = {"function": """
+                'Scan ID: ' + params.data.scanNumber + '|' +
+                'Sample: ' + params.data.sample_name + '|' +
+                params.data.scan_dim + ': ' + params.data.technique + ' (' + 
+                (params.data.aperture.toLowerCase().includes('coded') ? 'CA' : params.data.aperture) + ')'
+            """}
+        elif field_key in ['submit_time', 'start_time', 'finish_time']:
+            col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+        elif field_key == 'status':
+            col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
+        
+        cols.append(col_def)
 
     # Add the custom actions column
     cols.append({

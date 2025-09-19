@@ -59,7 +59,7 @@ catalog_form = dbc.Row(
                             title="File Parameters",
                             item_id="item-2",
                         ),
-dbc.AccordionItem(
+                        dbc.AccordionItem(
                             [
                                 _stack(
                                     [

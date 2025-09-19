@@ -246,6 +246,7 @@ def create_test_peakindex(scan_number: int = 1, recon_id: Optional[int] = None) 
         min_separation=40,
         peakShape='Lorentzian',
         scanPoints='1-2',
+        scanPointslen=2,
         detectorCropX1=0,
         detectorCropX2=2047,
         detectorCropY1=0,
