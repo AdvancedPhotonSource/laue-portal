@@ -46,7 +46,11 @@ catalog_form = dbc.Row(
                                 ),
                                 _stack(
                                     [
-                                        _field("Filename Prefix", "filenamePrefix", size='lg'),
+                                        # _field("Filename Prefix", "filenamePrefix", size='lg'),
+                                        _field("Filename Prefix 1", "filenamePrefix1", size='lg'),
+                                        _field("Filename Prefix 2", "filenamePrefix2", size='lg'),
+                                        _field("Filename Prefix 3", "filenamePrefix3", size='lg'),
+                                        _field("Filename Prefix 4", "filenamePrefix4", size='lg'),
                                     ]
                                 ),
                                 # _stack(
@@ -87,7 +91,9 @@ def set_catalog_form_props(catalog, read_only=False):
     # set_props("scanNumber", {'value':catalog.scanNumber, 'readonly':read_only})
 
     set_props("filefolder", {'value':catalog.filefolder, 'readonly':read_only})
-    set_props("filenamePrefix", {'value':catalog.filenamePrefix, 'readonly':read_only})
+    # set_props("filenamePrefix", {'value':catalog.filenamePrefix, 'readonly':read_only})
+    for i, filenamePrefix in enumerate(catalog.filenamePrefix):
+        set_props(f"filenamePrefix{i+1}", {'value':filenamePrefix, 'readonly':read_only})
 
     set_props("aperture", {'value':catalog.aperture, 'disabled':read_only})
     set_props("sample_name", {'value':catalog.sample_name, 'readonly':read_only})

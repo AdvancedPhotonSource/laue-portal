@@ -12,7 +12,8 @@ from laue_portal.components.catalog_form import catalog_form, set_catalog_form_p
 CATALOG_DEFAULTS = {#temporary
     # 'scanNumber':log['scanNumber'],
     'filefolder':'/net/s34data/export/s34data1/LauePortal/portal_workspace/Run1/data/scan_1', #'example/file/folder',
-    'filenamePrefix': 'Si-wire_%d', #'example_filename_prefix',
+    # 'filenamePrefix': 'Si-wire_%d', #'example_filename_prefix',
+    'filenamePrefix': ['Si-wire_%d'],
 
     'aperture':{'options':'wire'},
     'sample_name':'Si',
@@ -239,7 +240,11 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
     # Catalog form fields
     State('scanNumber', 'value'),
     State('filefolder', 'value'),
-    State('filenamePrefix', 'value'),
+    # State('filenamePrefix', 'value'),
+    State('filenamePrefix1', 'value'),
+    State('filenamePrefix2', 'value'),
+    State('filenamePrefix3', 'value'),
+    State('filenamePrefix4', 'value'),
     State('aperture', 'value'),
     State('sample_name', 'value'),
     State('notes', 'value'),
@@ -313,7 +318,11 @@ def submit_catalog_and_metadata(n,
     # Catalog parameters
     scanNumber,
     filefolder,
-    filenamePrefix,
+    # filenamePrefix,
+    filenamePrefix1,
+    filenamePrefix2,
+    filenamePrefix3,
+    filenamePrefix4,
     aperture,
     sample_name,
     notes,
@@ -521,6 +530,7 @@ def submit_catalog_and_metadata(n,
                     db_schema.Catalog.scanNumber == scanNumber
                 ).first()
                 
+                filenamePrefix = [prefix for prefix in [filenamePrefix1, filenamePrefix2, filenamePrefix3, filenamePrefix4] if prefix]
                 if catalog_data:
                     # Update existing catalog entry
                     catalog_data.filefolder = filefolder

@@ -179,7 +179,8 @@ class Catalog(Base):
     scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"), unique=True)
 
     filefolder: Mapped[str] = mapped_column(String) #infile
-    filenamePrefix: Mapped[str] = mapped_column(String) #infile
+    #filenamePrefix: Mapped[str] = mapped_column(String) #infile
+    filenamePrefix: Mapped[list[str]] = mapped_column(JSON) #infile
     
     aperture: Mapped[str] = mapped_column(String)
     sample_name: Mapped[str] = mapped_column(String, nullable=True)

@@ -41,7 +41,8 @@ WIRERECON_DEFAULTS = {
 
 CATALOG_DEFAULTS = {
     "filefolder": "tests/data/gdata",
-    "filenamePrefix": "HAs_long_laue1_",
+    # "filenamePrefix": "HAs_long_laue1_",
+    "filenamePrefix": ["HAs_long_laue1_"],
 }
 
 # DEFAULT_VARIABLES = {
@@ -162,7 +163,11 @@ Callbacks
     # Files
     State('scanPoints', 'value'),
     State('data_path', 'value'),
-    State('filenamePrefix', 'value'),
+    # State('filenamePrefix', 'value'),
+    State('filenamePrefix1', 'value'),
+    State('filenamePrefix2', 'value'),
+    State('filenamePrefix3', 'value'),
+    State('filenamePrefix4', 'value'),
     
     # Output
     State('outputFolder', 'value'),
@@ -189,7 +194,11 @@ def submit_parameters(n,
     # Files
     scanPoints,
     data_path,
-    filenamePrefix,
+    # filenamePrefix,
+    filenamePrefix1,
+    filenamePrefix2,
+    filenamePrefix3,
+    filenamePrefix4,
     
     # Output
     output_folder,
@@ -216,6 +225,7 @@ def submit_parameters(n,
         depth_resolution_list = parse_parameter(depth_resolution, num_scans)
         scanPoints_list = parse_parameter(scanPoints, num_scans)
         data_path_list = parse_parameter(data_path, num_scans)
+        filenamePrefix = [prefix for prefix in [filenamePrefix1, filenamePrefix2, filenamePrefix3, filenamePrefix4] if prefix]
         filenamePrefix_list = parse_parameter(filenamePrefix, num_scans)
         outputFolder_list = parse_parameter(output_folder, num_scans)
     except ValueError as e:
@@ -348,16 +358,17 @@ def submit_parameters(n,
             # Construct full data path from form values
             full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
             
-            for scanPoint_num in scanPoint_nums:
-                # Prepare parameters for wire reconstruction
-                file_str = current_filename_prefix % scanPoint_num
-                input_filename = file_str + ".h5"
-                input_file = os.path.join(full_data_path, input_filename)
-                output_base_name = file_str + "_"
-                output_file_base = os.path.join(full_output_folder, output_base_name)
-                
-                input_files.append(input_file)
-                output_files.append(output_file_base)
+            for current_filename_prefix_i in current_filename_prefix:
+                for scanPoint_num in scanPoint_nums:
+                    # Prepare parameters for wire reconstruction
+                    file_str = current_filename_prefix_i % scanPoint_num
+                    input_filename = file_str + ".h5"
+                    input_file = os.path.join(full_data_path, input_filename)
+                    output_base_name = file_str + "_"
+                    output_file_base = os.path.join(full_output_folder, output_base_name)
+                    
+                    input_files.append(input_file)
+                    output_files.append(output_file_base)
             
             # Enqueue the batch job with all files
             depth_range = (depth_start_list[i], depth_end_list[i])

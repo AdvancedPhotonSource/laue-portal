@@ -219,7 +219,11 @@ Callbacks
     # State('indexingPath', 'value'),
     State('data_path', 'value'),
     # State('filefolder', 'value'),
-    State('filenamePrefix', 'value'),
+    # State('filenamePrefix', 'value'),
+    State('filenamePrefix1', 'value'),
+    State('filenamePrefix2', 'value'),
+    State('filenamePrefix3', 'value'),
+    State('filenamePrefix4', 'value'),
     State('outputFolder', 'value'),
     State('geoFile', 'value'),
     State('crystFile', 'value'),
@@ -274,7 +278,11 @@ def submit_parameters(n,
     # indexingPath,
     data_path,
     # filefolder,
-    filenamePrefix,
+    # filenamePrefix,
+    filenamePrefix1,
+    filenamePrefix2,
+    filenamePrefix3,
+    filenamePrefix4,
     outputFolder,
     geometry_file,
     crystal_file,
@@ -326,6 +334,7 @@ def submit_parameters(n,
         recipLatticeUnit_list = parse_parameter(recipLatticeUnit, num_scans)
         latticeParametersUnit_list = parse_parameter(latticeParametersUnit, num_scans)
         data_path_list = parse_parameter(data_path, num_scans)
+        filenamePrefix = [prefix for prefix in [filenamePrefix1, filenamePrefix2, filenamePrefix3, filenamePrefix4] if prefix]
         filenamePrefix_list = parse_parameter(filenamePrefix, num_scans)
         outputFolder_list = parse_parameter(outputFolder, num_scans)
         geoFile_list = parse_parameter(geometry_file, num_scans)
@@ -949,7 +958,8 @@ def load_scan_data_from_url(href):
                             else:
                                 # No reconstruction, use catalog data path
                                 peakindex_defaults.data_path = catalog_data.get('data_path', '')
-                            peakindex_defaults.filenamePrefix = catalog_data.get('filenamePrefix', '')
+                            # peakindex_defaults.filenamePrefix = catalog_data.get('filenamePrefix', '')
+                            peakindex_defaults.filenamePrefix = catalog_data.get('filenamePrefix', [])
                             
                             peakindex_defaults_list.append(peakindex_defaults)
 
