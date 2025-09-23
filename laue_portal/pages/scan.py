@@ -372,47 +372,6 @@ def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
     set_props('positioner-info-div', {'children': positioner_info})
     set_props('scan-totals-row', {'children': total_points_fields})
 
-# VISIBLE_COLS_Metadata = [
-#     db_schema.Metadata.scanNumber,
-    
-#     db_schema.Metadata.date,
-#     db_schema.Metadata.calib_id,
-#     db_schema.Metadata.dataset_id,
-#     db_schema.Metadata.notes,
-# ]
-
-# VISIBLE_COLS_Scan = [
-#     db_schema.Scan.scanNumber,
-
-#     db_schema.Scan.scan_dim,
-#     db_schema.Scan.scan_npts,
-#     db_schema.Scan.scan_after,
-#     db_schema.Scan.scan_positioner1_PV,
-#     db_schema.Scan.scan_positioner1_ar,
-#     db_schema.Scan.scan_positioner1_mode,
-#     db_schema.Scan.scan_positioner1,
-#     db_schema.Scan.scan_positioner2_PV,
-#     db_schema.Scan.scan_positioner2_ar,
-#     db_schema.Scan.scan_positioner2_mode,
-#     db_schema.Scan.scan_positioner2,
-#     db_schema.Scan.scan_positioner3_PV,
-#     db_schema.Scan.scan_positioner3_ar,
-#     db_schema.Scan.scan_positioner3_mode,
-#     db_schema.Scan.scan_positioner3,
-#     db_schema.Scan.scan_positioner4_PV,
-#     db_schema.Scan.scan_positioner4_ar,
-#     db_schema.Scan.scan_positioner4_mode,
-#     db_schema.Scan.scan_positioner4,
-#     db_schema.Scan.scan_detectorTrig1_PV,
-#     db_schema.Scan.scan_detectorTrig1_VAL,
-#     db_schema.Scan.scan_detectorTrig2_PV,
-#     db_schema.Scan.scan_detectorTrig2_VAL,
-#     db_schema.Scan.scan_detectorTrig3_PV,
-#     db_schema.Scan.scan_detectorTrig3_VAL,
-#     db_schema.Scan.scan_detectorTrig4_PV,
-#     db_schema.Scan.scan_detectorTrig4_VAL,
-#     db_schema.Scan.scan_cpt,
-# ]
 
 @callback(
     Input('url-scan-page', 'href'),
@@ -451,162 +410,11 @@ def load_scan_metadata(href):
             print(f"Error loading scan data: {e}")
 
 
-# def _get_metadatas():
-#     with Session(db_utils.ENGINE) as session:
-#         metadatas = pd.read_sql(session.query(*VISIBLE_COLS_Metadata).statement, session.bind)
-
-#     cols = [{'name': str(col), 'id': str(col)} for col in metadatas.columns]
-#     cols.append({'name': 'Parameters', 'id': 'Parameters', 'presentation': 'markdown'})
-#     cols.append({'name': 'Measurement Info', 'id': 'Measurement Info', 'presentation': 'markdown'})
-
-#     metadatas['id'] = metadatas['scanNumber']
-
-#     metadatas['Parameters'] = '**Parameters**'
-#     metadatas['Measurement Info'] = '**Measurement Info**'
-    
-#     return cols, metadatas.to_dict('records')
-
-
-
-# @dash.callback(
-#     Output('metadata-table', 'columns', allow_duplicate=True),
-#     Output('metadata-table', 'data', allow_duplicate=True),
-#     Input('upload-metadata-log', 'contents'),
-#     prevent_initial_call=True,
-# )
-# def upload_log(contents):
-#     try:
-#         content_type, content_string = contents.split(',')
-#         decoded = base64.b64decode(content_string)
-#         log, scan = db_utils.parse_metadata(decoded) #yaml.safe_load(decoded)
-#         metadata_row = db_utils.import_metadata_row(log)
-#         scan_cards = []; scan_rows = []
-#         for i,scan in enumerate(scan):
-#             scan_cards.append(ui_shared.make_scan_card(i))
-#             scan_rows.append(db_utils.import_scan_row(scan))
-#         set_props("scan_cards", {'children': scan_cards})
-        
-#         metadata_row.date = datetime.datetime.now()
-#         metadata_row.commit_id = ''
-#         metadata_row.calib_id = ''
-#         metadata_row.runtime = ''
-#         metadata_row.computer_name = ''
-#         metadata_row.dataset_id = 0
-#         metadata_row.notes = ''
-
-#         with Session(db_utils.ENGINE) as session:
-#             session.add(metadata_row)
-#             session.commit()
-#             for scan_row in scan_rows:
-#                 session.add(scan_row)
-#                 session.commit()
-
-#     except Exception as e:
-#         print('Unable to parse log')
-#         print(e)
-    
-#     cols, metadatas = _get_metadatas()
-#     return cols, metadatas
-
-
-
-
-
-
-# @dash.callback(
-#     Output('metadata-table', 'columns', allow_duplicate=True),
-#     Output('metadata-table', 'data', allow_duplicate=True),
-#     Input('url-scan-page', 'pathname'),
-#     prevent_initial_call=True,
-# )
-# def get_metadatas(path):
-#     if 'scan' in path: #if path == '/':
-#         cols, metadatas = _get_metadatas()
-#         return cols, metadatas
-#     else:
-#         raise PreventUpdate
-
-
-# @dash.callback(
-#     Input("metadata-table", "active_cell"),
-# )
-# def cell_clicked(active_cell):
-#     if active_cell is None:
-#         return dash.no_update
-
-#     print(active_cell)
-#     row = active_cell["row"]
-#     row_id = active_cell["row_id"]
-#     col = active_cell["column"]
-
-#     if col == 5:
-#         with Session(db_utils.ENGINE) as session:
-#             metadata = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == row_id).first()
-#             scan = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == row_id)
-
-#         set_props("modal-details", {'is_open':True})
-#         set_props("modal-details-header", {'children':dbc.ModalTitle(f"Details for Peak Indexing {row_id} (Read Only)")})
-        
-#         set_metadata_form_props(metadata, scan, read_only=True)
-
-
-    
-#     elif col == 6:
-#         with Session(db_utils.ENGINE) as session:
-#             df = pd.read_sql(session.query(*VISIBLE_COLS_Scan).filter(db_schema.Scan.scanNumber == row_id).statement, session.bind)
-
-#         set_props("modal-scan", {'is_open':True})
-#         set_props("modal-scan-header", {'children':dbc.ModalTitle(f"Scan for {row_id}")})
-
-#         set_props("scan-table",
-#                     {
-#                         'columns':[{"name": i, "id": i} for i in df.columns],
-#                         'data':df.to_dict('records'),
-#                     }
-#         )
-
-#     print(f"Row {row} and Column {col} was clicked")
-
-
-# @dash.callback(
-#     Output("example-output", "children"), [Input("new-recon_button", "n_clicks")]
-# )
-# def on_button_click(n):
-#     if n is None:
-#         return "Not clicked."
-#     else:
-#         return f"Clicked {n} times."
-
-
-# @dash.callback(
-#     Output("example-output2", "children"), [Input("new-peakindexing_button", "n_clicks")]
-# )
-# def on_button_click(n):
-#     if n is None:
-#         return "Not clicked."
-#     else:
-#         return f"Clicked {n} times."
-
 """
 =======================
 Recon Table
 =======================
 """
-
-# VISIBLE_COLS_Recon = [
-#     db_schema.Recon.recon_id,
-#     db_schema.Recon.date,
-#     db_schema.Recon.calib_id,
-#     # db_schema.Recon.dataset_id,
-#     db_schema.Recon.scanNumber,
-#     db_schema.Recon.notes,
-# ]
-
-# CUSTOM_HEADER_NAMES_Recon = {
-#     'recon_id': 'Recon ID',
-#     'scanNumber': 'Scan ID',
-#     #'dataset_id': 'Scan ID',
-# }
 
 VISIBLE_COLS_Recon = [
     db_schema.Recon.recon_id,
@@ -630,7 +438,7 @@ CUSTOM_COLS_Recon_dict = {
         db_schema.Catalog.aperture, #db_schema.Recon.depth_technique, #presently does not exist
         db_schema.Recon.calib_id, #Calib.calib_id,
     ],
-    2:[
+    4:[
         db_schema.Recon.scanPointslen,
         #db_schema.Metadata.motorGroup_sample_npts_total,
         db_schema.Metadata.motorGroup_sample_cpt_total,
@@ -639,7 +447,7 @@ CUSTOM_COLS_Recon_dict = {
         # db_schema.Metadata.motorGroup_depth_npts_total,
         # db_schema.Metadata.motorGroup_depth_cpt_total,
     ],
-    3:[
+    5:[
         db_schema.Recon.geo_source_offset,
         db_schema.Recon.geo_source_grid,
     ],
@@ -669,7 +477,7 @@ CUSTOM_COLS_WireRecon_dict = {
         db_schema.Catalog.aperture, #db_schema.Recon.depth_technique, #presently does not exist
         # db_schema.WireRecon.calib_id, #Calib.calib_id,
     ],
-    2:[
+    4:[
         db_schema.WireRecon.scanPointslen,
         #db_schema.Metadata.motorGroup_sample_npts_total,
         db_schema.Metadata.motorGroup_sample_cpt_total,
@@ -678,7 +486,7 @@ CUSTOM_COLS_WireRecon_dict = {
         # db_schema.Metadata.motorGroup_depth_npts_total,
         # db_schema.Metadata.motorGroup_depth_cpt_total,
     ],
-    3:[
+    5:[
         # db_schema.Recon.geo_source_offset,
         # db_schema.Recon.geo_source_grid,
         db_schema.WireRecon.depth_start,
@@ -694,6 +502,8 @@ def _get_scan_recons(scan_id):
         scan_id = int(scan_id)
         with Session(db_utils.ENGINE) as session:
             aperture = pd.read_sql(session.query(db_schema.Catalog.aperture).filter(db_schema.Catalog.scanNumber == scan_id).statement, session.bind).at[0,'aperture']
+            aperture = str(aperture).lower()
+            
             if 'wire' in aperture:
                 # Query with subjob count
                 scan_recons = pd.read_sql(session.query(
@@ -759,7 +569,7 @@ def _get_scan_recons(scan_id):
                                 "params.data.aperture + ': ' + params.data.calib_id"
                             },
                         }
-                    elif col_num == 2:
+                    elif col_num == 4:
                         col_def = {
                             'headerName': 'Points',
                             'valueGetter': {"function":
@@ -767,7 +577,7 @@ def _get_scan_recons(scan_id):
                                 "params.data.scanPointslen + ' / ' + params.data.motorGroup_sample_cpt_total"
                             },
                         }
-                    elif col_num == 3:
+                    elif col_num == 5:
                         col_def = {
                             'headerName': 'Depth [µm]', # 'Depth [${\mu}m$]',
                             'valueGetter': {"function":
@@ -787,6 +597,7 @@ def _get_scan_recons(scan_id):
                 # recons['id'] = recons['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
                 
                 return cols, scan_recons.to_dict('records')
+            
             else:
                 # Query with subjob count
                 scan_recons = pd.read_sql(session.query(
@@ -853,7 +664,7 @@ def _get_scan_recons(scan_id):
                                 "params.data.aperture + ', calib: ' + params.data.calib_id" # "'CA, calib: ' + params.data.calib_id"
                             },
                         }
-                    elif col_num == 2:
+                    elif col_num == 4:
                         col_def = {
                             'headerName': 'Points',
                             'valueGetter': {"function":
@@ -861,7 +672,7 @@ def _get_scan_recons(scan_id):
                                 "params.data.scanPointslen + ' / ' + params.data.motorGroup_sample_cpt_total"
                             },
                         }
-                    elif col_num == 3:
+                    elif col_num == 5:
                         col_def = {
                             'headerName': 'Depth [µm]', # 'Depth [${\mu}m$]',
                             'valueGetter': {"function":
@@ -915,29 +726,11 @@ Peak Indexing Table
 =======================
 """
 
-# VISIBLE_COLS_PeakIndex = [
-#     db_schema.PeakIndex.peakindex_id,
-#     db_schema.PeakIndex.date,
-#     db_schema.PeakIndex.calib_id,
-#     # db_schema.PeakIndex.dataset_id,
-#     db_schema.PeakIndex.scanNumber,
-#     db_schema.PeakIndex.notes,
-# ]
-
-# CUSTOM_HEADER_NAMES_PeakIndex = {
-#     'peakindex_id': 'PeakIndex ID',
-#     'scanNumber': 'Scan ID',
-#     # 'dataset_id': 'Scan ID',
-# }
-
 VISIBLE_COLS_PeakIndex = [
     db_schema.PeakIndex.peakindex_id,
-    db_schema.PeakIndex.recon_id,
-    db_schema.PeakIndex.wirerecon_id,
     db_schema.PeakIndex.author,
     db_schema.PeakIndex.boxsize,
     db_schema.PeakIndex.threshold,
-    # db_schema.PeakIndexResults.structure,
     db_schema.Job.submit_time,
     db_schema.Job.start_time,
     db_schema.Job.finish_time,
@@ -947,14 +740,15 @@ VISIBLE_COLS_PeakIndex = [
 
 CUSTOM_HEADER_NAMES_PeakIndex = {
     'peakindex_id': 'Index ID', #'Peak Index ID',
-    'recon_id': 'Recon ID', #'ReconID',
-    'wirerecon_id': 'Recon ID (Wire)', #'Wire Recon ID',
     #'': 'Points',
     'boxsize': 'Box',
     'submit_time': 'Date',
 }
 
 CUSTOM_COLS_PeakIndex_dict = {
+    3:[
+        db_schema.PeakIndex.crystFile,
+    ],
     4:[
         db_schema.PeakIndex.scanPointslen.label('PeakIndex_scanPointslen'),
         db_schema.PeakIndex.depthRangelen,
@@ -964,12 +758,81 @@ CUSTOM_COLS_PeakIndex_dict = {
         # db_schema.Metadata.motorGroup_energy_cpt_total,
         #db_schema.Metadata.motorGroup_depth_npts_total,
         db_schema.Metadata.motorGroup_depth_cpt_total,
-        db_schema.Recon.scanPointslen.label('Recon_scanPointslen'),
-        db_schema.WireRecon.scanPointslen.label('WireRecon_scanPointslen'),
     ],
 }
 
 ALL_COLS_PeakIndex = VISIBLE_COLS_PeakIndex + [ii for i in CUSTOM_COLS_PeakIndex_dict.values() for ii in i]
+
+VISIBLE_COLS_Recon_PeakIndex = [
+    db_schema.PeakIndex.peakindex_id,
+    db_schema.PeakIndex.recon_id,
+    db_schema.PeakIndex.author,
+    db_schema.PeakIndex.boxsize,
+    db_schema.PeakIndex.threshold,
+    db_schema.Job.submit_time,
+    db_schema.Job.start_time,
+    db_schema.Job.finish_time,
+    db_schema.Job.status,
+    db_schema.PeakIndex.notes,
+]
+
+CUSTOM_HEADER_NAMES_Recon_PeakIndex = {
+    'peakindex_id': 'Index ID', #'Peak Index ID',
+    'recon_id': 'Recon ID', #'ReconID',
+    #'': 'Points',
+    'boxsize': 'Box',
+    'submit_time': 'Date',
+}
+
+CUSTOM_COLS_Recon_PeakIndex_dict = {
+    3:[
+        db_schema.PeakIndex.crystFile,
+    ],
+    4:[
+        db_schema.PeakIndex.scanPointslen.label('PeakIndex_scanPointslen'),
+        db_schema.PeakIndex.depthRangelen,
+        #db_schema.Metadata.motorGroup_depth_npts_total,
+        db_schema.Metadata.motorGroup_depth_cpt_total,
+        db_schema.Recon.scanPointslen.label('Recon_scanPointslen'),
+    ],
+}
+
+ALL_COLS_Recon_PeakIndex = VISIBLE_COLS_Recon_PeakIndex + [ii for i in CUSTOM_COLS_Recon_PeakIndex_dict.values() for ii in i]
+
+VISIBLE_COLS_WireRecon_PeakIndex = [
+    db_schema.PeakIndex.peakindex_id,
+    db_schema.PeakIndex.wirerecon_id,
+    db_schema.PeakIndex.author,
+    db_schema.PeakIndex.boxsize,
+    db_schema.PeakIndex.threshold,
+    db_schema.Job.submit_time,
+    db_schema.Job.start_time,
+    db_schema.Job.finish_time,
+    db_schema.Job.status,
+    db_schema.PeakIndex.notes,
+]
+
+CUSTOM_HEADER_NAMES_WireRecon_PeakIndex = {
+    'peakindex_id': 'Index ID', #'Peak Index ID',
+    'wirerecon_id': 'Recon ID (Wire)', #'Wire Recon ID',
+    'boxsize': 'Box',
+    'submit_time': 'Date',
+}
+
+CUSTOM_COLS_WireRecon_PeakIndex_dict = {
+    3:[
+        db_schema.PeakIndex.crystFile,
+    ],
+    4:[
+        db_schema.PeakIndex.scanPointslen.label('PeakIndex_scanPointslen'),
+        db_schema.PeakIndex.depthRangelen,
+        #db_schema.Metadata.motorGroup_depth_npts_total,
+        db_schema.Metadata.motorGroup_depth_cpt_total,
+        db_schema.WireRecon.scanPointslen.label('WireRecon_scanPointslen'),
+    ],
+}
+
+ALL_COLS_WireRecon_PeakIndex = VISIBLE_COLS_WireRecon_PeakIndex + [ii for i in CUSTOM_COLS_WireRecon_PeakIndex_dict.values() for ii in i]
 
 def _get_scan_peakindexings(scan_id):
     try:
@@ -977,96 +840,246 @@ def _get_scan_peakindexings(scan_id):
         with Session(db_utils.ENGINE) as session:
             aperture = pd.read_sql(session.query(db_schema.Catalog.aperture).filter(db_schema.Catalog.scanNumber == scan_id).statement, session.bind).at[0,'aperture']
             aperture = str(aperture).lower()
-
-            # Query with subjob count
-            scan_peakindexings = pd.read_sql(session.query(
-                            *ALL_COLS_PeakIndex,
-                            # func.count(db_schema.SubJob.subjob_id).label('subjob_count')
-                            )
-                            .join(db_schema.Metadata, db_schema.PeakIndex.scanNumber == db_schema.Metadata.scanNumber)
-                            .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
-                            .outerjoin(db_schema.Recon, db_schema.PeakIndex.recon_id == db_schema.Recon.recon_id)
-                            .outerjoin(db_schema.WireRecon, db_schema.PeakIndex.wirerecon_id == db_schema.WireRecon.wirerecon_id)
-                            .filter(db_schema.PeakIndex.scanNumber == scan_id)
-                            .group_by(*ALL_COLS_PeakIndex)
-                            .statement, session.bind)
             
-            # Format columns for ag-grid
-            cols = []
-            for col in VISIBLE_COLS_PeakIndex:
-                field_key = col.key
-                header_name = CUSTOM_HEADER_NAMES_PeakIndex.get(field_key, field_key.replace('_', ' ').title())
+            if aperture == 'none':
+                # Query with subjob count
+                scan_peakindexings = pd.read_sql(session.query(
+                                *ALL_COLS_PeakIndex,
+                                # func.count(db_schema.SubJob.subjob_id).label('subjob_count')
+                                )
+                                .join(db_schema.Metadata, db_schema.PeakIndex.scanNumber == db_schema.Metadata.scanNumber)
+                                .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
+                                .filter(db_schema.PeakIndex.scanNumber == scan_id)
+                                .group_by(*ALL_COLS_PeakIndex)
+                                .statement, session.bind)
                 
-                col_def = {
-                    'headerName': header_name,
-                    'field': field_key,
-                    'filter': True, 
-                    'sortable': True, 
-                    'resizable': True,
-                    'suppressMenuHide': True
-                }
+                # Format columns for ag-grid
+                cols = []
+                for col in VISIBLE_COLS_PeakIndex:
+                    field_key = col.key
+                    header_name = CUSTOM_HEADER_NAMES_PeakIndex.get(field_key, field_key.replace('_', ' ').title())
+                    
+                    col_def = {
+                        'headerName': header_name,
+                        'field': field_key,
+                        'filter': True, 
+                        'sortable': True, 
+                        'resizable': True,
+                        'suppressMenuHide': True
+                    }
 
-                if field_key == 'peakindex_id':
-                    col_def['cellRenderer'] = 'PeakIndexLinkRenderer'
-                elif field_key == 'recon_id':
-                    col_def['cellRenderer'] = 'ReconLinkRenderer'
-                elif field_key == 'wirerecon_id':
-                    col_def['cellRenderer'] = 'WireReconLinkRenderer'
-                elif field_key in ['scanNumber','dataset_id']:
-                    col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
-                elif field_key == 'scanNumber':
-                    col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
-                elif field_key in ['submit_time', 'start_time', 'finish_time']:
-                    col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
-                elif field_key == 'status':
-                    col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
-                
-                cols.append(col_def)
+                    if field_key == 'peakindex_id':
+                        col_def['cellRenderer'] = 'PeakIndexLinkRenderer'
+                    elif field_key in ['scanNumber','dataset_id']:
+                        col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
+                    elif field_key == 'scanNumber':
+                        col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+                    elif field_key in ['submit_time', 'start_time', 'finish_time']:
+                        col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+                    elif field_key == 'status':
+                        col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
+                    
+                    cols.append(col_def)
 
-            # # Add the custom actions column
-            # cols.append({
-            #     'headerName': 'Actions',
-            #     'field': 'actions',  # This field doesn't need to exist in the data
-            #     'cellRenderer': 'ActionButtonsRenderer',
-            #     'sortable': False,
-            #     'filter': False,
-            #     'resizable': True, # Or False, depending on preference
-            #     'suppressMenu': True, # Or False
-            #     'width': 200 # Adjusted width for DBC buttons
-            # })
+                # # Add the custom actions column
+                # cols.append({
+                #     'headerName': 'Actions',
+                #     'field': 'actions',  # This field doesn't need to exist in the data
+                #     'cellRenderer': 'ActionButtonsRenderer',
+                #     'sortable': False,
+                #     'filter': False,
+                #     'resizable': True, # Or False, depending on preference
+                #     'suppressMenu': True, # Or False
+                #     'width': 200 # Adjusted width for DBC buttons
+                # })
 
-            # Add a combined fields columns
-            for col_num in CUSTOM_COLS_PeakIndex_dict.keys():
-                if col_num == 4:
-                    if aperture == 'none':
+                # Add a combined fields columns
+                for col_num in CUSTOM_COLS_PeakIndex_dict.keys():
+                    if col_num == 3:
+                        col_def = {
+                            'headerName': 'Structure',
+                            'valueGetter': {"function": "params.data.crystFile.slice(params.data.crystFile.lastIndexOf('/') + 1, params.data.crystFile.lastIndexOf('.'))"},
+                            # "params.data.subjob_count + ' / ' + params.data.total_frames
+                        }
+                    if col_num == 4:
                         col_def = {
                             'headerName': 'Frames', # frames from all points
                             'valueGetter': {"function": "params.data.PeakIndex_scanPointslen * params.data.depthRangelen + ' / ' + params.data.motorGroup_sample_cpt_total * params.data.motorGroup_depth_cpt_total"},
                             # "params.data.subjob_count + ' / ' + params.data.total_frames
                         }
-                    elif 'wire' in aperture:
+                    col_def.update({
+                        'filter': True, 
+                        'sortable': True, 
+                        'resizable': True,
+                        'suppressMenuHide': True
+                    })
+                    cols.insert(col_num,col_def)
+
+                # peakindexings['id'] = peakindexings['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
+                
+                return cols, scan_peakindexings.to_dict('records')
+            
+            elif 'wire' in aperture:
+                # Query with subjob count
+                scan_peakindexings = pd.read_sql(session.query(
+                                *ALL_COLS_WireRecon_PeakIndex,
+                                # func.count(db_schema.SubJob.subjob_id).label('subjob_count')
+                                )
+                                .join(db_schema.Metadata, db_schema.PeakIndex.scanNumber == db_schema.Metadata.scanNumber)
+                                .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
+                                .outerjoin(db_schema.WireRecon, db_schema.PeakIndex.wirerecon_id == db_schema.WireRecon.wirerecon_id)
+                                .filter(db_schema.PeakIndex.scanNumber == scan_id)
+                                .group_by(*ALL_COLS_PeakIndex)
+                                .statement, session.bind)
+                
+                # Format columns for ag-grid
+                cols = []
+                for col in VISIBLE_COLS_WireRecon_PeakIndex:
+                    field_key = col.key
+                    header_name = CUSTOM_HEADER_NAMES_WireRecon_PeakIndex.get(field_key, field_key.replace('_', ' ').title())
+                    
+                    col_def = {
+                        'headerName': header_name,
+                        'field': field_key,
+                        'filter': True, 
+                        'sortable': True, 
+                        'resizable': True,
+                        'suppressMenuHide': True
+                    }
+
+                    if field_key == 'peakindex_id':
+                        col_def['cellRenderer'] = 'PeakIndexLinkRenderer'
+                    elif field_key == 'recon_id':
+                        col_def['cellRenderer'] = 'WireReconLinkRenderer'
+                    elif field_key in ['scanNumber','dataset_id']:
+                        col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
+                    elif field_key == 'scanNumber':
+                        col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+                    elif field_key in ['submit_time', 'start_time', 'finish_time']:
+                        col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+                    elif field_key == 'status':
+                        col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
+                    
+                    cols.append(col_def)
+
+                # # Add the custom actions column
+                # cols.append({
+                #     'headerName': 'Actions',
+                #     'field': 'actions',  # This field doesn't need to exist in the data
+                #     'cellRenderer': 'ActionButtonsRenderer',
+                #     'sortable': False,
+                #     'filter': False,
+                #     'resizable': True, # Or False, depending on preference
+                #     'suppressMenu': True, # Or False
+                #     'width': 200 # Adjusted width for DBC buttons
+                # })
+
+                # Add a combined fields columns
+                for col_num in CUSTOM_COLS_WireRecon_PeakIndex_dict.keys():
+                    if col_num == 3:
+                        col_def = {
+                            'headerName': 'Structure',
+                            'valueGetter': {"function": "params.data.crystFile.slice(params.data.crystFile.lastIndexOf('/') + 1, params.data.crystFile.lastIndexOf('.'))"},
+                            # "params.data.subjob_count + ' / ' + params.data.total_frames
+                        }
+                    if col_num == 4:
                         col_def = {
                             'headerName': 'Frames', # frames from all points
                             'valueGetter': {"function": "params.data.PeakIndex_scanPointslen * params.data.depthRangelen + ' / ' + params.data.WireRecon_scanPointslen * params.data.motorGroup_depth_cpt_total"},
                             # "params.data.subjob_count + ' / ' + params.data.total_frames
                         }
-                    else:
+                    col_def.update({
+                        'filter': True, 
+                        'sortable': True, 
+                        'resizable': True,
+                        'suppressMenuHide': True
+                    })
+                    cols.insert(col_num,col_def)
+
+                # peakindexings['id'] = peakindexings['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
+                
+                return cols, scan_peakindexings.to_dict('records')
+            
+            else:
+                # Query with subjob count
+                scan_peakindexings = pd.read_sql(session.query(
+                                *ALL_COLS_Recon_PeakIndex,
+                                # func.count(db_schema.SubJob.subjob_id).label('subjob_count')
+                                )
+                                .join(db_schema.Metadata, db_schema.PeakIndex.scanNumber == db_schema.Metadata.scanNumber)
+                                .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
+                                .outerjoin(db_schema.Recon, db_schema.PeakIndex.recon_id == db_schema.Recon.recon_id)
+                                .filter(db_schema.PeakIndex.scanNumber == scan_id)
+                                .group_by(*ALL_COLS_PeakIndex)
+                                .statement, session.bind)
+                
+                # Format columns for ag-grid
+                cols = []
+                for col in VISIBLE_COLS_Recon_PeakIndex:
+                    field_key = col.key
+                    header_name = CUSTOM_HEADER_NAMES_Recon_PeakIndex.get(field_key, field_key.replace('_', ' ').title())
+                    
+                    col_def = {
+                        'headerName': header_name,
+                        'field': field_key,
+                        'filter': True, 
+                        'sortable': True, 
+                        'resizable': True,
+                        'suppressMenuHide': True
+                    }
+
+                    if field_key == 'peakindex_id':
+                        col_def['cellRenderer'] = 'PeakIndexLinkRenderer'
+                    elif field_key == 'recon_id':
+                        col_def['cellRenderer'] = 'ReconLinkRenderer'
+                    elif field_key in ['scanNumber','dataset_id']:
+                        col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
+                    elif field_key == 'scanNumber':
+                        col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+                    elif field_key in ['submit_time', 'start_time', 'finish_time']:
+                        col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+                    elif field_key == 'status':
+                        col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
+                    
+                    cols.append(col_def)
+
+                # # Add the custom actions column
+                # cols.append({
+                #     'headerName': 'Actions',
+                #     'field': 'actions',  # This field doesn't need to exist in the data
+                #     'cellRenderer': 'ActionButtonsRenderer',
+                #     'sortable': False,
+                #     'filter': False,
+                #     'resizable': True, # Or False, depending on preference
+                #     'suppressMenu': True, # Or False
+                #     'width': 200 # Adjusted width for DBC buttons
+                # })
+
+                # Add a combined fields columns
+                for col_num in CUSTOM_COLS_PeakIndex_dict.keys():
+                    if col_num == 3:
+                        col_def = {
+                            'headerName': 'Structure',
+                            'valueGetter': {"function": "params.data.crystFile.slice(params.data.crystFile.lastIndexOf('/') + 1, params.data.crystFile.lastIndexOf('.'))"},
+                            # "params.data.subjob_count + ' / ' + params.data.total_frames
+                        }
+                    if col_num == 4:
                         col_def = {
                             'headerName': 'Frames', # frames from all points
                             'valueGetter': {"function": "params.data.PeakIndex_scanPointslen * params.data.depthRangelen + ' / ' + params.data.Recon_scanPointslen * params.data.motorGroup_depth_cpt_total"},
                             # "params.data.subjob_count + ' / ' + params.data.total_frames
                         }
-                col_def.update({
-                    'filter': True, 
-                    'sortable': True, 
-                    'resizable': True,
-                    'suppressMenuHide': True
-                })
-                cols.insert(col_num,col_def)
+                    col_def.update({
+                        'filter': True, 
+                        'sortable': True, 
+                        'resizable': True,
+                        'suppressMenuHide': True
+                    })
+                    cols.insert(col_num,col_def)
 
-            # peakindexings['id'] = peakindexings['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
-            
-            return cols, scan_peakindexings.to_dict('records')
+                # peakindexings['id'] = peakindexings['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
+                
+                return cols, scan_peakindexings.to_dict('records')
     
     except Exception as e:
         print(f"Error loading peak indexing data: {e}")

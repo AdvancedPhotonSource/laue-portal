@@ -39,6 +39,12 @@ layout = dbc.Container(
             dismissable=True,
             is_open=False,
         ),
+        dbc.Alert(
+            "Hello! I am an alert",
+            id="alert-catalog-submit",
+            dismissable=True,
+            is_open=False,
+        ),
         html.Hr(),
         html.Center(
             html.Div(
@@ -433,7 +439,6 @@ def submit_catalog_and_metadata(n,
                     # Add scan rows from the form data
                     if scan_dims and len(scan_dims) > 0:
                         motor_group_totals = {}
-                        valid_scans = 0
                         # Reconstruct scan objects from form values
                         for i in range(len(scan_dims)):
                             # Check if all required fields have values (not None)
@@ -486,14 +491,8 @@ def submit_catalog_and_metadata(n,
                                     scan_cpt=scan_cpts[i],
                                 )
                                 session.add(scan)
-                                valid_scans += 1
                                 motor_group_totals = db_utils.update_motor_group_totals(motor_group_totals, scan)
                         
-                        if valid_scans > 0:
-                            set_props("alert-submit", {'is_open': True, 
-                                                        'children': f'{valid_scans} Scan entries added to database',
-                                                        'color': 'success'})
-
                         # Fallback value of 1 for 'sample' and 'depth' completed points if any motor has completed points
                         if motor_group_totals:
                             for specific_motor_group in ['sample', 'depth']:
@@ -530,7 +529,7 @@ def submit_catalog_and_metadata(n,
                     catalog_data.sample_name = sample_name
                     catalog_data.notes = notes
                     
-                    set_props("alert-submit", {'is_open': True, 
+                    set_props("alert-catalog-submit", {'is_open': True, 
                                                 'children': f'Catalog Entry Updated for scan {scanNumber}',
                                                 'color': 'success'})
                 else:
@@ -546,11 +545,11 @@ def submit_catalog_and_metadata(n,
                     
                     session.add(catalog)
                     
-                    set_props("alert-submit", {'is_open': True, 
+                    set_props("alert-catalog-submit", {'is_open': True, 
                                                 'children': f'Catalog Entry Added to Database for scan {scanNumber}',
                                                 'color': 'success'})
             except Exception as e:
-                set_props("alert-submit", {'is_open': True, 
+                set_props("alert-catalog-submit", {'is_open': True, 
                                             'children': f'Error creating catalog entry: {str(e)}',
                                             'color': 'danger'})
                 return
