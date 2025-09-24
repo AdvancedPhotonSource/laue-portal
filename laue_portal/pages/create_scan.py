@@ -29,21 +29,21 @@ layout = dbc.Container(
         html.Div([
         navbar.navbar,
         dbc.Alert(
-            "Hello! I am an alert",
             id="alert-upload",
             dismissable=True,
+            duration=4000,
             is_open=False,
         ),
         dbc.Alert(
-            "Hello! I am an alert",
             id="alert-submit",
             dismissable=True,
+            duration=4000,
             is_open=False,
         ),
         dbc.Alert(
-            "Hello! I am an alert",
             id="alert-catalog-submit",
             dismissable=True,
+            duration=4000,
             is_open=False,
         ),
         html.Hr(),
@@ -238,7 +238,6 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
     Input('submit_catalog_and_metadata', 'n_clicks'),
 
     # Catalog form fields
-    State('scanNumber', 'value'),
     State('filefolder', 'value'),
     # State('filenamePrefix', 'value'),
     State('filenamePrefix1', 'value'),
@@ -250,6 +249,7 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
     State('notes', 'value'),
     
     # Metadata form fields
+    State('scanNumber', 'value'),
     State('time_epoch', 'value'),
     State('time', 'value'),
     State('user_name', 'value'),
@@ -316,7 +316,6 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
 )
 def submit_catalog_and_metadata(n,
     # Catalog parameters
-    scanNumber,
     filefolder,
     # filenamePrefix,
     filenamePrefix1,
@@ -328,6 +327,7 @@ def submit_catalog_and_metadata(n,
     notes,
     
     # Metadata parameters
+    scanNumber,
     time_epoch,
     time,
     user_name,
@@ -396,7 +396,7 @@ def submit_catalog_and_metadata(n,
         # Convert scanNumber to int if it's a string
         if isinstance(scanNumber, str):
             scanNumber = int(scanNumber)
-            
+        
         with Session(db_utils.ENGINE) as session:
             try:
                 # Check if metadata record exists for this scanNumber

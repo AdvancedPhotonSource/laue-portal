@@ -1,5 +1,5 @@
 import dash
-from dash import html, dcc, callback, Input, Output, set_props
+from dash import html, dcc, callback, Input, Output, State, set_props
 import dash_bootstrap_components as dbc
 import dash_ag_grid as dag
 import laue_portal.database.db_utils as db_utils
@@ -22,6 +22,12 @@ layout = html.Div([
         dcc.Location(id='url-scan-page', refresh=False),
         dbc.Container(id='scan-content-container', fluid=True, className="mt-4",
                   children=[
+                        dbc.Alert(
+                            id="alert-comment-submit",
+                            dismissable=True,
+                            duration=4000,
+                            is_open=False,
+                        ),
                         html.H1(id='scan-header', 
                                style={"display":"flex", "gap":"10px", "align-items":"baseline", "flexWrap":"wrap"},
                                className="mb-4"),
@@ -139,7 +145,25 @@ layout = html.Div([
                     metadata_form,
 
                     # Catalog Form
-                    html.H2("Catalog Details", className="mt-4 mb-3"),
+                    html.Div(
+                        [
+                            html.H2("Catalog Details", className="mt-4 mb-3"),
+                            dbc.Button(
+                                "Save Changes to Catalog",
+                                id="save-catalog-btn",
+                                color="success",
+                                className="mt-4 mb-3",
+                                style={'margin-left': '30px'}
+                            ),
+                        ],
+                        style={"display": "flex", "align-items": "center"},
+                    ),
+                    dbc.Alert(
+                        id="alert-catalog-submit",
+                        dismissable=True,
+                        duration=4000,
+                        is_open=False,
+                    ),
                     catalog_form,
                     #####
                     # dbc.Accordion(
@@ -313,39 +337,40 @@ def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
     cpt_label = "Completed"
     positioner_info = []
     motor_group_totals = {}
-    for i, scan in enumerate(scans):
-        motor_group_totals = db_utils.update_motor_group_totals(motor_group_totals, scan)
-        pos_fields = []
-        for PV_i in range(1, 5):
-            pv_attr = f'scan_positioner{PV_i}_PV'
-            pos_attr = f'scan_positioner{PV_i}'
-            if getattr(scan, pv_attr, None):
-                motor_group = db_utils.find_motor_group(getattr(scan, pv_attr))
-                
-                label = html.Div(f"{motor_group.capitalize()}:")
-                
-                start_val, stop_val, step_val = getattr(scan, pos_attr, '  ').split()
+    if scans:
+        for i, scan in enumerate(scans):
+            motor_group_totals = db_utils.update_motor_group_totals(motor_group_totals, scan)
+            pos_fields = []
+            for PV_i in range(1, 5):
+                pv_attr = f'scan_positioner{PV_i}_PV'
+                pos_attr = f'scan_positioner{PV_i}'
+                if getattr(scan, pv_attr, None):
+                    motor_group = db_utils.find_motor_group(getattr(scan, pv_attr))
+                    
+                    label = html.Div(f"{motor_group.capitalize()}:")
+                    
+                    start_val, stop_val, step_val = getattr(scan, pos_attr, '  ').split()
 
-                fields = [
-                    _field("Start", {"type": "pos_start", "index": i, "PV": PV_i}, size='sm', kwargs={'value': start_val, 'readonly': read_only}),
-                    _field("Stop", {"type": "pos_stop", "index": i, "PV": PV_i}, size='sm', kwargs={'value': stop_val, 'readonly': read_only}),
-                    _field("Step", {"type": "pos_step", "index": i, "PV": PV_i}, size='sm', kwargs={'value': step_val, 'readonly': read_only}),
-                ]
+                    fields = [
+                        _field("Start", {"type": "pos_start", "index": i, "PV": PV_i}, size='sm', kwargs={'value': start_val, 'readonly': read_only}),
+                        _field("Stop", {"type": "pos_stop", "index": i, "PV": PV_i}, size='sm', kwargs={'value': stop_val, 'readonly': read_only}),
+                        _field("Step", {"type": "pos_step", "index": i, "PV": PV_i}, size='sm', kwargs={'value': step_val, 'readonly': read_only}),
+                    ]
+                    
+                    pos_fields.append(html.Div([label, _stack(fields)], style={'margin-bottom': '10px'}))
+
+            if pos_fields:
+                points_fields = _stack([
+                    _field(npts_label, {"type": "points", "index": i}, size='sm', kwargs={'value': scan.scan_npts, 'readonly': read_only}),
+                    _field(cpt_label, {"type": "completed", "index": i}, size='sm', kwargs={'value': scan.scan_cpt, 'readonly': read_only})
+                ])
+
+                header = _stack([
+                    html.Strong(f"Scan {scan.scan_dim} Positioners", className="mb-3"),
+                    points_fields
+                ])
                 
-                pos_fields.append(html.Div([label, _stack(fields)], style={'margin-bottom': '10px'}))
-
-        if pos_fields:
-            points_fields = _stack([
-                _field(npts_label, {"type": "points", "index": i}, size='sm', kwargs={'value': scan.scan_npts, 'readonly': read_only}),
-                _field(cpt_label, {"type": "completed", "index": i}, size='sm', kwargs={'value': scan.scan_cpt, 'readonly': read_only})
-            ])
-
-            header = _stack([
-                html.Strong(f"Scan {scan.scan_dim} Positioners", className="mb-3"),
-                points_fields
-            ])
-            
-            positioner_info.append(html.Div([header, html.Div(pos_fields)]))
+                positioner_info.append(html.Div([header, html.Div(pos_fields)]))
 
     total_points_fields = []
     for motor_group in db_utils.MOTOR_GROUPS:
@@ -388,7 +413,7 @@ def load_scan_metadata(href):
 
     if scan_id_str:
         try:
-            scan_id = int(scan_id_str) if scan_id_str else None
+            scan_id = int(scan_id_str)
             with Session(db_utils.ENGINE) as session:
                 metadata_data = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == scan_id).first()
                 scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_id)
@@ -397,14 +422,12 @@ def load_scan_metadata(href):
                     if scan_data:
                         scan_rows = list(scan_data)  # Convert query to list
                         set_scan_accordions(scan_rows, read_only=True)
-                        set_metadata_form_props(metadata_data, scan_rows, read_only=True)
-                        if catalog_data:
-                            set_catalog_form_props(catalog_data, read_only=True)
-                            set_scaninfo_form_props(metadata_data, scan_rows, catalog_data, read_only=True)
                     else:
-                        set_metadata_form_props(metadata_data, read_only=True)
-                        if catalog_data:
-                            set_catalog_form_props(catalog_data, read_only=True)
+                        scan_rows = []
+                    set_metadata_form_props(metadata_data, scan_rows, read_only=True)
+                    if catalog_data:
+                        set_catalog_form_props(catalog_data, read_only=False)
+                        set_scaninfo_form_props(metadata_data, scan_rows, catalog_data, read_only=True)
 
         except Exception as e:
             print(f"Error loading scan data: {e}")
@@ -1120,3 +1143,126 @@ def get_scan_peakindexings(href):
             return cols, peakindexings
     else:
         raise PreventUpdate
+
+
+@callback(
+    Input("save-comment-btn", "n_clicks"),
+    State("scanNumber", "value"),
+    State("Comment_print", "value"),
+    prevent_initial_call=True,
+)
+def save_comment(n_clicks, scanNumber, comment):
+    if not n_clicks:
+        raise PreventUpdate
+
+    if not scanNumber:
+        set_props("alert-comment-submit", {'is_open': True, 'children': 'Scan ID not found.', 'color': 'danger'})
+        raise PreventUpdate
+
+    try:
+        scan_id = int(scanNumber)
+        with Session(db_utils.ENGINE) as session:
+            catalog_entry = (
+                session.query(db_schema.Catalog)
+                .filter(db_schema.Catalog.scanNumber == scan_id)
+                .first()
+            )
+
+            if not catalog_entry:
+                set_props("alert-comment-submit", {'is_open': True, 'children': f'No catalog entry found for scan {scan_id}.', 'color': 'danger'})
+                raise PreventUpdate
+
+            if catalog_entry.notes:
+                catalog_entry.notes += f"\n{comment}"
+            else:
+                catalog_entry.notes = comment
+
+            session.commit()
+
+            set_props("alert-comment-submit", {'is_open': True, 
+                                                'children': f'Comment added to scan {scan_id}',
+                                                'color': 'success'})
+
+    except Exception as e:
+        set_props("alert-comment-submit", {'is_open': True, 'children': f'Error saving comment: {e}', 'color': 'danger'})
+
+
+@callback(
+    Input("save-catalog-btn", "n_clicks"),
+    State("scanNumber", "value"),
+    State("aperture", "value"),
+    State("sample_name", "value"),
+    State("filefolder", "value"),
+    State("filenamePrefix1", "value"),
+    State("filenamePrefix2", "value"),
+    State("filenamePrefix3", "value"),
+    State("filenamePrefix4", "value"),
+    State("notes", "value"),
+    prevent_initial_call=True,
+)
+def update_catalog(n,
+    scanNumber,
+    aperture,
+    sample_name,
+    filefolder,
+    filenamePrefix1,
+    filenamePrefix2,
+    filenamePrefix3,
+    filenamePrefix4,
+    notes,
+):
+    # TODO: Input validation and response
+ 
+    try:
+        # Convert scanNumber to int if it's a string
+        if isinstance(scanNumber, str):
+            scanNumber = int(scanNumber)
+        
+        with Session(db_utils.ENGINE) as session:
+            try:
+                # Check if catalog entry already exists
+                catalog_data = session.query(db_schema.Catalog).filter(
+                    db_schema.Catalog.scanNumber == scanNumber
+                ).first()
+                
+                filenamePrefix = [prefix for prefix in [filenamePrefix1, filenamePrefix2, filenamePrefix3, filenamePrefix4] if prefix]
+                if catalog_data:
+                    # Update existing catalog entry
+                    catalog_data.filefolder = filefolder
+                    catalog_data.filenamePrefix = filenamePrefix
+                    catalog_data.aperture = aperture
+                    catalog_data.sample_name = sample_name
+                    catalog_data.notes = notes
+                    
+                    set_props("alert-catalog-submit", {'is_open': True, 
+                                                'children': f'Catalog Entry Updated for scan {scanNumber}',
+                                                'color': 'success'})
+                else:
+                    # Create new catalog entry
+                    catalog = db_schema.Catalog(
+                        scanNumber=scanNumber,
+                        filefolder=filefolder,
+                        filenamePrefix=filenamePrefix,
+                        aperture=aperture,
+                        sample_name=sample_name,
+                        notes=notes,
+                    )
+                    
+                    session.add(catalog)
+                    
+                    set_props("alert-catalog-submit", {'is_open': True, 
+                                                'children': f'Catalog Entry Added to Database for scan {scanNumber}',
+                                                'color': 'success'})
+            except Exception as e:
+                set_props("alert-catalog-submit", {'is_open': True, 
+                                            'children': f'Error creating catalog entry: {str(e)}',
+                                            'color': 'danger'})
+                return
+            
+            # Commit all changes
+            session.commit()
+                                            
+    except ValueError as e:
+        set_props("alert-catalog-submit", {'is_open': True, 
+                                    'children': f'Error: Invalid scan number format. Please enter a valid integer.',
+                                    'color': 'danger'})
