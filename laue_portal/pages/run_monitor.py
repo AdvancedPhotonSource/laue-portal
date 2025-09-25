@@ -430,6 +430,8 @@ def selected_recon_href(rows,href):
     
     if any_recon_scans:
         base_href = "/create-reconstruction"
+    elif any_wirerecon_scans:
+        base_href = "/create-wire-reconstruction"
 
     query_params = [f"scan_id=${','.join(scan_ids)}"]
     if any_wirerecon_scans: query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")

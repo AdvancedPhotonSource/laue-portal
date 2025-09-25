@@ -49,7 +49,7 @@ def load_peakindexing_data(href):
 
     if peakindex_id_str:
         try:
-            peakindex_id = int(peakindex_id_str) if peakindex_id_str else None
+            peakindex_id = int(peakindex_id_str)
             with Session(db_utils.ENGINE) as session:
                 peakindex_data = session.query(db_schema.PeakIndex).filter(db_schema.PeakIndex.peakindex_id == peakindex_id).first()
                 if peakindex_data:

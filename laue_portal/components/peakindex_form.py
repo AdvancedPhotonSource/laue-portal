@@ -30,11 +30,7 @@ peakindex_form = dbc.Row(
                                 ),
                                 _stack(
                                     [
-                                        # _field("Filename Prefix", "filenamePrefix", size='lg'),
-                                        _field("Filename Prefix 1", "filenamePrefix1", size='lg'),
-                                        _field("Filename Prefix 2", "filenamePrefix2", size='lg'),
-                                        _field("Filename Prefix 3", "filenamePrefix3", size='lg'),
-                                        _field("Filename Prefix 4", "filenamePrefix4", size='lg'),
+                                        _field("Filename Prefix", "filenamePrefix", size='lg'),
                                     ]
                                 ),
                                 _stack(
@@ -274,9 +270,7 @@ def set_peakindex_form_props(peakindex, read_only=False):
     # set_props("p2qPath", {'value':peakindex.p2qPath, 'readonly':read_only})
     # set_props("indexingPath", {'value':peakindex.indexingPath, 'readonly':read_only})
     set_props("data_path", {'value':peakindex.data_path, 'readonly':True})
-    # set_props("filenamePrefix", {'value':peakindex.filenamePrefix, 'readonly':True})
-    for i, filenamePrefix in enumerate(peakindex.filenamePrefix):
-        set_props(f"filenamePrefix{i+1}", {'value':filenamePrefix, 'readonly':True})
+    set_props("filenamePrefix", {'value':','.join(peakindex.filenamePrefix), 'readonly':True})
     set_props("outputFolder", {'value':peakindex.outputFolder, 'readonly':read_only})
     set_props("geoFile", {'value':peakindex.geoFile, 'readonly':read_only})
     set_props("crystFile", {'value':peakindex.crystFile, 'readonly':read_only})

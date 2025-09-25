@@ -56,8 +56,7 @@ layout = html.Div([
                 columnSize="responsiveSizeToFit",
                 defaultColDef={
                     "filter": True,
-                    "cellStyle": {"textAlign": "left"},
-            },
+                },
                 dashGridOptions={
                     "pagination": True, 
                     "paginationPageSize": 20, 

@@ -49,7 +49,7 @@ def load_wire_recon_data(href):
 
     if wirerecon_id_str:
         try:
-            wirerecon_id = int(wirerecon_id_str) if wirerecon_id_str else None
+            wirerecon_id = int(wirerecon_id_str)
             with Session(db_utils.ENGINE) as session:
                 wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == wirerecon_id).first()
                 if wirerecon_data:
