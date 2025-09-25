@@ -163,11 +163,7 @@ Callbacks
     # Files
     State('scanPoints', 'value'),
     State('data_path', 'value'),
-    # State('filenamePrefix', 'value'),
-    State('filenamePrefix1', 'value'),
-    State('filenamePrefix2', 'value'),
-    State('filenamePrefix3', 'value'),
-    State('filenamePrefix4', 'value'),
+    State('filenamePrefix', 'value'),
     
     # Output
     State('outputFolder', 'value'),
@@ -194,11 +190,7 @@ def submit_parameters(n,
     # Files
     scanPoints,
     data_path,
-    # filenamePrefix,
-    filenamePrefix1,
-    filenamePrefix2,
-    filenamePrefix3,
-    filenamePrefix4,
+    filenamePrefix,
     
     # Output
     output_folder,
@@ -225,7 +217,6 @@ def submit_parameters(n,
         depth_resolution_list = parse_parameter(depth_resolution, num_scans)
         scanPoints_list = parse_parameter(scanPoints, num_scans)
         data_path_list = parse_parameter(data_path, num_scans)
-        filenamePrefix = [prefix for prefix in [filenamePrefix1, filenamePrefix2, filenamePrefix3, filenamePrefix4] if prefix]
         filenamePrefix_list = parse_parameter(filenamePrefix, num_scans)
         outputFolder_list = parse_parameter(output_folder, num_scans)
     except ValueError as e:
@@ -248,7 +239,8 @@ def submit_parameters(n,
         current_scanNumber = scanNumber_list[i]
         current_output_folder = outputFolder_list[i]
         current_data_path = data_path_list[i]
-        current_filename_prefix = filenamePrefix_list[i]
+        current_filename_prefix_str = filenamePrefix_list[i]
+        current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
         current_geo_file = geoFile_list[i]
         current_scanPoints = scanPoints_list[i]
         

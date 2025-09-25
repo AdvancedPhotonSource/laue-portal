@@ -239,11 +239,7 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
 
     # Catalog form fields
     State('filefolder', 'value'),
-    # State('filenamePrefix', 'value'),
-    State('filenamePrefix1', 'value'),
-    State('filenamePrefix2', 'value'),
-    State('filenamePrefix3', 'value'),
-    State('filenamePrefix4', 'value'),
+    State('filenamePrefix', 'value'),
     State('aperture', 'value'),
     State('sample_name', 'value'),
     State('notes', 'value'),
@@ -317,11 +313,7 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
 def submit_catalog_and_metadata(n,
     # Catalog parameters
     filefolder,
-    # filenamePrefix,
-    filenamePrefix1,
-    filenamePrefix2,
-    filenamePrefix3,
-    filenamePrefix4,
+    filenamePrefix,
     aperture,
     sample_name,
     notes,
@@ -530,7 +522,7 @@ def submit_catalog_and_metadata(n,
                     db_schema.Catalog.scanNumber == scanNumber
                 ).first()
                 
-                filenamePrefix = [prefix for prefix in [filenamePrefix1, filenamePrefix2, filenamePrefix3, filenamePrefix4] if prefix]
+                filenamePrefix = [s.strip() for s in filenamePrefix.split(',')] if filenamePrefix else []
                 if catalog_data:
                     # Update existing catalog entry
                     catalog_data.filefolder = filefolder

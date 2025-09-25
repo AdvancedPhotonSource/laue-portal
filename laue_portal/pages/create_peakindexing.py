@@ -219,11 +219,7 @@ Callbacks
     # State('indexingPath', 'value'),
     State('data_path', 'value'),
     # State('filefolder', 'value'),
-    # State('filenamePrefix', 'value'),
-    State('filenamePrefix1', 'value'),
-    State('filenamePrefix2', 'value'),
-    State('filenamePrefix3', 'value'),
-    State('filenamePrefix4', 'value'),
+    State('filenamePrefix', 'value'),
     State('outputFolder', 'value'),
     State('geoFile', 'value'),
     State('crystFile', 'value'),
@@ -278,11 +274,7 @@ def submit_parameters(n,
     # indexingPath,
     data_path,
     # filefolder,
-    # filenamePrefix,
-    filenamePrefix1,
-    filenamePrefix2,
-    filenamePrefix3,
-    filenamePrefix4,
+    filenamePrefix,
     outputFolder,
     geometry_file,
     crystal_file,
@@ -334,7 +326,6 @@ def submit_parameters(n,
         recipLatticeUnit_list = parse_parameter(recipLatticeUnit, num_scans)
         latticeParametersUnit_list = parse_parameter(latticeParametersUnit, num_scans)
         data_path_list = parse_parameter(data_path, num_scans)
-        filenamePrefix = [prefix for prefix in [filenamePrefix1, filenamePrefix2, filenamePrefix3, filenamePrefix4] if prefix]
         filenamePrefix_list = parse_parameter(filenamePrefix, num_scans)
         outputFolder_list = parse_parameter(outputFolder, num_scans)
         geoFile_list = parse_parameter(geometry_file, num_scans)
@@ -360,7 +351,8 @@ def submit_parameters(n,
         current_wirerecon_id = wirerecon_id_list[i]
         current_output_folder = outputFolder_list[i]
         current_data_path = data_path_list[i]
-        current_filename_prefix = filenamePrefix_list[i]
+        current_filename_prefix_str = filenamePrefix_list[i]
+        current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
         current_geo_file = geoFile_list[i]
         current_crystal_file = crystFile_list[i]
         current_scanPoints = scanPoints_list[i]
@@ -511,21 +503,22 @@ def submit_parameters(n,
             # Construct full data path from form values
             full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
             
-            for scanPoint_num in scanPoint_nums:
-                for depthRange_num in depthRange_nums:
-                    # Prepare parameters for peak indexing
-                    file_str = current_filename_prefix % scanPoint_num
-                    
-                    if depthRange_num is not None:
-                        # Reconstruction file with depth index
-                        input_filename = file_str + f"_{depthRange_num}.h5"
-                    else:
-                        # Raw data file
-                        input_filename = file_str + ".h5"
-                    input_file = os.path.join(full_data_path, input_filename)
-                    
-                    input_files.append(input_file)
-                    output_dirs.append(full_output_folder)
+            for current_filename_prefix_i in current_filename_prefix:
+                for scanPoint_num in scanPoint_nums:
+                    for depthRange_num in depthRange_nums:
+                        # Prepare parameters for peak indexing
+                        file_str = current_filename_prefix_i % scanPoint_num
+                        
+                        if depthRange_num is not None:
+                            # Reconstruction file with depth index
+                            input_filename = file_str + f"_{depthRange_num}.h5"
+                        else:
+                            # Raw data file
+                            input_filename = file_str + ".h5"
+                        input_file = os.path.join(full_data_path, input_filename)
+                        
+                        input_files.append(input_file)
+                        output_dirs.append(full_output_folder)
             
             # Enqueue the batch job with all files
             rq_job_id = enqueue_peakindexing(

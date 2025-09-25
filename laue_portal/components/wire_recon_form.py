@@ -22,11 +22,7 @@ wire_recon_form = dbc.Row(
                                 ),
                                 _stack(
                                     [
-                                        # _field("Filename Prefix", "filenamePrefix", size='lg'),
-                                        _field("Filename Prefix 1", "filenamePrefix1", size='lg'),
-                                        _field("Filename Prefix 2", "filenamePrefix2", size='lg'),
-                                        _field("Filename Prefix 3", "filenamePrefix3", size='lg'),
-                                        _field("Filename Prefix 4", "filenamePrefix4", size='lg'),
+                                        _field("Filename Prefix", "filenamePrefix", size='lg'),
                                     ]
                                 ),
                                 _stack(
@@ -119,9 +115,7 @@ def set_wire_recon_form_props(wirerecon, read_only=False):
     # File paths
     set_props("root_path", {'value':wirerecon.root_path, 'readonly':True})
     set_props("data_path", {'value':wirerecon.data_path, 'readonly':True})
-    # set_props("filenamePrefix", {'value':wirerecon.filenamePrefix, 'readonly':True})
-    for i, filenamePrefix in enumerate(wirerecon.filenamePrefix):
-        set_props(f"filenamePrefix{i+1}", {'value':filenamePrefix, 'readonly':True})
+    set_props("filenamePrefix", {'value':','.join(wirerecon.filenamePrefix), 'readonly':True})
     
     # Wire recon parameters
     set_props("geoFile", {'value':wirerecon.geoFile, 'readonly':read_only})

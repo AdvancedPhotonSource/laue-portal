@@ -23,7 +23,7 @@ layout = html.Div([
         dbc.Container(id='scan-content-container', fluid=True, className="mt-4",
                   children=[
                         dbc.Alert(
-                            id="alert-comment-submit",
+                            id="alert-note-submit",
                             dismissable=True,
                             duration=4000,
                             is_open=False,
@@ -73,14 +73,14 @@ layout = html.Div([
                             ]),
                             dbc.Row([
                                 dbc.Col([
-                                    html.P(html.Strong("Comment:")),
-                                    dbc.Button("Add to DB", id="save-comment-btn", color="success", size="sm", className="mt-2")
+                                    html.P(html.Strong("Note:")),
+                                    dbc.Button("Add to DB", id="save-note-btn", color="success", size="sm", className="mt-2")
                                 ], width="auto", align="start"),
                                 dbc.Col(
                                     dbc.Textarea(
-                                        id="Comment_print",
-                                        #id='scan-comment',
-                                        #value=scan["comment"] or "—",
+                                        id="Note_print",
+                                        #id='scan-note',
+                                        #value=scan["note"] or "—",
                                         style={"width": "100%", "minHeight": "100px"},
                                     )
                                 )
@@ -89,6 +89,12 @@ layout = html.Div([
                     ], className="mb-4 shadow-sm border",
                     style={"width": "100%"}),
 
+                    html.Div([
+                        dbc.Button("New Recon", id="new-recon-btn", color="success", size="sm", className="ms-2", href="/create-reconstruction"),
+                        dbc.Button("New Index", id="new-index-btn", color="success", size="sm", className="ms-2", href="/create-peakindexing"),
+                        dbc.Button("New Recon+Index", id="new-recon-index-btn", color="success", size="sm", className="ms-2", href="/create-reconstruction-peakindexing"),
+                    ], className="d-flex justify-content-start mb-2"),
+
                     # Recon Table
                     dbc.Card([
                         dbc.CardHeader(
@@ -96,8 +102,9 @@ layout = html.Div([
                                 dbc.Col(html.H4("Reconstructions", className="mb-0"), width="auto"),
                                 dbc.Col(
                                     html.Div([
-                                        dbc.Button("New Recon+Index", id="new-recon-index-btn", color="success", size="sm", className="me-2"),
-                                        dbc.Button("New Recon", id="new-recon-btn", color="success", size="sm")
+                                        dbc.Button("New Recon", id="recon-table-new-recon-btn", color="success", size="sm", className="me-2", href="/create-reconstruction"),
+                                        dbc.Button("New Index", id="recon-table-new-index-btn", color="success", size="sm", className="me-2", href="/create-peakindexing"),
+                                        dbc.Button("New Recon+Index", id="recon-table-new-recon-index-btn", color="success", size="sm", className="me-2", href="/create-reconstruction-peakindexing"),
                                     ], className="d-flex justify-content-end"),
                                     width=True
                                 )
@@ -108,7 +115,18 @@ layout = html.Div([
                             dag.AgGrid(
                                 id='scan-recon-table',
                                 columnSize="responsiveSizeToFit",
-                                dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight', "rowHeight": 32},
+                                defaultColDef={
+                                    "filter": True,
+                                },
+                                dashGridOptions={
+                                    "pagination": True, 
+                                    "paginationPageSize": 20, 
+                                    "domLayout": 'autoHeight',
+                                    "rowSelection": 'multiple', 
+                                    "suppressRowClickSelection": True, 
+                                    "animateRows": False, 
+                                    "rowHeight": 32
+                                },
                                 #style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                                 className="ag-theme-alpine"
                             )
@@ -122,7 +140,8 @@ layout = html.Div([
                                 dbc.Col(html.H4("Peak Indexing", className="mb-0"), width="auto"),
                                 dbc.Col(
                                     html.Div([
-                                        dbc.Button("New Peak Indexing", id="new-peakindexing-btn", color="success", size="sm")
+                                        dbc.Button("New Recon", id="index-table-new-recon-btn", color="success", size="sm", className="me-2", href="/create-reconstruction"),
+                                        dbc.Button("New Index", id="index-table-new-index-btn", color="success", size="sm", className="me-2", href="/create-peakindexing"),
                                     ], className="d-flex justify-content-end"),
                                     width=True
                                 )
@@ -133,7 +152,18 @@ layout = html.Div([
                             dag.AgGrid(
                                 id='scan-peakindex-table',
                                 columnSize="responsiveSizeToFit",
-                                dashGridOptions={"pagination": True, "paginationPageSize": 20, "domLayout": 'autoHeight', "rowHeight": 32},
+                                defaultColDef={
+                                    "filter": True,
+                                },
+                                dashGridOptions={
+                                    "pagination": True, 
+                                    "paginationPageSize": 20, 
+                                    "domLayout": 'autoHeight',
+                                    "rowSelection": 'multiple', 
+                                    "suppressRowClickSelection": True, 
+                                    "animateRows": False, 
+                                    "rowHeight": 32
+                                },
                                 #style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                                 className="ag-theme-alpine"
                             )
@@ -331,7 +361,7 @@ def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
     set_props('Technique_print', {'children':[technique_str]}) #depth
     set_props('Aperture_print', {'children':[catalog.aperture.title()]})
     set_props('Sample_print', {'children':[catalog.sample_name]}) #"Si"
-    set_props('Comment_print', {'value':"submit indexing"})
+    set_props('Note_print', {'value':"submit indexing"})
 
     npts_label = "Points"
     cpt_label = "Completed"
@@ -476,7 +506,7 @@ CUSTOM_COLS_Recon_dict = {
     ],
 }
 
-ALL_COLS_Recon = VISIBLE_COLS_Recon + [ii for i in CUSTOM_COLS_Recon_dict.values() for ii in i]
+ALL_COLS_Recon = VISIBLE_COLS_Recon + [db_schema.Recon.scanNumber] + [ii for i in CUSTOM_COLS_Recon_dict.values() for ii in i]
 
 VISIBLE_COLS_WireRecon = [
     db_schema.WireRecon.wirerecon_id,
@@ -518,7 +548,7 @@ CUSTOM_COLS_WireRecon_dict = {
     ],
 }
 
-ALL_COLS_WireRecon = VISIBLE_COLS_WireRecon + [ii for i in CUSTOM_COLS_WireRecon_dict.values() for ii in i]
+ALL_COLS_WireRecon = VISIBLE_COLS_WireRecon + [db_schema.WireRecon.scanNumber] + [ii for i in CUSTOM_COLS_WireRecon_dict.values() for ii in i]
 
 def _get_scan_recons(scan_id):
     try:
@@ -545,6 +575,23 @@ def _get_scan_recons(scan_id):
                 
                 # Format columns for ag-grid
                 cols = []
+    
+                # Add explicit checkbox column as the first column
+                cols.append({
+                    'headerName': '',
+                    'field': 'checkbox',
+                    'checkboxSelection': True,
+                    'headerCheckboxSelection': True,
+                    'width': 60,
+                    'pinned': 'left',
+                    'sortable': False,
+                    'filter': False,
+                    'resizable': False,
+                    'suppressMenu': True,
+                    'floatingFilter': False,
+                    'cellClass': 'ag-checkbox-cell',
+                    'headerClass': 'ag-checkbox-header',
+                })
                 for col in VISIBLE_COLS_WireRecon:
                     field_key = col.key
                     header_name = CUSTOM_HEADER_NAMES_WireRecon.get(field_key, field_key.replace('_', ' ').title())
@@ -555,6 +602,7 @@ def _get_scan_recons(scan_id):
                         'filter': True, 
                         'sortable': True, 
                         'resizable': True,
+                        'floatingFilter': True,
                         'suppressMenuHide': True
                     }
 
@@ -640,6 +688,23 @@ def _get_scan_recons(scan_id):
                 
                 # Format columns for ag-grid
                 cols = []
+                    
+                # Add explicit checkbox column as the first column
+                cols.append({
+                    'headerName': '',
+                    'field': 'checkbox',
+                    'checkboxSelection': True,
+                    'headerCheckboxSelection': True,
+                    'width': 60,
+                    'pinned': 'left',
+                    'sortable': False,
+                    'filter': False,
+                    'resizable': False,
+                    'suppressMenu': True,
+                    'floatingFilter': False,
+                    'cellClass': 'ag-checkbox-cell',
+                    'headerClass': 'ag-checkbox-header',
+                })
                 for col in VISIBLE_COLS_Recon:
                     field_key = col.key
                     header_name = CUSTOM_HEADER_NAMES_Recon.get(field_key, field_key.replace('_', ' ').title())
@@ -650,6 +715,7 @@ def _get_scan_recons(scan_id):
                         'filter': True, 
                         'sortable': True, 
                         'resizable': True,
+                        'floatingFilter': True,
                         'suppressMenuHide': True
                     }
 
@@ -784,7 +850,7 @@ CUSTOM_COLS_PeakIndex_dict = {
     ],
 }
 
-ALL_COLS_PeakIndex = VISIBLE_COLS_PeakIndex + [ii for i in CUSTOM_COLS_PeakIndex_dict.values() for ii in i]
+ALL_COLS_PeakIndex = VISIBLE_COLS_PeakIndex + [db_schema.PeakIndex.scanNumber] + [ii for i in CUSTOM_COLS_PeakIndex_dict.values() for ii in i]
 
 VISIBLE_COLS_Recon_PeakIndex = [
     db_schema.PeakIndex.peakindex_id,
@@ -820,7 +886,7 @@ CUSTOM_COLS_Recon_PeakIndex_dict = {
     ],
 }
 
-ALL_COLS_Recon_PeakIndex = VISIBLE_COLS_Recon_PeakIndex + [ii for i in CUSTOM_COLS_Recon_PeakIndex_dict.values() for ii in i]
+ALL_COLS_Recon_PeakIndex = VISIBLE_COLS_Recon_PeakIndex + [db_schema.PeakIndex.scanNumber] + [ii for i in CUSTOM_COLS_Recon_PeakIndex_dict.values() for ii in i]
 
 VISIBLE_COLS_WireRecon_PeakIndex = [
     db_schema.PeakIndex.peakindex_id,
@@ -855,7 +921,7 @@ CUSTOM_COLS_WireRecon_PeakIndex_dict = {
     ],
 }
 
-ALL_COLS_WireRecon_PeakIndex = VISIBLE_COLS_WireRecon_PeakIndex + [ii for i in CUSTOM_COLS_WireRecon_PeakIndex_dict.values() for ii in i]
+ALL_COLS_WireRecon_PeakIndex = VISIBLE_COLS_WireRecon_PeakIndex + [db_schema.PeakIndex.scanNumber] + [ii for i in CUSTOM_COLS_WireRecon_PeakIndex_dict.values() for ii in i]
 
 def _get_scan_peakindexings(scan_id):
     try:
@@ -878,6 +944,23 @@ def _get_scan_peakindexings(scan_id):
                 
                 # Format columns for ag-grid
                 cols = []
+                    
+                # Add explicit checkbox column as the first column
+                cols.append({
+                    'headerName': '',
+                    'field': 'checkbox',
+                    'checkboxSelection': True,
+                    'headerCheckboxSelection': True,
+                    'width': 60,
+                    'pinned': 'left',
+                    'sortable': False,
+                    'filter': False,
+                    'resizable': False,
+                    'suppressMenu': True,
+                    'floatingFilter': False,
+                    'cellClass': 'ag-checkbox-cell',
+                    'headerClass': 'ag-checkbox-header',
+                })
                 for col in VISIBLE_COLS_PeakIndex:
                     field_key = col.key
                     header_name = CUSTOM_HEADER_NAMES_PeakIndex.get(field_key, field_key.replace('_', ' ').title())
@@ -888,6 +971,7 @@ def _get_scan_peakindexings(scan_id):
                         'filter': True, 
                         'sortable': True, 
                         'resizable': True,
+                        'floatingFilter': True,
                         'suppressMenuHide': True
                     }
 
@@ -957,6 +1041,23 @@ def _get_scan_peakindexings(scan_id):
                 
                 # Format columns for ag-grid
                 cols = []
+                    
+                # Add explicit checkbox column as the first column
+                cols.append({
+                    'headerName': '',
+                    'field': 'checkbox',
+                    'checkboxSelection': True,
+                    'headerCheckboxSelection': True,
+                    'width': 60,
+                    'pinned': 'left',
+                    'sortable': False,
+                    'filter': False,
+                    'resizable': False,
+                    'suppressMenu': True,
+                    'floatingFilter': False,
+                    'cellClass': 'ag-checkbox-cell',
+                    'headerClass': 'ag-checkbox-header',
+                })
                 for col in VISIBLE_COLS_WireRecon_PeakIndex:
                     field_key = col.key
                     header_name = CUSTOM_HEADER_NAMES_WireRecon_PeakIndex.get(field_key, field_key.replace('_', ' ').title())
@@ -967,6 +1068,7 @@ def _get_scan_peakindexings(scan_id):
                         'filter': True, 
                         'sortable': True, 
                         'resizable': True,
+                        'floatingFilter': True,
                         'suppressMenuHide': True
                     }
 
@@ -1038,6 +1140,23 @@ def _get_scan_peakindexings(scan_id):
                 
                 # Format columns for ag-grid
                 cols = []
+                    
+                # Add explicit checkbox column as the first column
+                cols.append({
+                    'headerName': '',
+                    'field': 'checkbox',
+                    'checkboxSelection': True,
+                    'headerCheckboxSelection': True,
+                    'width': 60,
+                    'pinned': 'left',
+                    'sortable': False,
+                    'filter': False,
+                    'resizable': False,
+                    'suppressMenu': True,
+                    'floatingFilter': False,
+                    'cellClass': 'ag-checkbox-cell',
+                    'headerClass': 'ag-checkbox-header',
+                })
                 for col in VISIBLE_COLS_Recon_PeakIndex:
                     field_key = col.key
                     header_name = CUSTOM_HEADER_NAMES_Recon_PeakIndex.get(field_key, field_key.replace('_', ' ').title())
@@ -1048,6 +1167,7 @@ def _get_scan_peakindexings(scan_id):
                         'filter': True, 
                         'sortable': True, 
                         'resizable': True,
+                        'floatingFilter': True,
                         'suppressMenuHide': True
                     }
 
@@ -1131,32 +1251,138 @@ def get_scan_peakindexings(href):
     else:
         raise PreventUpdate
 
-    parsed_url = urllib.parse.urlparse(href)
-    path = parsed_url.path
-    
-    if path == '/scan':
-        query_params = urllib.parse.parse_qs(parsed_url.query)
-        scan_id = query_params.get('scan_id', [None])[0]
 
-        if scan_id:
-            cols, peakindexings = _get_scan_peakindexings(scan_id)
-            return cols, peakindexings
-    else:
-        raise PreventUpdate
+@callback(
+    Output('new-recon-btn', 'href'),
+    Output('recon-table-new-recon-btn', 'href'),
+    Output('index-table-new-recon-btn', 'href'),
+    Input('scan-recon-table', 'selectedRows'),
+    Input('scan-peakindex-table', 'selectedRows'),
+    State('new-recon-btn', 'href'),
+    prevent_initial_call=True,
+)
+def selected_recon_href(recon_rows, peakindex_rows, href):
+    base_href = href.split("?")[0]
+
+    main_scan_ids, main_wirerecon_ids, main_recon_ids = [], [], []
+    recon_scan_ids, recon_wirerecon_ids, recon_recon_ids = [], [], []
+    index_scan_ids, index_wirerecon_ids, index_recon_ids = [], [], []
+
+    for row in (recon_rows or []):
+        if not row.get('scanNumber'): return base_href, base_href, base_href
+        scan_id, wirerecon_id, recon_id = str(row['scanNumber']), str(row.get('wirerecon_id', '')), str(row.get('recon_id', ''))
+        main_scan_ids.append(scan_id); main_wirerecon_ids.append(wirerecon_id); main_recon_ids.append(recon_id)
+        recon_scan_ids.append(scan_id); recon_wirerecon_ids.append(wirerecon_id); recon_recon_ids.append(recon_id)
+
+    for row in (peakindex_rows or []):
+        if not row.get('scanNumber'): return base_href, base_href, base_href
+        scan_id, wirerecon_id, recon_id = str(row['scanNumber']), str(row.get('wirerecon_id', '')), str(row.get('recon_id', ''))
+        main_scan_ids.append(scan_id); main_wirerecon_ids.append(wirerecon_id); main_recon_ids.append(recon_id)
+        index_scan_ids.append(scan_id); index_wirerecon_ids.append(wirerecon_id); index_recon_ids.append(recon_id)
+
+    def build_href(scan_ids, wirerecon_ids, recon_ids, rows, base_href):
+        if not rows:
+            return base_href
+
+        any_wirerecon_scans, any_recon_scans = False, False
+        for i, row in enumerate(rows):
+            any_wirerecon_scans = any(wirerecon_ids)
+            any_recon_scans = any(recon_ids)
+
+            # Conflict condition: mixture of wirerecon and recon
+            if any_wirerecon_scans and any_recon_scans:
+                return base_href
+
+            # Missing Recon ID condition
+            if not any_wirerecon_scans and not any_recon_scans and row.get('aperture'):
+                aperture = str(row['aperture']).lower()
+                if aperture == 'none':
+                    return base_href # Conflict condition: cannot be reconstructed
+                elif 'wire' in aperture:
+                    any_wirerecon_scans = True
+                else:
+                    any_recon_scans = True
+        
+                # Conflict condition: mixture of wirerecon and recon (copied from above)
+                if any_wirerecon_scans and any_recon_scans:
+                    return base_href
+        
+        if any_recon_scans:
+            base_href = "/create-reconstruction"
+        elif any_wirerecon_scans:
+            base_href = "/create-wire-reconstruction"
+
+        query_params = [f"scan_id={','.join(list(set(scan_ids)))}"]
+        if any_wirerecon_scans: query_params.append(f"wirerecon_id={','.join(filter(None, wirerecon_ids))}")
+        if any_recon_scans: query_params.append(f"recon_id={','.join(filter(None, recon_ids))}")
+        
+        return f"{base_href}?{'&'.join(query_params)}"
+
+    main_href = build_href(main_scan_ids, main_wirerecon_ids, main_recon_ids, (recon_rows or []) + (peakindex_rows or []), base_href)
+    recon_href = build_href(recon_scan_ids, recon_wirerecon_ids, recon_recon_ids, recon_rows or [], base_href)
+    index_href = build_href(index_scan_ids, index_wirerecon_ids, index_recon_ids, peakindex_rows or [], base_href)
+
+    return main_href, recon_href, index_href
 
 
 @callback(
-    Input("save-comment-btn", "n_clicks"),
-    State("scanNumber", "value"),
-    State("Comment_print", "value"),
+    Output('new-index-btn', 'href'),
+    Output('recon-table-new-index-btn', 'href'),
+    Output('index-table-new-index-btn', 'href'),
+    Input('scan-recon-table', 'selectedRows'),
+    Input('scan-peakindex-table', 'selectedRows'),
+    State('new-index-btn', 'href'),
     prevent_initial_call=True,
 )
-def save_comment(n_clicks, scanNumber, comment):
+def selected_peakindex_href(recon_rows, peakindex_rows, href):
+    base_href = href.split("?")[0]
+
+    main_scan_ids, main_wirerecon_ids, main_recon_ids, main_peakindex_ids = [], [], [], []
+    recon_scan_ids, recon_wirerecon_ids, recon_recon_ids, recon_peakindex_ids = [], [], [], []
+    index_scan_ids, index_wirerecon_ids, index_recon_ids, index_peakindex_ids = [], [], [], []
+
+    for row in (recon_rows or []):
+        if not row.get('scanNumber'): return base_href, base_href, base_href
+        scan_id, wirerecon_id, recon_id, peakindex_id = str(row['scanNumber']), str(row.get('wirerecon_id', '')), str(row.get('recon_id', '')), str(row.get('peakindex_id', ''))
+        main_scan_ids.append(scan_id); main_wirerecon_ids.append(wirerecon_id); main_recon_ids.append(recon_id); main_peakindex_ids.append(peakindex_id)
+        recon_scan_ids.append(scan_id); recon_wirerecon_ids.append(wirerecon_id); recon_recon_ids.append(recon_id); recon_peakindex_ids.append(peakindex_id)
+
+    for row in (peakindex_rows or []):
+        if not row.get('scanNumber'): return base_href, base_href, base_href
+        scan_id, wirerecon_id, recon_id, peakindex_id = str(row['scanNumber']), str(row.get('wirerecon_id', '')), str(row.get('recon_id', '')), str(row.get('peakindex_id', ''))
+        main_scan_ids.append(scan_id); main_wirerecon_ids.append(wirerecon_id); main_recon_ids.append(recon_id); main_peakindex_ids.append(peakindex_id)
+        index_scan_ids.append(scan_id); index_wirerecon_ids.append(wirerecon_id); index_recon_ids.append(recon_id); index_peakindex_ids.append(peakindex_id)
+
+    def build_href(scan_ids, wirerecon_ids, recon_ids, peakindex_ids, base_href):
+        if not scan_ids:
+            return base_href
+
+        query_params = [f"scan_id={','.join(list(set(scan_ids)))}"]
+        if any(wirerecon_ids): query_params.append(f"wirerecon_id={','.join(filter(None, wirerecon_ids))}")
+        if any(recon_ids): query_params.append(f"recon_id={','.join(filter(None, recon_ids))}")
+        if any(peakindex_ids): query_params.append(f"peakindex_id={','.join(filter(None, peakindex_ids))}")
+
+        return f"{base_href}?{'&'.join(query_params)}"
+
+    main_href = build_href(main_scan_ids, main_wirerecon_ids, main_recon_ids, main_peakindex_ids, base_href)
+    recon_href = build_href(recon_scan_ids, recon_wirerecon_ids, recon_recon_ids, recon_peakindex_ids, base_href)
+    index_href = build_href(index_scan_ids, index_wirerecon_ids, index_recon_ids, index_peakindex_ids, base_href)
+
+    return main_href, recon_href, index_href
+
+
+@callback(
+    Input("save-note-btn", "n_clicks"),
+    State("scanNumber", "value"),
+    State("Note_print", "value"),
+    prevent_initial_call=True,
+)
+def save_note(n_clicks, scanNumber, note):
     if not n_clicks:
         raise PreventUpdate
 
     if not scanNumber:
-        set_props("alert-comment-submit", {'is_open': True, 'children': 'Scan ID not found.', 'color': 'danger'})
+        set_props("alert-note-submit", {'is_open': True, 'children': 'Scan ID not found.', 'color': 'danger'})
         raise PreventUpdate
 
     try:
@@ -1169,22 +1395,22 @@ def save_comment(n_clicks, scanNumber, comment):
             )
 
             if not catalog_entry:
-                set_props("alert-comment-submit", {'is_open': True, 'children': f'No catalog entry found for scan {scan_id}.', 'color': 'danger'})
+                set_props("alert-note-submit", {'is_open': True, 'children': f'No catalog entry found for scan {scan_id}.', 'color': 'danger'})
                 raise PreventUpdate
 
             if catalog_entry.notes:
-                catalog_entry.notes += f"\n{comment}"
+                catalog_entry.notes += f"\n{note}"
             else:
-                catalog_entry.notes = comment
+                catalog_entry.notes = note
 
             session.commit()
 
-            set_props("alert-comment-submit", {'is_open': True, 
-                                                'children': f'Comment added to scan {scan_id}',
+            set_props("alert-note-submit", {'is_open': True, 
+                                                'children': f'Note added to scan {scan_id}',
                                                 'color': 'success'})
 
     except Exception as e:
-        set_props("alert-comment-submit", {'is_open': True, 'children': f'Error saving comment: {e}', 'color': 'danger'})
+        set_props("alert-note-submit", {'is_open': True, 'children': f'Error saving note: {e}', 'color': 'danger'})
 
 
 @callback(
