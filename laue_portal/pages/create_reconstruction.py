@@ -17,6 +17,7 @@ from laue_portal.database.db_utils import get_catalog_data, remove_root_path_pre
 from laue_portal.components.recon_form import recon_form, set_recon_form_props
 from laue_portal.processing.redis_utils import enqueue_reconstruction, STATUS_REVERSE_MAPPING
 from config import DEFAULT_VARIABLES
+import laue_portal.database.session_utils as session_utils
 
 JOB_DEFAULTS = {
     "computer_name": 'example_computer',
@@ -299,7 +300,7 @@ def submit_config(n,
             finish_time=JOB_DEFAULTS['finish_time'],
         )
 
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             
             session.add(job)
             session.flush()  # Get job_id without committing
@@ -397,7 +398,7 @@ def submit_config(n,
                 algo_ene_range=[ene_min, ene_max, ene_step],
             )
 
-        # with Session(db_utils.ENGINE) as session:
+        # with Session(session_utils.get_engine()) as session:
             session.add(recon)
             config_dict = db_utils.create_config_obj(recon)
 
@@ -445,7 +446,7 @@ def load_scan_data_from_url(href):
     root_path = DEFAULT_VARIABLES.get("root_path", "")
 
     if scan_id:
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             try:
                 scan_id = int(scan_id)
                 

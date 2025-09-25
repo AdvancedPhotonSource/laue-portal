@@ -15,6 +15,7 @@ from laue_portal.components.wire_recon_form import wire_recon_form, set_wire_rec
 from laue_portal.processing.redis_utils import enqueue_wire_reconstruction, STATUS_REVERSE_MAPPING
 from config import DEFAULT_VARIABLES
 from srange import srange
+import laue_portal.database.session_utils as session_utils
 
 logger = logging.getLogger(__name__)
 
@@ -273,7 +274,7 @@ def submit_parameters(n,
             finish_time=JOB_DEFAULTS['finish_time'],
         )
 
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             
             session.add(job)
             session.flush()  # Get job_id without committing
@@ -331,7 +332,7 @@ def submit_parameters(n,
                 verbose=verbose,
             )
 
-        # with Session(db_utils.ENGINE) as session:
+        # with Session(session_utils.get_engine()) as session:
             session.add(wirerecon)
             # config_dict = db_utils.create_config_obj(wirerecon)
 
@@ -430,7 +431,7 @@ def get_wirerecons(path):
         )
         # Add root_path from DEFAULT_VARIABLES
         wirerecon_defaults.root_path = root_path
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             # Get next wirerecon_id
             next_wirerecon_id = db_utils.get_next_id(session, db_schema.WireRecon)
             # Store next_wirerecon_id and update title
@@ -470,7 +471,7 @@ def load_scan_data_from_url(href):
     root_path = DEFAULT_VARIABLES.get("root_path", "")
 
     if scan_id_str:
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             # Get next wirerecon_id
             next_wirerecon_id = db_utils.get_next_id(session, db_schema.WireRecon)
             # Store next_wirerecon_id and update title

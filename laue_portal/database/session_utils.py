@@ -32,9 +32,20 @@ SessionLocal = sessionmaker(autoflush=False, autocommit=False)
 def get_engine():
     """
     Return the shared SQLAlchemy Engine.
+
+    If an engine already exists but config.db_file has changed (e.g., in tests),
+    dispose the old engine and create a new one bound to the updated DB file.
     """
     global engine, _engine_db_file
-    if engine is None:
+    if engine is None or _engine_db_file != config.db_file:
+        # If switching databases, dispose the previous engine to release resources
+        if engine is not None and _engine_db_file != config.db_file:
+            try:
+                engine.dispose()
+            except Exception:
+                # Best-effort dispose; continue to rebuild engine
+                pass
+
         engine = create_engine(f"sqlite:///{config.db_file}")
         # Ensure SQLite enforces foreign keys for this engine
         event.listen(engine, "connect", enable_sqlite_fks)

@@ -1,6 +1,6 @@
 import dash
 import dash_bootstrap_components as dbc
-from laue_portal.database.session import init_db, get_engine
+from laue_portal.database.session_utils import init_db, get_engine
 import laue_portal.database.db_utils as db_utils
 import os
 import config
@@ -22,9 +22,6 @@ def ensure_database_exists():
 
     # Ensure tables exist on the shared app engine (idempotent) and create file if missing
     init_db()
-
-    # Bind runtime ENGINE used by pages/callbacks to the shared app engine
-    db_utils.ENGINE = get_engine()
 
     if not file_exists:
         logging.info(f"Database '{db_path}' created successfully with all tables.")

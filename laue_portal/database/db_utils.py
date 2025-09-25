@@ -4,27 +4,6 @@ import xml.etree.ElementTree as ET
 import sqlalchemy
 from datetime import datetime
 from config import MOTOR_GROUPS
-from laue_portal.database.session import get_engine
-class _EngineProxy:
-    """
-    Backward-compatible proxy for ENGINE that defers to the shared engine.
-    - When accessed (e.g., ENGINE.connect, ENGINE.dialect), attributes are
-      forwarded to laue_portal.database.session.get_engine().
-    - Tests that patch db_utils.ENGINE still work: patching replaces this object.
-    """
-    def __getattr__(self, name):
-        # Delegate attribute access to the real Engine created lazily
-        return getattr(get_engine(), name)
-
-    def __repr__(self):
-        try:
-            eng = get_engine()
-        except Exception:
-            eng = None
-        return f"<EngineProxy to {eng!r}>"
-
-ENGINE = _EngineProxy()
-
 
 
 def parse_metadata(xml,xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog",scan_no=2,empty='\n\t\t'):
