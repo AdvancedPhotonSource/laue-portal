@@ -2,17 +2,30 @@ import laue_portal.database.db_schema as db_schema
 import config
 import xml.etree.ElementTree as ET
 import sqlalchemy
-from sqlalchemy import event
 from datetime import datetime
 from config import MOTOR_GROUPS
+from laue_portal.database.session import get_engine
+class _EngineProxy:
+    """
+    Backward-compatible proxy for ENGINE that defers to the shared engine.
+    - When accessed (e.g., ENGINE.connect, ENGINE.dialect), attributes are
+      forwarded to laue_portal.database.session.get_engine().
+    - Tests that patch db_utils.ENGINE still work: patching replaces this object.
+    """
+    def __getattr__(self, name):
+        # Delegate attribute access to the real Engine created lazily
+        return getattr(get_engine(), name)
 
-ENGINE = sqlalchemy.create_engine(f'sqlite:///{config.db_file}')
+    def __repr__(self):
+        try:
+            eng = get_engine()
+        except Exception:
+            eng = None
+        return f"<EngineProxy to {eng!r}>"
 
-@event.listens_for(ENGINE, "connect")
-def enable_sqlite_fks(dbapi_connection, connection_record):
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
+ENGINE = _EngineProxy()
+
+
 
 def parse_metadata(xml,xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog",scan_no=2,empty='\n\t\t'):
     # tree = ET.parse(xml)
