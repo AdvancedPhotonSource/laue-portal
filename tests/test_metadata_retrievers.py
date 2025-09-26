@@ -31,8 +31,8 @@ class TestMetadataRetrievers:
             import laue_portal.database.db_utils as db_utils
             from sqlalchemy.orm import Session
             
-            # Patch the ENGINE in db_utils to use our test engine
-            with patch.object(db_utils, 'ENGINE', test_engine):
+            # Patch the central engine getter to return our test engine
+            with patch('laue_portal.database.session_utils.get_engine', lambda: test_engine):
                 # Add test data to the database
                 with Session(test_engine) as session:
                     session.add(test_metadata)
@@ -79,8 +79,8 @@ class TestMetadataRetrievers:
             import laue_portal.database.db_utils as db_utils
             from sqlalchemy.orm import Session
             
-            # Patch the ENGINE in db_utils to use our test engine
-            with patch.object(db_utils, 'ENGINE', test_engine):
+            # Patch the central engine getter to return our test engine
+            with patch('laue_portal.database.session_utils.get_engine', lambda: test_engine):
                 # Add test data to the database
                 with Session(test_engine) as session:
                     session.add(test_metadata)
@@ -111,8 +111,8 @@ class TestMetadataRetrievers:
             from laue_portal.pages.scans import _get_metadatas
             import laue_portal.database.db_utils as db_utils
             
-            # Patch the ENGINE in db_utils to use our test engine
-            with patch.object(db_utils, 'ENGINE', test_engine):
+            # Patch the central engine getter to return our test engine
+            with patch('laue_portal.database.session_utils.get_engine', lambda: test_engine):
                 # Test the _get_metadatas function with empty database
                 cols, metadatas = _get_metadatas()
             

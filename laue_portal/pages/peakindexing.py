@@ -10,6 +10,7 @@ from laue_portal.database.db_utils import get_catalog_data, remove_root_path_pre
 from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
 from config import DEFAULT_VARIABLES
 import urllib.parse
+import laue_portal.database.session_utils as session_utils
 
 dash.register_page(__name__, path="/peakindexing") # Simplified path
 
@@ -50,7 +51,7 @@ def load_peakindexing_data(href):
     if peakindex_id_str:
         try:
             peakindex_id = int(peakindex_id_str)
-            with Session(db_utils.ENGINE) as session:
+            with Session(session_utils.get_engine()) as session:
                 peakindex_data = session.query(db_schema.PeakIndex).filter(db_schema.PeakIndex.peakindex_id == peakindex_id).first()
                 if peakindex_data:
                     # Add root_path from DEFAULT_VARIABLES

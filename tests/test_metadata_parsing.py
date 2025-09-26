@@ -21,6 +21,7 @@ sys.path.insert(0, project_root)
 
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
+import laue_portal.database.session_utils as session_utils
 
 
 # Global test XML path - shared between all test classes
@@ -245,7 +246,7 @@ class TestDatabaseIntegration:
         engine, temp_db_path = temp_database
         
         # Mock the config to use our test database
-        with patch('laue_portal.database.db_utils.ENGINE', engine):
+        with patch('laue_portal.database.session_utils.get_engine', lambda: engine):
             # Parse metadata from XML (test the first scan)
             log_dict, scan_dims_list = db_utils.parse_metadata(test_xml_data, scan_no=2)
             
@@ -292,7 +293,7 @@ class TestDatabaseIntegration:
         """Test processing multiple different scans from the XML."""
         engine, temp_db_path = temp_database
         
-        with patch('laue_portal.database.db_utils.ENGINE', engine):
+        with patch('laue_portal.database.session_utils.get_engine', lambda: engine):
             with Session(engine) as session:
                 scan_row_count = 0
                 

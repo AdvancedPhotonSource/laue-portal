@@ -31,8 +31,8 @@ class TestDataRetrievers:
             import laue_portal.database.db_utils as db_utils
             from sqlalchemy.orm import Session
             
-            # Patch the ENGINE in db_utils to use our test engine
-            with patch.object(db_utils, 'ENGINE', test_engine):
+            # Patch the central engine getter to return our test engine
+            with patch('laue_portal.database.session_utils.get_engine', lambda: test_engine):
                 # Add test data to the database
                 with Session(test_engine) as session:
                     session.add(test_metadata)
@@ -77,8 +77,8 @@ class TestDataRetrievers:
             import laue_portal.database.db_utils as db_utils
             from sqlalchemy.orm import Session
             
-            # Patch the ENGINE in db_utils to use our test engine
-            with patch.object(db_utils, 'ENGINE', test_engine):
+            # Patch the central engine getter to return our test engine
+            with patch('laue_portal.database.session_utils.get_engine', lambda: test_engine):
                 # Add test data to the database
                 with Session(test_engine) as session:
                     session.add(test_metadata)
@@ -111,8 +111,8 @@ class TestDataRetrievers:
             from laue_portal.pages.reconstructions import _get_recons
             import laue_portal.database.db_utils as db_utils
             
-            # Patch the ENGINE in db_utils to use our test engine
-            with patch.object(db_utils, 'ENGINE', test_engine):
+            # Patch the central engine getter to return our test engine
+            with patch('laue_portal.database.session_utils.get_engine', lambda: test_engine):
                 # Test the _get_recons function with empty database
                 cols, recons = _get_recons()
             
