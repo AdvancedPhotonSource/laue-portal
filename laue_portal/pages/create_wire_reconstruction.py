@@ -293,7 +293,6 @@ def submit_parameters(n,
                     set_props("alert-submit", {'is_open': True, 
                                                'children': f'Failed to create output directory: {str(e)}',
                                                'color': 'danger'})
-                    session.rollback()
                     continue
 
                 JOB_DEFAULTS.update({'submit_time':datetime.datetime.now()})
