@@ -564,7 +564,7 @@ def get_peakindexings(path):
     root_path = DEFAULT_VARIABLES["root_path"]
     if path == '/create-peakindexing':
         # Create a PeakIndex object with form defaults (not for database insertion)
-        peakindex_defaults = db_schema.PeakIndex(
+        peakindex_form_data = db_schema.PeakIndex(
             scanNumber=PEAKINDEX_DEFAULTS.get("scanNumber", 0),
             
             # User text
@@ -624,7 +624,7 @@ def get_peakindexings(path):
         )
         
         # Add root_path from DEFAULT_VARIABLES
-        peakindex_defaults.root_path = root_path
+        peakindex_form_data.root_path = root_path
         with Session(db_utils.ENGINE) as session:
             # Get next peakindex_id
             next_peakindex_id = db_utils.get_next_id(session, db_schema.PeakIndex)                                
@@ -634,11 +634,11 @@ def get_peakindexings(path):
             
             # Retrieve data_path and filenamePrefix from catalog data
             catalog_data = get_catalog_data(session, PEAKINDEX_DEFAULTS["scanNumber"], root_path, CATALOG_DEFAULTS)
-        peakindex_defaults.data_path = catalog_data["data_path"]
-        peakindex_defaults.filenamePrefix = catalog_data["filenamePrefix"]
+        peakindex_form_data.data_path = catalog_data["data_path"]
+        peakindex_form_data.filenamePrefix = catalog_data["filenamePrefix"]
             
         # Populate the form with the defaults
-        set_peakindex_form_props(peakindex_defaults)
+        set_peakindex_form_props(peakindex_form_data)
     else:
         raise PreventUpdate
 
@@ -716,19 +716,19 @@ def load_scan_data_from_url(href):
                                 peakindex_data = session.query(db_schema.PeakIndex).filter(db_schema.PeakIndex.peakindex_id == peakindex_id).first()
                                 if peakindex_data:
                                     # Use existing peakindex data as the base
-                                    peakindex_defaults = peakindex_data
+                                    peakindex_form_data = peakindex_data
                                     
                                     # Update only the necessary fields
-                                    # peakindex_defaults.scanNumber = scan_id
-                                    peakindex_defaults.author = DEFAULT_VARIABLES['author']
-                                    peakindex_defaults.notes = DEFAULT_VARIABLES['notes']
-                                    # peakindex_defaults.recon_id = recon_id
-                                    # peakindex_defaults.wirerecon_id = wirerecon_id
-                                    peakindex_defaults.outputFolder = outputFolder
+                                    # peakindex_form_data.scanNumber = scan_id
+                                    peakindex_form_data.author = DEFAULT_VARIABLES['author']
+                                    peakindex_form_data.notes = DEFAULT_VARIABLES['notes']
+                                    # peakindex_form_data.recon_id = recon_id
+                                    # peakindex_form_data.wirerecon_id = wirerecon_id
+                                    peakindex_form_data.outputFolder = outputFolder
                                     
                                     # Convert file paths to relative paths
-                                    peakindex_defaults.geoFile = remove_root_path_prefix(peakindex_data.geoFile, root_path)
-                                    peakindex_defaults.crystFile = remove_root_path_prefix(peakindex_data.crystFile, root_path)
+                                    peakindex_form_data.geoFile = remove_root_path_prefix(peakindex_data.geoFile, root_path)
+                                    peakindex_form_data.crystFile = remove_root_path_prefix(peakindex_data.crystFile, root_path)
                                 else:
                                     # Show warning if peakindex not found
                                     set_props("alert-scan-loaded", {
@@ -745,7 +745,7 @@ def load_scan_data_from_url(href):
                         # Create defaults if no peakindex_id or if loading failed
                         if not peakindex_id:
                             # Create a PeakIndex object with populated defaults from metadata/scan
-                            peakindex_defaults = db_schema.PeakIndex(
+                            peakindex_form_data = db_schema.PeakIndex(
                                 scanNumber = scan_id,
                                 
                                 # User text
@@ -806,7 +806,7 @@ def load_scan_data_from_url(href):
                             )
                         
                         # Add root_path from DEFAULT_VARIABLES
-                        peakindex_defaults.root_path = root_path
+                        peakindex_form_data.root_path = root_path
                         
                         # Retrieve data_path and filenamePrefix from catalog data
                         catalog_data = get_catalog_data(session, scan_id, root_path, CATALOG_DEFAULTS)
@@ -816,23 +816,23 @@ def load_scan_data_from_url(href):
                             wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == wirerecon_id).first()
                             if wirerecon_data.outputFolder:
                                 # Use the wire reconstruction output folder as the data path
-                                peakindex_defaults.data_path = remove_root_path_prefix(wirerecon_data.outputFolder, root_path)
+                                peakindex_form_data.data_path = remove_root_path_prefix(wirerecon_data.outputFolder, root_path)
                             else:
-                                peakindex_defaults.data_path = catalog_data["data_path"]
+                                peakindex_form_data.data_path = catalog_data["data_path"]
                         elif recon_id:
                             recon_data = session.query(db_schema.Recon).filter(db_schema.Recon.recon_id == recon_id).first()
                             if recon_data.file_output:
                                 # Use the reconstruction output folder as the data path
-                                peakindex_defaults.data_path = remove_root_path_prefix(recon_data.file_output, root_path)
+                                peakindex_form_data.data_path = remove_root_path_prefix(recon_data.file_output, root_path)
                             else:
-                                peakindex_defaults.data_path = catalog_data["data_path"]
+                                peakindex_form_data.data_path = catalog_data["data_path"]
                         else:
-                            peakindex_defaults.data_path = catalog_data["data_path"]
+                            peakindex_form_data.data_path = catalog_data["data_path"]
                         
-                        peakindex_defaults.filenamePrefix = catalog_data["filenamePrefix"]
+                        peakindex_form_data.filenamePrefix = catalog_data["filenamePrefix"]
                         
                         # Populate the form with the defaults
-                        set_peakindex_form_props(peakindex_defaults)
+                        set_peakindex_form_props(peakindex_form_data)
                         
                         # Show success message
                         set_props("alert-scan-loaded", {
@@ -870,7 +870,7 @@ def load_scan_data_from_url(href):
                     if not recon_ids: recon_ids = [None] * len(scan_ids)
                     if not peakindex_ids: peakindex_ids = [None] * len(scan_ids)
 
-                    peakindex_defaults_list = []
+                    peakindex_form_data_list = []
                     for i, current_scan_id in enumerate(scan_ids):
                         current_wirerecon_id = wirerecon_ids[i]
                         current_recon_id = recon_ids[i]
@@ -905,15 +905,15 @@ def load_scan_data_from_url(href):
                                     peakindex_data = session.query(db_schema.PeakIndex).filter(db_schema.PeakIndex.peakindex_id == current_peakindex_id).first()
                                     if peakindex_data:
                                         # Use existing peakindex data as the base
-                                        peakindex_defaults = peakindex_data
+                                        peakindex_form_data = peakindex_data
                                         # Update only the necessary fields
-                                        # peakindex_defaults.scanNumber = current_scan_id
-                                        # peakindex_defaults.recon_id = current_recon_id
-                                        # peakindex_defaults.wirerecon_id = current_wirerecon_id
-                                        peakindex_defaults.outputFolder = outputFolder
+                                        # peakindex_form_data.scanNumber = current_scan_id
+                                        # peakindex_form_data.recon_id = current_recon_id
+                                        # peakindex_form_data.wirerecon_id = current_wirerecon_id
+                                        peakindex_form_data.outputFolder = outputFolder
                                         # Convert file paths to relative paths
-                                        peakindex_defaults.geoFile = remove_root_path_prefix(peakindex_data.geoFile, root_path)
-                                        peakindex_defaults.crystFile = remove_root_path_prefix(peakindex_data.crystFile, root_path)
+                                        peakindex_form_data.geoFile = remove_root_path_prefix(peakindex_data.geoFile, root_path)
+                                        peakindex_form_data.crystFile = remove_root_path_prefix(peakindex_data.crystFile, root_path)
                                 
                                 except (ValueError, Exception):
                                     # If peakindex_id is not valid or not found, create defaults
@@ -922,7 +922,7 @@ def load_scan_data_from_url(href):
                             # Create defaults if no peakindex_id or if loading failed
                             if not current_peakindex_id:
                                 # Create a PeakIndex object with populated defaults from metadata/scan
-                                peakindex_defaults = db_schema.PeakIndex(
+                                peakindex_form_data = db_schema.PeakIndex(
                                     scanNumber=current_scan_id,
                                     # Recon ID
                                     recon_id=current_recon_id,
@@ -936,7 +936,7 @@ def load_scan_data_from_url(href):
                                 )
 
                             # Add root_path from DEFAULT_VARIABLES
-                            peakindex_defaults.root_path = root_path
+                            peakindex_form_data.root_path = root_path
 
                             # Retrieve data_path and filenamePrefix from catalog data
                             catalog_data = get_catalog_data(session, current_scan_id, root_path, CATALOG_DEFAULTS)
@@ -944,17 +944,17 @@ def load_scan_data_from_url(href):
                             # If processing reconstruction data, use the reconstruction output folder as data path
                             if current_wirerecon_id:
                                 wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == current_wirerecon_id).first()
-                                peakindex_defaults.data_path = remove_root_path_prefix(wirerecon_data.outputFolder, root_path) if wirerecon_data and wirerecon_data.outputFolder else catalog_data.get('data_path', '')
+                                peakindex_form_data.data_path = remove_root_path_prefix(wirerecon_data.outputFolder, root_path) if wirerecon_data and wirerecon_data.outputFolder else catalog_data.get('data_path', '')
                             elif current_recon_id:
                                 recon_data = session.query(db_schema.Recon).filter(db_schema.Recon.recon_id == current_recon_id).first()
-                                peakindex_defaults.data_path = remove_root_path_prefix(recon_data.file_output, root_path) if recon_data and recon_data.file_output else catalog_data.get('data_path', '')
+                                peakindex_form_data.data_path = remove_root_path_prefix(recon_data.file_output, root_path) if recon_data and recon_data.file_output else catalog_data.get('data_path', '')
                             else:
                                 # No reconstruction, use catalog data path
-                                peakindex_defaults.data_path = catalog_data.get('data_path', '')
-                            # peakindex_defaults.filenamePrefix = catalog_data.get('filenamePrefix', '')
-                            peakindex_defaults.filenamePrefix = catalog_data.get('filenamePrefix', [])
+                                peakindex_form_data.data_path = catalog_data.get('data_path', '')
+                            # peakindex_form_data.filenamePrefix = catalog_data.get('filenamePrefix', '')
+                            peakindex_form_data.filenamePrefix = catalog_data.get('filenamePrefix', [])
                             
-                            peakindex_defaults_list.append(peakindex_defaults)
+                            peakindex_form_data_list.append(peakindex_form_data)
 
                         #     # Show success message
                         #     set_props("alert-scan-loaded", {
@@ -970,9 +970,9 @@ def load_scan_data_from_url(href):
                         #         'color': 'warning'
                         #     })
                         
-                    # Create pooled peakindex_defaults by combining values from all scans
-                    if peakindex_defaults_list:
-                        pooled_peakindex_defaults = db_schema.PeakIndex()
+                    # Create pooled peakindex_form_data by combining values from all scans
+                    if peakindex_form_data_list:
+                        pooled_peakindex_form_data = db_schema.PeakIndex()
                         
                         # Pool all attributes - both database columns and extra attributes
                         all_attrs = list(db_schema.PeakIndex.__table__.columns.keys()) + ['root_path', 'data_path', 'filenamePrefix']
@@ -981,26 +981,26 @@ def load_scan_data_from_url(href):
                             if attr == 'peakindex_id': continue
                             
                             values = []
-                            for d in peakindex_defaults_list:
+                            for d in peakindex_form_data_list:
                                 if hasattr(d, attr):
                                     values.append(getattr(d, attr))
                             
                             if values:
                                 if all(v == values[0] for v in values):
-                                    setattr(pooled_peakindex_defaults, attr, values[0])
+                                    setattr(pooled_peakindex_form_data, attr, values[0])
                                 else:
-                                    setattr(pooled_peakindex_defaults, attr, "; ".join(map(str, values)))
+                                    setattr(pooled_peakindex_form_data, attr, "; ".join(map(str, values)))
                         
                         # User text
-                        pooled_peakindex_defaults.author = DEFAULT_VARIABLES['author']
-                        pooled_peakindex_defaults.notes = DEFAULT_VARIABLES['notes']
+                        pooled_peakindex_form_data.author = DEFAULT_VARIABLES['author']
+                        pooled_peakindex_form_data.notes = DEFAULT_VARIABLES['notes']
                         # # Add root_path from DEFAULT_VARIABLES
-                        # pooled_peakindex_defaults.root_path = root_path
+                        # pooled_peakindex_form_data.root_path = root_path
                         # Populate the form with the defaults
-                        set_peakindex_form_props(pooled_peakindex_defaults)
+                        set_peakindex_form_props(pooled_peakindex_form_data)
                     else:
                         # Fallback if no valid scans found
-                        peakindex_defaults = db_schema.PeakIndex(
+                        peakindex_form_data = db_schema.PeakIndex(
                             scanNumber=str(scan_id_str).replace('$','').replace(',','; '),
                             
                             # User text
@@ -1047,12 +1047,12 @@ def load_scan_data_from_url(href):
                         )
                         
                         # Set root_path
-                        peakindex_defaults.root_path = root_path
-                        peakindex_defaults.data_path = ""
-                        peakindex_defaults.filenamePrefix = ""
+                        peakindex_form_data.root_path = root_path
+                        peakindex_form_data.data_path = ""
+                        peakindex_form_data.filenamePrefix = ""
                         
                         # Populate the form with the defaults
-                        set_peakindex_form_props(peakindex_defaults)
+                        set_peakindex_form_props(peakindex_form_data)
 
                 except Exception as e:
                     set_props("alert-scan-loaded", {
