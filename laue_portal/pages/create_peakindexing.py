@@ -708,11 +708,11 @@ def load_scan_data_from_url(href):
     
     if scan_id_str:
         with Session(db_utils.ENGINE) as session:
-            # Get next peakindex_id
-            next_peakindex_id = db_utils.get_next_id(session, db_schema.PeakIndex)
-            # Store next_peakindex_id and update title
-            set_props('next-peakindex-id', {'value': next_peakindex_id})
-            set_props('peakindex-title', {'children': f"New peak indexing {next_peakindex_id}"})
+            # # Get next peakindex_id
+            # next_peakindex_id = db_utils.get_next_id(session, db_schema.PeakIndex)
+            # # Store next_peakindex_id and update title
+            # set_props('next-peakindex-id', {'value': next_peakindex_id})
+            # set_props('peakindex-title', {'children': f"New peak indexing {next_peakindex_id}"})
 
             is_pooled = '$' in scan_id_str or ',' in scan_id_str
             
@@ -734,17 +734,17 @@ def load_scan_data_from_url(href):
                         if recon_id or wirerecon_id:
                             outputFolder = outputFolder.replace("index_%d", "rec_%d/index_%d") #"analysis/scan_%d/rec_%d/index_%d"
                         
-                        # Format output folder with scan number and IDs
-                        try:
-                            if wirerecon_id:
-                                outputFolder = outputFolder % (scan_id, wirerecon_id, next_peakindex_id)
-                            elif recon_id:
-                                outputFolder = outputFolder % (scan_id, recon_id, next_peakindex_id)
-                            else:
-                                outputFolder = outputFolder % (scan_id, next_peakindex_id)
-                        except:
-                            # If formatting fails, use the original string
-                            pass
+                        # # Format output folder with scan number and IDs
+                        # try:
+                        #     if wirerecon_id:
+                        #         outputFolder = outputFolder % (scan_id, wirerecon_id, next_peakindex_id)
+                        #     elif recon_id:
+                        #         outputFolder = outputFolder % (scan_id, recon_id, next_peakindex_id)
+                        #     else:
+                        #         outputFolder = outputFolder % (scan_id, next_peakindex_id)
+                        # except:
+                        #     # If formatting fails, use the original string
+                        #     pass
 
                         # If peakindex_id is provided, load existing peakindex data
                         if peakindex_id:
@@ -922,18 +922,18 @@ def load_scan_data_from_url(href):
                             if current_recon_id or current_wirerecon_id:
                                 outputFolder = outputFolder.replace("index_%d", "rec_%d/index_%d") #"analysis/scan_%d/rec_%d/index_%d"
                             
-                            # Format output folder with scan number and IDs
-                            try:
-                                if current_wirerecon_id:
-                                    outputFolder = outputFolder % (current_scan_id, current_wirerecon_id, next_peakindex_id)
-                                elif current_recon_id:
-                                    outputFolder = outputFolder % (current_scan_id, current_recon_id, next_peakindex_id)
-                                else:
-                                    outputFolder = outputFolder % (current_scan_id, next_peakindex_id)
-                            except:
-                                # If formatting fails, use the original string
-                                pass
-                            next_peakindex_id += 1
+                            # # Format output folder with scan number and IDs
+                            # try:
+                            #     if current_wirerecon_id:
+                            #         outputFolder = outputFolder % (current_scan_id, current_wirerecon_id, next_peakindex_id)
+                            #     elif current_recon_id:
+                            #         outputFolder = outputFolder % (current_scan_id, current_recon_id, next_peakindex_id)
+                            #     else:
+                            #         outputFolder = outputFolder % (current_scan_id, next_peakindex_id)
+                            # except:
+                            #     # If formatting fails, use the original string
+                            #     pass
+                            # next_peakindex_id += 1
 
                             # If peakindex_id is provided, load existing peakindex data
                             if current_peakindex_id:
