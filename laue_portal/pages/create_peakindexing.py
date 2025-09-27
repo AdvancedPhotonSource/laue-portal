@@ -141,36 +141,6 @@ layout = dbc.Container(
 Callbacks
 =======================
 """
-# @dash.callback(
-#     Input('upload-peakindexing-config', 'contents'),
-#     prevent_initial_call=True,
-# )
-# def upload_config(contents):
-#     try:
-#         content_type, content_string = contents.split(',')
-#         decoded = base64.b64decode(content_string)
-#         config = yaml.safe_load(decoded)
-#         peakindex_row = db_utils.import_peakindex_row(config)
-#         peakindex_row.date = datetime.datetime.now()
-#         peakindex_row.commit_id = ''
-#         peakindex_row.calib_id = ''
-#         peakindex_row.runtime = ''
-#         peakindex_row.computer_name = ''
-#         peakindex_row.dataset_id = 0
-#         peakindex_row.notes = ''
-
-#         set_props("alert-upload", {'is_open': True, 
-#                                     'children': 'Config uploaded successfully',
-#                                     'color': 'success'})
-#         set_peakindex_form_props(peakindex_row)
-
-#     except Exception as e:
-#         set_props("alert-upload", {'is_open': True, 
-#                                     'children': f'Upload Failed! Error: {e}',
-#                                     'color': 'danger'})
-#         raise e
-
-
 @dash.callback(
     Input('submit_peakindexing', 'n_clicks'),
     
@@ -439,14 +409,6 @@ def submit_parameters(n,
                 current_indexHKL = str(indexHKL_list[i])
                 
                 peakindex = db_schema.PeakIndex(
-                    # date=datetime.datetime.now(),
-                    # commit_id='TEST',
-                    # calib_id='TEST',
-                    # runtime='TEST',
-                    # computer_name='TEST',
-                    # dataset_id=0,
-                    # notes='TODO', 
-
                     scanNumber = current_scanNumber,
                     job_id = job_id,
                     author = author_list[i],

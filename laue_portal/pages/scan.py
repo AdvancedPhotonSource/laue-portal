@@ -1460,9 +1460,6 @@ def update_catalog(n,
                     catalog_data.sample_name = sample_name
                     catalog_data.notes = notes
                     
-                    set_props("alert-catalog-submit", {'is_open': True, 
-                                                'children': f'Catalog Entry Updated for scan {scanNumber}',
-                                                'color': 'success'})
                 else:
                     # Create new catalog entry
                     catalog = db_schema.Catalog(
@@ -1475,18 +1472,24 @@ def update_catalog(n,
                     )
                     
                     session.add(catalog)
-                    
+                
+                # Commit all changes
+                session.commit()
+
+                if catalog_data:
+                    set_props("alert-catalog-submit", {'is_open': True, 
+                                                'children': f'Catalog Entry Updated for scan {scanNumber}',
+                                                'color': 'success'})
+                else:
                     set_props("alert-catalog-submit", {'is_open': True, 
                                                 'children': f'Catalog Entry Added to Database for scan {scanNumber}',
                                                 'color': 'success'})
+                    
             except Exception as e:
                 set_props("alert-catalog-submit", {'is_open': True, 
                                             'children': f'Error creating catalog entry: {str(e)}',
                                             'color': 'danger'})
                 return
-            
-            # Commit all changes
-            session.commit()
                                             
     except ValueError as e:
         set_props("alert-catalog-submit", {'is_open': True, 
