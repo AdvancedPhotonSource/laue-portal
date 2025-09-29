@@ -317,7 +317,7 @@ def submit_parameters(n,
     peakindexes_to_enqueue = []
 
     # First loop: Create all database entries for each listed scanNumber
-    with Session(db_utils.ENGINE) as session:
+    with Session(session_utils.get_engine()) as session:
         try:
             for i in range(num_scans):
                 # Extract values for this scan
@@ -463,7 +463,30 @@ def submit_parameters(n,
                     beamline=beamline_list[i],
                 )
                 session.add(peakindex)
-                peakindexes_to_enqueue.append(peakindex)
+                peakindexes_to_enqueue.append({
+                    "job_id": job_id,
+                    "scanNumber": current_scanNumber,
+                    "outputFolder": full_output_folder,
+                    "geoFile": full_geometry_file,
+                    "crystFile": full_crystal_file,
+                    "scanPoints": current_scanPoints,
+                    "depthRange": current_depthRange,
+                    "boxsize": boxsize_list[i],
+                    "maxRfactor": maxRfactor_list[i],
+                    "min_size": min_size_list[i],
+                    "min_separation": min_separation_list[i],
+                    "threshold": threshold_list[i],
+                    "peakShape": peakShape_list[i],
+                    "max_peaks": max_peaks_list[i],
+                    "smooth": smooth_list[i],
+                    "indexKeVmaxCalc": indexKeVmaxCalc_list[i],
+                    "indexKeVmaxTest": indexKeVmaxTest_list[i],
+                    "indexAngleTolerance": indexAngleTolerance_list[i],
+                    "indexCone": indexCone_list[i],
+                    "indexH": int(current_indexHKL[0]),
+                    "indexK": int(current_indexHKL[1]),
+                    "indexL": int(current_indexHKL[2]),
+                })
 
             session.commit()
             set_props("alert-submit", {'is_open': True, 
@@ -478,7 +501,7 @@ def submit_parameters(n,
             return
 
     # Second loop: Enqueue jobs to Redis
-    for i, peakindex in enumerate(peakindexes_to_enqueue):
+    for i, spec in enumerate(peakindexes_to_enqueue):
         try:
             # Extract values for this scan
             current_data_path = data_path_list[i]
@@ -488,11 +511,11 @@ def submit_parameters(n,
             # Construct full data path from form values
             full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
             
-            scanPoints_srange = srange(peakindex.scanPoints)
+            scanPoints_srange = srange(spec["scanPoints"])
             scanPoint_nums = scanPoints_srange.list()
 
-            if peakindex.depthRange and peakindex.depthRange.strip():
-                depthRange_srange = srange(peakindex.depthRange)
+            if spec["depthRange"] and str(spec["depthRange"]).strip():
+                depthRange_srange = srange(spec["depthRange"])
                 depthRange_nums = depthRange_srange.list()
             else:
                 depthRange_nums = [None]
@@ -505,7 +528,43 @@ def submit_parameters(n,
                 for scanPoint_num in scanPoint_nums:
                     for depthRange_num in depthRange_nums:
                         # Prepare parameters for peak indexing
-                        file_str = current_filename_prefix_i % scanPoint_num
+                        # Support multiple filename prefix styles:
+                        #  - Percent-style e.g. "prefix_%d", "%05d", "%d_%d"
+                        #  - Brace-style e.g. "prefix_{}", "{}_{}", "{scanNumber}_{scanPoint}"
+                        #  - Bare prefix e.g. "prefix_" (appends the scanPoint number)
+                        file_str = None
+                        try:
+                            if "%" in current_filename_prefix_i:
+                                # Try single scanPoint, then tuple, then (scanNumber, scanPoint)
+                                try:
+                                    file_str = current_filename_prefix_i % scanPoint_num
+                                except TypeError:
+                                    try:
+                                        file_str = current_filename_prefix_i % (scanPoint_num,)
+                                    except TypeError:
+                                        try:
+                                            file_str = current_filename_prefix_i % (spec["scanNumber"], scanPoint_num)
+                                        except Exception as e2:
+                                            raise TypeError(f"Invalid filenamePrefix percent-format '{current_filename_prefix_i}' with scan {spec['scanNumber']} and point {scanPoint_num}: {e2}")
+                            elif "{" in current_filename_prefix_i and "}" in current_filename_prefix_i:
+                                # Try str.format styles: positional or named
+                                try:
+                                    # First assume single placeholder (scanPoint)
+                                    file_str = current_filename_prefix_i.format(scanPoint_num)
+                                except Exception:
+                                    try:
+                                        # Try two positional placeholders (scanNumber, scanPoint)
+                                        file_str = current_filename_prefix_i.format(spec["scanNumber"], scanPoint_num)
+                                    except Exception:
+                                        try:
+                                            # Try named placeholders
+                                            file_str = current_filename_prefix_i.format(scanNumber=spec["scanNumber"], scanPoint=scanPoint_num)
+                                        except Exception as e2:
+                                            raise TypeError(f"Invalid filenamePrefix brace-format '{current_filename_prefix_i}' with scan {spec['scanNumber']} and point {scanPoint_num}: {e2}")
+                            else:
+                                file_str = f"{current_filename_prefix_i}{scanPoint_num}"
+                        except Exception as fmt_err:
+                            raise TypeError(f"Invalid filenamePrefix format '{current_filename_prefix_i}' with scan point {scanPoint_num}: {fmt_err}")
                         
                         if depthRange_num is not None:
                             # Reconstruction file with depth index
@@ -516,41 +575,49 @@ def submit_parameters(n,
                         input_file = os.path.join(full_data_path, input_filename)
                         
                         input_files.append(input_file)
-                        output_dirs.append(peakindex.outputFolder)
+                        output_dirs.append(spec["outputFolder"])
             
             # Enqueue the batch job with all files
             rq_job_id = enqueue_peakindexing(
-                job_id=peakindex.job_id,
+                job_id=spec["job_id"],
                 input_files=input_files,
                 output_files=output_dirs,
-                geometry_file=peakindex.geoFile,
-                crystal_file=peakindex.crystFile,
-                boxsize=peakindex.boxsize,
-                max_rfactor=peakindex.maxRfactor,
-                min_size=peakindex.min_size,
-                min_separation=peakindex.min_separation,
-                threshold=peakindex.threshold,
-                peak_shape=peakindex.peakShape,
-                max_peaks=peakindex.max_peaks,
-                smooth=peakindex.smooth,
-                index_kev_max_calc=peakindex.indexKeVmaxCalc,
-                index_kev_max_test=peakindex.indexKeVmaxTest,
-                index_angle_tolerance=peakindex.indexAngleTolerance,
-                index_cone=peakindex.indexCone,
-                index_h=peakindex.indexH,
-                index_k=peakindex.indexK,
-                index_l=peakindex.indexL
+                geometry_file=spec["geoFile"],
+                crystal_file=spec["crystFile"],
+                boxsize=spec["boxsize"],
+                max_rfactor=spec["maxRfactor"],
+                min_size=spec["min_size"],
+                min_separation=spec["min_separation"],
+                threshold=spec["threshold"],
+                peak_shape=spec["peakShape"],
+                max_peaks=spec["max_peaks"],
+                smooth=spec["smooth"],
+                index_kev_max_calc=spec["indexKeVmaxCalc"],
+                index_kev_max_test=spec["indexKeVmaxTest"],
+                index_angle_tolerance=spec["indexAngleTolerance"],
+                index_cone=spec["indexCone"],
+                index_h=spec["indexH"],
+                index_k=spec["indexK"],
+                index_l=spec["indexL"]
             )
             
-            logger.info(f"Peakindexing batch job {peakindex.job_id} enqueued with RQ ID: {rq_job_id} for {len(input_files)} files")
+            logger.info(f"Peakindexing batch job {spec['job_id']} enqueued with RQ ID: {rq_job_id} for {len(input_files)} files")
             
             set_props("alert-submit", {'is_open': True, 
-                                        'children': f'Job {peakindex.job_id} submitted to queue with {len(input_files)} file(s)',
+                                        'children': f'Job {spec["job_id"]} submitted to queue with {len(input_files)} file(s)',
                                         'color': 'info'})
         except Exception as e:
-            logger.error(f"Failed to enqueue job {peakindex.job_id}: {e}")
+            # Provide more context to help diagnose format issues and input parsing
+            logger.error(
+                f"Failed to enqueue job {spec['job_id']}: {e}. "
+                f"filenamePrefix='{current_filename_prefix_str}', "
+                f"parsed prefixes={current_filename_prefix}, "
+                f"scanPoints='{spec['scanPoints']}', depthRange='{spec['depthRange']}', data_path='{current_data_path}'"
+            )
             set_props("alert-submit", {'is_open': True, 
-                                        'children': f'Failed to queue job {peakindex.job_id}: {str(e)}',
+                                        'children': f'Failed to queue job {spec["job_id"]}: {str(e)}. '
+                                                    f'filenamePrefix={current_filename_prefix_str}, '
+                                                    f'scanPoints={spec["scanPoints"]}, depthRange={spec["depthRange"]}',
                                         'color': 'danger'})
 
 
