@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, aliased
 import pandas as pd 
 import laue_portal.components.navbar as navbar
 from datetime import datetime
+import laue_portal.database.session_utils as session_utils
 
 dash.register_page(__name__)
 
@@ -126,7 +127,7 @@ def calculate_duration_display(start_time, finish_time, current_time):
     return None
 
 def _get_jobs():
-    with Session(db_utils.ENGINE) as session:
+    with Session(session_utils.get_engine()) as session:
         # Query all subjobs once
         subjobs = pd.read_sql(
             session.query(db_schema.SubJob)

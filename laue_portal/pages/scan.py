@@ -14,6 +14,7 @@ from laue_portal.components.form_base import _stack, _field
 import urllib.parse
 import pandas as pd
 from datetime import datetime
+import laue_portal.database.session_utils as session_utils
 
 dash.register_page(__name__, path="/scan") # Simplified path
 
@@ -444,7 +445,7 @@ def load_scan_metadata(href):
     if scan_id_str:
         try:
             scan_id = int(scan_id_str)
-            with Session(db_utils.ENGINE) as session:
+            with Session(session_utils.get_engine()) as session:
                 metadata_data = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == scan_id).first()
                 scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_id)
                 catalog_data = session.query(db_schema.Catalog).filter(db_schema.Catalog.scanNumber == scan_id).first()
@@ -553,7 +554,7 @@ ALL_COLS_WireRecon = VISIBLE_COLS_WireRecon + [db_schema.WireRecon.scanNumber] +
 def _get_scan_recons(scan_id):
     try:
         scan_id = int(scan_id)
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             aperture = pd.read_sql(session.query(db_schema.Catalog.aperture).filter(db_schema.Catalog.scanNumber == scan_id).statement, session.bind).at[0,'aperture']
             aperture = str(aperture).lower()
             
@@ -926,7 +927,7 @@ ALL_COLS_WireRecon_PeakIndex = VISIBLE_COLS_WireRecon_PeakIndex + [db_schema.Pea
 def _get_scan_peakindexings(scan_id):
     try:
         scan_id = int(scan_id)
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             aperture = pd.read_sql(session.query(db_schema.Catalog.aperture).filter(db_schema.Catalog.scanNumber == scan_id).statement, session.bind).at[0,'aperture']
             aperture = str(aperture).lower()
             
@@ -1387,7 +1388,7 @@ def save_note(n_clicks, scanNumber, note):
 
     try:
         scan_id = int(scanNumber)
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             catalog_entry = (
                 session.query(db_schema.Catalog)
                 .filter(db_schema.Catalog.scanNumber == scan_id)
@@ -1444,7 +1445,7 @@ def update_catalog(n,
         if isinstance(scanNumber, str):
             scanNumber = int(scanNumber)
         
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             try:
                 # Check if catalog entry already exists
                 catalog_data = session.query(db_schema.Catalog).filter(

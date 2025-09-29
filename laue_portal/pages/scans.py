@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 import pandas as pd
 import laue_portal.components.navbar as navbar
 from laue_portal.pages.scan import build_technique_strings
+import laue_portal.database.session_utils as session_utils
 
 dash.register_page(__name__, path='/')
 
@@ -95,7 +96,7 @@ CUSTOM_HEADER_NAMES = {
 }
 
 def _get_metadatas():
-    with Session(db_utils.ENGINE) as session:
+    with Session(session_utils.get_engine()) as session:
         # Query with JOINs to get scan count and catalog info for each metadata record
         query = session.query(
             *VISIBLE_COLS,
