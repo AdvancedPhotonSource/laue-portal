@@ -158,3 +158,6 @@ supervisor/supervisord.conf
 supervisor/supervisord.pid
 supervisor/supervisor.sock
 supervisor/logs/
+
+# Reference modified scripts
+modified/

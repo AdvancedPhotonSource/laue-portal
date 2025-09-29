@@ -25,7 +25,7 @@ peakindex_form = dbc.Row(
                                 ),
                                 _stack(
                                     [
-                                        _field("Data Path", "data_path", size='hg'),
+                                        _field("Data Path", "data_path"),
                                     ]
                                 ),
                                 _stack(
@@ -41,12 +41,12 @@ peakindex_form = dbc.Row(
                                 ),
                                 _stack(
                                     [
-                                        _field("Geo File", "geoFile", size='hg'),
+                                        _field("Geo File", "geoFile"),
                                     ]
                                 ),
                                 _stack(
                                     [
-                                        _field("Output Path", "outputFolder", size='hg'),
+                                        _field("Output Path", "outputFolder"),
                                     ]
                                 ),
                                 # _stack(
@@ -111,7 +111,7 @@ peakindex_form = dbc.Row(
                                 ),
                                 _stack(
                                     [
-                                        _field("Mask File", "maskFile", size='hg'),
+                                        _field("Mask File", "maskFile"),
                                     ]
                                 ),
                                 # dbc.Button(
@@ -123,8 +123,8 @@ peakindex_form = dbc.Row(
                                 # ),
                                 # dbc.Collapse(
                                 #     [
-                                #         _field("peaksearch Path", "peaksearchPath", size='hg'),
-                                #         _field("p2q Path", "p2qPath", size='hg'),
+                                #         _field("peaksearch Path", "peaksearchPath"),
+                                #         _field("p2q Path", "p2qPath"),
                                 #     ],
                                 # id="collapse1",
                                 # is_open=False,
@@ -136,7 +136,7 @@ peakindex_form = dbc.Row(
                             [
                                 _stack(
                                     [
-                                        _field("Cryst File", "crystFile", size='hg'),
+                                        _field("Cryst File", "crystFile"),
                                     ]
                                 ),
                                 _stack(
@@ -165,7 +165,7 @@ peakindex_form = dbc.Row(
                                 # ),
                                 # dbc.Collapse(
                                 #     [
-                                #         _field("Indexing Path", "indexingPath", size='hg'),
+                                #         _field("Indexing Path", "indexingPath"),
                                 #     ],
                                 # id="collapse2",
                                 # is_open=False,

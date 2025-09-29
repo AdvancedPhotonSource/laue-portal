@@ -41,7 +41,7 @@ catalog_form = dbc.Row(
                             [
                                 _stack(
                                     [
-                                        _field("Files Path", "filefolder", size='hg'), #'file_path'
+                                        _field("Files Path", "filefolder"), #'file_path'
                                     ]
                                 ),
                                 _stack(
@@ -63,7 +63,7 @@ catalog_form = dbc.Row(
                             [
                                 _stack(
                                     [
-                                        # _field("Notes", "notes", size='hg')
+                                        # _field("Notes", "notes")
                                         dbc.Textarea(
                                             id="notes",
                                             style={"width": "100%", "minHeight": "100px"},
