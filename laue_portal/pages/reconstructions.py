@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 import pandas as pd
 import laue_portal.components.navbar as navbar
 from laue_portal.components.recon_form import recon_form, set_recon_form_props
+import laue_portal.database.session_utils as session_utils
 
 dash.register_page(__name__)
 
@@ -103,7 +104,7 @@ CUSTOM_HEADER_NAMES = {
 }
 
 def _get_recons():
-    with Session(db_utils.ENGINE) as session:
+    with Session(session_utils.get_engine()) as session:
         recons = pd.read_sql(session.query(*VISIBLE_COLS)
             .join(db_schema.Catalog, db_schema.Recon.scanNumber == db_schema.Catalog.scanNumber)
             .join(db_schema.Job, db_schema.Recon.job_id == db_schema.Job.job_id)

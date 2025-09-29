@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, set_scan_accordions
 from laue_portal.components.catalog_form import catalog_form, set_catalog_form_props
+import laue_portal.database.session_utils as session_utils
 
 CATALOG_DEFAULTS = {#temporary
     # 'scanNumber':log['scanNumber'],
@@ -210,7 +211,7 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
             set_metadata_form_props(metadata_row, scan_rows, read_only=True)
             
             # # Add to database
-            # with Session(db_utils.ENGINE) as session:
+            # with Session(session_utils.get_engine()) as session:
             #     session.add(metadata_row)
             #     # session.add(catalog_row)
             #     scan_row_count = session.query(Scan).count()
@@ -389,7 +390,7 @@ def submit_catalog_and_metadata(n,
         if isinstance(scanNumber, str):
             scanNumber = int(scanNumber)
         
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             try:
                 # Check if metadata record exists for this scanNumber
                 metadata_data = session.query(db_schema.Metadata).filter(

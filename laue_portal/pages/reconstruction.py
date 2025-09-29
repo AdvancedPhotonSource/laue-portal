@@ -15,6 +15,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
 import h5py
+import laue_portal.database.session_utils as session_utils
 
 dash.register_page(__name__, path="/reconstruction")
 
@@ -212,7 +213,7 @@ def load_recon_data(href):
     if recon_id:
         try:
             recon_id = int(recon_id)
-            with Session(db_utils.ENGINE) as session:
+            with Session(session_utils.get_engine()) as session:
                 recon_data = session.query(db_schema.Recon).filter(db_schema.Recon.recon_id == recon_id).first()
                 if recon_data:
                     set_recon_form_props(recon_data, read_only=True)

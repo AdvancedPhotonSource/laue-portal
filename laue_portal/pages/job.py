@@ -10,6 +10,7 @@ from dash.exceptions import PreventUpdate
 import urllib.parse
 import pandas as pd
 from laue_portal.processing.redis_utils import STATUS_MAPPING
+import laue_portal.database.session_utils as session_utils
 
 dash.register_page(__name__, path="/job")
 
@@ -134,7 +135,7 @@ def load_job_data(href):
     if job_id:
         try:
             job_id = int(job_id)
-            with Session(db_utils.ENGINE) as session:
+            with Session(session_utils.get_engine()) as session:
                 job_data = session.query(db_schema.Job).filter(db_schema.Job.job_id == job_id).first()
                 
                 if job_data:

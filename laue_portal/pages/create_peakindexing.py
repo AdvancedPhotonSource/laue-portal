@@ -15,6 +15,7 @@ from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_
 from laue_portal.processing.redis_utils import enqueue_peakindexing, STATUS_REVERSE_MAPPING
 from config import DEFAULT_VARIABLES
 from srange import srange
+import laue_portal.database.session_utils as session_utils
 
 logger = logging.getLogger(__name__)
 
@@ -622,7 +623,7 @@ def get_peakindexings(path):
         
         # Add root_path from DEFAULT_VARIABLES
         peakindex_form_data.root_path = root_path
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             # Get next peakindex_id
             next_peakindex_id = db_utils.get_next_id(session, db_schema.PeakIndex)                                
             # Store next_peakindex_id and update title
@@ -668,7 +669,7 @@ def load_scan_data_from_url(href):
     root_path = DEFAULT_VARIABLES.get("root_path", "")
     
     if scan_id_str:
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             # # Get next peakindex_id
             # next_peakindex_id = db_utils.get_next_id(session, db_schema.PeakIndex)
             # # Store next_peakindex_id and update title
