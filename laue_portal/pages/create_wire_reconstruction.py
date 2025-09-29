@@ -276,7 +276,10 @@ def submit_parameters(n,
                 next_wirerecon_id = db_utils.get_next_id(session, db_schema.WireRecon)
                 # Now that we have the ID, format the output folder path
                 try:
-                    formatted_output_folder = current_output_folder % (current_scanNumber, next_wirerecon_id)
+                    if '%d' in current_output_folder:
+                        formatted_output_folder = current_output_folder % (current_scanNumber, next_wirerecon_id)
+                    else:
+                        formatted_output_folder = current_output_folder
                 except TypeError:
                     formatted_output_folder = current_output_folder # Fallback if formatting fails
                 
@@ -291,7 +294,6 @@ def submit_parameters(n,
                     set_props("alert-submit", {'is_open': True, 
                                                'children': f'Failed to create output directory: {str(e)}',
                                                'color': 'danger'})
-                    session.rollback()
                     continue
 
                 JOB_DEFAULTS.update({'submit_time':datetime.datetime.now()})

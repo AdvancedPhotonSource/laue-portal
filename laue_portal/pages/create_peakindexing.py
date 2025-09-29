@@ -142,36 +142,6 @@ layout = dbc.Container(
 Callbacks
 =======================
 """
-# @dash.callback(
-#     Input('upload-peakindexing-config', 'contents'),
-#     prevent_initial_call=True,
-# )
-# def upload_config(contents):
-#     try:
-#         content_type, content_string = contents.split(',')
-#         decoded = base64.b64decode(content_string)
-#         config = yaml.safe_load(decoded)
-#         peakindex_row = db_utils.import_peakindex_row(config)
-#         peakindex_row.date = datetime.datetime.now()
-#         peakindex_row.commit_id = ''
-#         peakindex_row.calib_id = ''
-#         peakindex_row.runtime = ''
-#         peakindex_row.computer_name = ''
-#         peakindex_row.dataset_id = 0
-#         peakindex_row.notes = ''
-
-#         set_props("alert-upload", {'is_open': True, 
-#                                     'children': 'Config uploaded successfully',
-#                                     'color': 'success'})
-#         set_peakindex_form_props(peakindex_row)
-
-#     except Exception as e:
-#         set_props("alert-upload", {'is_open': True, 
-#                                     'children': f'Upload Failed! Error: {e}',
-#                                     'color': 'danger'})
-#         raise e
-
-
 @dash.callback(
     Input('submit_peakindexing', 'n_clicks'),
     
@@ -344,171 +314,257 @@ def submit_parameters(n,
     
     root_path = DEFAULT_VARIABLES["root_path"]
     
-    # Process each scan
-    for i in range(num_scans):
-        # Extract values for this scan
-        current_scanNumber = scanNumber_list[i]
-        current_recon_id = recon_id_list[i]
-        current_wirerecon_id = wirerecon_id_list[i]
-        current_output_folder = outputFolder_list[i]
-        current_data_path = data_path_list[i]
-        current_filename_prefix_str = filenamePrefix_list[i]
-        current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
-        current_geo_file = geoFile_list[i]
-        current_crystal_file = crystFile_list[i]
-        current_scanPoints = scanPoints_list[i]
-        current_depthRange = depthRange_list[i]
-        
-        # Convert relative paths to full paths
-        full_output_folder = os.path.join(root_path, current_output_folder.lstrip('/'))
-        full_geometry_file = os.path.join(root_path, current_geo_file.lstrip('/'))
-        full_crystal_file = os.path.join(root_path, current_crystal_file.lstrip('/'))
-        
-        # Create output directory if it doesn't exist
+    peakindexes_to_enqueue = []
+
+    # First loop: Create all database entries for each listed scanNumber
+    with Session(session_utils.get_engine()) as session:
         try:
-            os.makedirs(full_output_folder, exist_ok=True)
-            logger.info(f"Output directory: {full_output_folder}")
-        except Exception as e:
-            logger.error(f"Failed to create output directory {full_output_folder}: {e}")
-            set_props("alert-submit", {'is_open': True, 
-                                      'children': f'Failed to create output directory: {str(e)}',
-                                      'color': 'danger'})
-            continue
+            for i in range(num_scans):
+                # Extract values for this scan
+                current_scanNumber = scanNumber_list[i]
+                current_recon_id = recon_id_list[i]
+                current_wirerecon_id = wirerecon_id_list[i]
+                current_output_folder = outputFolder_list[i]
+                current_geo_file = geoFile_list[i]
+                current_crystal_file = crystFile_list[i]
+                current_scanPoints = scanPoints_list[i]
+                current_depthRange = depthRange_list[i]
 
-        JOB_DEFAULTS.update({'submit_time':datetime.datetime.now()})
-        JOB_DEFAULTS.update({'start_time':datetime.datetime.now()})
-        JOB_DEFAULTS.update({'finish_time':datetime.datetime.now()})
+                # Convert relative paths to full paths
+                full_geometry_file = os.path.join(root_path, current_geo_file.lstrip('/'))
+                full_crystal_file = os.path.join(root_path, current_crystal_file.lstrip('/'))
+
+                next_peakindex_id = db_utils.get_next_id(session, db_schema.PeakIndex)
+                # Now that we have the ID, format the output folder path
+                try:
+                    if '%d' in current_output_folder:
+                        if current_wirerecon_id:
+                            formatted_output_folder = current_output_folder % (current_scanNumber, current_wirerecon_id, next_peakindex_id)
+                        elif current_recon_id:
+                            formatted_output_folder = current_output_folder % (current_scanNumber, current_recon_id, next_peakindex_id)
+                        else:
+                            formatted_output_folder = current_output_folder % (current_scanNumber, next_peakindex_id)
+                    else:
+                        formatted_output_folder = current_output_folder
+                except TypeError:
+                    formatted_output_folder = current_output_folder # Fallback if formatting fails
+                
+                full_output_folder = os.path.join(root_path, formatted_output_folder.lstrip('/'))
+                
+                # Create output directory if it doesn't exist
+                try:
+                    os.makedirs(full_output_folder, exist_ok=True)
+                    logger.info(f"Output directory: {full_output_folder}")
+                except Exception as e:
+                    logger.error(f"Failed to create output directory {full_output_folder}: {e}")
+                    set_props("alert-submit", {'is_open': True, 
+                                              'children': f'Failed to create output directory: {str(e)}',
+                                              'color': 'danger'})
+                    continue
+
+                JOB_DEFAULTS.update({'submit_time':datetime.datetime.now()})
+                JOB_DEFAULTS.update({'start_time':datetime.datetime.now()})
+                JOB_DEFAULTS.update({'finish_time':datetime.datetime.now()})
+                
+                job = db_schema.Job(
+                    computer_name=JOB_DEFAULTS['computer_name'],
+                    status=JOB_DEFAULTS['status'],
+                    priority=JOB_DEFAULTS['priority'],
+
+                    submit_time=JOB_DEFAULTS['submit_time'],
+                    start_time=JOB_DEFAULTS['start_time'],
+                    finish_time=JOB_DEFAULTS['finish_time'],
+                )
+
+                session.add(job)
+                session.flush()  # Get job_id without committing
+                job_id = job.job_id
+                
+                # Create subjobs for parallel processing
+                # Parse scanPoints using srange
+                scanPoints_srange = srange(current_scanPoints)
+                scanPoint_nums = scanPoints_srange.list()
+                
+                # Parse depthRange if provided using srange
+                if current_depthRange and current_depthRange.strip():
+                    depthRange_srange = srange(current_depthRange)
+                    depthRange_nums = depthRange_srange.list()
+                else:
+                    depthRange_srange = srange('')
+                    depthRange_nums = [None]  # No reconstruction indices
+                
+                # Create subjobs for each combination of scan point and depth
+                subjob_count = 0
+                for scanPoint_num in scanPoint_nums:
+                    for depthRange_num in depthRange_nums:
+                        subjob = db_schema.SubJob(
+                            job_id=job_id,
+                            computer_name=JOB_DEFAULTS['computer_name'],
+                            status=STATUS_REVERSE_MAPPING["Queued"],
+                            priority=JOB_DEFAULTS['priority']
+                        )
+                        session.add(subjob)
+                        subjob_count += 1
         
-        job = db_schema.Job(
-            computer_name=JOB_DEFAULTS['computer_name'],
-            status=JOB_DEFAULTS['status'],
-            priority=JOB_DEFAULTS['priority'],
+                # Extract HKL values from indexHKL parameter
+                current_indexHKL = str(indexHKL_list[i])
+                
+                peakindex = db_schema.PeakIndex(
+                    scanNumber = current_scanNumber,
+                    job_id = job_id,
+                    author = author_list[i],
+                    notes = notes_list[i],
+                    recon_id = current_recon_id,
+                    wirerecon_id = current_wirerecon_id,
 
-            submit_time=JOB_DEFAULTS['submit_time'],
-            start_time=JOB_DEFAULTS['start_time'],
-            finish_time=JOB_DEFAULTS['finish_time'],
-        )
-
-        with Session(session_utils.get_engine()) as session:
-            
-            session.add(job)
-            session.flush()  # Get job_id without committing
-            job_id = job.job_id
-            
-            # Create subjobs for parallel processing
-            # Parse scanPoints using srange
-            scanPoints_srange = srange(current_scanPoints)
-            scanPoint_nums = scanPoints_srange.list()
-            
-            # Parse depthRange if provided using srange
-            if current_depthRange and current_depthRange.strip():
-                depthRange_srange = srange(current_depthRange)
-                depthRange_nums = depthRange_srange.list()
-            else:
-                depthRange_nums = [None]  # No reconstruction indices
-            
-            # Create subjobs for each combination of scan point and depth
-            subjob_count = 0
-            for scanPoint_num in scanPoint_nums:
-                for depthRange_num in depthRange_nums:
-                    subjob = db_schema.SubJob(
-                        job_id=job_id,
-                        computer_name=JOB_DEFAULTS['computer_name'],
-                        status=STATUS_REVERSE_MAPPING["Queued"],
-                        priority=JOB_DEFAULTS['priority']
-                    )
-                    session.add(subjob)
-                    subjob_count += 1
-    
-            # Extract HKL values from indexHKL parameter
-            current_indexHKL = str(indexHKL_list[i])
-            
-            peakindex = db_schema.PeakIndex(
-                # date=datetime.datetime.now(),
-                # commit_id='TEST',
-                # calib_id='TEST',
-                # runtime='TEST',
-                # computer_name='TEST',
-                # dataset_id=0,
-                # notes='TODO', 
-
-                scanNumber = current_scanNumber,
-                job_id = job_id,
-                author = author_list[i],
-                notes = notes_list[i],
-                recon_id = current_recon_id,
-                wirerecon_id = current_wirerecon_id,
-
-                # peakProgram=peakProgram,
-                threshold=threshold_list[i],
-                thresholdRatio=thresholdRatio_list[i],
-                maxRfactor=maxRfactor_list[i],
-                boxsize=boxsize_list[i],
-                max_number=max_number_list[i],
-                min_separation=min_separation_list[i],
-                peakShape=peakShape_list[i],
-                # scanPointStart=scanPointStart,
-                # scanPointEnd=scanPointEnd,
-                # depthRangeStart=depthRangeStart,
-                # depthRangeEnd=depthRangeEnd,
-                scanPoints=current_scanPoints,
-                scanPointslen=scanPoints_srange.len(),
-                depthRange=current_depthRange,
-                depthRangelen=depthRange_srange.len(),
-                detectorCropX1=detectorCropX1_list[i],
-                detectorCropX2=detectorCropX2_list[i],
-                detectorCropY1=detectorCropY1_list[i],
-                detectorCropY2=detectorCropY2_list[i],
-                min_size=min_size_list[i],
-                max_peaks=max_peaks_list[i],
-                smooth=smooth_list[i],
-                maskFile=maskFile_list[i],
-                indexKeVmaxCalc=indexKeVmaxCalc_list[i],
-                indexKeVmaxTest=indexKeVmaxTest_list[i],
-                indexAngleTolerance=indexAngleTolerance_list[i],
-                indexH=int(current_indexHKL[0]),
-                indexK=int(current_indexHKL[1]),
-                indexL=int(current_indexHKL[2]),
-                indexCone=indexCone_list[i],
-                energyUnit=energyUnit_list[i],
-                exposureUnit=exposureUnit_list[i],
-                cosmicFilter=cosmicFilter_list[i],
-                recipLatticeUnit=recipLatticeUnit_list[i],
-                latticeParametersUnit=latticeParametersUnit_list[i],
-                # peaksearchPath=peaksearchPath,
-                # p2qPath=p2qPath,
-                # indexingPath=indexingPath,
-                outputFolder=full_output_folder,  # Store full path in database
-                geoFile=full_geometry_file,  # Store full path in database
-                crystFile=full_crystal_file,  # Store full path in database
-                depth=depth_list[i],
-                beamline=beamline_list[i],
-            )
-
-        # with Session(session_utils.get_engine()) as session:
-            session.add(peakindex)
-            # config_dict = db_utils.create_config_obj(peakindex)
+                    # peakProgram=peakProgram,
+                    threshold=threshold_list[i],
+                    thresholdRatio=thresholdRatio_list[i],
+                    maxRfactor=maxRfactor_list[i],
+                    boxsize=boxsize_list[i],
+                    max_number=max_number_list[i],
+                    min_separation=min_separation_list[i],
+                    peakShape=peakShape_list[i],
+                    # scanPointStart=scanPointStart,
+                    # scanPointEnd=scanPointEnd,
+                    # depthRangeStart=depthRangeStart,
+                    # depthRangeEnd=depthRangeEnd,
+                    scanPoints=current_scanPoints,
+                    scanPointslen=scanPoints_srange.len(),
+                    depthRange=current_depthRange,
+                    depthRangelen=depthRange_srange.len(),
+                    detectorCropX1=detectorCropX1_list[i],
+                    detectorCropX2=detectorCropX2_list[i],
+                    detectorCropY1=detectorCropY1_list[i],
+                    detectorCropY2=detectorCropY2_list[i],
+                    min_size=min_size_list[i],
+                    max_peaks=max_peaks_list[i],
+                    smooth=smooth_list[i],
+                    maskFile=maskFile_list[i],
+                    indexKeVmaxCalc=indexKeVmaxCalc_list[i],
+                    indexKeVmaxTest=indexKeVmaxTest_list[i],
+                    indexAngleTolerance=indexAngleTolerance_list[i],
+                    indexH=int(current_indexHKL[0]),
+                    indexK=int(current_indexHKL[1]),
+                    indexL=int(current_indexHKL[2]),
+                    indexCone=indexCone_list[i],
+                    energyUnit=energyUnit_list[i],
+                    exposureUnit=exposureUnit_list[i],
+                    cosmicFilter=cosmicFilter_list[i],
+                    recipLatticeUnit=recipLatticeUnit_list[i],
+                    latticeParametersUnit=latticeParametersUnit_list[i],
+                    # peaksearchPath=peaksearchPath,
+                    # p2qPath=p2qPath,
+                    # indexingPath=indexingPath,
+                    outputFolder=full_output_folder,  # Store full path in database
+                    geoFile=full_geometry_file,  # Store full path in database
+                    crystFile=full_crystal_file,  # Store full path in database
+                    depth=depth_list[i],
+                    beamline=beamline_list[i],
+                )
+                session.add(peakindex)
+                peakindexes_to_enqueue.append({
+                    "job_id": job_id,
+                    "scanNumber": current_scanNumber,
+                    "outputFolder": full_output_folder,
+                    "geoFile": full_geometry_file,
+                    "crystFile": full_crystal_file,
+                    "scanPoints": current_scanPoints,
+                    "depthRange": current_depthRange,
+                    "boxsize": boxsize_list[i],
+                    "maxRfactor": maxRfactor_list[i],
+                    "min_size": min_size_list[i],
+                    "min_separation": min_separation_list[i],
+                    "threshold": threshold_list[i],
+                    "peakShape": peakShape_list[i],
+                    "max_peaks": max_peaks_list[i],
+                    "smooth": smooth_list[i],
+                    "indexKeVmaxCalc": indexKeVmaxCalc_list[i],
+                    "indexKeVmaxTest": indexKeVmaxTest_list[i],
+                    "indexAngleTolerance": indexAngleTolerance_list[i],
+                    "indexCone": indexCone_list[i],
+                    "indexH": int(current_indexHKL[0]),
+                    "indexK": int(current_indexHKL[1]),
+                    "indexL": int(current_indexHKL[2]),
+                })
 
             session.commit()
-        
-        set_props("alert-submit", {'is_open': True, 
-                                    'children': 'Entry Added to Database',
-                                    'color': 'success'})
+            set_props("alert-submit", {'is_open': True, 
+                                        'children': 'Entries Added to Database',
+                                        'color': 'success'})
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to create database entries: {e}")
+            set_props("alert-submit", {'is_open': True,
+                                       'children': f'Failed to create database entries: {str(e)}',
+                                       'color': 'danger'})
+            return
 
-        # Enqueue the job to Redis
+    # Second loop: Enqueue jobs to Redis
+    for i, spec in enumerate(peakindexes_to_enqueue):
         try:
-            # Prepare lists of input and output files for all subjobs
-            input_files = []
-            output_dirs = []
+            # Extract values for this scan
+            current_data_path = data_path_list[i]
+            current_filename_prefix_str = filenamePrefix_list[i]
+            current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
             
             # Construct full data path from form values
             full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
+            
+            scanPoints_srange = srange(spec["scanPoints"])
+            scanPoint_nums = scanPoints_srange.list()
+
+            if spec["depthRange"] and str(spec["depthRange"]).strip():
+                depthRange_srange = srange(spec["depthRange"])
+                depthRange_nums = depthRange_srange.list()
+            else:
+                depthRange_nums = [None]
+
+            # Prepare lists of input and output files for all subjobs
+            input_files = []
+            output_dirs = []
             
             for current_filename_prefix_i in current_filename_prefix:
                 for scanPoint_num in scanPoint_nums:
                     for depthRange_num in depthRange_nums:
                         # Prepare parameters for peak indexing
-                        file_str = current_filename_prefix_i % scanPoint_num
+                        # Support multiple filename prefix styles:
+                        #  - Percent-style e.g. "prefix_%d", "%05d", "%d_%d"
+                        #  - Brace-style e.g. "prefix_{}", "{}_{}", "{scanNumber}_{scanPoint}"
+                        #  - Bare prefix e.g. "prefix_" (appends the scanPoint number)
+                        file_str = None
+                        try:
+                            if "%" in current_filename_prefix_i:
+                                # Try single scanPoint, then tuple, then (scanNumber, scanPoint)
+                                try:
+                                    file_str = current_filename_prefix_i % scanPoint_num
+                                except TypeError:
+                                    try:
+                                        file_str = current_filename_prefix_i % (scanPoint_num,)
+                                    except TypeError:
+                                        try:
+                                            file_str = current_filename_prefix_i % (spec["scanNumber"], scanPoint_num)
+                                        except Exception as e2:
+                                            raise TypeError(f"Invalid filenamePrefix percent-format '{current_filename_prefix_i}' with scan {spec['scanNumber']} and point {scanPoint_num}: {e2}")
+                            elif "{" in current_filename_prefix_i and "}" in current_filename_prefix_i:
+                                # Try str.format styles: positional or named
+                                try:
+                                    # First assume single placeholder (scanPoint)
+                                    file_str = current_filename_prefix_i.format(scanPoint_num)
+                                except Exception:
+                                    try:
+                                        # Try two positional placeholders (scanNumber, scanPoint)
+                                        file_str = current_filename_prefix_i.format(spec["scanNumber"], scanPoint_num)
+                                    except Exception:
+                                        try:
+                                            # Try named placeholders
+                                            file_str = current_filename_prefix_i.format(scanNumber=spec["scanNumber"], scanPoint=scanPoint_num)
+                                        except Exception as e2:
+                                            raise TypeError(f"Invalid filenamePrefix brace-format '{current_filename_prefix_i}' with scan {spec['scanNumber']} and point {scanPoint_num}: {e2}")
+                            else:
+                                file_str = f"{current_filename_prefix_i}{scanPoint_num}"
+                        except Exception as fmt_err:
+                            raise TypeError(f"Invalid filenamePrefix format '{current_filename_prefix_i}' with scan point {scanPoint_num}: {fmt_err}")
                         
                         if depthRange_num is not None:
                             # Reconstruction file with depth index
@@ -519,41 +575,49 @@ def submit_parameters(n,
                         input_file = os.path.join(full_data_path, input_filename)
                         
                         input_files.append(input_file)
-                        output_dirs.append(full_output_folder)
+                        output_dirs.append(spec["outputFolder"])
             
             # Enqueue the batch job with all files
             rq_job_id = enqueue_peakindexing(
-                job_id=job_id,
+                job_id=spec["job_id"],
                 input_files=input_files,
                 output_files=output_dirs,
-                geometry_file=full_geometry_file,
-                crystal_file=full_crystal_file,
-                boxsize=boxsize_list[i],
-                max_rfactor=maxRfactor_list[i],
-                min_size=min_size_list[i],
-                min_separation=min_separation_list[i],
-                threshold=threshold_list[i],
-                peak_shape=peakShape_list[i],
-                max_peaks=max_peaks_list[i],
-                smooth=smooth_list[i],
-                index_kev_max_calc=indexKeVmaxCalc_list[i],
-                index_kev_max_test=indexKeVmaxTest_list[i],
-                index_angle_tolerance=indexAngleTolerance_list[i],
-                index_cone=indexCone_list[i],
-                index_h=int(current_indexHKL[0]),
-                index_k=int(current_indexHKL[1]),
-                index_l=int(current_indexHKL[2])
+                geometry_file=spec["geoFile"],
+                crystal_file=spec["crystFile"],
+                boxsize=spec["boxsize"],
+                max_rfactor=spec["maxRfactor"],
+                min_size=spec["min_size"],
+                min_separation=spec["min_separation"],
+                threshold=spec["threshold"],
+                peak_shape=spec["peakShape"],
+                max_peaks=spec["max_peaks"],
+                smooth=spec["smooth"],
+                index_kev_max_calc=spec["indexKeVmaxCalc"],
+                index_kev_max_test=spec["indexKeVmaxTest"],
+                index_angle_tolerance=spec["indexAngleTolerance"],
+                index_cone=spec["indexCone"],
+                index_h=spec["indexH"],
+                index_k=spec["indexK"],
+                index_l=spec["indexL"]
             )
             
-            logger.info(f"Peakindexing batch job {job_id} enqueued with RQ ID: {rq_job_id} for {len(input_files)} files")
+            logger.info(f"Peakindexing batch job {spec['job_id']} enqueued with RQ ID: {rq_job_id} for {len(input_files)} files")
             
             set_props("alert-submit", {'is_open': True, 
-                                        'children': f'Job {job_id} submitted to queue with {len(input_files)} file(s)',
+                                        'children': f'Job {spec["job_id"]} submitted to queue with {len(input_files)} file(s)',
                                         'color': 'info'})
         except Exception as e:
-            logger.error(f"Failed to enqueue job: {e}")
+            # Provide more context to help diagnose format issues and input parsing
+            logger.error(
+                f"Failed to enqueue job {spec['job_id']}: {e}. "
+                f"filenamePrefix='{current_filename_prefix_str}', "
+                f"parsed prefixes={current_filename_prefix}, "
+                f"scanPoints='{spec['scanPoints']}', depthRange='{spec['depthRange']}', data_path='{current_data_path}'"
+            )
             set_props("alert-submit", {'is_open': True, 
-                                        'children': f'Failed to queue job: {str(e)}',
+                                        'children': f'Failed to queue job {spec["job_id"]}: {str(e)}. '
+                                                    f'filenamePrefix={current_filename_prefix_str}, '
+                                                    f'scanPoints={spec["scanPoints"]}, depthRange={spec["depthRange"]}',
                                         'color': 'danger'})
 
 
@@ -673,11 +737,11 @@ def load_scan_data_from_url(href):
     
     if scan_id_str:
         with Session(session_utils.get_engine()) as session:
-            # Get next peakindex_id
-            next_peakindex_id = db_utils.get_next_id(session, db_schema.PeakIndex)
-            # Store next_peakindex_id and update title
-            set_props('next-peakindex-id', {'value': next_peakindex_id})
-            set_props('peakindex-title', {'children': f"New peak indexing {next_peakindex_id}"})
+            # # Get next peakindex_id
+            # next_peakindex_id = db_utils.get_next_id(session, db_schema.PeakIndex)
+            # # Store next_peakindex_id and update title
+            # set_props('next-peakindex-id', {'value': next_peakindex_id})
+            # set_props('peakindex-title', {'children': f"New peak indexing {next_peakindex_id}"})
 
             is_pooled = '$' in scan_id_str or ',' in scan_id_str
             
@@ -699,17 +763,17 @@ def load_scan_data_from_url(href):
                         if recon_id or wirerecon_id:
                             outputFolder = outputFolder.replace("index_%d", "rec_%d/index_%d") #"analysis/scan_%d/rec_%d/index_%d"
                         
-                        # Format output folder with scan number and IDs
-                        try:
-                            if wirerecon_id:
-                                outputFolder = outputFolder % (scan_id, wirerecon_id, next_peakindex_id)
-                            elif recon_id:
-                                outputFolder = outputFolder % (scan_id, recon_id, next_peakindex_id)
-                            else:
-                                outputFolder = outputFolder % (scan_id, next_peakindex_id)
-                        except:
-                            # If formatting fails, use the original string
-                            pass
+                        # # Format output folder with scan number and IDs
+                        # try:
+                        #     if wirerecon_id:
+                        #         outputFolder = outputFolder % (scan_id, wirerecon_id, next_peakindex_id)
+                        #     elif recon_id:
+                        #         outputFolder = outputFolder % (scan_id, recon_id, next_peakindex_id)
+                        #     else:
+                        #         outputFolder = outputFolder % (scan_id, next_peakindex_id)
+                        # except:
+                        #     # If formatting fails, use the original string
+                        #     pass
 
                         # If peakindex_id is provided, load existing peakindex data
                         if peakindex_id:
@@ -887,18 +951,18 @@ def load_scan_data_from_url(href):
                             if current_recon_id or current_wirerecon_id:
                                 outputFolder = outputFolder.replace("index_%d", "rec_%d/index_%d") #"analysis/scan_%d/rec_%d/index_%d"
                             
-                            # Format output folder with scan number and IDs
-                            try:
-                                if current_wirerecon_id:
-                                    outputFolder = outputFolder % (current_scan_id, current_wirerecon_id, next_peakindex_id)
-                                elif current_recon_id:
-                                    outputFolder = outputFolder % (current_scan_id, current_recon_id, next_peakindex_id)
-                                else:
-                                    outputFolder = outputFolder % (current_scan_id, next_peakindex_id)
-                            except:
-                                # If formatting fails, use the original string
-                                pass
-                            next_peakindex_id += 1
+                            # # Format output folder with scan number and IDs
+                            # try:
+                            #     if current_wirerecon_id:
+                            #         outputFolder = outputFolder % (current_scan_id, current_wirerecon_id, next_peakindex_id)
+                            #     elif current_recon_id:
+                            #         outputFolder = outputFolder % (current_scan_id, current_recon_id, next_peakindex_id)
+                            #     else:
+                            #         outputFolder = outputFolder % (current_scan_id, next_peakindex_id)
+                            # except:
+                            #     # If formatting fails, use the original string
+                            #     pass
+                            # next_peakindex_id += 1
 
                             # If peakindex_id is provided, load existing peakindex data
                             if current_peakindex_id:

@@ -507,10 +507,7 @@ def submit_catalog_and_metadata(n,
                             setattr(metadata, f'motorGroup_{motor_group}_cpt_total', totals['completed'])
                     
                     session.add(metadata)
-                    
-                    set_props("alert-submit", {'is_open': True, 
-                                                'children': f'Metadata Entry Added to Database for scan {scanNumber}',
-                                                'color': 'success'})
+                       
             except Exception as e:
                 set_props("alert-submit", {'is_open': True, 
                                             'children': f'Error creating metadata entry: {str(e)}',
@@ -532,9 +529,6 @@ def submit_catalog_and_metadata(n,
                     catalog_data.sample_name = sample_name
                     catalog_data.notes = notes
                     
-                    set_props("alert-catalog-submit", {'is_open': True, 
-                                                'children': f'Catalog Entry Updated for scan {scanNumber}',
-                                                'color': 'success'})
                 else:
                     # Create new catalog entry
                     catalog = db_schema.Catalog(
@@ -548,9 +542,6 @@ def submit_catalog_and_metadata(n,
                     
                     session.add(catalog)
                     
-                    set_props("alert-catalog-submit", {'is_open': True, 
-                                                'children': f'Catalog Entry Added to Database for scan {scanNumber}',
-                                                'color': 'success'})
             except Exception as e:
                 set_props("alert-catalog-submit", {'is_open': True, 
                                             'children': f'Error creating catalog entry: {str(e)}',
@@ -559,6 +550,18 @@ def submit_catalog_and_metadata(n,
             
             # Commit all changes
             session.commit()
+
+            set_props("alert-submit", {'is_open': True, 
+                                        'children': f'Metadata Entry Added to Database for scan {scanNumber}',
+                                        'color': 'success'})
+            if catalog_data:
+                set_props("alert-catalog-submit", {'is_open': True, 
+                                            'children': f'Catalog Entry Updated for scan {scanNumber}',
+                                            'color': 'success'})
+            else:
+                set_props("alert-catalog-submit", {'is_open': True, 
+                                            'children': f'Catalog Entry Added to Database for scan {scanNumber}',
+                                            'color': 'success'})
                                             
     except ValueError as e:
         set_props("alert-submit", {'is_open': True, 
