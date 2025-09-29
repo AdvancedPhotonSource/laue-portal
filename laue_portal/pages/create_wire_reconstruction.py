@@ -261,7 +261,7 @@ def submit_parameters(n,
     wirerecons_to_enqueue = []
 
     # First loop: Create all database entries for each listed scanNumber
-    with Session(db_utils.ENGINE) as session:
+    with Session(session_utils.get_engine()) as session:
         try:
             for i in range(num_scans):
                 # Extract values for this scan
@@ -357,7 +357,21 @@ def submit_parameters(n,
                 # config_dict = db_utils.create_config_obj(wirerecon)
                 session.add(wirerecon)
                 
-                wirerecons_to_enqueue.append(wirerecon)
+                wirerecons_to_enqueue.append({
+                    "job_id": job_id,
+                    "scanPoints": current_scanPoints,
+                    "outputFolder": full_output_folder,
+                    "geoFile": full_geometry_file,
+                    "depth_start": depth_start_list[i],
+                    "depth_end": depth_end_list[i],
+                    "depth_resolution": depth_resolution_list[i],
+                    "percent_brightest": percent_brightest_list[i],
+                    "wire_edges": wire_edges_list[i],
+                    "memory_limit_mb": memory_limit_mb,
+                    "num_threads": num_threads,
+                    "verbose": verbose,
+                    "scanNumber": current_scanNumber,
+                })
 
             session.commit()
             set_props("alert-submit", {'is_open': True,
@@ -372,7 +386,7 @@ def submit_parameters(n,
             return
 
     # Second loop: Enqueue jobs to Redis
-    for i, wirerecon in enumerate(wirerecons_to_enqueue):
+    for i, spec in enumerate(wirerecons_to_enqueue):
         try:
             # Extract values for this scan
             current_data_path = data_path_list[i]
@@ -382,7 +396,7 @@ def submit_parameters(n,
             # Construct full data path from form values
             full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
             
-            scanPoints_srange = srange(wirerecon.scanPoints)
+            scanPoints_srange = srange(spec["scanPoints"])
             scanPoint_nums = scanPoints_srange.list()
             
             # Prepare lists of input and output files for all subjobs
@@ -392,41 +406,87 @@ def submit_parameters(n,
             for current_filename_prefix_i in current_filename_prefix:
                 for scanPoint_num in scanPoint_nums:
                     # Prepare parameters for wire reconstruction
-                    file_str = current_filename_prefix_i % scanPoint_num
+                    # Support three styles for filename prefixes:
+                    #  - Old-style printf e.g. "prefix_%d"
+                    #  - str.format e.g. "prefix_{}"
+                    #  - bare prefix e.g. "prefix_" (appends the scanPoint number)
+                    file_str = None
+                    try:
+                        if "%" in current_filename_prefix_i:
+                            # Try formatting with a single scanPoint first, then (scanNumber, scanPoint)
+                            try:
+                                file_str = current_filename_prefix_i % scanPoint_num
+                            except TypeError:
+                                try:
+                                    file_str = current_filename_prefix_i % (scanPoint_num,)
+                                except TypeError:
+                                    try:
+                                        file_str = current_filename_prefix_i % (spec["scanNumber"], scanPoint_num)
+                                    except Exception as e2:
+                                        raise TypeError(f"Invalid filenamePrefix percent-format '{current_filename_prefix_i}' with scan {spec['scanNumber']} and point {scanPoint_num}: {e2}")
+                        elif "{" in current_filename_prefix_i and "}" in current_filename_prefix_i:
+                            # Try str.format styles: positional or named
+                            try:
+                                # First assume single placeholder (scanPoint)
+                                file_str = current_filename_prefix_i.format(scanPoint_num)
+                            except Exception:
+                                try:
+                                    # Try two positional placeholders (scanNumber, scanPoint)
+                                    file_str = current_filename_prefix_i.format(spec["scanNumber"], scanPoint_num)
+                                except Exception:
+                                    try:
+                                        # Try named placeholders
+                                        file_str = current_filename_prefix_i.format(scanNumber=spec["scanNumber"], scanPoint=scanPoint_num)
+                                    except Exception as e2:
+                                        raise TypeError(f"Invalid filenamePrefix brace-format '{current_filename_prefix_i}' with scan {spec['scanNumber']} and point {scanPoint_num}: {e2}")
+                        else:
+                            file_str = f"{current_filename_prefix_i}{scanPoint_num}"
+                    except Exception as fmt_err:
+                        raise TypeError(f"Invalid filenamePrefix format '{current_filename_prefix_i}' with scan point {scanPoint_num}: {fmt_err}")
                     input_filename = file_str + ".h5"
                     input_file = os.path.join(full_data_path, input_filename)
                     output_base_name = file_str + "_"
-                    output_file_base = os.path.join(wirerecon.outputFolder, output_base_name)
+                    output_file_base = os.path.join(spec["outputFolder"], output_base_name)
                     
                     input_files.append(input_file)
                     output_files.append(output_file_base)
             
             # Enqueue the batch job with all files
-            depth_range = (wirerecon.depth_start, wirerecon.depth_end)
+            depth_range = (spec["depth_start"], spec["depth_end"])
             rq_job_id = enqueue_wire_reconstruction(
-                job_id=wirerecon.job_id,
+                job_id=spec["job_id"],
                 input_files=input_files,
                 output_files=output_files,
-                geometry_file=wirerecon.geoFile,  # Use full path
+                geometry_file=spec["geoFile"],  # Use full path
                 depth_range=depth_range,
-                resolution=wirerecon.depth_resolution,
-                percent_brightest=wirerecon.percent_brightest, #percent_to_process
-                wire_edge=wirerecon.wire_edges,  # Note: form uses 'wire_edges', function expects 'wire_edge'
-                memory_limit_mb=wirerecon.memory_limit_mb,
-                num_threads=wirerecon.num_threads,
-                verbose=wirerecon.verbose,
+                resolution=spec["depth_resolution"],
+                percent_brightest=spec["percent_brightest"], #percent_to_process
+                wire_edge=spec["wire_edges"],  # Note: form uses 'wire_edges', function expects 'wire_edge'
+                memory_limit_mb=spec["memory_limit_mb"],
+                num_threads=spec["num_threads"],
+                verbose=spec["verbose"],
                 detector_number=0  # Default detector number
             )
             
-            logger.info(f"Wire reconstruction batch job {wirerecon.job_id} enqueued with RQ ID: {rq_job_id} for {len(input_files)} files")
+            logger.info(f"Wire reconstruction batch job {spec['job_id']} enqueued with RQ ID: {rq_job_id} for {len(input_files)} files")
             set_props("alert-submit", {'is_open': True,
-                                       'children': f'Job {wirerecon.job_id} submitted to queue with {len(input_files)} file(s)',
+                                       'children': f'Job {spec["job_id"]} submitted to queue with {len(input_files)} file(s)',
                                        'color': 'info'})
         except Exception as e:
-            logger.error(f"Failed to enqueue job {wirerecon.job_id}: {e}")
-            set_props("alert-submit", {'is_open': True,
-                                       'children': f'Failed to queue job {wirerecon.job_id}: {str(e)}',
-                                       'color': 'danger'})
+            # Provide more context to help diagnose format issues and input parsing
+            logger.error(
+                f"Failed to enqueue job {spec['job_id']}: {e}. "
+                f"filenamePrefix='{current_filename_prefix_str}', "
+                f"parsed prefixes={current_filename_prefix}, "
+                f"scanPoints='{spec['scanPoints']}', data_path='{current_data_path}'"
+            )
+            set_props("alert-submit", {
+                'is_open': True,
+                'children': f'Failed to queue job {spec["job_id"]}: {str(e)}. '
+                            f'filenamePrefix={current_filename_prefix_str}, '
+                            f'scanPoints={spec["scanPoints"]}',
+                'color': 'danger'
+            })
 
 
 @dash.callback(
@@ -613,7 +673,7 @@ def load_scan_data_from_url(href):
                         # Show success message
                         set_props("alert-scan-loaded", {
                             'is_open': True, 
-                            'children': f'Scan {scan_id} data loaded successfully. Scan Number: {metadata_data.dataset_id}, Energy: {metadata_data.source_energy} {metadata_data.source_energy_unit}',
+                            'children': f'Scan {scan_id} data loaded successfully. Scan Number: {metadata_data.scanNumber}, Energy: {metadata_data.source_energy} {metadata_data.source_energy_unit}',
                             'color': 'success'
                         })
                     else:
