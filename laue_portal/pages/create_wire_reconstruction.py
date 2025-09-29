@@ -491,60 +491,60 @@ def submit_parameters(n,
             })
 
 
-@dash.callback(
-    Input('url-create-wirerecon','pathname'),
-    prevent_initial_call=True,
-)
-def get_wirerecons(path):
-    root_path = DEFAULT_VARIABLES["root_path"]
-    if path == '/create-wire-reconstruction':
-        # Create a WireRecon object with form defaults (not for database insertion)
-        wirerecon_form_data = db_schema.WireRecon(
-            scanNumber=WIRERECON_DEFAULTS["scanNumber"],
+# @dash.callback(
+#     Input('url-create-wirerecon','pathname'),
+#     prevent_initial_call=True,
+# )
+# def get_wirerecons(path):
+#     root_path = DEFAULT_VARIABLES["root_path"]
+#     if path == '/create-wire-reconstruction':
+#         # Create a WireRecon object with form defaults (not for database insertion)
+#         wirerecon_form_data = db_schema.WireRecon(
+#             scanNumber=WIRERECON_DEFAULTS["scanNumber"],
             
-            # User text
-            author=DEFAULT_VARIABLES["author"],
-            notes=DEFAULT_VARIABLES["notes"],
+#             # User text
+#             author=DEFAULT_VARIABLES["author"],
+#             notes=DEFAULT_VARIABLES["notes"],
             
-            # Recon constraints
-            geoFile=WIRERECON_DEFAULTS["geoFile"],
-            percent_brightest=WIRERECON_DEFAULTS["percent_brightest"],
-            wire_edges=WIRERECON_DEFAULTS["wire_edges"],
+#             # Recon constraints
+#             geoFile=WIRERECON_DEFAULTS["geoFile"],
+#             percent_brightest=WIRERECON_DEFAULTS["percent_brightest"],
+#             wire_edges=WIRERECON_DEFAULTS["wire_edges"],
             
-            # Depth parameters
-            depth_start=WIRERECON_DEFAULTS["depth_start"],
-            depth_end=WIRERECON_DEFAULTS["depth_end"],
-            depth_resolution=WIRERECON_DEFAULTS["depth_resolution"],
+#             # Depth parameters
+#             depth_start=WIRERECON_DEFAULTS["depth_start"],
+#             depth_end=WIRERECON_DEFAULTS["depth_end"],
+#             depth_resolution=WIRERECON_DEFAULTS["depth_resolution"],
             
-            # Compute parameters
-            num_threads=DEFAULT_VARIABLES["num_threads"],
-            memory_limit_mb=DEFAULT_VARIABLES["memory_limit_mb"],
+#             # Compute parameters
+#             num_threads=DEFAULT_VARIABLES["num_threads"],
+#             memory_limit_mb=DEFAULT_VARIABLES["memory_limit_mb"],
             
-            # Files
-            scanPoints=WIRERECON_DEFAULTS["scanPoints"],
-            scanPointslen=srange(WIRERECON_DEFAULTS["scanPoints"]).len(),
+#             # Files
+#             scanPoints=WIRERECON_DEFAULTS["scanPoints"],
+#             scanPointslen=srange(WIRERECON_DEFAULTS["scanPoints"]).len(),
             
-            # Output
-            outputFolder=WIRERECON_DEFAULTS["outputFolder"],
-            verbose=DEFAULT_VARIABLES["verbose"],
-        )
-        # Add root_path from DEFAULT_VARIABLES
-        wirerecon_form_data.root_path = root_path
-        with Session(session_utils.get_engine()) as session:
-            # # Get next wirerecon_id
-            # next_wirerecon_id = db_utils.get_next_id(session, db_schema.WireRecon)
-            # # Store next_wirerecon_id and update title
-            # set_props('next-wire-recon-id', {'value': next_wirerecon_id})
-            # set_props('wirerecon-title', {'children': f"New wire recon {next_wirerecon_id}"})
+#             # Output
+#             outputFolder=WIRERECON_DEFAULTS["outputFolder"],
+#             verbose=DEFAULT_VARIABLES["verbose"],
+#         )
+#         # Add root_path from DEFAULT_VARIABLES
+#         wirerecon_form_data.root_path = root_path
+#         with Session(session_utils.get_engine()) as session:
+#             # # Get next wirerecon_id
+#             # next_wirerecon_id = db_utils.get_next_id(session, db_schema.WireRecon)
+#             # # Store next_wirerecon_id and update title
+#             # set_props('next-wire-recon-id', {'value': next_wirerecon_id})
+#             # set_props('wirerecon-title', {'children': f"New wire recon {next_wirerecon_id}"})
             
-            # Retrieve data_path and filenamePrefix from catalog data
-            catalog_data = get_catalog_data(session, WIRERECON_DEFAULTS["scanNumber"], root_path, CATALOG_DEFAULTS)
-        wirerecon_form_data.data_path = catalog_data["data_path"]
-        wirerecon_form_data.filenamePrefix = catalog_data["filenamePrefix"]
+#             # Retrieve data_path and filenamePrefix from catalog data
+#             catalog_data = get_catalog_data(session, WIRERECON_DEFAULTS["scanNumber"], root_path, CATALOG_DEFAULTS)
+#         wirerecon_form_data.data_path = catalog_data["data_path"]
+#         wirerecon_form_data.filenamePrefix = catalog_data["filenamePrefix"]
             
-        set_wire_recon_form_props(wirerecon_form_data)
-    else:
-        raise PreventUpdate
+#         set_wire_recon_form_props(wirerecon_form_data)
+#     else:
+#         raise PreventUpdate
 
 @dash.callback(
     Input('url-create-wirerecon', 'href'),

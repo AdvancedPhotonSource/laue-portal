@@ -621,91 +621,91 @@ def submit_parameters(n,
                                         'color': 'danger'})
 
 
-@dash.callback(
-    Input('url-create-peakindexing','pathname'),
-    prevent_initial_call=True,
-)
-def get_peakindexings(path):
-    root_path = DEFAULT_VARIABLES["root_path"]
-    if path == '/create-peakindexing':
-        # Create a PeakIndex object with form defaults (not for database insertion)
-        peakindex_form_data = db_schema.PeakIndex(
-            scanNumber=PEAKINDEX_DEFAULTS.get("scanNumber", 0),
+# @dash.callback(
+#     Input('url-create-peakindexing','pathname'),
+#     prevent_initial_call=True,
+# )
+# def get_peakindexings(path):
+#     root_path = DEFAULT_VARIABLES["root_path"]
+#     if path == '/create-peakindexing':
+#         # Create a PeakIndex object with form defaults (not for database insertion)
+#         peakindex_form_data = db_schema.PeakIndex(
+#             scanNumber=PEAKINDEX_DEFAULTS.get("scanNumber", 0),
             
-            # User text
-            author=DEFAULT_VARIABLES["author"],
-            notes=DEFAULT_VARIABLES["notes"],
+#             # User text
+#             author=DEFAULT_VARIABLES["author"],
+#             notes=DEFAULT_VARIABLES["notes"],
             
-            # Processing parameters
-            # peakProgram=PEAKINDEX_DEFAULTS["peakProgram"],
-            threshold=PEAKINDEX_DEFAULTS["threshold"],
-            thresholdRatio=PEAKINDEX_DEFAULTS["thresholdRatio"],
-            maxRfactor=PEAKINDEX_DEFAULTS["maxRfactor"],
-            boxsize=PEAKINDEX_DEFAULTS["boxsize"],
-            max_number=PEAKINDEX_DEFAULTS["max_peaks"],
-            min_separation=PEAKINDEX_DEFAULTS["min_separation"],
-            peakShape=PEAKINDEX_DEFAULTS["peakShape"],
-            # scanPointStart=PEAKINDEX_DEFAULTS["scanPointStart"],
-            # scanPointEnd=PEAKINDEX_DEFAULTS["scanPointEnd"],
-            # depthRangeStart=PEAKINDEX_DEFAULTS.get("depthRangeStart"),
-            # depthRangeEnd=PEAKINDEX_DEFAULTS.get("depthRangeEnd"),
-            scanPoints=PEAKINDEX_DEFAULTS["scanPoints"],
-            scanPointslen=srange(PEAKINDEX_DEFAULTS["scanPoints"]).len(),
-            depthRange=PEAKINDEX_DEFAULTS["depthRange"],
-            depthRangelen=srange(PEAKINDEX_DEFAULTS["depthRange"]).len(),
-            detectorCropX1=PEAKINDEX_DEFAULTS["detectorCropX1"],
-            detectorCropX2=PEAKINDEX_DEFAULTS["detectorCropX2"],
-            detectorCropY1=PEAKINDEX_DEFAULTS["detectorCropY1"],
-            detectorCropY2=PEAKINDEX_DEFAULTS["detectorCropY2"],
-            min_size=PEAKINDEX_DEFAULTS["min_size"],
-            max_peaks=PEAKINDEX_DEFAULTS["max_peaks"],
-            smooth=PEAKINDEX_DEFAULTS["smooth"],
-            maskFile=PEAKINDEX_DEFAULTS["maskFile"],
-            indexKeVmaxCalc=PEAKINDEX_DEFAULTS["indexKeVmaxCalc"],
-            indexKeVmaxTest=PEAKINDEX_DEFAULTS["indexKeVmaxTest"],
-            indexAngleTolerance=PEAKINDEX_DEFAULTS["indexAngleTolerance"],
-            indexH=PEAKINDEX_DEFAULTS["indexH"],
-            indexK=PEAKINDEX_DEFAULTS["indexK"],
-            indexL=PEAKINDEX_DEFAULTS["indexL"],
-            indexCone=PEAKINDEX_DEFAULTS["indexCone"],
-            energyUnit=PEAKINDEX_DEFAULTS["energyUnit"],
-            exposureUnit=PEAKINDEX_DEFAULTS["exposureUnit"],
-            cosmicFilter=PEAKINDEX_DEFAULTS["cosmicFilter"],
-            recipLatticeUnit=PEAKINDEX_DEFAULTS["recipLatticeUnit"],
-            latticeParametersUnit=PEAKINDEX_DEFAULTS["latticeParametersUnit"],
-            # peaksearchPath=PEAKINDEX_DEFAULTS["peaksearchPath"],
-            # p2qPath=PEAKINDEX_DEFAULTS["p2qPath"],
-            # indexingPath=PEAKINDEX_DEFAULTS["indexingPath"],
+#             # Processing parameters
+#             # peakProgram=PEAKINDEX_DEFAULTS["peakProgram"],
+#             threshold=PEAKINDEX_DEFAULTS["threshold"],
+#             thresholdRatio=PEAKINDEX_DEFAULTS["thresholdRatio"],
+#             maxRfactor=PEAKINDEX_DEFAULTS["maxRfactor"],
+#             boxsize=PEAKINDEX_DEFAULTS["boxsize"],
+#             max_number=PEAKINDEX_DEFAULTS["max_peaks"],
+#             min_separation=PEAKINDEX_DEFAULTS["min_separation"],
+#             peakShape=PEAKINDEX_DEFAULTS["peakShape"],
+#             # scanPointStart=PEAKINDEX_DEFAULTS["scanPointStart"],
+#             # scanPointEnd=PEAKINDEX_DEFAULTS["scanPointEnd"],
+#             # depthRangeStart=PEAKINDEX_DEFAULTS.get("depthRangeStart"),
+#             # depthRangeEnd=PEAKINDEX_DEFAULTS.get("depthRangeEnd"),
+#             scanPoints=PEAKINDEX_DEFAULTS["scanPoints"],
+#             scanPointslen=srange(PEAKINDEX_DEFAULTS["scanPoints"]).len(),
+#             depthRange=PEAKINDEX_DEFAULTS["depthRange"],
+#             depthRangelen=srange(PEAKINDEX_DEFAULTS["depthRange"]).len(),
+#             detectorCropX1=PEAKINDEX_DEFAULTS["detectorCropX1"],
+#             detectorCropX2=PEAKINDEX_DEFAULTS["detectorCropX2"],
+#             detectorCropY1=PEAKINDEX_DEFAULTS["detectorCropY1"],
+#             detectorCropY2=PEAKINDEX_DEFAULTS["detectorCropY2"],
+#             min_size=PEAKINDEX_DEFAULTS["min_size"],
+#             max_peaks=PEAKINDEX_DEFAULTS["max_peaks"],
+#             smooth=PEAKINDEX_DEFAULTS["smooth"],
+#             maskFile=PEAKINDEX_DEFAULTS["maskFile"],
+#             indexKeVmaxCalc=PEAKINDEX_DEFAULTS["indexKeVmaxCalc"],
+#             indexKeVmaxTest=PEAKINDEX_DEFAULTS["indexKeVmaxTest"],
+#             indexAngleTolerance=PEAKINDEX_DEFAULTS["indexAngleTolerance"],
+#             indexH=PEAKINDEX_DEFAULTS["indexH"],
+#             indexK=PEAKINDEX_DEFAULTS["indexK"],
+#             indexL=PEAKINDEX_DEFAULTS["indexL"],
+#             indexCone=PEAKINDEX_DEFAULTS["indexCone"],
+#             energyUnit=PEAKINDEX_DEFAULTS["energyUnit"],
+#             exposureUnit=PEAKINDEX_DEFAULTS["exposureUnit"],
+#             cosmicFilter=PEAKINDEX_DEFAULTS["cosmicFilter"],
+#             recipLatticeUnit=PEAKINDEX_DEFAULTS["recipLatticeUnit"],
+#             latticeParametersUnit=PEAKINDEX_DEFAULTS["latticeParametersUnit"],
+#             # peaksearchPath=PEAKINDEX_DEFAULTS["peaksearchPath"],
+#             # p2qPath=PEAKINDEX_DEFAULTS["p2qPath"],
+#             # indexingPath=PEAKINDEX_DEFAULTS["indexingPath"],
             
-            # File paths
-            outputFolder=PEAKINDEX_DEFAULTS["outputFolder"],
-            # filefolder=CATALOG_DEFAULTS["filefolder"],
-            geoFile=PEAKINDEX_DEFAULTS["geoFile"],
-            crystFile=PEAKINDEX_DEFAULTS["crystFile"],
+#             # File paths
+#             outputFolder=PEAKINDEX_DEFAULTS["outputFolder"],
+#             # filefolder=CATALOG_DEFAULTS["filefolder"],
+#             geoFile=PEAKINDEX_DEFAULTS["geoFile"],
+#             crystFile=PEAKINDEX_DEFAULTS["crystFile"],
             
-            # Other fields
-            depth=PEAKINDEX_DEFAULTS["depth"],
-            beamline=PEAKINDEX_DEFAULTS["beamline"],
-        )
+#             # Other fields
+#             depth=PEAKINDEX_DEFAULTS["depth"],
+#             beamline=PEAKINDEX_DEFAULTS["beamline"],
+#         )
         
-        # Add root_path from DEFAULT_VARIABLES
-        peakindex_form_data.root_path = root_path
-        with Session(session_utils.get_engine()) as session:
-            # Get next peakindex_id
-            next_peakindex_id = db_utils.get_next_id(session, db_schema.PeakIndex)                                
-            # Store next_peakindex_id and update title
-            set_props('next-peakindex-id', {'value': next_peakindex_id})
-            set_props('peakindex-title', {'children': f"New peak indexing {next_peakindex_id}"})
+#         # Add root_path from DEFAULT_VARIABLES
+#         peakindex_form_data.root_path = root_path
+#         with Session(session_utils.get_engine()) as session:
+#             # Get next peakindex_id
+#             next_peakindex_id = db_utils.get_next_id(session, db_schema.PeakIndex)                                
+#             # Store next_peakindex_id and update title
+#             set_props('next-peakindex-id', {'value': next_peakindex_id})
+#             set_props('peakindex-title', {'children': f"New peak indexing {next_peakindex_id}"})
             
-            # Retrieve data_path and filenamePrefix from catalog data
-            catalog_data = get_catalog_data(session, PEAKINDEX_DEFAULTS["scanNumber"], root_path, CATALOG_DEFAULTS)
-        peakindex_form_data.data_path = catalog_data["data_path"]
-        peakindex_form_data.filenamePrefix = catalog_data["filenamePrefix"]
+#             # Retrieve data_path and filenamePrefix from catalog data
+#             catalog_data = get_catalog_data(session, PEAKINDEX_DEFAULTS["scanNumber"], root_path, CATALOG_DEFAULTS)
+#         peakindex_form_data.data_path = catalog_data["data_path"]
+#         peakindex_form_data.filenamePrefix = catalog_data["filenamePrefix"]
             
-        # Populate the form with the defaults
-        set_peakindex_form_props(peakindex_form_data)
-    else:
-        raise PreventUpdate
+#         # Populate the form with the defaults
+#         set_peakindex_form_props(peakindex_form_data)
+#     else:
+#         raise PreventUpdate
 
 @dash.callback(
     Input('url-create-peakindexing', 'href'),
