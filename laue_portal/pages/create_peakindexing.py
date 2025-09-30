@@ -914,16 +914,24 @@ def load_scan_data_from_url(href):
                         set_peakindex_form_props(peakindex_form_data)
                         
                         # Show success message
+                        if peakindex_id:
+                            message = f'Successfully loaded data from peak index {peakindex_id} into the form.'
+                        elif recon_id:
+                            message = f'Successfully loaded data for reconstruction {recon_id} into the form.'
+                        elif wirerecon_id:
+                            message = f'Successfully loaded data for wire reconstruction {wirerecon_id} into the form.'
+                        else:
+                            message = f'Successfully loaded data for scan {scan_id} into the form.'
                         set_props("alert-scan-loaded", {
-                            'is_open': True, 
-                            'children': f'Scan {scan_id} data loaded successfully. Scan Number: {metadata_data.scanNumber}, Energy: {metadata_data.source_energy} {metadata_data.source_energy_unit}',
+                            'is_open': True,
+                            'children': message,
                             'color': 'success'
                         })
                     else:
                         # Show error if scan not found
                         set_props("alert-scan-loaded", {
-                            'is_open': True, 
-                            'children': f'Scan {scan_id} not found in database',
+                            'is_open': True,
+                            'children': f'Could not find scan {scan_id} in the database. Displaying default values.',
                             'color': 'warning'
                         })
                         
@@ -950,6 +958,8 @@ def load_scan_data_from_url(href):
                     if not peakindex_ids: peakindex_ids = [None] * len(scan_ids)
 
                     peakindex_form_data_list = []
+                    found_items = []
+                    not_found_items = []
                     for i, current_scan_id in enumerate(scan_ids):
                         current_wirerecon_id = wirerecon_ids[i]
                         current_recon_id = recon_ids[i]
@@ -959,6 +969,14 @@ def load_scan_data_from_url(href):
                         metadata_data = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == current_scan_id).first()
                         # scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == current_scan_id).all()
                         if metadata_data:
+                            if current_peakindex_id:
+                                found_items.append(f"peak index {current_peakindex_id}")
+                            elif current_recon_id:
+                                found_items.append(f"reconstruction {current_recon_id}")
+                            elif current_wirerecon_id:
+                                found_items.append(f"wire reconstruction {current_wirerecon_id}")
+                            else:
+                                found_items.append(f"scan {current_scan_id}")
 
                             # Determine output folder format based on if reconstruction ID
                             outputFolder = PEAKINDEX_DEFAULTS["outputFolder"]
@@ -1047,20 +1065,15 @@ def load_scan_data_from_url(href):
                                 peakindex_form_data.filenamePrefix = catalog_data.get('filenamePrefix', [])
                             
                             peakindex_form_data_list.append(peakindex_form_data)
-
-                        #     # Show success message
-                        #     set_props("alert-scan-loaded", {
-                        #         'is_open': True, 
-                        #         'children': f'Scan {scan_id} data loaded successfully. Scan Number: {metadata_data.scanNumber}, Energy: {metadata_data.source_energy} {metadata_data.source_energy_unit}',
-                        #         'color': 'success'
-                        #     })
-                        # else:
-                        #     # Show error if scan not found
-                        #     set_props("alert-scan-loaded", {
-                        #         'is_open': True, 
-                        #         'children': f'Scan {scan_id} not found in database',
-                        #         'color': 'warning'
-                        #     })
+                        else:
+                            if current_peakindex_id:
+                                not_found_items.append(f"peak index {current_peakindex_id}")
+                            elif current_recon_id:
+                                not_found_items.append(f"reconstruction {current_recon_id}")
+                            elif current_wirerecon_id:
+                                not_found_items.append(f"wire reconstruction {current_wirerecon_id}")
+                            else:
+                                not_found_items.append(f"scan {current_scan_id}")
                         
                     # Create pooled peakindex_form_data by combining values from all scans
                     if peakindex_form_data_list:
@@ -1090,8 +1103,31 @@ def load_scan_data_from_url(href):
                         # pooled_peakindex_form_data.root_path = root_path
                         # Populate the form with the defaults
                         set_peakindex_form_props(pooled_peakindex_form_data)
+
+                        # Set alert based on what was found
+                        if not_found_items:
+                            # Partial success
+                            set_props("alert-scan-loaded", {
+                                'is_open': True,
+                                'children': f"Loaded data for {len(found_items)} items. Could not find: {', '.join(not_found_items)}.",
+                                'color': 'warning'
+                            })
+                        else:
+                            # Full success
+                            set_props("alert-scan-loaded", {
+                                'is_open': True,
+                                'children': f"Successfully loaded and merged data from {len(found_items)} items into the form.",
+                                'color': 'success'
+                            })
                     else:
                         # Fallback if no valid scans found
+                        if not_found_items:
+                            set_props("alert-scan-loaded", {
+                                'is_open': True,
+                                'children': f"Could not find any of the requested items: {', '.join(not_found_items)}. Displaying default values.",
+                                'color': 'danger'
+                            })
+                        
                         peakindex_form_data = db_schema.PeakIndex(
                             scanNumber=str(scan_id_str).replace('$','').replace(',','; '),
                             

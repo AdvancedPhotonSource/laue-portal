@@ -685,16 +685,20 @@ def load_scan_data_from_url(href):
                         set_wire_recon_form_props(wirerecon_form_data)#,read_only=True)
                         
                         # Show success message
+                        if wirerecon_id:
+                            message = f'Successfully loaded data from wire reconstruction {wirerecon_id} into the form.'
+                        else:
+                            message = f'Successfully loaded data for scan {scan_id} into the form.'
                         set_props("alert-scan-loaded", {
-                            'is_open': True, 
-                            'children': f'Scan {scan_id} data loaded successfully. Scan Number: {metadata_data.scanNumber}, Energy: {metadata_data.source_energy} {metadata_data.source_energy_unit}',
+                            'is_open': True,
+                            'children': message,
                             'color': 'success'
                         })
                     else:
                         # Show error if scan not found
                         set_props("alert-scan-loaded", {
-                            'is_open': True, 
-                            'children': f'Scan {scan_id} not found in database',
+                            'is_open': True,
+                            'children': f'Could not find scan {scan_id} in the database. Displaying default values.',
                             'color': 'warning'
                         })
 
@@ -718,6 +722,8 @@ def load_scan_data_from_url(href):
                     
                     # Collect data paths and filename prefixes for each scan
                     wirerecon_form_data_list = []
+                    found_items = []
+                    not_found_items = []
                     for i, current_scan_id in enumerate(scan_ids):
                         current_wirerecon_id = wirerecon_ids[i]
                         
@@ -726,6 +732,10 @@ def load_scan_data_from_url(href):
                         # scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_id).all()
                         
                         if metadata_data:
+                            if current_wirerecon_id:
+                                found_items.append(f"wire reconstruction {current_wirerecon_id}")
+                            else:
+                                found_items.append(f"scan {current_scan_id}")
                             
                             output_folder = WIRERECON_DEFAULTS["outputFolder"]
                             
@@ -778,20 +788,11 @@ def load_scan_data_from_url(href):
                                 wirerecon_form_data.filenamePrefix = catalog_data.get('filenamePrefix', [])
 
                             wirerecon_form_data_list.append(wirerecon_form_data)
-                    
-                        #     # Show success message
-                        #     set_props("alert-scan-loaded", {
-                        #         'is_open': True, 
-                        #         'children': f'Scan {scan_id} data loaded successfully. Scan Number: {metadata_data.scanNumber}, Energy: {metadata_data.source_energy} {metadata_data.source_energy_unit}',
-                        #         'color': 'success'
-                        #     })
-                        # else:
-                        #     # Show error if scan not found
-                        #     set_props("alert-scan-loaded", {
-                        #         'is_open': True, 
-                        #         'children': f'Scan {scan_id} not found in database',
-                        #         'color': 'warning'
-                        #     })
+                        else:
+                            if current_wirerecon_id:
+                                not_found_items.append(f"wire reconstruction {current_wirerecon_id}")
+                            else:
+                                not_found_items.append(f"scan {current_scan_id}")
 
                     # Create pooled wirerecon_form_data by combining values from all scans
                     if wirerecon_form_data_list:
@@ -821,8 +822,31 @@ def load_scan_data_from_url(href):
                         # pooled_wirerecon_form_data.root_path = root_path
                         # Populate the form with the defaults
                         set_wire_recon_form_props(pooled_wirerecon_form_data)
+
+                        # Set alert based on what was found
+                        if not_found_items:
+                            # Partial success
+                            set_props("alert-scan-loaded", {
+                                'is_open': True,
+                                'children': f"Loaded data for {len(found_items)} items. Could not find: {', '.join(not_found_items)}.",
+                                'color': 'warning'
+                            })
+                        else:
+                            # Full success
+                            set_props("alert-scan-loaded", {
+                                'is_open': True,
+                                'children': f"Successfully loaded and merged data from {len(found_items)} items into the form.",
+                                'color': 'success'
+                            })
                     else:
                         # Fallback if no valid scans found
+                        if not_found_items:
+                            set_props("alert-scan-loaded", {
+                                'is_open': True,
+                                'children': f"Could not find any of the requested items: {', '.join(not_found_items)}. Displaying default values.",
+                                'color': 'danger'
+                            })
+
                         wirerecon_form_data = db_schema.WireRecon(
                             scanNumber=str(scan_id_str).replace('$','').replace(',','; '),
                             
