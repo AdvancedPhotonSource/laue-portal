@@ -58,16 +58,22 @@ def load_wire_recon_data(href):
                     root_path = DEFAULT_VARIABLES.get("root_path", "")
                     wirerecon_data.root_path = root_path
                     
-                    # Retrieve data_path and filenamePrefix from catalog data
-                    catalog_data = get_catalog_data(session, wirerecon_data.scanNumber, root_path)
-                    wirerecon_data.data_path = catalog_data["data_path"]
-                    wirerecon_data.filenamePrefix = catalog_data["filenamePrefix"]
-                    
                     # Convert full paths back to relative paths for display
                     if wirerecon_data.geoFile:
                         wirerecon_data.geoFile = remove_root_path_prefix(wirerecon_data.geoFile, root_path)
                     if wirerecon_data.outputFolder:
                         wirerecon_data.outputFolder = remove_root_path_prefix(wirerecon_data.outputFolder, root_path)
+
+                    if wirerecon_data.filefolder:
+                        wirerecon_data.data_path = remove_root_path_prefix(wirerecon_data.filefolder, root_path)
+
+                    if any([not hasattr(wirerecon_data, field) for field in ['data_path','filenamePrefix']]):
+                        # Retrieve data_path and filenamePrefix from catalog data
+                        catalog_data = get_catalog_data(session, wirerecon_data.scanNumber, root_path)
+                    if not hasattr(wirerecon_data, 'data_path'):
+                        wirerecon_data.data_path = catalog_data.get('data_path', '')
+                    if not hasattr(wirerecon_data, 'filenamePrefix'):
+                        wirerecon_data.filenamePrefix = catalog_data.get('filenamePrefix', [])
                     
                     # Populate the form with the data
                     set_wire_recon_form_props(wirerecon_data, read_only=True)

@@ -326,9 +326,16 @@ def submit_parameters(n,
                     )
                     session.add(subjob)
 
+                # Get filefolder and filenamePrefix
+                current_data_path = data_path_list[i]
+                current_filename_prefix_str = filenamePrefix_list[i]
+                current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
+
                 wirerecon = db_schema.WireRecon(
                     scanNumber=current_scanNumber,
                     job_id=job_id,
+                    filefolder=os.path.join(root_path, current_data_path.lstrip('/')),
+                    filenamePrefix=current_filename_prefix,
                     
                     # User text
                     author=author_list[i],
@@ -362,6 +369,8 @@ def submit_parameters(n,
                 wirerecons_to_enqueue.append({
                     "job_id": job_id,
                     "scanPoints": current_scanPoints,
+                    "filefolder": os.path.join(root_path, current_data_path.lstrip('/')),
+                    "filenamePrefix": current_filename_prefix,
                     "outputFolder": full_output_folder,
                     "geoFile": full_geometry_file,
                     "depth_start": depth_start_list[i],
@@ -391,12 +400,8 @@ def submit_parameters(n,
     for i, spec in enumerate(wirerecons_to_enqueue):
         try:
             # Extract values for this scan
-            current_data_path = data_path_list[i]
-            current_filename_prefix_str = filenamePrefix_list[i]
-            current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
-            
-            # Construct full data path from form values
-            full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
+            full_data_path = spec["filefolder"]
+            current_filename_prefix = spec["filenamePrefix"]
             
             scanPoints_srange = srange(spec["scanPoints"])
             scanPoint_nums = scanPoints_srange.list()
@@ -615,6 +620,10 @@ def load_scan_data_from_url(href):
                                     
                                     # Convert file path to relative path
                                     wirerecon_form_data.geoFile = remove_root_path_prefix(wirerecon_data.geoFile, root_path)
+                                    if wirerecon_data.filefolder:
+                                        wirerecon_form_data.data_path = remove_root_path_prefix(wirerecon_data.filefolder, root_path)
+                                    if wirerecon_data.filenamePrefix:
+                                        wirerecon_form_data.filenamePrefix = wirerecon_data.filenamePrefix
                                 else:
                                     # Show warning if wirerecon not found
                                     set_props("alert-scan-loaded", {
@@ -663,11 +672,14 @@ def load_scan_data_from_url(href):
                         
                         # Add root_path from DEFAULT_VARIABLES
                         wirerecon_form_data.root_path = root_path
-                        
-                        # Retrieve data_path and filenamePrefix from catalog data
-                        catalog_data = get_catalog_data(session, scan_id, root_path, CATALOG_DEFAULTS)
-                        wirerecon_form_data.data_path = catalog_data["data_path"]
-                        wirerecon_form_data.filenamePrefix = catalog_data["filenamePrefix"]
+                                               
+                        if any([not hasattr(wirerecon_form_data, field) for field in ['data_path','filenamePrefix']]):
+                            # Retrieve data_path and filenamePrefix from catalog data
+                            catalog_data = get_catalog_data(session, scan_id, root_path, CATALOG_DEFAULTS)
+                        if not hasattr(wirerecon_form_data, 'data_path'):
+                            wirerecon_form_data.data_path = catalog_data.get('data_path', '')
+                        if not hasattr(wirerecon_form_data, 'filenamePrefix'):
+                            wirerecon_form_data.filenamePrefix = catalog_data.get('filenamePrefix', [])
                         
                         # Populate the form with the defaults
                         set_wire_recon_form_props(wirerecon_form_data)#,read_only=True)
@@ -736,6 +748,10 @@ def load_scan_data_from_url(href):
                                         wirerecon_form_data.outputFolder = output_folder
                                         # Convert file paths to relative paths
                                         wirerecon_form_data.geoFile = remove_root_path_prefix(wirerecon_data.geoFile, root_path)
+                                        if wirerecon_data.filefolder:
+                                            wirerecon_form_data.data_path = remove_root_path_prefix(wirerecon_data.filefolder, root_path)
+                                        if wirerecon_data.filenamePrefix:
+                                            wirerecon_form_data.filenamePrefix = wirerecon_data.filenamePrefix
                                 
                                 except (ValueError, Exception):
                                     # If wirerecon_id is not valid or not found, create defaults
@@ -753,10 +769,13 @@ def load_scan_data_from_url(href):
                             # Add root_path from DEFAULT_VARIABLES
                             wirerecon_form_data.root_path = root_path
                             
-                            # Retrieve data_path and filenamePrefix from catalog data
-                            catalog_data = get_catalog_data(session, current_scan_id, root_path, CATALOG_DEFAULTS)
-                            wirerecon_form_data.data_path = catalog_data["data_path"]
-                            wirerecon_form_data.filenamePrefix = catalog_data["filenamePrefix"]
+                            if any([not hasattr(wirerecon_form_data, field) for field in ['data_path','filenamePrefix']]):
+                                # Retrieve data_path and filenamePrefix from catalog data
+                                catalog_data = get_catalog_data(session, current_scan_id, root_path, CATALOG_DEFAULTS)
+                            if not hasattr(wirerecon_form_data, 'data_path'):
+                                wirerecon_form_data.data_path = catalog_data.get('data_path', '')
+                            if not hasattr(wirerecon_form_data, 'filenamePrefix'):
+                                wirerecon_form_data.filenamePrefix = catalog_data.get('filenamePrefix', [])
 
                             wirerecon_form_data_list.append(wirerecon_form_data)
                     
