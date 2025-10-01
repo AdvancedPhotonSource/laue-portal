@@ -30,12 +30,12 @@ JOB_DEFAULTS = {
 PEAKINDEX_DEFAULTS = {
     "scanNumber": 276994,
     # "peakProgram": "peaksearch",
-    "threshold": 100, #250
-    "thresholdRatio": -1,
-    "maxRfactor": 2.0, #0.5
-    "boxsize": 5, #18
+    "threshold": "", #250
+    "thresholdRatio": "",
+    "maxRfactor": 0.5, #0.5
+    "boxsize": 18, #18
     "max_number": 300,
-    "min_separation": 10, #40
+    "min_separation": 20, #40
     "peakShape": "L", #"Lorentzian"
     # "scanPointStart": 1,
     # "scanPointEnd": 2,
@@ -49,9 +49,9 @@ PEAKINDEX_DEFAULTS = {
     "max_peaks": 50,
     "smooth": False, #0
     "maskFile": "None", 
-    "indexKeVmaxCalc": 30.0, #17.2
+    "indexKeVmaxCalc": 17.2, #17.2
     "indexKeVmaxTest": 35.0, #30.0
-    "indexAngleTolerance": 0.12, #0.1
+    "indexAngleTolerance": 0.1, #0.1
     "indexH": 0, #1
     "indexK": 0, #1
     "indexL": 1,
@@ -109,24 +109,119 @@ layout = dbc.Container(
             color="success",
         ),
         html.Hr(),
-        html.Center(
-            html.Div(
+        
+        dbc.Row(
                 [
-                    html.Div([
-                            dcc.Upload(dbc.Button('Upload Config'), id='upload-peakindexing-config'),
-                    ], style={'display':'inline-block'}),
+                    dbc.Col(
+                        html.H3(id="peakindex-title", children="New peak indexing"),
+                        width="auto",   # shrink to content
+                    ),
+                    dbc.Col(
+                        dbc.Button(
+                            "Set from ...",
+                            id="upload-peakindexing-config",
+                            color="secondary",
+                            style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
+                        ),
+                        width="auto",
+                        className="ms-3",  # small gap from title
+                    ),
+                    dbc.Col(
+                        dbc.Button(
+                            "Validate",
+                            id="validate-btn",
+                            color="secondary",
+                            style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
+                        ),
+                        width="auto",
+                        className="ms-3",  # small gap from title
+                    ),
+                    dbc.Col(
+                        dbc.Button(
+                            "Submit",
+                            id="submit_peakindexing",
+                            color="primary",
+                            style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
+                        ),
+                        width="auto",
+                        className="ms-2",
+                    ),
                 ],
-            )
-        ),
+                className="g-2",     # gutter between cols
+                justify="center",     # CENTER horizontally
+                align="center",       # CENTER vertically
+            ),
         html.Hr(),
-        html.Center(
-            html.H3(id="peakindex-title", children="New peak indexing"),
+    
+        dbc.Row([
+                dbc.Col(
+                    dbc.Alert([
+                                html.H4("Validate status: Warning !", className="alert-heading"),
+                                html.Hr(),
+                                html.P("Press button Validate! or Some parameter (which one) seems to be too big! Better check it! ", className="mb-0"),
+                            ],
+                            color="warning",  # <- set the color here
+                    ),
+                ),
+                ],
+                className="g-0",            # g-0 removes row gutters
+                align="center",
         ),
-        html.Hr(),
-        html.Center(
-            dbc.Button('Submit', id='submit_peakindexing', color='primary'),
+        ######## Below are other examples of the Alert 
+        # this is just example  but it should be changable to something like that if Error
+        dbc.Row([
+                dbc.Col(
+                    dbc.Alert([
+                                html.H4("Validate status: Error !", className="alert-heading"),
+                                html.Hr(),
+                                html.P("Check your file inputs! or check Peak Search parameters! or Check Index Parameters!", className="mb-0"),
+                            ],
+                            color="danger",  # <- set the color here
+                    ),
+                ),
+        
+                ],
+                className="g-0",            # g-0 removes row gutters
+                align="center",
         ),
+        # this is just example  but it should be changable to something like that if Success
+        dbc.Row([
+                dbc.Col(
+                    dbc.Alert([
+                                html.H4("Validate status: Success !", className="alert-heading"),
+                                html.Hr(),
+                                html.P("You can Submit!", className="mb-0"),
+                            ],
+                            color="success",  # <- set the color here
+                    ),
+                 ),
+                ],
+                className="g-0",            # g-0 removes row gutters
+                align="center",
+        ),
+        
         html.Hr(),
+        dbc.Row([
+                dbc.Col(
+                    dbc.InputGroup([
+                            dbc.InputGroupText("Author"),
+                            dbc.Input(
+                                type="text",
+                                id="author-input",
+                                placeholder="Required! Enter author or Tag for the reconstruction",
+                            ),
+                        ],
+                        className="w-100 mb-0",
+                    ),
+                    md=12, xs=12,   # full row on small, wide on medium+
+                    width = "auto",
+                    style={"minWidth": "300px"},
+                ),
+            ],
+            justify="center",
+            className="mb-3",
+            align="center",
+        ),
         peakindex_form,
         dcc.Store(id="next-peakindex-id"),
     ],
@@ -637,7 +732,7 @@ def get_peakindexings(path):
             next_peakindex_id = db_utils.get_next_id(session, db_schema.PeakIndex)                                
             # Store next_peakindex_id and update title
             set_props('next-peakindex-id', {'value': next_peakindex_id})
-            set_props('peakindex-title', {'children': f"New peak indexing {next_peakindex_id}"})
+            set_props('peakindex-title', {'children': f"New LaueGo Indexing"})
             
             # Retrieve data_path and filenamePrefix from catalog data
             catalog_data = get_catalog_data(session, PEAKINDEX_DEFAULTS["scanNumber"], root_path, CATALOG_DEFAULTS)

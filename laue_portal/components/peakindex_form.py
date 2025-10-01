@@ -5,65 +5,267 @@ from laue_portal.components.form_base import _stack, _field, _select, _ckbx
 
 peakindex_form = dbc.Row(
                 [
+                    dbc.Col(
                     dbc.Accordion(
                         [
                         dbc.AccordionItem(
                             [
+                                dbc.Row(
+                                        [
+                                            dbc.Col(
+                                                dbc.InputGroup(
+                                                    [
+                                                        dbc.InputGroupText("ID Number: SN# | WR# | MR# | PI#"),
+                                                        dbc.Input(id="IDnumber", type="text", placeholder="e.g. SN123456 or WR1 or MR3 or PI4"),
+                                                    ],
+                                                    className="w-100",            # input group spans the col
+                                                ),
+                                                className="flex-grow-1",          # THIS makes it expand
+                                                style={"minWidth": 0},            # avoid overflow when very narrow
+                                            ),
+                                            dbc.Col(
+                                                dbc.Button(
+                                                    "Update path fields",
+                                                    id="update-path-fields-btn",
+                                                    color="secondary",
+                                                    size="md",
+                                                    style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size
+                                                ),
+                                                width="auto",                      # column sizes to content
+                                                className="d-flex justify-content-end",  # optional: keep at right edge
+                                            ),
+                                        ],
+                                        className="mb-3",
+                                        align="center",
+                                    ),
                                 _stack(
                                     [
-                                        _field("Scan Number", "scanNumber", size='md'),
-                                        _field("Root Path", "root_path", size='md'),
-                                    ]
-                                ),
-                                _stack(
-                                    [   
-                                        # _field("Dataset", "dataset", size='lg'),
-                                        # _field("Scan Number", "scanNumber", size='md'),
-                                        _field("Recon ID", "recon_id", size='md', kwargs={'value':None}),
-                                        _field("Wire Recon ID", "wirerecon_id", size='md', kwargs={'value':None}),
+                                        
+                                        _field("Root Path", "root_path", size='hg'),
                                     ]
                                 ),
                                 _stack(
                                     [
-                                        _field("Data Path", "data_path", size='hg'),
+                                        _field("Folder Path", "data_path", size='hg'),
                                     ]
                                 ),
-                                _stack(
+                                
+                                
+                                
+                                dbc.Card(
+                                    
+                                dbc.CardBody([
+                                
+                                _stack(   
+                                       [
+                                dbc.Switch(
+                                    id="files switch-switch",
+                                    label="All Files",
+                                    value=False,
+                                ),
+                                ]
+                                ),
+                                
+                                
+                                dbc.Row(
                                     [
-                                        # _field("Filename Prefix", "filenamePrefix", size='lg'),
-                                        _field("Filename Prefix 1", "filenamePrefix1", size='lg'),
-                                        _field("Filename Prefix 2", "filenamePrefix2", size='lg'),
-                                        _field("Filename Prefix 3", "filenamePrefix3", size='lg'),
-                                        _field("Filename Prefix 4", "filenamePrefix4", size='lg'),
-                                    ]
+                                        
+                                        dbc.Col(
+                                            html.Div(
+                                                [
+                                                    dbc.InputGroup(
+                                                        [
+                                                            dbc.InputGroupText("Filename"),
+                                                            dbc.Input(
+                                                                id="filenamePrefix",
+                                                                type="text",
+                                                                placeholder="e.g. Si_%d.h5 or Si_*%d.h5",
+                                                                list="filename-templates",  # link to datalist below
+                                                                
+                                                            ),
+                                                        ],
+                                                        className="w-100",
+                                                    ),
+                                                    # just as example
+                                                    html.Datalist(
+                                                        id="filename-templates",
+                                                        children=[
+                                                                html.Option(value="Si1_PE2_%d.h5",    label="Si1_PE2_%d.h5   (files 1–245)"),
+                                                                html.Option(value="Si1_Eiger1_%d.h5", label="Si1_Eiger1_%d.h5 (files 3–198)"),
+                                                                html.Option(value="Si_*_%d.h5",        label="Si_*_%d.h5        (files 1–245)"),
+                                                            ]
+                                                    ),
+                                                ]
+                                            ),
+                                            className="flex-grow-1",
+                                            style={"minWidth": 0},
+                                        ),
+
+                                        dbc.Col(
+                                            dbc.Button(
+                                                "Update from folder",
+                                                id="check-filenames-btn",
+                                                color="secondary",
+                                                size="md",
+                                                style={"minWidth": "220px", "whiteSpace": "nowrap"},
+                                            ),
+                                            width="auto",
+                                            className="d-flex justify-content-end",
+                                        ),
+                                    ],
+                                    className="mb-3",
+                                    align="center",
                                 ),
-                                _stack(
+                                
+                                
+                                dbc.Row(
+                                        [
+                                            dbc.Col(
+                                                dbc.InputGroup(
+                                                    [
+                                                        dbc.InputGroupText("Scan indices"),
+                                                        dbc.Input(id="scanPoints", type="text", size = "md", placeholder="e.g. 1-10 or 1,5,8,9 or 1-4,10-21"),
+                                                    ],
+                                                    className="w-100",            # input group spans the col
+                                                ),
+                                                className="flex-grow-1",          # THIS makes it expand
+                                                style={"minWidth": 0},            # avoid overflow when very narrow
+                                            ),
+                                            
+                                            dbc.Col(
+                                                dbc.InputGroup(
+                                                    [
+                                                        dbc.InputGroupText("Depth indices"),
+                                                        dbc.Input(id="depthRange", type="text", size = "md", placeholder="e.g. 1-10 or 1,5,8,9 or 1-4,10-21"),
+                                                    ],
+                                                    className="w-100",            # input group spans the col
+                                                ),
+                                                className="flex-grow-1",          # THIS makes it expand
+                                                style={"minWidth": 0},            # avoid overflow when very narrow
+                                            ),
+
+                                            dbc.Col(
+                                                dbc.Button(
+                                                    "Load indices from file",
+                                                    id="load-file-indices-btn",
+                                                    color="secondary",
+                                                    size="md",
+                                                    style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size
+                                                ),
+                                                width="auto",                      # column sizes to content
+                                                className="d-flex justify-content-end",  # optional: keep at right edge
+                                            ),
+                                        ],
+                                        className="mb-2",
+                                        align="center",
+                                    ),
+                                
+                            ],
+                                             className="p-2",
+                                ),
+                                className="mb-3",
+                                #style={"margin": "10px"},             # control outer spacing of the card itself
+                                ),
+                                
+                                
+                                #_stack([
+                                dbc.Row(
                                     [
-                                        _field("Scan Points", "scanPoints", size='md', kwargs={'placeholder': 'e.g. 1-10,12,15-20'}),
-                                        _field("Depth Range", "depthRange", size='md', kwargs={'placeholder': 'e.g. 0-200'}),
-                                    ]
+                                        dbc.Col(
+                                            dbc.InputGroup(
+                                                [
+                                                    dbc.InputGroupText("Geometry File"),
+                                                    dbc.Input(id="geoFile", type="text", size="md", placeholder=""),
+                                                ],
+                                                className="w-100",
+                                            ),
+                                            className="flex-grow-1",
+                                            style={"minWidth": 150},
+                                        ),
+
+                                        dbc.Col(
+                                            dbc.Row(
+                                                [
+                                                    dbc.Col(
+                                                        dbc.Button(
+                                                            "Load default",
+                                                            id="load-default-geo-btn",
+                                                            color="secondary",
+                                                            size="md",
+                                                            style={"minWidth": "120px", "whiteSpace": "nowrap"},
+                                                        ),
+                                                        width="auto",
+                                                    ),
+                                                    dbc.Col(
+                                                        dbc.Button(
+                                                            "Load...",
+                                                            id="load-from-geo-btn",
+                                                            color="secondary",
+                                                            size="md",
+                                                            style={"minWidth": "120px", "whiteSpace": "nowrap"},
+                                                        ),
+                                                        width="auto",
+                                                    ),
+                                                    dbc.Col(
+                                                        dbc.Button(
+                                                            "Edit",
+                                                            id="edit-modify-params-btn",
+                                                            color="secondary",
+                                                            size="md",
+                                                            style={"minWidth": "120px", "whiteSpace": "nowrap"},
+                                                        ),
+                                                        width="auto",
+                                                    ),
+                                                ],
+                                                className="g-2 justify-content-end",  # g-2 adds a nice gap
+                                            ),
+                                            xs=12, md="auto",  # whole block drops under input on small screens
+                                        ),
+                                    ],
+                                    className="mb-3 g-2",
+                                    align="center",
                                 ),
-                                _stack(
-                                    [
-                                        _field("Geo File", "geoFile", size='hg'),
-                                    ]
-                                ),
+                                #]),
+                               
+                                
                                 _stack(
                                     [
                                         _field("Output Path", "outputFolder", size='hg'),
                                     ]
                                 ),
-                                # _stack(
-                                #     [
-                                #         _field("Depth (Outer Index) Range Start", "depthRangeStart", size='lg'),
-                                #         _field("Depth (Outer Index) Range End", "depthRangeEnd", size='lg'),
-                                #     ]
-                                # ),
+                                
+                                
+                                
+                                
                             ],
                             title="Files",
+                            item_id = "item-1",
                         ),
                         dbc.AccordionItem(
+                            
                             [
+                                html.Div(
+                                        dbc.Row(
+                                            [
+                                                dbc.Col(
+                                                    dbc.Button("Set to defaults", size="sm", color="light"),
+                                                    width="auto",
+                                                ),
+                                                dbc.Col(
+                                                    dbc.Button("Set from ...", size="sm", color="light"),
+                                                    width="auto",
+                                                ),
+                                            ],
+                                            className="g-2 align-items-center",
+                                        ),
+                                        style={
+                                            "background": "var(--bs-accordion-active-bg)",   # match header when open
+                                            "padding": ".5rem 1rem",
+                                            "margin": "-1rem -1.25rem 1rem",                 # stretch to card edges
+                                            "borderTop": "none",
+                                            "borderBottom": "1px solid var(--bs-accordion-border-color)",
+                                        },
+                                    ),
                                 # _stack(
                                 #     [
                                 #         _field("Peak Program", "peakProgram", size='md'),
@@ -71,18 +273,18 @@ peakindex_form = dbc.Row(
                                 # ),
                                 _stack(
                                     [
-                                        _field("Box Size", "boxsize", size='md'),
-                                        _field("Max Rfactor", "maxRfactor", size='md'),
-                                        _field("Threshold", "threshold", size='md'),
-                                        _field("Threshold Ratio", "thresholdRatio", size='md'),
+                                        _field("Box Size [pixels]", "boxsize", size='md'),
+                                        _field("Max R-factor", "maxRfactor", size='md'),
+                                        _field("Threshold (empty -> auto)", "threshold", size='md'),
+                                        _field("Threshold Ratio (empty -> auto)", "thresholdRatio", size='md'),
                                         
                                     ]
                                 ),
                                 _stack(
                                     [
-                                        _field("Min Spot Size", "min_size", size='md'),
-                                        _field("Min Spot Separation", "min_separation", size='md'),
-                                        _field("Max No. of Spots", "max_number", size='md')
+                                        _field("Min Spot Size [pixels]", "min_size", size='md'),
+                                        _field("Min Spot Separation [pixels]", "min_separation", size='md'),
+                                        _field("Max No. of Spots (empty for all)", "max_number", size='md')
                                     ]
                                 ),
                                 _stack(
@@ -101,23 +303,55 @@ peakindex_form = dbc.Row(
                                         # _ckbx("Cosmic Filter", "cosmicFilter", size='lg'),
                                     ]
                                 ),
-                                _stack(
-                                    [
-                                        _field("Detector CropX1", "detectorCropX1", size='md'),
-                                        _field("Detector CropY1", "detectorCropY1", size='md'),
-                                    ]
-                                ),
-                                _stack(
-                                    [
-                                        _field("Detector CropX2", "detectorCropX2", size='md'),
-                                        _field("Detector CropY2", "detectorCropY2", size='md'),
-                                    ]
-                                ),
-                                _stack(
-                                    [
-                                        _field("Mask File", "maskFile", size='hg'),
-                                    ]
-                                ),
+                                # _stack(
+                                #     [
+                                #         _field("Detector CropX1", "detectorCropX1", size='md'),
+                                #         _field("Detector CropY1", "detectorCropY1", size='md'),
+                                #     ]
+                                # ),
+                                # _stack(
+                                #     [
+                                #         _field("Detector CropX2", "detectorCropX2", size='md'),
+                                #         _field("Detector CropY2", "detectorCropY2", size='md'),
+                                #     ]
+                                # ),
+                                
+                                dbc.Row(
+                                        [
+                                            dbc.Col(
+                                                dbc.InputGroup(
+                                                    [
+                                                        dbc.InputGroupText("Mask File"),
+                                                        dbc.Input(id="maskFile", type="text", placeholder=""),
+                                                    ],
+                                                    className="w-100",            # input group spans the col
+                                                ),
+                                                className="flex-grow-1",          # THIS makes it expand
+                                                style={"minWidth": 0},            # avoid overflow when very narrow
+                                            ),
+                                            dbc.Col(
+                                                dbc.Button(
+                                                    "Load...",
+                                                    id="load-mask-file-btn",
+                                                    color="secondary",
+                                                    size="md",
+                                                    style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size
+                                                ),
+                                                width="auto",                      # column sizes to content
+                                                className="d-flex justify-content-end",  # optional: keep at right edge
+                                            ),
+                                        ],
+                                        className="mb-3",
+                                        align="center",
+                                    ),
+                                
+                                
+                                
+                                # _stack(
+                                #     [
+                                #         _field("Mask File", "maskFile", size='hg'),
+                                #     ]
+                                # ),
                                 # dbc.Button(
                                 #     "Show Paths to Programs",
                                 #     id="collapse1-button",
@@ -134,30 +368,92 @@ peakindex_form = dbc.Row(
                                 # is_open=False,
                                 # ),
                             ],
-                            title="Peak Search",
+                            title="Peak Search Parameters",
+                            item_id = "item-2",
+                            className="no-border-bottom",   # 👈 add custom class
+                            
                         ),
                         dbc.AccordionItem(
                             [
-                                _stack(
-                                    [
-                                        _field("Cryst File", "crystFile", size='hg'),
-                                    ]
-                                ),
+                                
+                                html.Div(
+                                        dbc.Row(
+                                            [
+                                                dbc.Col(
+                                                    dbc.Button("Set to defaults", size="sm", color="light"),
+                                                    width="auto",
+                                                ),
+                                                dbc.Col(
+                                                    dbc.Button("Set from ...", size="sm", color="light"),
+                                                    width="auto",
+                                                ),
+                                            ],
+                                            className="g-2 align-items-center",
+                                        ),
+                                        style={
+                                            "background": "var(--bs-accordion-active-bg)",   # match header when open
+                                            "padding": ".5rem 1rem",
+                                            "margin": "-1rem -1.25rem 1rem",                 # stretch to card edges
+                                            "borderTop": "none",
+                                            "borderBottom": "1px solid var(--bs-accordion-border-color)",
+                                        },
+                                    ),
+                                
+                                dbc.Row(
+                                        [
+                                            dbc.Col(
+                                                dbc.InputGroup(
+                                                    [
+                                                        dbc.InputGroupText("Crystal Structure File"),
+                                                        dbc.Input(id="crystFile", type="text", placeholder=""),
+                                                    ],
+                                                    className="w-100",            # input group spans the col
+                                                ),
+                                                className="flex-grow-1",          # THIS makes it expand
+                                                style={"minWidth": 0},            # avoid overflow when very narrow
+                                            ),
+                                            dbc.Col(
+                                                dbc.Button(
+                                                    "Load...",
+                                                    id="load-cryst-file-btn",
+                                                    color="secondary",
+                                                    size="md",
+                                                    style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size
+                                                ),
+                                                width="auto",                      # column sizes to content
+                                                className="d-flex justify-content-end",  # optional: keep at right edge
+                                            ),
+                                        ],
+                                        className="mb-3",
+                                        align="center",
+                                    ),
+                                
+                                # _stack(
+                                #     [
+                                #         _field("Crystal Structure File", "crystFile", size='hg'),
+                                #     ]
+                                # ),
                                 _stack(
                                     [
                                         _field("Max Calc Energy [keV]", "indexKeVmaxCalc", size='md'),
                                         _field("Max Test Energy [keV]", "indexKeVmaxTest", size='md'),
-                                        _field("Index Angle Tolerance", "indexAngleTolerance", size='md'),
+                                        _field("Angle Tolerance [deg]", "indexAngleTolerance", size='md'),
                                     ]
                                 ),
                                 _stack(
                                     [
-                                        _field("Index HKL", "indexHKL", size='md'),
+                                        _field("Central HKL", "indexHKL", size='md'),
                                         # _field("Index H", "indexH", size='md'),
                                         # _field("Index K", "indexK", size='md'),
                                         # _field("Index L", "indexL", size='md'),
-                                        _field("Index Cone", "indexCone", size='md'),
-                                        _field("Max Peaks", "max_peaks", size='md'),
+                                        _field("Cone Angle [deg]", "indexCone", size='md'),
+                                        _field("Max no. of Spots (empty for all)", "max_peaks", size='md'),
+                                    ]
+                                ),
+                                    _stack(
+                                    [
+                                        _field("Depth [µm] (empty -> auto)", "depth", size='md'),
+                                        
                                     ]
                                 ),
                                 # dbc.Button(
@@ -175,38 +471,47 @@ peakindex_form = dbc.Row(
                                 # is_open=False,
                                 # ),
                             ],
-                            title="Indexing",
+                            title="Indexing Parameters",
+                            item_id = "item-3",
+                            className="no-border-bottom",   # 👈 add custom class
                         ),
+                        
+    
+                        # dbc.AccordionItem(
+                        #     [
+                        #         _stack(
+                        #             [
+                        #                 _field("Energy Unit", "energyUnit", size='md'),
+                        #                 _field("Exposure Unit", "exposureUnit", size='md'),
+                        #             ]
+                        #         ),
+                        #         _stack(
+                        #             [
+                        #                 _field("Recip Lattice Unit", "recipLatticeUnit", size='md'),
+                        #                 _field("Lattice Parameters Unit", "latticeParametersUnit", size='md'),
+                        #             ]
+                        #         ),
+                        #         _stack(
+                        #             [
+                        #                 _field("Beamline", "beamline", size='md'),
+                        #                 _field("Depth", "depth", size='md'),
+                        #             ]
+                        #         ),
+                        #     ],
+                        #     title="Labels",
+                        # ),
+                        
+                        
+                        
+                        
+                        
                         dbc.AccordionItem(
                             [
-                                _stack(
-                                    [
-                                        _field("Energy Unit", "energyUnit", size='md'),
-                                        _field("Exposure Unit", "exposureUnit", size='md'),
-                                    ]
-                                ),
-                                _stack(
-                                    [
-                                        _field("Recip Lattice Unit", "recipLatticeUnit", size='md'),
-                                        _field("Lattice Parameters Unit", "latticeParametersUnit", size='md'),
-                                    ]
-                                ),
-                                _stack(
-                                    [
-                                        _field("Beamline", "beamline", size='md'),
-                                        _field("Depth", "depth", size='md'),
-                                    ]
-                                ),
-                            ],
-                            title="Labels",
-                        ),
-                        dbc.AccordionItem(
-                            [
-                                _stack(
-                                    [
-                                        _field("Author", "author", size='md', kwargs={'placeholder': 'Required'}),
-                                    ]
-                                ),
+                                # _stack(
+                                #     [
+                                #         _field("Author", "author", size='md', kwargs={'placeholder': 'Required'}),
+                                #     ]
+                                # ),
                                 dbc.Row([
                                     dbc.Col([
                                         html.P(html.Strong("Notes:")),
@@ -220,11 +525,18 @@ peakindex_form = dbc.Row(
                                 ], className="mb-3", align="start")
                             ],
                             title="User Text",
+                            item_id="item-4"
                         ),
                         ],
-                        always_open=True
+                        always_open=True,
+                        start_collapsed=False,
+                        active_item=["item-1","item-2","item-3","item-4"]
+                    ),
+                    xs=12,
+                    className="px-0",
                     ),
                 ],
+                className="g-0",             # no gutters
                 style={'width': '100%', 'overflow-x': 'auto'}
         )
 
