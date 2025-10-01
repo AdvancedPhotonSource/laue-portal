@@ -1,0 +1,11 @@
+/* When the item is OPEN (not .collapsed), remove the header's bottom line */
+.accordion-item.no-border-bottom > .accordion-header > .accordion-button:not(.collapsed) {
+  box-shadow: none !important;      /* this is the “line” you see */
+  border-bottom: none !important;   /* harmless extra */
+}
+
+/* If the above doesn't catch due to markup differences, this broader one will: */
+.accordion-item.no-border-bottom .accordion-button:not(.collapsed) {
+  box-shadow: none !important;
+  border-bottom: none !important;
+}
