@@ -235,6 +235,8 @@ def create_test_peakindex(scan_number: int = 1, recon_id: Optional[int] = None) 
     return db_schema.PeakIndex(
         scanNumber=scan_number,
         job_id=scan_number,
+        filefolder='tests/data/input',
+        filenamePrefix=['test_file'],
         recon_id=recon_id,  # This will be set after recon is saved if None
         
         # Required peak search and indexing parameters
