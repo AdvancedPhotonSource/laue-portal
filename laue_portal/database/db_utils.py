@@ -2,17 +2,9 @@ import laue_portal.database.db_schema as db_schema
 import config
 import xml.etree.ElementTree as ET
 import sqlalchemy
-from sqlalchemy import event
 from datetime import datetime
 from config import MOTOR_GROUPS
 
-ENGINE = sqlalchemy.create_engine(f'sqlite:///{config.db_file}')
-
-@event.listens_for(ENGINE, "connect")
-def enable_sqlite_fks(dbapi_connection, connection_record):
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
 
 def parse_metadata(xml,xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog",scan_no=2,empty='\n\t\t'):
     # tree = ET.parse(xml)

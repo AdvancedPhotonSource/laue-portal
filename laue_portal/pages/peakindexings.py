@@ -9,6 +9,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session, aliased
 import pandas as pd
 import laue_portal.components.navbar as navbar
+import laue_portal.database.session_utils as session_utils
 
 dash.register_page(__name__, path="/peakindexings")
 
@@ -56,7 +57,7 @@ layout = html.Div([
                 columnSize="responsiveSizeToFit",
                 defaultColDef={
                     "filter": True,
-            },
+                },
                 dashGridOptions={
                     "pagination": True, 
                     "paginationPageSize": 20, 
@@ -105,7 +106,7 @@ CUSTOM_HEADER_NAMES = {
 }
 
 def _get_peakindexings():
-    with Session(db_utils.ENGINE) as session:
+    with Session(session_utils.get_engine()) as session:
         catalog_recon = aliased(db_schema.Catalog)
         catalog_wirerecon = aliased(db_schema.Catalog)
 
@@ -229,6 +230,8 @@ def selected_recon_href(rows,href):
     
     if any_recon_scans:
         base_href = "/create-reconstruction"
+    elif any_wirerecon_scans:
+        base_href = "/create-wire-reconstruction"
 
     query_params = [f"scan_id=${','.join(scan_ids)}"]
     if any_wirerecon_scans: query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")

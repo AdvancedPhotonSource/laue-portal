@@ -38,22 +38,9 @@ peakindex_form = dbc.Row(
                                         className="mb-3",
                                         align="center",
                                     ),
-                                _stack(
-                                    [
-                                        
-                                        _field("Root Path", "root_path", size='hg'),
-                                    ]
-                                ),
-                                _stack(
-                                    [
-                                        _field("Folder Path", "data_path", size='hg'),
-                                    ]
-                                ),
-                                
-                                
-                                
+                                _field("Root Path", "root_path"),
+                                _field("Folder Path", "data_path"),
                                 dbc.Card(
-                                    
                                 dbc.CardBody([
                                 
                                 _stack(   
@@ -228,11 +215,7 @@ peakindex_form = dbc.Row(
                                 #]),
                                
                                 
-                                _stack(
-                                    [
-                                        _field("Output Path", "outputFolder", size='hg'),
-                                    ]
-                                ),
+                                _field("Output Path", "outputFolder"),
                                 
                                 
                                 
@@ -349,7 +332,7 @@ peakindex_form = dbc.Row(
                                 
                                 # _stack(
                                 #     [
-                                #         _field("Mask File", "maskFile", size='hg'),
+                                #         _field("Mask File", "maskFile", size='lg'),
                                 #     ]
                                 # ),
                                 # dbc.Button(
@@ -361,8 +344,8 @@ peakindex_form = dbc.Row(
                                 # ),
                                 # dbc.Collapse(
                                 #     [
-                                #         _field("peaksearch Path", "peaksearchPath", size='hg'),
-                                #         _field("p2q Path", "p2qPath", size='hg'),
+                                #         _field("peaksearch Path", "peaksearchPath"),
+                                #         _field("p2q Path", "p2qPath"),
                                 #     ],
                                 # id="collapse1",
                                 # is_open=False,
@@ -430,7 +413,7 @@ peakindex_form = dbc.Row(
                                 
                                 # _stack(
                                 #     [
-                                #         _field("Crystal Structure File", "crystFile", size='hg'),
+                                #         _field("Crystal Structure File", "crystFile", size='lg'),
                                 #     ]
                                 # ),
                                 _stack(
@@ -465,7 +448,7 @@ peakindex_form = dbc.Row(
                                 # ),
                                 # dbc.Collapse(
                                 #     [
-                                #         _field("Indexing Path", "indexingPath", size='hg'),
+                                #         _field("Indexing Path", "indexingPath"),
                                 #     ],
                                 # id="collapse2",
                                 # is_open=False,
@@ -586,9 +569,7 @@ def set_peakindex_form_props(peakindex, read_only=False):
     # set_props("p2qPath", {'value':peakindex.p2qPath, 'readonly':read_only})
     # set_props("indexingPath", {'value':peakindex.indexingPath, 'readonly':read_only})
     set_props("data_path", {'value':peakindex.data_path, 'readonly':True})
-    # set_props("filenamePrefix", {'value':peakindex.filenamePrefix, 'readonly':True})
-    for i, filenamePrefix in enumerate(peakindex.filenamePrefix):
-        set_props(f"filenamePrefix{i+1}", {'value':filenamePrefix, 'readonly':True})
+    set_props("filenamePrefix", {'value':','.join(peakindex.filenamePrefix), 'readonly':True})
     set_props("outputFolder", {'value':peakindex.outputFolder, 'readonly':read_only})
     set_props("geoFile", {'value':peakindex.geoFile, 'readonly':read_only})
     set_props("crystFile", {'value':peakindex.crystFile, 'readonly':read_only})

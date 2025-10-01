@@ -10,6 +10,7 @@ from laue_portal.database.db_utils import get_catalog_data, remove_root_path_pre
 from laue_portal.components.wire_recon_form import wire_recon_form, set_wire_recon_form_props
 from config import DEFAULT_VARIABLES
 import urllib.parse
+import laue_portal.database.session_utils as session_utils
 
 dash.register_page(__name__, path="/wire_reconstruction")
 
@@ -49,8 +50,8 @@ def load_wire_recon_data(href):
 
     if wirerecon_id_str:
         try:
-            wirerecon_id = int(wirerecon_id_str) if wirerecon_id_str else None
-            with Session(db_utils.ENGINE) as session:
+            wirerecon_id = int(wirerecon_id_str)
+            with Session(session_utils.get_engine()) as session:
                 wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == wirerecon_id).first()
                 if wirerecon_data:
                     # Add root_path from DEFAULT_VARIABLES

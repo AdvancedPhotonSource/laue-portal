@@ -21,6 +21,7 @@ from laue_portal.recon import analysis_recon
 from laueanalysis.reconstruct import reconstruct as wire_reconstruct  # This is actually for wire reconstruction
 from laueanalysis.indexing import index #pyLaueGo
 from config import REDIS_CONFIG
+import laue_portal.database.session_utils as session_utils
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ def enqueue_job(job_id: int, job_type: str, execute_func, at_front: bool = False
     # Update job status in database
     # Skip status update for batch coordinator since it manages the parent job status
     if job_type != 'batch_coordinator':
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             # Get the primary key column dynamically
             mapper = inspect(table)
             pk_col = list(mapper.primary_key)[0]  # Get first primary key column
@@ -111,7 +112,7 @@ def execute_batch_coordinator(job_id: int):
     Updates the main job status based on subjob statuses.
     """
     try:
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             # Query for all subjobs of this job
             subjob_data = session.query(db_schema.SubJob).filter(
                 db_schema.SubJob.job_id == job_id
@@ -189,7 +190,7 @@ def _enqueue_batch(job_id: int, job_type: str, execute_func, at_front: bool = Fa
         RQ job ID of the batch coordinator
     """
     # Query for subjobs
-    with Session(db_utils.ENGINE) as session:
+    with Session(session_utils.get_engine()) as session:
         subjob_data = session.query(db_schema.SubJob).filter(
             db_schema.SubJob.job_id == job_id
         ).order_by(db_schema.SubJob.subjob_id).all()
@@ -503,7 +504,7 @@ def cancel_job(rq_job_id: str) -> bool:
         # Update job status in database to cancelled
         if job.meta and 'db_job_id' in job.meta:
             db_job_id = job.meta['db_job_id']
-            with Session(db_utils.ENGINE) as session:
+            with Session(session_utils.get_engine()) as session:
                 job_data = session.query(db_schema.Job).filter(db_schema.Job.job_id == db_job_id).first()
                 if job_data:
                     job_data.status = STATUS_REVERSE_MAPPING["Cancelled"]
@@ -584,7 +585,7 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
     
     try:
         # Update job status to running
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             # Query using the primary key
             job_data = session.query(table).filter(pk_col == job_id).first()
             if job_data:
@@ -610,7 +611,7 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
         result = job_func(*args, **kwargs)
         
         # Update job status to finished
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             # Query using the primary key
             job_data = session.query(table).filter(pk_col == job_id).first()
             if job_data:
@@ -658,7 +659,7 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
         
     except Exception as e:
         # Update job status to failed
-        with Session(db_utils.ENGINE) as session:
+        with Session(session_utils.get_engine()) as session:
             # Query using the primary key
             job_data = session.query(table).filter(pk_col == job_id).first()
             if job_data:

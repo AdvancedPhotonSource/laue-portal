@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, set_scan_accordions
 from laue_portal.components.catalog_form import catalog_form, set_catalog_form_props
+import laue_portal.database.session_utils as session_utils
 
 CATALOG_DEFAULTS = {#temporary
     # 'scanNumber':log['scanNumber'],
@@ -29,21 +30,21 @@ layout = dbc.Container(
         html.Div([
         navbar.navbar,
         dbc.Alert(
-            "Hello! I am an alert",
             id="alert-upload",
             dismissable=True,
+            duration=4000,
             is_open=False,
         ),
         dbc.Alert(
-            "Hello! I am an alert",
             id="alert-submit",
             dismissable=True,
+            duration=4000,
             is_open=False,
         ),
         dbc.Alert(
-            "Hello! I am an alert",
             id="alert-catalog-submit",
             dismissable=True,
+            duration=4000,
             is_open=False,
         ),
         html.Hr(),
@@ -210,7 +211,7 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
             set_metadata_form_props(metadata_row, scan_rows, read_only=True)
             
             # # Add to database
-            # with Session(db_utils.ENGINE) as session:
+            # with Session(session_utils.get_engine()) as session:
             #     session.add(metadata_row)
             #     # session.add(catalog_row)
             #     scan_row_count = session.query(Scan).count()
@@ -238,18 +239,14 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
     Input('submit_catalog_and_metadata', 'n_clicks'),
 
     # Catalog form fields
-    State('scanNumber', 'value'),
     State('filefolder', 'value'),
-    # State('filenamePrefix', 'value'),
-    State('filenamePrefix1', 'value'),
-    State('filenamePrefix2', 'value'),
-    State('filenamePrefix3', 'value'),
-    State('filenamePrefix4', 'value'),
+    State('filenamePrefix', 'value'),
     State('aperture', 'value'),
     State('sample_name', 'value'),
     State('notes', 'value'),
     
     # Metadata form fields
+    State('scanNumber', 'value'),
     State('time_epoch', 'value'),
     State('time', 'value'),
     State('user_name', 'value'),
@@ -316,18 +313,14 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
 )
 def submit_catalog_and_metadata(n,
     # Catalog parameters
-    scanNumber,
     filefolder,
-    # filenamePrefix,
-    filenamePrefix1,
-    filenamePrefix2,
-    filenamePrefix3,
-    filenamePrefix4,
+    filenamePrefix,
     aperture,
     sample_name,
     notes,
     
     # Metadata parameters
+    scanNumber,
     time_epoch,
     time,
     user_name,
@@ -396,8 +389,8 @@ def submit_catalog_and_metadata(n,
         # Convert scanNumber to int if it's a string
         if isinstance(scanNumber, str):
             scanNumber = int(scanNumber)
-            
-        with Session(db_utils.ENGINE) as session:
+        
+        with Session(session_utils.get_engine()) as session:
             try:
                 # Check if metadata record exists for this scanNumber
                 metadata_data = session.query(db_schema.Metadata).filter(
@@ -514,10 +507,7 @@ def submit_catalog_and_metadata(n,
                             setattr(metadata, f'motorGroup_{motor_group}_cpt_total', totals['completed'])
                     
                     session.add(metadata)
-                    
-                    set_props("alert-submit", {'is_open': True, 
-                                                'children': f'Metadata Entry Added to Database for scan {scanNumber}',
-                                                'color': 'success'})
+                       
             except Exception as e:
                 set_props("alert-submit", {'is_open': True, 
                                             'children': f'Error creating metadata entry: {str(e)}',
@@ -530,7 +520,7 @@ def submit_catalog_and_metadata(n,
                     db_schema.Catalog.scanNumber == scanNumber
                 ).first()
                 
-                filenamePrefix = [prefix for prefix in [filenamePrefix1, filenamePrefix2, filenamePrefix3, filenamePrefix4] if prefix]
+                filenamePrefix = [s.strip() for s in filenamePrefix.split(',')] if filenamePrefix else []
                 if catalog_data:
                     # Update existing catalog entry
                     catalog_data.filefolder = filefolder
@@ -539,9 +529,6 @@ def submit_catalog_and_metadata(n,
                     catalog_data.sample_name = sample_name
                     catalog_data.notes = notes
                     
-                    set_props("alert-catalog-submit", {'is_open': True, 
-                                                'children': f'Catalog Entry Updated for scan {scanNumber}',
-                                                'color': 'success'})
                 else:
                     # Create new catalog entry
                     catalog = db_schema.Catalog(
@@ -555,9 +542,6 @@ def submit_catalog_and_metadata(n,
                     
                     session.add(catalog)
                     
-                    set_props("alert-catalog-submit", {'is_open': True, 
-                                                'children': f'Catalog Entry Added to Database for scan {scanNumber}',
-                                                'color': 'success'})
             except Exception as e:
                 set_props("alert-catalog-submit", {'is_open': True, 
                                             'children': f'Error creating catalog entry: {str(e)}',
@@ -566,6 +550,18 @@ def submit_catalog_and_metadata(n,
             
             # Commit all changes
             session.commit()
+
+            set_props("alert-submit", {'is_open': True, 
+                                        'children': f'Metadata Entry Added to Database for scan {scanNumber}',
+                                        'color': 'success'})
+            if catalog_data:
+                set_props("alert-catalog-submit", {'is_open': True, 
+                                            'children': f'Catalog Entry Updated for scan {scanNumber}',
+                                            'color': 'success'})
+            else:
+                set_props("alert-catalog-submit", {'is_open': True, 
+                                            'children': f'Catalog Entry Added to Database for scan {scanNumber}',
+                                            'color': 'success'})
                                             
     except ValueError as e:
         set_props("alert-submit", {'is_open': True, 
