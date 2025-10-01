@@ -2,8 +2,8 @@
 Table of peak indexing parameters and results.
 """
 from typing import Optional
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Integer, String, Float, Boolean, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Integer, String, Float, Boolean, JSON, ForeignKey
 from laue_portal.database.base import Base
 
 
@@ -14,6 +14,10 @@ class PeakIndex(Base):
     peakindex_id: Mapped[int] = mapped_column(primary_key=True)
     scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
     job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"), unique=True)
+
+    filefolder: Mapped[str] = mapped_column(String)  # infile
+    # filenamePrefix: Mapped[str] = mapped_column(String) # infile
+    filenamePrefix: Mapped[list[str]] = mapped_column(JSON)  # infile
 
     author: Mapped[str] = mapped_column(String, nullable=True)
     notes: Mapped[str] = mapped_column(String, nullable=True)

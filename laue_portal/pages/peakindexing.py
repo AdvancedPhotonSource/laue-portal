@@ -57,9 +57,6 @@ def load_peakindexing_data(href):
                     # Add root_path from DEFAULT_VARIABLES
                     peakindex_data.root_path = root_path
                     
-                    # Retrieve data_path and filenamePrefix from catalog data
-                    catalog_data = get_catalog_data(session, peakindex_data.scanNumber, root_path)
-                    
                     # Convert full paths back to relative paths for display
                     if peakindex_data.geoFile:
                         peakindex_data.geoFile = remove_root_path_prefix(peakindex_data.geoFile, root_path)
@@ -68,25 +65,35 @@ def load_peakindexing_data(href):
                     if peakindex_data.outputFolder:
                         peakindex_data.outputFolder = remove_root_path_prefix(peakindex_data.outputFolder, root_path)
                     
-                    # If processing reconstruction data, use the reconstruction output folder as data path
-                    if peakindex_data.wirerecon_id:
-                        wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == peakindex_data.wirerecon_id).first()
-                        if wirerecon_data.outputFolder:
-                            # Use the wire reconstruction output folder as the data path
-                            peakindex_data.data_path = remove_root_path_prefix(wirerecon_data.outputFolder, root_path)
-                        else:
-                            peakindex_data.data_path = catalog_data["data_path"]
-                    elif peakindex_data.recon_id:
-                        recon_data = session.query(db_schema.Recon).filter(db_schema.Recon.recon_id == peakindex_data.recon_id).first()
-                        if recon_data.file_output:
-                            # Use the reconstruction output folder as the data path
-                            peakindex_data.data_path = remove_root_path_prefix(recon_data.file_output, root_path)
-                        else:
-                            peakindex_data.data_path = catalog_data["data_path"]
-                    else:
-                        peakindex_data.data_path = catalog_data["data_path"]
-                    
-                    peakindex_data.filenamePrefix = catalog_data["filenamePrefix"]
+                    if peakindex_data.filefolder:
+                        peakindex_data.data_path = remove_root_path_prefix(peakindex_data.filefolder, root_path)
+
+                    if any([not hasattr(peakindex_data, field) for field in ['data_path','filenamePrefix']]):
+                        # If processing reconstruction data, use the reconstruction output folder as data path
+                        if peakindex_data.wirerecon_id:
+                            wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == peakindex_data.wirerecon_id).first()
+                            if wirerecon_data:
+                                if wirerecon_data.outputFolder:
+                                    # Use the wire reconstruction output folder as the data path
+                                    peakindex_data.data_path = remove_root_path_prefix(wirerecon_data.outputFolder, root_path)
+                                if wirerecon_data.filenamePrefix:
+                                    peakindex_data.filenamePrefix = wirerecon_data.filenamePrefix
+                        elif peakindex_data.recon_id:
+                            recon_data = session.query(db_schema.Recon).filter(db_schema.Recon.recon_id == peakindex_data.recon_id).first()
+                            if recon_data:
+                                if recon_data.file_output:
+                                    # Use the reconstruction output folder as the data path
+                                    peakindex_data.data_path = remove_root_path_prefix(recon_data.file_output, root_path)
+                                if hasattr(recon_data, 'filenamePrefix') and recon_data.filenamePrefix:
+                                    peakindex_data.filenamePrefix = recon_data.filenamePrefix
+                        
+                        if any([not hasattr(peakindex_data, field) for field in ['data_path','filenamePrefix']]):
+                            # Retrieve data_path and filenamePrefix from catalog data
+                            catalog_data = get_catalog_data(session, peakindex_data.scanNumber, root_path)
+                        if not hasattr(peakindex_data, 'data_path'):
+                            peakindex_data.data_path = catalog_data.get('data_path', '')
+                        if not hasattr(peakindex_data, 'filenamePrefix'):
+                            peakindex_data.filenamePrefix = catalog_data.get('filenamePrefix', [])
                     
                     # Populate the form with the data
                     set_peakindex_form_props(peakindex_data, read_only=True)

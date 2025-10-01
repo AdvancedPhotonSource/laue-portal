@@ -227,6 +227,11 @@ wire_recon_form = dbc.Row(
 def set_wire_recon_form_props(wirerecon, read_only=False):
     set_props("scanNumber", {'value':wirerecon.scanNumber, 'readonly':read_only})
     
+    # File paths
+    set_props("root_path", {'value':wirerecon.root_path, 'readonly':read_only})
+    set_props("data_path", {'value':wirerecon.data_path, 'readonly':read_only})
+    set_props("filenamePrefix", {'value':','.join(wirerecon.filenamePrefix), 'readonly':read_only})
+    
     # User text
     # set_props("author", {'value':wirerecon.author, 'readonly':read_only})
     set_props("notes", {'value':wirerecon.notes, 'readonly':read_only})
@@ -240,11 +245,6 @@ def set_wire_recon_form_props(wirerecon, read_only=False):
     set_props("depth_start", {'value':wirerecon.depth_start, 'readonly':read_only})
     set_props("depth_end", {'value':wirerecon.depth_end, 'readonly':read_only})
     set_props("depth_resolution", {'value':wirerecon.depth_resolution, 'readonly':read_only})
-    
-    # File paths
-    set_props("root_path", {'value':wirerecon.root_path, 'readonly':read_only}) # 'readonly':True
-    set_props("data_path", {'value':wirerecon.data_path, 'readonly':read_only}) # 'readonly':True
-    set_props("filenamePrefix", {'value':','.join(wirerecon.filenamePrefix), 'readonly':read_only}) # 'readonly':True
     
     # Files
     set_props("scanPoints", {'value':wirerecon.scanPoints, 'readonly':read_only})  # Range of files field

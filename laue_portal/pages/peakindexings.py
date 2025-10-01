@@ -233,7 +233,7 @@ def selected_recon_href(rows,href):
     elif any_wirerecon_scans:
         base_href = "/create-wire-reconstruction"
 
-    query_params = [f"scan_id=${','.join(scan_ids)}"]
+    query_params = [f"scan_id={','.join(scan_ids)}"]
     if any_wirerecon_scans: query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
     if any_recon_scans: query_params.append(f"recon_id={','.join(recon_ids)}")
     
@@ -263,7 +263,7 @@ def selected_peakindex_href(rows,href):
         recon_ids.append(str(row['recon_id']) if row.get('recon_id') else '')
         peakindex_ids.append(str(row['peakindex_id']) if row.get('peakindex_id') else '')
 
-    query_params = [f"scan_id=${','.join(scan_ids)}"]
+    query_params = [f"scan_id={','.join(scan_ids)}"]
     if any(wirerecon_ids): query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
     if any(recon_ids): query_params.append(f"recon_id={','.join(recon_ids)}")
     if any(peakindex_ids): query_params.append(f"peakindex_id={','.join(peakindex_ids)}")

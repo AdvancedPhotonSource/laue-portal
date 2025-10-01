@@ -2,7 +2,7 @@
 Table of wire reconstruction parameters and results.
 """
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Integer, String, Float, ForeignKey
+from sqlalchemy import Integer, String, Float, JSON, ForeignKey
 from laue_portal.database.base import Base
 
 
@@ -14,6 +14,10 @@ class WireRecon(Base):
     scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
     # calib_id: Mapped[int] = mapped_column(ForeignKey("calib.calib_id"))
     job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"), unique=True)
+
+    filefolder: Mapped[str] = mapped_column(String)  # infile
+    # filenamePrefix: Mapped[str] = mapped_column(String) # infile
+    filenamePrefix: Mapped[list[str]] = mapped_column(JSON)  # infile
 
     author: Mapped[str] = mapped_column(String, nullable=True)
     notes: Mapped[str] = mapped_column(String, nullable=True)

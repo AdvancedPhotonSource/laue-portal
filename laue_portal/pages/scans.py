@@ -255,7 +255,7 @@ def selected_recon_href(rows,href):
     if any_nonwire_scans:
         base_href = "/create-reconstruction"
     
-    return f"{base_href}?scan_id=${','.join(scan_ids)}"
+    return f"{base_href}?scan_id={','.join(scan_ids)}"
 
 
 @dash.callback(
@@ -277,4 +277,4 @@ def selected_peakindex_href(rows,href):
         else:
             return base_href
 
-    return f"{base_href}?scan_id=${','.join(scan_ids)}"
+    return f"{base_href}?scan_id={','.join(scan_ids)}"

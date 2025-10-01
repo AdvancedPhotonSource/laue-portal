@@ -527,7 +527,9 @@ peakindex_form = dbc.Row(
 def set_peakindex_form_props(peakindex, read_only=False):
     #set_props("dataset", {'value':peakindex.dataset_id, 'readonly':read_only})
     set_props("scanNumber", {'value':peakindex.scanNumber, 'readonly':read_only})
-    set_props("root_path", {'value':peakindex.root_path, 'readonly':True})
+    set_props("root_path", {'value':peakindex.root_path, 'readonly':read_only})
+    set_props("data_path", {'value':peakindex.data_path, 'readonly':read_only})
+    set_props("filenamePrefix", {'value':','.join(peakindex.filenamePrefix), 'readonly':read_only})
     set_props("recon_id", {'value':peakindex.recon_id, 'readonly':read_only})
     set_props("wirerecon_id", {'value':peakindex.wirerecon_id, 'readonly':read_only})
     
@@ -568,8 +570,6 @@ def set_peakindex_form_props(peakindex, read_only=False):
     # set_props("peaksearchPath", {'value':peakindex.peaksearchPath, 'readonly':read_only})
     # set_props("p2qPath", {'value':peakindex.p2qPath, 'readonly':read_only})
     # set_props("indexingPath", {'value':peakindex.indexingPath, 'readonly':read_only})
-    set_props("data_path", {'value':peakindex.data_path, 'readonly':True})
-    set_props("filenamePrefix", {'value':','.join(peakindex.filenamePrefix), 'readonly':True})
     set_props("outputFolder", {'value':peakindex.outputFolder, 'readonly':read_only})
     set_props("geoFile", {'value':peakindex.geoFile, 'readonly':read_only})
     set_props("crystFile", {'value':peakindex.crystFile, 'readonly':read_only})
