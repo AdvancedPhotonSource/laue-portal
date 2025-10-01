@@ -533,43 +533,7 @@ def submit_parameters(n,
                 for scanPoint_num in scanPoint_nums:
                     for depthRange_num in depthRange_nums:
                         # Prepare parameters for peak indexing
-                        # Support multiple filename prefix styles:
-                        #  - Percent-style e.g. "prefix_%d", "%05d", "%d_%d"
-                        #  - Brace-style e.g. "prefix_{}", "{}_{}", "{scanNumber}_{scanPoint}"
-                        #  - Bare prefix e.g. "prefix_" (appends the scanPoint number)
-                        file_str = None
-                        try:
-                            if "%" in current_filename_prefix_i:
-                                # Try single scanPoint, then tuple, then (scanNumber, scanPoint)
-                                try:
-                                    file_str = current_filename_prefix_i % scanPoint_num
-                                except TypeError:
-                                    try:
-                                        file_str = current_filename_prefix_i % (scanPoint_num,)
-                                    except TypeError:
-                                        try:
-                                            file_str = current_filename_prefix_i % (spec["scanNumber"], scanPoint_num)
-                                        except Exception as e2:
-                                            raise TypeError(f"Invalid filenamePrefix percent-format '{current_filename_prefix_i}' with scan {spec['scanNumber']} and point {scanPoint_num}: {e2}")
-                            elif "{" in current_filename_prefix_i and "}" in current_filename_prefix_i:
-                                # Try str.format styles: positional or named
-                                try:
-                                    # First assume single placeholder (scanPoint)
-                                    file_str = current_filename_prefix_i.format(scanPoint_num)
-                                except Exception:
-                                    try:
-                                        # Try two positional placeholders (scanNumber, scanPoint)
-                                        file_str = current_filename_prefix_i.format(spec["scanNumber"], scanPoint_num)
-                                    except Exception:
-                                        try:
-                                            # Try named placeholders
-                                            file_str = current_filename_prefix_i.format(scanNumber=spec["scanNumber"], scanPoint=scanPoint_num)
-                                        except Exception as e2:
-                                            raise TypeError(f"Invalid filenamePrefix brace-format '{current_filename_prefix_i}' with scan {spec['scanNumber']} and point {scanPoint_num}: {e2}")
-                            else:
-                                file_str = f"{current_filename_prefix_i}{scanPoint_num}"
-                        except Exception as fmt_err:
-                            raise TypeError(f"Invalid filenamePrefix format '{current_filename_prefix_i}' with scan point {scanPoint_num}: {fmt_err}")
+                        file_str = current_filename_prefix_i % scanPoint_num
                         
                         if depthRange_num is not None:
                             # Reconstruction file with depth index
@@ -720,7 +684,7 @@ def load_scan_data_from_url(href):
     """
     Load scan data and optionally existing recon and peakindex data when provided in URL query parameters
     URL format: /create-peakindexing?scan_id={scan_id}
-    Pooled URL format: /create-peakindexing?scan_id=${scan_ids}
+    Pooled URL format: /create-peakindexing?scan_id={scan_ids}
     With recon_id: /create-peakindexing?scan_id={scan_id}&recon_id={recon_id}
     With wirerecon_id: /create-peakindexing?scan_id={scan_id}&wirerecon_id={wirerecon_id}
     With peakindex_id: /create-peakindexing?scan_id={scan_id}&peakindex_id={peakindex_id}
@@ -748,443 +712,253 @@ def load_scan_data_from_url(href):
             # set_props('next-peakindex-id', {'value': next_peakindex_id})
             # set_props('peakindex-title', {'children': f"New peak indexing {next_peakindex_id}"})
 
-            is_pooled = '$' in scan_id_str or ',' in scan_id_str
-            
-            if not is_pooled:
-                try:
-                    scan_id = int(scan_id_str)
-                    # Convert to int if not None
-                    recon_id = int(recon_id_str) if recon_id_str else None
-                    wirerecon_id = int(wirerecon_id_str) if wirerecon_id_str else None
-                    peakindex_id = int(peakindex_id_str) if peakindex_id_str else None
+            try:
+                # This section handles both single and multiple/pooled scan numbers
+                scan_ids = [int(sid) if sid and sid.lower() != 'none' else None for sid in (scan_id_str.split(',') if scan_id_str else [])]
+                
+                # Handle pooled reconstruction IDs
+                wirerecon_ids = [int(wid) if wid and wid.lower() != 'none' else None for wid in (wirerecon_id_str.split(',') if wirerecon_id_str else [])]
+                recon_ids = [int(rid) if rid and rid.lower() != 'none' else None for rid in (recon_id_str.split(',') if recon_id_str else [])]
+                peakindex_ids = [int(pid) if pid and pid.lower() != 'none' else None for pid in (peakindex_id_str.split(',') if peakindex_id_str else [])]
+
+                # Validate that lists have matching lengths
+                if wirerecon_ids and len(wirerecon_ids) != len(scan_ids): raise ValueError(f"Mismatch: {len(scan_ids)} scan IDs but {len(wirerecon_ids)} wirerecon IDs")
+                if recon_ids and len(recon_ids) != len(scan_ids): raise ValueError(f"Mismatch: {len(scan_ids)} scan IDs but {len(recon_ids)} recon IDs")
+                if peakindex_ids and len(peakindex_ids) != len(scan_ids): raise ValueError(f"Mismatch: {len(scan_ids)} scan IDs but {len(peakindex_ids)} peakindex IDs")
+
+                # If no reconstruction IDs provided, fill with None
+                if not wirerecon_ids: wirerecon_ids = [None] * len(scan_ids)
+                if not recon_ids: recon_ids = [None] * len(scan_ids)
+                if not peakindex_ids: peakindex_ids = [None] * len(scan_ids)
+
+                peakindex_form_data_list = []
+                found_items = []
+                not_found_items = []
+                for i, current_scan_id in enumerate(scan_ids):
+                    current_wirerecon_id = wirerecon_ids[i]
+                    current_recon_id = recon_ids[i]
+                    current_peakindex_id = peakindex_ids[i]
 
                     # Query metadata and scan data
-                    metadata_data = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == scan_id).first()
-                    # scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_id).all()
+                    metadata_data = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == current_scan_id).first()
+                    # scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == current_scan_id).all()
                     if metadata_data:
+                        if current_peakindex_id:
+                            found_items.append(f"peak index {current_peakindex_id}")
+                        elif current_recon_id:
+                            found_items.append(f"reconstruction {current_recon_id}")
+                        elif current_wirerecon_id:
+                            found_items.append(f"wire reconstruction {current_wirerecon_id}")
+                        else:
+                            found_items.append(f"scan {current_scan_id}")
 
                         # Determine output folder format based on if reconstruction ID
                         outputFolder = PEAKINDEX_DEFAULTS["outputFolder"]
-                        if recon_id or wirerecon_id:
+                        if current_recon_id or current_wirerecon_id:
                             outputFolder = outputFolder.replace("index_%d", "rec_%d/index_%d") #"analysis/scan_%d/rec_%d/index_%d"
                         
                         # # Format output folder with scan number and IDs
                         # try:
-                        #     if wirerecon_id:
-                        #         outputFolder = outputFolder % (scan_id, wirerecon_id, next_peakindex_id)
-                        #     elif recon_id:
-                        #         outputFolder = outputFolder % (scan_id, recon_id, next_peakindex_id)
+                        #     if current_wirerecon_id:
+                        #         outputFolder = outputFolder % (current_scan_id, current_wirerecon_id, next_peakindex_id)
+                        #     elif current_recon_id:
+                        #         outputFolder = outputFolder % (current_scan_id, current_recon_id, next_peakindex_id)
                         #     else:
-                        #         outputFolder = outputFolder % (scan_id, next_peakindex_id)
+                        #         outputFolder = outputFolder % (current_scan_id, next_peakindex_id)
                         # except:
                         #     # If formatting fails, use the original string
                         #     pass
+                        # next_peakindex_id += 1
 
                         # If peakindex_id is provided, load existing peakindex data
-                        if peakindex_id:
+                        if current_peakindex_id:
                             try:
-                                peakindex_data = session.query(db_schema.PeakIndex).filter(db_schema.PeakIndex.peakindex_id == peakindex_id).first()
+                                peakindex_data = session.query(db_schema.PeakIndex).filter(db_schema.PeakIndex.peakindex_id == current_peakindex_id).first()
                                 if peakindex_data:
                                     # Use existing peakindex data as the base
                                     peakindex_form_data = peakindex_data
-                                    
                                     # Update only the necessary fields
-                                    # peakindex_form_data.scanNumber = scan_id
-                                    peakindex_form_data.author = DEFAULT_VARIABLES['author']
-                                    peakindex_form_data.notes = DEFAULT_VARIABLES['notes']
-                                    # peakindex_form_data.recon_id = recon_id
-                                    # peakindex_form_data.wirerecon_id = wirerecon_id
+                                    # peakindex_form_data.scanNumber = current_scan_id
+                                    # peakindex_form_data.recon_id = current_recon_id
+                                    # peakindex_form_data.wirerecon_id = current_wirerecon_id
                                     peakindex_form_data.outputFolder = outputFolder
-                                    
                                     # Convert file paths to relative paths
                                     peakindex_form_data.geoFile = remove_root_path_prefix(peakindex_data.geoFile, root_path)
                                     peakindex_form_data.crystFile = remove_root_path_prefix(peakindex_data.crystFile, root_path)
-
                                     if peakindex_data.filefolder:
                                         peakindex_form_data.data_path = remove_root_path_prefix(peakindex_data.filefolder, root_path)
                                     if peakindex_data.filenamePrefix:
                                         peakindex_form_data.filenamePrefix = peakindex_data.filenamePrefix
-                                else:
-                                    # Show warning if peakindex not found
-                                    set_props("alert-scan-loaded", {
-                                        'is_open': True, 
-                                        'children': f'Peak indexing {peakindex_id} not found in database',
-                                        'color': 'warning'
-                                    })
-                                    raise ValueError("PeakIndex not found")
-                                    
+                            
                             except (ValueError, Exception):
                                 # If peakindex_id is not valid or not found, create defaults
-                                peakindex_id = None
+                                current_peakindex_id = None
 
                         # Create defaults if no peakindex_id or if loading failed
-                        if not peakindex_id:
+                        if not current_peakindex_id:
                             # Create a PeakIndex object with populated defaults from metadata/scan
                             peakindex_form_data = db_schema.PeakIndex(
-                                scanNumber = scan_id,
-                                
-                                # User text
-                                author = DEFAULT_VARIABLES['author'],
-                                notes = DEFAULT_VARIABLES['notes'],
-                                
+                                scanNumber=current_scan_id,
                                 # Recon ID
-                                recon_id = recon_id,
-                                wirerecon_id = wirerecon_id,
-                                
+                                recon_id=current_recon_id,
+                                wirerecon_id=current_wirerecon_id,
                                 # Energy-related fields from source
-                                indexKeVmaxCalc=metadata_data.source_energy or PEAKINDEX_DEFAULTS["indexKeVmaxCalc"],
-                                indexKeVmaxTest=metadata_data.source_energy or PEAKINDEX_DEFAULTS["indexKeVmaxTest"],
-                                energyUnit=metadata_data.source_energy_unit or PEAKINDEX_DEFAULTS["energyUnit"],
-                                
-                                # # Scan point range from scan data
-                                # scanPointStart=PEAKINDEX_DEFAULTS["scanPointStart"],
-                                # scanPointEnd=PEAKINDEX_DEFAULTS["scanPointEnd"], # Probably needs logic to determine which dim is the scan dim
-                                # Scan points and depth range
-                                scanPoints=PEAKINDEX_DEFAULTS["scanPoints"],
-                                scanPointslen=srange(PEAKINDEX_DEFAULTS["scanPoints"]).len(),
-                                depthRange=PEAKINDEX_DEFAULTS["depthRange"],
-                                depthRangelen=srange(PEAKINDEX_DEFAULTS["depthRange"]).len(),
-                                
-                                # Default processing parameters - set to None to leave empty for user input
-                                threshold=PEAKINDEX_DEFAULTS["threshold"],
-                                thresholdRatio=PEAKINDEX_DEFAULTS["thresholdRatio"],
-                                maxRfactor=PEAKINDEX_DEFAULTS["maxRfactor"],
-                                boxsize=PEAKINDEX_DEFAULTS["boxsize"],
-                                max_number=PEAKINDEX_DEFAULTS["max_number"],
-                                min_separation=PEAKINDEX_DEFAULTS["min_separation"],
-                                peakShape=PEAKINDEX_DEFAULTS["peakShape"],
-                                detectorCropX1=PEAKINDEX_DEFAULTS["detectorCropX1"],
-                                detectorCropX2=PEAKINDEX_DEFAULTS["detectorCropX2"],
-                                detectorCropY1=PEAKINDEX_DEFAULTS["detectorCropY1"],
-                                detectorCropY2=PEAKINDEX_DEFAULTS["detectorCropY2"],
-                                min_size=PEAKINDEX_DEFAULTS["min_size"],
-                                max_peaks=PEAKINDEX_DEFAULTS["max_peaks"],
-                                smooth=PEAKINDEX_DEFAULTS["smooth"],
-                                maskFile=PEAKINDEX_DEFAULTS["maskFile"],
-                                indexAngleTolerance=PEAKINDEX_DEFAULTS["indexAngleTolerance"],
-                                indexH=PEAKINDEX_DEFAULTS["indexH"],
-                                indexK=PEAKINDEX_DEFAULTS["indexK"],
-                                indexL=PEAKINDEX_DEFAULTS["indexL"],
-                                indexCone=PEAKINDEX_DEFAULTS["indexCone"],
-                                exposureUnit=PEAKINDEX_DEFAULTS["exposureUnit"],
-                                cosmicFilter=PEAKINDEX_DEFAULTS["cosmicFilter"],
-                                recipLatticeUnit=PEAKINDEX_DEFAULTS["recipLatticeUnit"],
-                                latticeParametersUnit=PEAKINDEX_DEFAULTS["latticeParametersUnit"],
-                                # peaksearchPath=PEAKINDEX_DEFAULTS["peaksearchPath"],
-                                # p2qPath=PEAKINDEX_DEFAULTS["p2qPath"],
-                                # indexingPath=PEAKINDEX_DEFAULTS["indexingPath"],
-                                outputFolder=outputFolder,#PEAKINDEX_DEFAULTS["outputFolder"],
-                                geoFile=PEAKINDEX_DEFAULTS["geoFile"],
-                                crystFile=PEAKINDEX_DEFAULTS["crystFile"],
-                                depth=PEAKINDEX_DEFAULTS["depth"],
-                                beamline=PEAKINDEX_DEFAULTS["beamline"]
+                                indexKeVmaxCalc=metadata_data.source_energy if metadata_data else PEAKINDEX_DEFAULTS["indexKeVmaxCalc"],
+                                indexKeVmaxTest=metadata_data.source_energy if metadata_data else PEAKINDEX_DEFAULTS["indexKeVmaxTest"],
+                                energyUnit=metadata_data.source_energy_unit if metadata_data else PEAKINDEX_DEFAULTS["energyUnit"],
+                                outputFolder=outputFolder,
+                                **{k: v for k, v in PEAKINDEX_DEFAULTS.items() if k not in ['scanNumber', 'outputFolder', 'indexKeVmaxCalc', 'indexKeVmaxTest', 'energyUnit']}
                             )
-                        
+
                         # Add root_path from DEFAULT_VARIABLES
                         peakindex_form_data.root_path = root_path
-                        
+
                         # If processing reconstruction data, use the reconstruction output folder as data path
-                        if wirerecon_id:
-                            wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == wirerecon_id).first()
+                        if current_wirerecon_id:
+                            wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == current_wirerecon_id).first()
                             if wirerecon_data:
                                 if wirerecon_data.outputFolder:
-                                    # Use the wire reconstruction output folder as the data path
                                     peakindex_form_data.data_path = remove_root_path_prefix(wirerecon_data.outputFolder, root_path)
                                 if wirerecon_data.filenamePrefix:
                                     peakindex_form_data.filenamePrefix = wirerecon_data.filenamePrefix
-                        elif recon_id:
-                            recon_data = session.query(db_schema.Recon).filter(db_schema.Recon.recon_id == recon_id).first()
+                        elif current_recon_id:
+                            recon_data = session.query(db_schema.Recon).filter(db_schema.Recon.recon_id == current_recon_id).first()
                             if recon_data:
                                 if recon_data.file_output:
-                                    # Use the reconstruction output folder as the data path
                                     peakindex_form_data.data_path = remove_root_path_prefix(recon_data.file_output, root_path)
                                 if recon_data.filenamePrefix: #if hasattr(recon_data, 'filenamePrefix') and recon_data.filenamePrefix:
                                     peakindex_form_data.filenamePrefix = recon_data.filenamePrefix
-
-                        if any([not hasattr(peakindex_form_data, field) for field in ['data_path','filenamePrefix']]):
+                        
+                        if not all([hasattr(peakindex_form_data, 'data_path'), getattr(peakindex_form_data, 'filenamePrefix')]):
                             # Retrieve data_path and filenamePrefix from catalog data
                             catalog_data = get_catalog_data(session, current_scan_id, root_path, CATALOG_DEFAULTS)
                         if not hasattr(peakindex_form_data, 'data_path'):
                             peakindex_form_data.data_path = catalog_data.get('data_path', '')
-                        if not hasattr(peakindex_form_data, 'filenamePrefix'):
+                        if not getattr(peakindex_form_data, 'filenamePrefix'):
                             # peakindex_form_data.filenamePrefix = catalog_data.get('filenamePrefix', '')
                             peakindex_form_data.filenamePrefix = catalog_data.get('filenamePrefix', [])
-                    
-                        # Populate the form with the defaults
-                        set_peakindex_form_props(peakindex_form_data)
                         
-                        # Show success message
-                        if peakindex_id:
-                            message = f'Successfully loaded data from peak index {peakindex_id} into the form.'
-                        elif recon_id:
-                            message = f'Successfully loaded data for reconstruction {recon_id} into the form.'
-                        elif wirerecon_id:
-                            message = f'Successfully loaded data for wire reconstruction {wirerecon_id} into the form.'
-                        else:
-                            message = f'Successfully loaded data for scan {scan_id} into the form.'
-                        set_props("alert-scan-loaded", {
-                            'is_open': True,
-                            'children': message,
-                            'color': 'success'
-                        })
+                        peakindex_form_data_list.append(peakindex_form_data)
                     else:
-                        # Show error if scan not found
+                        if current_peakindex_id:
+                            not_found_items.append(f"peak index {current_peakindex_id}")
+                        elif current_recon_id:
+                            not_found_items.append(f"reconstruction {current_recon_id}")
+                        elif current_wirerecon_id:
+                            not_found_items.append(f"wire reconstruction {current_wirerecon_id}")
+                        else:
+                            not_found_items.append(f"scan {current_scan_id}")
+                    
+                # Create pooled peakindex_form_data by combining values from all scans
+                if peakindex_form_data_list:
+                    pooled_peakindex_form_data = db_schema.PeakIndex()
+                    
+                    # Pool all attributes - both database columns and extra attributes
+                    all_attrs = list(db_schema.PeakIndex.__table__.columns.keys()) + ['root_path', 'data_path', 'filenamePrefix']
+                    
+                    for attr in all_attrs:
+                        if attr == 'peakindex_id': continue
+                        
+                        values = []
+                        for d in peakindex_form_data_list:
+                            if hasattr(d, attr):
+                                values.append(getattr(d, attr))
+                        
+                        if values:
+                            if all(v == values[0] for v in values):
+                                setattr(pooled_peakindex_form_data, attr, values[0])
+                            else:
+                                setattr(pooled_peakindex_form_data, attr, "; ".join(map(str, values)))
+                    
+                    # User text
+                    pooled_peakindex_form_data.author = DEFAULT_VARIABLES['author']
+                    pooled_peakindex_form_data.notes = DEFAULT_VARIABLES['notes']
+                    # # Add root_path from DEFAULT_VARIABLES
+                    # pooled_peakindex_form_data.root_path = root_path
+                    # Populate the form with the defaults
+                    set_peakindex_form_props(pooled_peakindex_form_data)
+
+                    # Set alert based on what was found
+                    if not_found_items:
+                        # Partial success
                         set_props("alert-scan-loaded", {
                             'is_open': True,
-                            'children': f'Could not find scan {scan_id} in the database. Displaying default values.',
+                            'children': f"Loaded data for {len(found_items)} items. Could not find: {', '.join(not_found_items)}.",
                             'color': 'warning'
                         })
-                        
-                except Exception as e:
-                    print(f"An error occurred: {e}")
-            else:
-                try:
-                    # This section handles multiple/pooled scan numbers
-                    scan_ids = [int(sid) if sid and sid.lower() != 'none' else None for sid in (scan_id_str.replace('$','').split(',') if scan_id_str else [])]
+                    else:
+                        # Full success
+                        set_props("alert-scan-loaded", {
+                            'is_open': True,
+                            'children': f"Successfully loaded and merged data from {len(found_items)} items into the form.",
+                            'color': 'success'
+                        })
+                else:
+                    # Fallback if no valid scans found
+                    if not_found_items:
+                        set_props("alert-scan-loaded", {
+                            'is_open': True,
+                            'children': f"Could not find any of the requested items: {', '.join(not_found_items)}. Displaying default values.",
+                            'color': 'danger'
+                        })
                     
-                    # Handle pooled reconstruction IDs
-                    wirerecon_ids = [int(wid) if wid and wid.lower() != 'none' else None for wid in (wirerecon_id_str.replace('$','').split(',') if wirerecon_id_str else [])]
-                    recon_ids = [int(rid) if rid and rid.lower() != 'none' else None for rid in (recon_id_str.replace('$','').split(',') if recon_id_str else [])]
-                    peakindex_ids = [int(pid) if pid and pid.lower() != 'none' else None for pid in (peakindex_id_str.replace('$','').split(',') if peakindex_id_str else [])]
-
-                    # Validate that lists have matching lengths
-                    if wirerecon_ids and len(wirerecon_ids) != len(scan_ids): raise ValueError(f"Mismatch: {len(scan_ids)} scan IDs but {len(wirerecon_ids)} wirerecon IDs")
-                    if recon_ids and len(recon_ids) != len(scan_ids): raise ValueError(f"Mismatch: {len(scan_ids)} scan IDs but {len(recon_ids)} recon IDs")
-                    if peakindex_ids and len(peakindex_ids) != len(scan_ids): raise ValueError(f"Mismatch: {len(scan_ids)} scan IDs but {len(peakindex_ids)} peakindex IDs")
-
-                    # If no reconstruction IDs provided, fill with None
-                    if not wirerecon_ids: wirerecon_ids = [None] * len(scan_ids)
-                    if not recon_ids: recon_ids = [None] * len(scan_ids)
-                    if not peakindex_ids: peakindex_ids = [None] * len(scan_ids)
-
-                    peakindex_form_data_list = []
-                    found_items = []
-                    not_found_items = []
-                    for i, current_scan_id in enumerate(scan_ids):
-                        current_wirerecon_id = wirerecon_ids[i]
-                        current_recon_id = recon_ids[i]
-                        current_peakindex_id = peakindex_ids[i]
-
-                        # Query metadata and scan data
-                        metadata_data = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == current_scan_id).first()
-                        # scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == current_scan_id).all()
-                        if metadata_data:
-                            if current_peakindex_id:
-                                found_items.append(f"peak index {current_peakindex_id}")
-                            elif current_recon_id:
-                                found_items.append(f"reconstruction {current_recon_id}")
-                            elif current_wirerecon_id:
-                                found_items.append(f"wire reconstruction {current_wirerecon_id}")
-                            else:
-                                found_items.append(f"scan {current_scan_id}")
-
-                            # Determine output folder format based on if reconstruction ID
-                            outputFolder = PEAKINDEX_DEFAULTS["outputFolder"]
-                            if current_recon_id or current_wirerecon_id:
-                                outputFolder = outputFolder.replace("index_%d", "rec_%d/index_%d") #"analysis/scan_%d/rec_%d/index_%d"
-                            
-                            # # Format output folder with scan number and IDs
-                            # try:
-                            #     if current_wirerecon_id:
-                            #         outputFolder = outputFolder % (current_scan_id, current_wirerecon_id, next_peakindex_id)
-                            #     elif current_recon_id:
-                            #         outputFolder = outputFolder % (current_scan_id, current_recon_id, next_peakindex_id)
-                            #     else:
-                            #         outputFolder = outputFolder % (current_scan_id, next_peakindex_id)
-                            # except:
-                            #     # If formatting fails, use the original string
-                            #     pass
-                            # next_peakindex_id += 1
-
-                            # If peakindex_id is provided, load existing peakindex data
-                            if current_peakindex_id:
-                                try:
-                                    peakindex_data = session.query(db_schema.PeakIndex).filter(db_schema.PeakIndex.peakindex_id == current_peakindex_id).first()
-                                    if peakindex_data:
-                                        # Use existing peakindex data as the base
-                                        peakindex_form_data = peakindex_data
-                                        # Update only the necessary fields
-                                        # peakindex_form_data.scanNumber = current_scan_id
-                                        # peakindex_form_data.recon_id = current_recon_id
-                                        # peakindex_form_data.wirerecon_id = current_wirerecon_id
-                                        peakindex_form_data.outputFolder = outputFolder
-                                        # Convert file paths to relative paths
-                                        peakindex_form_data.geoFile = remove_root_path_prefix(peakindex_data.geoFile, root_path)
-                                        peakindex_form_data.crystFile = remove_root_path_prefix(peakindex_data.crystFile, root_path)
-                                        if peakindex_data.filefolder:
-                                            peakindex_form_data.data_path = remove_root_path_prefix(peakindex_data.filefolder, root_path)
-                                        if peakindex_data.filenamePrefix:
-                                            peakindex_form_data.filenamePrefix = peakindex_data.filenamePrefix
-                                
-                                except (ValueError, Exception):
-                                    # If peakindex_id is not valid or not found, create defaults
-                                    current_peakindex_id = None
-
-                            # Create defaults if no peakindex_id or if loading failed
-                            if not current_peakindex_id:
-                                # Create a PeakIndex object with populated defaults from metadata/scan
-                                peakindex_form_data = db_schema.PeakIndex(
-                                    scanNumber=current_scan_id,
-                                    # Recon ID
-                                    recon_id=current_recon_id,
-                                    wirerecon_id=current_wirerecon_id,
-                                    # Energy-related fields from source
-                                    indexKeVmaxCalc=metadata_data.source_energy if metadata_data else PEAKINDEX_DEFAULTS["indexKeVmaxCalc"],
-                                    indexKeVmaxTest=metadata_data.source_energy if metadata_data else PEAKINDEX_DEFAULTS["indexKeVmaxTest"],
-                                    energyUnit=metadata_data.source_energy_unit if metadata_data else PEAKINDEX_DEFAULTS["energyUnit"],
-                                    outputFolder=outputFolder,
-                                    **{k: v for k, v in PEAKINDEX_DEFAULTS.items() if k not in ['scanNumber', 'outputFolder', 'indexKeVmaxCalc', 'indexKeVmaxTest', 'energyUnit']}
-                                )
-
-                            # Add root_path from DEFAULT_VARIABLES
-                            peakindex_form_data.root_path = root_path
-
-                            # If processing reconstruction data, use the reconstruction output folder as data path
-                            if current_wirerecon_id:
-                                wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == current_wirerecon_id).first()
-                                if wirerecon_data:
-                                    if wirerecon_data.outputFolder:
-                                        peakindex_form_data.data_path = remove_root_path_prefix(wirerecon_data.outputFolder, root_path)
-                                    if wirerecon_data.filenamePrefix:
-                                        peakindex_form_data.filenamePrefix = wirerecon_data.filenamePrefix
-                            elif current_recon_id:
-                                recon_data = session.query(db_schema.Recon).filter(db_schema.Recon.recon_id == current_recon_id).first()
-                                if recon_data:
-                                    if recon_data.file_output:
-                                        peakindex_form_data.data_path = remove_root_path_prefix(recon_data.file_output, root_path)
-                                    if recon_data.filenamePrefix: #if hasattr(recon_data, 'filenamePrefix') and recon_data.filenamePrefix:
-                                        peakindex_form_data.filenamePrefix = recon_data.filenamePrefix
-                            
-                            if any([not hasattr(peakindex_form_data, field) for field in ['data_path','filenamePrefix']]):
-                                # Retrieve data_path and filenamePrefix from catalog data
-                                catalog_data = get_catalog_data(session, current_scan_id, root_path, CATALOG_DEFAULTS)
-                            if not hasattr(peakindex_form_data, 'data_path'):
-                                peakindex_form_data.data_path = catalog_data.get('data_path', '')
-                            if not hasattr(peakindex_form_data, 'filenamePrefix'):
-                                # peakindex_form_data.filenamePrefix = catalog_data.get('filenamePrefix', '')
-                                peakindex_form_data.filenamePrefix = catalog_data.get('filenamePrefix', [])
-                            
-                            peakindex_form_data_list.append(peakindex_form_data)
-                        else:
-                            if current_peakindex_id:
-                                not_found_items.append(f"peak index {current_peakindex_id}")
-                            elif current_recon_id:
-                                not_found_items.append(f"reconstruction {current_recon_id}")
-                            elif current_wirerecon_id:
-                                not_found_items.append(f"wire reconstruction {current_wirerecon_id}")
-                            else:
-                                not_found_items.append(f"scan {current_scan_id}")
-                        
-                    # Create pooled peakindex_form_data by combining values from all scans
-                    if peakindex_form_data_list:
-                        pooled_peakindex_form_data = db_schema.PeakIndex()
-                        
-                        # Pool all attributes - both database columns and extra attributes
-                        all_attrs = list(db_schema.PeakIndex.__table__.columns.keys()) + ['root_path', 'data_path', 'filenamePrefix']
-                        
-                        for attr in all_attrs:
-                            if attr == 'peakindex_id': continue
-                            
-                            values = []
-                            for d in peakindex_form_data_list:
-                                if hasattr(d, attr):
-                                    values.append(getattr(d, attr))
-                            
-                            if values:
-                                if all(v == values[0] for v in values):
-                                    setattr(pooled_peakindex_form_data, attr, values[0])
-                                else:
-                                    setattr(pooled_peakindex_form_data, attr, "; ".join(map(str, values)))
+                    peakindex_form_data = db_schema.PeakIndex(
+                        scanNumber=str(scan_id_str).replace(',','; '),
                         
                         # User text
-                        pooled_peakindex_form_data.author = DEFAULT_VARIABLES['author']
-                        pooled_peakindex_form_data.notes = DEFAULT_VARIABLES['notes']
-                        # # Add root_path from DEFAULT_VARIABLES
-                        # pooled_peakindex_form_data.root_path = root_path
-                        # Populate the form with the defaults
-                        set_peakindex_form_props(pooled_peakindex_form_data)
+                        author=DEFAULT_VARIABLES['author'],
+                        notes=DEFAULT_VARIABLES['notes'],
+                        
+                        # Processing parameters
+                        threshold=PEAKINDEX_DEFAULTS["threshold"],
+                        thresholdRatio=PEAKINDEX_DEFAULTS["thresholdRatio"],
+                        maxRfactor=PEAKINDEX_DEFAULTS["maxRfactor"],
+                        boxsize=PEAKINDEX_DEFAULTS["boxsize"],
+                        max_number=PEAKINDEX_DEFAULTS["max_number"],
+                        min_separation=PEAKINDEX_DEFAULTS["min_separation"],
+                        peakShape=PEAKINDEX_DEFAULTS["peakShape"],
+                        scanPoints=PEAKINDEX_DEFAULTS["scanPoints"],
+                        scanPointslen=srange(PEAKINDEX_DEFAULTS["scanPoints"]).len(),
+                        depthRange=PEAKINDEX_DEFAULTS["depthRange"],
+                        depthRangelen=srange(PEAKINDEX_DEFAULTS["depthRange"]).len(),
+                        detectorCropX1=PEAKINDEX_DEFAULTS["detectorCropX1"],
+                        detectorCropX2=PEAKINDEX_DEFAULTS["detectorCropX2"],
+                        detectorCropY1=PEAKINDEX_DEFAULTS["detectorCropY1"],
+                        detectorCropY2=PEAKINDEX_DEFAULTS["detectorCropY2"],
+                        min_size=PEAKINDEX_DEFAULTS["min_size"],
+                        max_peaks=PEAKINDEX_DEFAULTS["max_peaks"],
+                        smooth=PEAKINDEX_DEFAULTS["smooth"],
+                        maskFile=PEAKINDEX_DEFAULTS["maskFile"],
+                        indexKeVmaxCalc=PEAKINDEX_DEFAULTS["indexKeVmaxCalc"],
+                        indexKeVmaxTest=PEAKINDEX_DEFAULTS["indexKeVmaxTest"],
+                        indexAngleTolerance=PEAKINDEX_DEFAULTS["indexAngleTolerance"],
+                        indexH=PEAKINDEX_DEFAULTS["indexH"],
+                        indexK=PEAKINDEX_DEFAULTS["indexK"],
+                        indexL=PEAKINDEX_DEFAULTS["indexL"],
+                        indexCone=PEAKINDEX_DEFAULTS["indexCone"],
+                        energyUnit=PEAKINDEX_DEFAULTS["energyUnit"],
+                        exposureUnit=PEAKINDEX_DEFAULTS["exposureUnit"],
+                        cosmicFilter=PEAKINDEX_DEFAULTS["cosmicFilter"],
+                        recipLatticeUnit=PEAKINDEX_DEFAULTS["recipLatticeUnit"],
+                        latticeParametersUnit=PEAKINDEX_DEFAULTS["latticeParametersUnit"],
+                        outputFolder=PEAKINDEX_DEFAULTS["outputFolder"],
+                        geoFile=PEAKINDEX_DEFAULTS["geoFile"],
+                        crystFile=PEAKINDEX_DEFAULTS["crystFile"],
+                        depth=PEAKINDEX_DEFAULTS["depth"],
+                        beamline=PEAKINDEX_DEFAULTS["beamline"]
+                    )
+                    
+                    # Set root_path
+                    peakindex_form_data.root_path = root_path
+                    peakindex_form_data.data_path = ""
+                    peakindex_form_data.filenamePrefix = ""
+                    
+                    # Populate the form with the defaults
+                    set_peakindex_form_props(peakindex_form_data)
 
-                        # Set alert based on what was found
-                        if not_found_items:
-                            # Partial success
-                            set_props("alert-scan-loaded", {
-                                'is_open': True,
-                                'children': f"Loaded data for {len(found_items)} items. Could not find: {', '.join(not_found_items)}.",
-                                'color': 'warning'
-                            })
-                        else:
-                            # Full success
-                            set_props("alert-scan-loaded", {
-                                'is_open': True,
-                                'children': f"Successfully loaded and merged data from {len(found_items)} items into the form.",
-                                'color': 'success'
-                            })
-                    else:
-                        # Fallback if no valid scans found
-                        if not_found_items:
-                            set_props("alert-scan-loaded", {
-                                'is_open': True,
-                                'children': f"Could not find any of the requested items: {', '.join(not_found_items)}. Displaying default values.",
-                                'color': 'danger'
-                            })
-                        
-                        peakindex_form_data = db_schema.PeakIndex(
-                            scanNumber=str(scan_id_str).replace('$','').replace(',','; '),
-                            
-                            # User text
-                            author=DEFAULT_VARIABLES['author'],
-                            notes=DEFAULT_VARIABLES['notes'],
-                            
-                            # Processing parameters
-                            threshold=PEAKINDEX_DEFAULTS["threshold"],
-                            thresholdRatio=PEAKINDEX_DEFAULTS["thresholdRatio"],
-                            maxRfactor=PEAKINDEX_DEFAULTS["maxRfactor"],
-                            boxsize=PEAKINDEX_DEFAULTS["boxsize"],
-                            max_number=PEAKINDEX_DEFAULTS["max_number"],
-                            min_separation=PEAKINDEX_DEFAULTS["min_separation"],
-                            peakShape=PEAKINDEX_DEFAULTS["peakShape"],
-                            scanPoints=PEAKINDEX_DEFAULTS["scanPoints"],
-                            scanPointslen=srange(PEAKINDEX_DEFAULTS["scanPoints"]).len(),
-                            depthRange=PEAKINDEX_DEFAULTS["depthRange"],
-                            depthRangelen=srange(PEAKINDEX_DEFAULTS["depthRange"]).len(),
-                            detectorCropX1=PEAKINDEX_DEFAULTS["detectorCropX1"],
-                            detectorCropX2=PEAKINDEX_DEFAULTS["detectorCropX2"],
-                            detectorCropY1=PEAKINDEX_DEFAULTS["detectorCropY1"],
-                            detectorCropY2=PEAKINDEX_DEFAULTS["detectorCropY2"],
-                            min_size=PEAKINDEX_DEFAULTS["min_size"],
-                            max_peaks=PEAKINDEX_DEFAULTS["max_peaks"],
-                            smooth=PEAKINDEX_DEFAULTS["smooth"],
-                            maskFile=PEAKINDEX_DEFAULTS["maskFile"],
-                            indexKeVmaxCalc=PEAKINDEX_DEFAULTS["indexKeVmaxCalc"],
-                            indexKeVmaxTest=PEAKINDEX_DEFAULTS["indexKeVmaxTest"],
-                            indexAngleTolerance=PEAKINDEX_DEFAULTS["indexAngleTolerance"],
-                            indexH=PEAKINDEX_DEFAULTS["indexH"],
-                            indexK=PEAKINDEX_DEFAULTS["indexK"],
-                            indexL=PEAKINDEX_DEFAULTS["indexL"],
-                            indexCone=PEAKINDEX_DEFAULTS["indexCone"],
-                            energyUnit=PEAKINDEX_DEFAULTS["energyUnit"],
-                            exposureUnit=PEAKINDEX_DEFAULTS["exposureUnit"],
-                            cosmicFilter=PEAKINDEX_DEFAULTS["cosmicFilter"],
-                            recipLatticeUnit=PEAKINDEX_DEFAULTS["recipLatticeUnit"],
-                            latticeParametersUnit=PEAKINDEX_DEFAULTS["latticeParametersUnit"],
-                            outputFolder=PEAKINDEX_DEFAULTS["outputFolder"],
-                            geoFile=PEAKINDEX_DEFAULTS["geoFile"],
-                            crystFile=PEAKINDEX_DEFAULTS["crystFile"],
-                            depth=PEAKINDEX_DEFAULTS["depth"],
-                            beamline=PEAKINDEX_DEFAULTS["beamline"]
-                        )
-                        
-                        # Set root_path
-                        peakindex_form_data.root_path = root_path
-                        peakindex_form_data.data_path = ""
-                        peakindex_form_data.filenamePrefix = ""
-                        
-                        # Populate the form with the defaults
-                        set_peakindex_form_props(peakindex_form_data)
-
-                except Exception as e:
-                    set_props("alert-scan-loaded", {
-                        'is_open': True, 
-                        'children': f'Error loading scan data: {str(e)}',
-                        'color': 'danger'
-                    })
+            except Exception as e:
+                set_props("alert-scan-loaded", {
+                    'is_open': True, 
+                    'children': f'Error loading scan data: {str(e)}',
+                    'color': 'danger'
+                })

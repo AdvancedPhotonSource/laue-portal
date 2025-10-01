@@ -213,7 +213,7 @@ def selected_hrefs(rows, recon_href, peakindex_href):
         
         recon_ids.append(str(row['recon_id']) if row.get('recon_id') else '')
 
-    query_params = [f"scan_id=${','.join(scan_ids)}"]
+    query_params = [f"scan_id={','.join(scan_ids)}"]
     if any(recon_ids): query_params.append(f"recon_id={','.join(recon_ids)}")
     
     query_string = "&".join(query_params)

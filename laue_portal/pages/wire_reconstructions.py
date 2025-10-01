@@ -245,7 +245,7 @@ def selected_hrefs(rows, wirerecon_href, peakindex_href):
         
         wirerecon_ids.append(str(row['wirerecon_id']) if row.get('wirerecon_id') else '')
 
-    query_params = [f"scan_id=${','.join(scan_ids)}"]
+    query_params = [f"scan_id={','.join(scan_ids)}"]
     if any(wirerecon_ids): query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
     
     query_string = "&".join(query_params)
