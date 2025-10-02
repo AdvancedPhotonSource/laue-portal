@@ -11,7 +11,7 @@ import laue_portal.components.navbar as navbar
 from laue_portal.pages.scan import build_technique_strings
 import laue_portal.database.session_utils as session_utils
 
-dash.register_page(__name__, path='/')
+dash.register_page(__name__, path='/scans')
 
 layout = html.Div([
         navbar.navbar,
@@ -212,7 +212,7 @@ def _get_metadatas():
     prevent_initial_call=True,
 )
 def get_metadatas(path):
-    if path == '/':
+    if path == '/scans':
         cols, metadatas_records = _get_metadatas()
         return cols, metadatas_records
     else:

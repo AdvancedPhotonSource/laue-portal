@@ -88,8 +88,8 @@ class TestMetadataRetrievers:
                     session.add(test_scan)
                     session.commit()
                 
-                # Test the callback with correct path (root path '/')
-                cols, metadatas = get_metadatas('/')
+                # Test the callback with correct path ('/scans')
+                cols, metadatas = get_metadatas('/scans')
             
             # Verify that the callback returns the expected structure
             assert isinstance(cols, list), "Callback should return columns as a list"
@@ -98,7 +98,7 @@ class TestMetadataRetrievers:
             
             # Test the callback with incorrect path (should raise PreventUpdate)
             with pytest.raises(PreventUpdate):
-                get_metadatas('/wrong_path')
+                get_metadatas('/')
 
     def test_get_metadatas_empty_database_smoke(self, empty_metadata_database):
         """Test that _get_metadatas function handles empty database gracefully."""
