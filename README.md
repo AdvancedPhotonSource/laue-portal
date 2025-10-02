@@ -1,6 +1,8 @@
 # Laue Portal
 
-A web-based platform for managing Laue X-ray diffraction data processing workflows at APS beamline 34-ID-E.
+A web-based platform for managing Laue X-ray diffraction data processing workflows at APS beamline 34-ID-E. Currently under construction!
+
+![Laue Portal](images/temp_splash.png)
 
 ## Overview
 
