@@ -1,36 +1,3 @@
-# import dash_bootstrap_components as dbc
-
-# navbar = dbc.NavbarSimple(
-#     children=[
-#         dbc.NavItem(dbc.NavLink("Scans", href="/", active="exact")),
-#         dbc.NavItem(dbc.NavLink("Mask Reconstructions", href="/reconstructions", active="exact")),
-#         dbc.NavItem(dbc.NavLink("Wire Reconstructions", href="/wire-reconstructions", active="exact")),
-#         dbc.NavItem(dbc.NavLink("Peak Indexings", href="/peakindexings", active="exact")),
-#         dbc.NavItem(dbc.NavLink("Run Monitor", href="/run-monitor", active="exact")),
-#         dbc.DropdownMenu(
-#             id="manual-entry-dropdown",
-#             children=[
-#                 dbc.DropdownMenuItem("New Scan", href="/create-scan"),
-#                 dbc.DropdownMenuItem("New CA Reconstruction", href="/create-reconstruction"),
-#                 dbc.DropdownMenuItem("New Wire Reconstruction", href="/create-wire-reconstruction"),
-#                 dbc.DropdownMenuItem("New Peak Indexing", href="/create-peakindexing"),
-#             ],
-#             nav=True,
-#             in_navbar=True,
-#             label="Manual Entry",
-#         ),
-#     ],
-#     brand="3DMN Portal",
-#     brand_href="/",
-#     color="primary",
-#     className="navbar-lg",
-#     dark=True,
-#     style={"max-height": "50px"},
-# )
-
-
-
-
 import dash_bootstrap_components as dbc
 from dash import html, Input, Output, State, callback
 
@@ -42,7 +9,8 @@ navbar = dbc.Navbar(
             dbc.Collapse(
                 dbc.Nav(
                     [
-                        dbc.NavItem(dbc.NavLink("Scans", href="/", active="exact")),
+                        dbc.NavItem(dbc.NavLink("Status", href="/", active="exact")),
+                        dbc.NavItem(dbc.NavLink("Scans", href="/scans", active="exact")),
                         dbc.NavItem(dbc.NavLink("Mask Reconstructions", href="/reconstructions", active="exact")),
                         dbc.NavItem(dbc.NavLink("Wire Reconstructions", href="/wire-reconstructions", active="exact")),
                         dbc.NavItem(dbc.NavLink("Indexations", href="/peakindexings", active="exact")),
@@ -73,12 +41,8 @@ navbar = dbc.Navbar(
         fluid=True,
     ),
     className="py-3",
-    #brand="3DMN Portal",
-    #brand_href="/",
     color="primary",
     dark=True,
-    #className="navbar-lg",
-    #style={"max-height": "70px"},
 )
 
 @callback(
