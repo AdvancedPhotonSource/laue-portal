@@ -1,15 +1,24 @@
 import dash_bootstrap_components as dbc
-from dash import html, Input, Output, State, callback
+from dash import html, Input, Output, State, callback, dcc
+from laue_portal.processing.redis_utils import REDIS_CONNECTED_AT_STARTUP
 
 navbar = dbc.Navbar(
     dbc.Container(
         [
-            dbc.NavbarBrand("3DMN Portal", href="/"),
+            dbc.NavbarBrand("3DMN Portal", href="/", id="navbar-brand"),
+            html.Div([
+                html.I(
+                    className="bi bi-hdd-network",
+                    style={
+                        'fontSize': '1.5rem',
+                        'color': '#90EE90' if REDIS_CONNECTED_AT_STARTUP else '#FF6B6B'
+                    }
+                ),
+            ], className="d-flex align-items-center ms-2"),
             dbc.NavbarToggler(id="nav-toggler"),
             dbc.Collapse(
                 dbc.Nav(
                     [
-                        dbc.NavItem(dbc.NavLink("Status", href="/", active="exact")),
                         dbc.NavItem(dbc.NavLink("Scans", href="/scans", active="exact")),
                         dbc.NavItem(dbc.NavLink("Mask Reconstructions", href="/reconstructions", active="exact")),
                         dbc.NavItem(dbc.NavLink("Wire Reconstructions", href="/wire-reconstructions", active="exact")),

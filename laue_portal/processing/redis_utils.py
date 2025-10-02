@@ -4,6 +4,7 @@ Provides functions for enqueueing jobs, checking status, and managing the job qu
 """
 
 from redis import Redis
+import redis
 from rq import Queue, Worker
 from rq.job import Job, Dependency
 from rq.registry import StartedJobRegistry, FinishedJobRegistry, FailedJobRegistry
@@ -26,10 +27,27 @@ import laue_portal.database.session_utils as session_utils
 logger = logging.getLogger(__name__)
 
 # Redis connection
-redis_conn = Redis(host='localhost', port=6379, decode_responses=False)
+redis_conn = Redis(host='localhost', port=REDIS_CONFIG['port'], decode_responses=False)
 
 # Single queue for all job types
 job_queue = Queue('laue_jobs', connection=redis_conn)
+
+# Global variable to store startup status
+REDIS_CONNECTED_AT_STARTUP = None
+
+def check_redis_connection():
+    """Check if Redis server is accessible and responding."""
+    try:
+        return redis_conn.ping()
+    except (redis.ConnectionError, redis.TimeoutError, Exception):
+        return False
+
+def init_redis_status():
+    """Initialize Redis status check on startup."""
+    global REDIS_CONNECTED_AT_STARTUP
+    REDIS_CONNECTED_AT_STARTUP = check_redis_connection()
+    logger.info(f"Redis connection status at startup: {'Connected' if REDIS_CONNECTED_AT_STARTUP else 'Disconnected'}")
+    return REDIS_CONNECTED_AT_STARTUP
 
 # Job status mapping
 STATUS_MAPPING = {

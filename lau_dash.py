@@ -2,6 +2,7 @@ import dash
 import dash_bootstrap_components as dbc
 from laue_portal.database.session_utils import init_db, get_engine
 import laue_portal.database.db_utils as db_utils
+from laue_portal.processing.redis_utils import init_redis_status
 import os
 import config
 import logging
@@ -29,8 +30,12 @@ def ensure_database_exists():
         logging.info(f"Database file '{db_path}' already exists. Running on existing database.")
 
 
+# Initialize Redis status BEFORE creating the Dash app
+# This ensures the status is set before pages (and navbar) are imported
+init_redis_status()
+
 app = dash.Dash(__name__, 
-                external_stylesheets=[dbc.themes.FLATLY, dbc_css], 
+                external_stylesheets=[dbc.themes.FLATLY, dbc_css, dbc.icons.BOOTSTRAP], 
                 suppress_callback_exceptions=True,
                 pages_folder="laue_portal/pages",)
 
