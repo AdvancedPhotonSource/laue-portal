@@ -1,66 +1,77 @@
 # Laue Portal
 
-A comprehensive web-based platform for Laue X-ray diffraction data analysis and reconstruction, designed for synchrotron beamline operations at the APS 3DMN beamline: 34-IDE.
+A web-based platform for managing Laue X-ray diffraction data processing workflows at APS beamline 34-ID-E.
 
+## Overview
 
-Laue Portal is a Dash-based web application that provides an integrated workflow for processing and analyzing Laue diffraction patterns. The platform combines data management, peak indexing, and 3D reconstruction capabilities with an intuitive web interface for researchers working with polychromatic X-ray diffraction data.
+Laue Portal provides a Dash-based interface for processing and analyzing depth resolved X-ray diffraction data. It manages the workflow from scan metadata collection through peak indexing and 3D reconstruction.
 
+## Installation
 
 ### Prerequisites
-- Python 3.12
+- Python 3.11+
+- Redis server
 - SQLite
-- HDF5 libraries
 
 ### Setup
+
 1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd laue-portal
-   ```
-
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Run the application:
-   ```bash
-   python lau_dash.py
-   ```
-
-4. Access the web interface at `http://localhost:2052`
-
-## Architecture
-
-### Core Components
-
-- **`lau_dash.py`**: Main Dash application entry point
-- **`laue_portal/`**: Core application package
-  - **`pages/`**: Web interface pages (scans, reconstructions, peak indexing)
-  - **`components/`**: Reusable UI components and forms
-  - **`database/`**: Database schema and utilities
-  - **`recon/`**: Reconstruction algorithms and analysis tools
-
-
-### Workflow Integration
-
-- **`polaris_workflow/`**: Integration with Argonne's Polaris supercomputer
-- **`gladier`**: Workflow orchestration for distributed computing
-- **Remote Processing**: Automated data transfer and processing on HPC resources
-
-
-## Configuration
-
-Key configuration files:
-- **`config.py`**: Database and application settings
-- **`polaris_workflow/funcx_launch/laue_conf.json`**: HPC workflow configuration
-- **`requirements.txt`**: Python dependencies
-
-
-## Testing
-
-Run the test suite:
 ```bash
-python -m unittest discover -s tests -p 'test_*.py'
+git clone https://github.com/Linked-Liszt/laue-portal.git
+cd laue-portal
 ```
 
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Configure the application by editing `config.py`:
+   - `db_file`: Database path (default: `Laue_Records.db`)
+   - `REDIS_CONFIG`: Redis connection settings
+   - `DASH_CONFIG`: Web server host/port (default: `localhost:2092`)
+   - `DEFAULT_VARIABLES`: Processing parameters and workspace paths
+
+## Usage
+
+### Start the Web Application Without Processing
+
+```bash
+python lau_dash.py
+```
+
+### Production Deployment with Supervisor
+
+```bash
+cd supervisor
+./setup_supervisor.sh <conda_env_name_or_path>
+./start_supervisor.sh
+```
+
+See `supervisor/README.md` for detailed management commands.
+
+## Project Structure
+
+```
+laue-portal/
+├── lau_dash.py              # Main Dash application
+├── config.py                # Configuration settings
+├── laue_portal/
+│   ├── components/          # UI components and forms
+│   ├── database/            # SQLAlchemy models and utilities
+│   ├── pages/               # Page layouts and callbacks
+│   ├── processing/          # RQ workers and Redis utilities
+│   └── recon/               # Reconstruction analysis tools
+├── polaris_workflow/        # HPC workflow integration (Gladier/funcX)
+├── supervisor/              # Production deployment scripts
+└── tests/                   # Test suite
+```
+
+
+## Development
+
+### Running Tests
+
+```bash
+pytest tests/
+```
