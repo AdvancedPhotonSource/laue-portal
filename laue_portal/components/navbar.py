@@ -11,7 +11,7 @@ navbar = dbc.Navbar(
                     className="bi bi-hdd-network",
                     style={
                         'fontSize': '1.5rem',
-                        'color': '#90EE90' if REDIS_CONNECTED_AT_STARTUP else '#FF6B6B'
+                        'color': '#18BC9C' if REDIS_CONNECTED_AT_STARTUP else '#FF6B6B'
                     }
                 ),
             ], className="d-flex align-items-center ms-2"),
