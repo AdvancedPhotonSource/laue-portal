@@ -14,7 +14,7 @@ Responsibilities:
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from laue_portal.database.base import Base
-import config
+from laue_portal import config
 
 # Shared SQLAlchemy Engine (static, based on config.db_file at import time)
 # Shared SQLAlchemy Engine, created lazily based on current config.db_file

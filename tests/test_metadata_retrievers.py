@@ -24,7 +24,7 @@ class TestMetadataRetrievers:
         test_engine, test_db_file, test_metadata, test_scan, test_catalog = test_metadata_database
         
         # Mock the config to use test database
-        with patch('config.db_file', test_db_file):
+        with patch('laue_portal.config.db_file', test_db_file):
             # Import after patching config
             import lau_dash
             from laue_portal.pages.scans import _get_metadatas
@@ -72,7 +72,7 @@ class TestMetadataRetrievers:
         test_engine, test_db_file, test_metadata, test_scan, test_catalog = test_metadata_database
         
         # Mock the config to use test database
-        with patch('config.db_file', test_db_file):
+        with patch('laue_portal.config.db_file', test_db_file):
             # Import after patching config
             import lau_dash
             from laue_portal.pages.scans import get_metadatas
@@ -105,7 +105,7 @@ class TestMetadataRetrievers:
         test_engine, test_db_file = empty_metadata_database
         
         # Mock the config to use test database
-        with patch('config.db_file', test_db_file):
+        with patch('laue_portal.config.db_file', test_db_file):
             # Import after patching config
             import lau_dash
             from laue_portal.pages.scans import _get_metadatas

@@ -16,7 +16,7 @@ import laue_portal.components.navbar as navbar
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix
 from laue_portal.components.recon_form import recon_form, set_recon_form_props
 from laue_portal.processing.redis_utils import enqueue_reconstruction, STATUS_REVERSE_MAPPING
-from config import DEFAULT_VARIABLES
+from laue_portal.config import DEFAULT_VARIABLES
 import laue_portal.database.session_utils as session_utils
 
 JOB_DEFAULTS = {

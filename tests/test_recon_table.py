@@ -24,7 +24,7 @@ class TestDataRetrievers:
         test_engine, test_db_file, test_metadata, test_job, test_recon, test_catalog = test_database
         
         # Mock the config to use test database
-        with patch('config.db_file', test_db_file):
+        with patch('laue_portal.config.db_file', test_db_file):
             # Import after patching config
             import lau_dash
             from laue_portal.pages.reconstructions import _get_recons
@@ -70,7 +70,7 @@ class TestDataRetrievers:
         test_engine, test_db_file, test_metadata, test_job, test_recon, test_catalog = test_database
         
         # Mock the config to use test database
-        with patch('config.db_file', test_db_file):
+        with patch('laue_portal.config.db_file', test_db_file):
             # Import after patching config
             import lau_dash
             from laue_portal.pages.reconstructions import get_recons
@@ -105,7 +105,7 @@ class TestDataRetrievers:
         test_engine, test_db_file = empty_test_database
         
         # Mock the config to use test database
-        with patch('config.db_file', test_db_file):
+        with patch('laue_portal.config.db_file', test_db_file):
             # Import after patching config
             import lau_dash
             from laue_portal.pages.reconstructions import _get_recons
