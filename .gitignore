@@ -161,3 +161,7 @@ supervisor/logs/
 
 # Reference modified scripts
 modified/
+
+
+# Config
+config.yaml
