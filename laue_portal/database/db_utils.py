@@ -1,9 +1,9 @@
 import laue_portal.database.db_schema as db_schema
-import config
+from laue_portal import config
 import xml.etree.ElementTree as ET
 import sqlalchemy
 from datetime import datetime
-from config import MOTOR_GROUPS
+from laue_portal.config import MOTOR_GROUPS
 
 
 def parse_metadata(xml,xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog",scan_no=2,empty='\n\t\t'):

@@ -8,7 +8,7 @@ import laue_portal.components.navbar as navbar
 from dash.exceptions import PreventUpdate
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix
 from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
-from config import DEFAULT_VARIABLES
+from laue_portal.config import DEFAULT_VARIABLES
 import urllib.parse
 import laue_portal.database.session_utils as session_utils
 

@@ -13,7 +13,7 @@ import laue_portal.components.navbar as navbar
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix, parse_parameter
 from laue_portal.components.wire_recon_form import wire_recon_form, set_wire_recon_form_props
 from laue_portal.processing.redis_utils import enqueue_wire_reconstruction, STATUS_REVERSE_MAPPING
-from config import DEFAULT_VARIABLES
+from laue_portal.config import DEFAULT_VARIABLES
 from srange import srange
 import laue_portal.database.session_utils as session_utils
 

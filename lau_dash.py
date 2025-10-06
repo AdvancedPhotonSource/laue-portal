@@ -4,7 +4,7 @@ from laue_portal.database.session_utils import init_db, get_engine
 import laue_portal.database.db_utils as db_utils
 from laue_portal.processing.redis_utils import init_redis_status
 import os
-import config
+from laue_portal import config
 import logging
 
 dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"

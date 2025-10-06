@@ -4,7 +4,7 @@ import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
 import laue_portal.components.navbar as navbar
 from laue_portal.processing import redis_utils
-import config
+from laue_portal import config
 import os
 
 dash.register_page(__name__, path='/')
