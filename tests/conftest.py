@@ -320,7 +320,7 @@ def create_test_database_with_entities(
         test_db_file = temp_db.name
 
     # Mock the config to use test database
-    with patch('config.db_file', test_db_file):
+    with patch('laue_portal.config.db_file', test_db_file):
         # Import after patching config
         import laue_portal.database.db_schema as db_schema
         import sqlalchemy
@@ -428,7 +428,7 @@ def empty_test_database():
 
     try:
         # Mock the config to use test database
-        with patch('config.db_file', test_db_file):
+        with patch('laue_portal.config.db_file', test_db_file):
             # Import after patching config
             import laue_portal.database.db_schema as db_schema
             import sqlalchemy

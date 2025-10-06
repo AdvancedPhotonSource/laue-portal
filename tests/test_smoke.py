@@ -30,7 +30,7 @@ def test_dash_app_creation():
         test_db_file = temp_db.name
 
     # Mock the config to use test database
-    with patch('config.db_file', test_db_file):
+    with patch('laue_portal.config.db_file', test_db_file):
         import lau_dash
         
         # Verify app was created
@@ -47,7 +47,7 @@ def test_database_creation():
         test_db_file = temp_db.name
 
     # Mock the config to use test database
-    with patch('config.db_file', test_db_file):
+    with patch('laue_portal.config.db_file', test_db_file):
         import lau_dash
         
         # Test database creation function
@@ -64,7 +64,7 @@ def test_server_startup_smoke():
         test_db_file = temp_db.name
 
     # Mock the config to use test database
-    with patch('config.db_file', test_db_file):
+    with patch('laue_portal.config.db_file', test_db_file):
         import lau_dash
         
         # Ensure database exists
