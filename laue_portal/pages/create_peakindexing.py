@@ -1,10 +1,11 @@
 import datetime
+import glob
 import logging
 import os
 import urllib.parse
 import dash
 import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, set_props, State
+from dash import html, dcc, Input, Output, set_props, State
 from dash.exceptions import PreventUpdate
 from sqlalchemy.orm import Session
 import laue_portal.database.db_utils as db_utils
@@ -16,6 +17,9 @@ from laue_portal.processing.redis_utils import enqueue_peakindexing, STATUS_REVE
 from laue_portal.config import DEFAULT_VARIABLES
 from srange import srange
 import laue_portal.database.session_utils as session_utils
+import re
+from difflib import SequenceMatcher
+from itertools import combinations
 
 logger = logging.getLogger(__name__)
 
@@ -224,7 +228,8 @@ layout = dbc.Container(
             align="center",
         ),
         peakindex_form,
-        dcc.Store(id="next-peakindex-id"),
+        # dcc.Store(id="next-peakindex-id"),
+        dcc.Store(id="peakindex-data-loaded-trigger"),
     ],
     )
     ],
@@ -354,12 +359,13 @@ def submit_parameters(n,
     Submit parameters for peak indexing job(s).
     Handles both single scan and pooled scan submissions.
     """
-    # Parse scanNumber first to get the number of scans
-    scanNumber_list = parse_parameter(scanNumber)
-    num_scans = len(scanNumber_list)
+    # Parse data_path first to get the number of scans
+    data_path_list = parse_parameter(data_path)
+    num_scans = len(data_path_list)
     
     # Parse all other parameters with num_scans
     try:
+        scanNumber_list = parse_parameter(scanNumber, num_scans)
         author_list = parse_parameter(author, num_scans)
         notes_list = parse_parameter(notes, num_scans)
         recon_id_list = parse_parameter(recon_id, num_scans)
@@ -508,6 +514,8 @@ def submit_parameters(n,
                 current_data_path = data_path_list[i]
                 current_filename_prefix_str = filenamePrefix_list[i]
                 current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
+                # Build full path
+                current_full_data_path=os.path.join(root_path, current_data_path.lstrip('/'))
                 
                 peakindex = db_schema.PeakIndex(
                     scanNumber = current_scanNumber,
@@ -516,7 +524,7 @@ def submit_parameters(n,
                     notes = notes_list[i],
                     recon_id = current_recon_id,
                     wirerecon_id = current_wirerecon_id,
-                    filefolder=os.path.join(root_path, current_data_path.lstrip('/')),
+                    filefolder=current_full_data_path,
                     filenamePrefix=current_filename_prefix,
 
                     # peakProgram=peakProgram,
@@ -568,7 +576,7 @@ def submit_parameters(n,
                 peakindexes_to_enqueue.append({
                     "job_id": job_id,
                     "scanNumber": current_scanNumber,
-                    "filefolder": os.path.join(root_path, current_data_path.lstrip('/')),
+                    "filefolder": current_full_data_path,
                     "filenamePrefix": current_filename_prefix,
                     "outputFolder": full_output_folder,
                     "geoFile": full_geometry_file,
@@ -622,24 +630,29 @@ def submit_parameters(n,
 
             # Prepare lists of input and output files for all subjobs
             input_files = []
-            output_dirs = []
             
             for current_filename_prefix_i in current_filename_prefix:
                 for scanPoint_num in scanPoint_nums:
                     for depthRange_num in depthRange_nums:
-                        # Prepare parameters for peak indexing
-                        file_str = current_filename_prefix_i % scanPoint_num
+                        # Apply %d formatting with scanPoint_num if prefix contains %d placeholder
+                        file_str = current_filename_prefix_i % scanPoint_num if '%d' in current_filename_prefix_i else current_filename_prefix_i
                         
+                        # Add depth index if processing reconstruction data
                         if depthRange_num is not None:
-                            # Reconstruction file with depth index
-                            input_filename = file_str + f"_{depthRange_num}.h5"
-                        else:
-                            # Raw data file
-                            input_filename = file_str + ".h5"
-                        input_file = os.path.join(full_data_path, input_filename)
+                            file_str += f"_{depthRange_num}"
                         
-                        input_files.append(input_file)
-                        output_dirs.append(spec["outputFolder"])
+                        input_file_pattern = os.path.join(full_data_path, file_str)
+                        
+                        # Use glob to find matching files
+                        matched_files = glob.glob(input_file_pattern)
+                        
+                        if not matched_files:
+                            raise ValueError(f"No files found matching pattern: {input_file_pattern}")
+                        
+                        input_files.extend(matched_files)
+            
+            # Create output directory list matching input_files length
+            output_dirs = [spec["outputFolder"] for _ in input_files]
             
             # Enqueue the batch job with all files
             rq_job_id = enqueue_peakindexing(
@@ -683,6 +696,168 @@ def submit_parameters(n,
                                                     f'filenamePrefix={current_filename_prefix_str}, '
                                                     f'scanPoints={spec["scanPoints"]}, depthRange={spec["depthRange"]}',
                                         'color': 'danger'})
+
+
+@dash.callback(
+    Output('wirerecon-filename-templates', 'children', allow_duplicate=True),
+    Input('wirerecon-check-filenames-btn', 'n_clicks'),
+    Input('wirerecon-update-path-fields-btn', 'n_clicks'),
+    Input('peakindex-data-loaded-trigger', 'data'),
+    # Files
+    State('data_path', 'value'),
+    prevent_initial_call=True,
+)
+def check_filenames(n_check, n_update, data_loaded_trigger,
+    # Files
+    data_path,
+    num_indices=2,
+):
+    """
+    Scan directory and suggest common filename patterns.
+    Replaces numeric sequences with %d to find templates and shows index ranges.
+    
+    For peak indexing, this captures TWO rightmost numbers:
+    - First number: scanPoint (e.g., 7 in file_7_150.h5)
+    - Second number: depthRange (e.g., 150 in file_7_150.h5)
+    
+    Parameters:
+    -----------
+    n : int
+        Number of clicks (callback trigger)
+    data_path : str
+        Path to the data directory
+    num_indices : int, optional
+        Number of rightmost numeric indices to capture (default=2 for peak indexing)
+    """
+    
+    if not data_path:
+        return [html.Option(value="", label="No data path provided")]
+    
+    # Parse data_path first to get the number of scans
+    data_path_list = parse_parameter(data_path)
+    num_scans = len(data_path_list)
+    
+    root_path = DEFAULT_VARIABLES["root_path"]
+    
+    # Dictionary to store pattern -> list of indices
+    pattern_files = {}
+
+    for i in range(num_scans):
+        # Get filefolder
+        current_data_path = data_path_list[i]
+
+        # Build full path
+        current_full_data_path=os.path.join(root_path, current_data_path.lstrip('/'))
+        
+        # Check if directory exists
+        if not os.path.exists(current_full_data_path):
+            logger.warning(f"Directory does not exist: {current_full_data_path}")
+            continue
+        
+        # List all files in directory
+        try:
+            files = [f for f in os.listdir(current_full_data_path) if os.path.isfile(os.path.join(current_full_data_path, f))]
+        except Exception as e:
+            logger.error(f"Error reading directory {current_full_data_path}: {e}")
+            continue
+        
+        # Extract patterns and indices
+        for filename in files:
+            base_name, extension = os.path.splitext(filename)
+            
+            # Build regex pattern to capture N rightmost numbers
+            # For num_indices=1: (\d+)(?!.*\d)
+            # For num_indices=2: (\d+)_(\d+)(?!.*\d)
+            if num_indices == 1:
+                regex_pattern = r'(\d+)(?!.*\d)'
+            else:
+                # Capture N groups of digits separated by underscores from the right
+                regex_pattern = r'_'.join([r'(\d+)'] * num_indices) + r'(?!.*\d)'
+            
+            match = re.search(regex_pattern, base_name)
+            
+            if match:
+                # Extract all captured groups as integers
+                indices = [int(match.group(i)) for i in range(1, num_indices + 1)]
+                
+                # Create pattern with appropriate number of %d placeholders
+                pattern_placeholder = '_'.join(['%d'] * num_indices)
+                pattern = base_name[:match.start()] + pattern_placeholder + base_name[match.end():] + extension
+                
+                pattern_files.setdefault(pattern, []).append(indices)
+            else:
+                # No numeric pattern found
+                pattern_files.setdefault(filename, []).append([])
+    
+    if not pattern_files:
+        return [html.Option(value="", label="No files found in specified path(s)")]
+    
+    # Sort by file count and create options for top 10 patterns
+    sorted_patterns = sorted(pattern_files.items(), key=lambda x: len(x[1]), reverse=True)[:10]
+    pattern_options = []
+    
+    for pattern, indices_list in sorted_patterns:
+        if indices_list and indices_list[0]:
+            if num_indices == 1:
+                # Single index: show simple range
+                label = f"{pattern} (files {str(srange(sorted(set(idx[0] for idx in indices_list))))})"
+            else:
+                # Multiple indices: show ranges for each dimension
+                range_labels = []
+                dim_names = ['scanPoints', 'depths'] if num_indices == 2 else [f"dim{i+1}" for i in range(num_indices)]
+                
+                for dim in range(num_indices):
+                    dim_values = sorted(set(idx[dim] for idx in indices_list if len(idx) > dim))
+                    if dim_values:
+                        range_labels.append(f"{dim_names[dim]}: {str(srange(dim_values))}")
+                
+                if range_labels:
+                    label = f"{pattern} ({', '.join(range_labels)})"
+                else:
+                    label = f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
+        else:
+            label = f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
+        pattern_options.append(html.Option(value=pattern, label=label))
+    
+    # Generate combined wildcard patterns for similar patterns
+    if len(sorted_patterns) > 1:
+        seen_wildcards = set()
+        
+        for (pattern1, indices1), (pattern2, indices2) in combinations(sorted_patterns, 2):
+            # Find matching and differing sections
+            matcher = SequenceMatcher(None, pattern1, pattern2)
+            wildcard_parts = []
+            last_pos = 0
+            
+            for match_start1, match_start2, match_length in matcher.get_matching_blocks():
+                # Handle the gap before this match (differences)
+                if match_start1 > last_pos:
+                    diff1 = pattern1[last_pos:match_start1]
+                    diff2 = pattern2[last_pos:match_start2]
+                    
+                    # Skip if differences contain %d
+                    if '%d' in diff1 or '%d' in diff2:
+                        break
+                    
+                    wildcard_parts.append('*')
+                
+                # Add the matching section
+                if match_length > 0:
+                    wildcard_parts.append(pattern1[match_start1:match_start1 + match_length])
+                
+                last_pos = match_start1 + match_length
+            else:
+                # Only create wildcard if pattern contains wildcards and hasn't been seen before
+                wildcard_pattern = ''.join(wildcard_parts)
+                if '*' in wildcard_pattern and wildcard_pattern not in seen_wildcards:
+                    seen_wildcards.add(wildcard_pattern)
+                    
+                    # Combine indices from both patterns
+                    combined_indices = sorted(set(idx[0] for idx in indices1 + indices2 if idx))
+                    label = f"{wildcard_pattern} (files {str(srange(combined_indices))})"
+                    pattern_options.append(html.Option(value=wildcard_pattern, label=label))
+    
+    return pattern_options
 
 
 # @dash.callback(
@@ -772,6 +947,7 @@ def submit_parameters(n,
 #         raise PreventUpdate
 
 @dash.callback(
+    Output('peakindex-data-loaded-trigger', 'data'),
     Input('url-create-peakindexing', 'href'),
     prevent_initial_call=True,
 )
@@ -1057,3 +1233,6 @@ def load_scan_data_from_url(href):
                     'children': f'Error loading scan data: {str(e)}',
                     'color': 'danger'
                 })
+    
+    # Return timestamp to trigger downstream callbacks
+    return datetime.datetime.now().isoformat()
