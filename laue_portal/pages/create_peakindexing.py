@@ -699,9 +699,9 @@ def submit_parameters(n,
 
 
 @dash.callback(
-    Output('wirerecon-filename-templates', 'children', allow_duplicate=True),
-    Input('wirerecon-check-filenames-btn', 'n_clicks'),
-    Input('wirerecon-update-path-fields-btn', 'n_clicks'),
+    Output('peakindex-filename-templates', 'children', allow_duplicate=True),
+    Input('peakindex-check-filenames-btn', 'n_clicks'),
+    Input('peakindex-update-path-fields-btn', 'n_clicks'),
     Input('peakindex-data-loaded-trigger', 'data'),
     # Files
     State('data_path', 'value'),

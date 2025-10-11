@@ -26,7 +26,7 @@ peakindex_form = dbc.Row(
                                             dbc.Col(
                                                 dbc.Button(
                                                     "Update path fields",
-                                                    id="peakindex-update-path-fields-btn",
+                                                    id="update-path-fields-btn",
                                                     color="secondary",
                                                     size="md",
                                                     style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size
@@ -46,7 +46,7 @@ peakindex_form = dbc.Row(
                                 _stack(   
                                        [
                                 dbc.Switch(
-                                    id="peakindex-files switch-switch",
+                                    id="files switch-switch",
                                     label="All Files",
                                     value=False,
                                 ),
@@ -75,7 +75,7 @@ peakindex_form = dbc.Row(
                                                     ),
                                                     # just as example
                                                     html.Datalist(
-                                                        id="peakindex-filename-templates",
+                                                        id="filename-templates",
                                                         children=[
                                                                 html.Option(value="Si1_PE2_%d.h5",    label="Si1_PE2_%d.h5   (files 1–245)"),
                                                                 html.Option(value="Si1_Eiger1_%d.h5", label="Si1_Eiger1_%d.h5 (files 3–198)"),
@@ -91,7 +91,7 @@ peakindex_form = dbc.Row(
                                         dbc.Col(
                                             dbc.Button(
                                                 "Update from folder",
-                                                id="peakindex-check-filenames-btn",
+                                                id="check-filenames-btn",
                                                 color="secondary",
                                                 size="md",
                                                 style={"minWidth": "220px", "whiteSpace": "nowrap"},
@@ -134,7 +134,7 @@ peakindex_form = dbc.Row(
                                             dbc.Col(
                                                 dbc.Button(
                                                     "Load indices from file",
-                                                    id="peakindex-load-file-indices-btn",
+                                                    id="load-file-indices-btn",
                                                     color="secondary",
                                                     size="md",
                                                     style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size
@@ -176,7 +176,7 @@ peakindex_form = dbc.Row(
                                                     dbc.Col(
                                                         dbc.Button(
                                                             "Load default",
-                                                            id="peakindex-load-default-geo-btn",
+                                                            id="load-default-geo-btn",
                                                             color="secondary",
                                                             size="md",
                                                             style={"minWidth": "120px", "whiteSpace": "nowrap"},
@@ -186,7 +186,7 @@ peakindex_form = dbc.Row(
                                                     dbc.Col(
                                                         dbc.Button(
                                                             "Load...",
-                                                            id="peakindex-load-from-geo-btn",
+                                                            id="load-from-geo-btn",
                                                             color="secondary",
                                                             size="md",
                                                             style={"minWidth": "120px", "whiteSpace": "nowrap"},
@@ -196,7 +196,7 @@ peakindex_form = dbc.Row(
                                                     dbc.Col(
                                                         dbc.Button(
                                                             "Edit",
-                                                            id="peakindex-edit-modify-params-btn",
+                                                            id="edit-modify-params-btn",
                                                             color="secondary",
                                                             size="md",
                                                             style={"minWidth": "120px", "whiteSpace": "nowrap"},
@@ -315,7 +315,7 @@ peakindex_form = dbc.Row(
                                             dbc.Col(
                                                 dbc.Button(
                                                     "Load...",
-                                                    id="peakindex-load-mask-file-btn",
+                                                    id="load-mask-file-btn",
                                                     color="secondary",
                                                     size="md",
                                                     style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size
@@ -398,7 +398,7 @@ peakindex_form = dbc.Row(
                                             dbc.Col(
                                                 dbc.Button(
                                                     "Load...",
-                                                    id="peakindex-load-cryst-file-btn",
+                                                    id="load-cryst-file-btn",
                                                     color="secondary",
                                                     size="md",
                                                     style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size

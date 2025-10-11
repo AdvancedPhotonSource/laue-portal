@@ -170,7 +170,6 @@ layout = dbc.Container(
 Callbacks
 =======================
 """
-
 @dash.callback(
     Input('submit_wire', 'n_clicks'),
     
@@ -474,6 +473,110 @@ def submit_parameters(n,
                 'color': 'danger'
             })
 
+
+@dash.callback(
+    Input('wirerecon-update-path-fields-btn', 'n_clicks'),
+    State('scanNumber', 'value'),
+    prevent_initial_call=True,
+)
+def update_path_fields_from_scan(n_clicks, scanNumber):
+    """
+    Update path fields (data_path, filenamePrefix) by querying the database
+    for catalog data based on the scan number.
+    """
+    if not scanNumber:
+        set_props("alert-scan-loaded", {
+            'is_open': True,
+            'children': 'Please enter a scan number first.',
+            'color': 'warning'
+        })
+        raise PreventUpdate
+    
+    root_path = DEFAULT_VARIABLES.get("root_path", "")
+    
+    with Session(session_utils.get_engine()) as session:
+        try:
+            # Parse scan number (handle semicolon-separated values for pooled scans)
+            scan_ids = [int(sid.strip()) for sid in str(scanNumber).split(';') if sid.strip()]
+            
+            if not scan_ids:
+                set_props("alert-scan-loaded", {
+                    'is_open': True,
+                    'children': 'Invalid scan number format.',
+                    'color': 'danger'
+                })
+                raise PreventUpdate
+            
+            # Get catalog data for each scan
+            catalog_data_list = []
+            for scan_id in scan_ids:
+                catalog_data = get_catalog_data(session, scan_id, root_path, CATALOG_DEFAULTS)
+                if catalog_data:
+                    catalog_data_list.append(catalog_data)
+            
+            if catalog_data_list:
+                # If multiple scans, merge the data
+                if len(catalog_data_list) == 1:
+                    merged_data = catalog_data_list[0]
+                else:
+                    # Merge data paths and filename prefixes
+                    data_paths = [cd['data_path'] for cd in catalog_data_list]
+                    filename_prefixes = [cd['filenamePrefix'] for cd in catalog_data_list]
+                    
+                    # Check if all values are the same
+                    if all(dp == data_paths[0] for dp in data_paths):
+                        merged_data_path = data_paths[0]
+                    else:
+                        merged_data_path = "; ".join(data_paths)
+                    
+                    if all(fp == filename_prefixes[0] for fp in filename_prefixes):
+                        merged_filename_prefix = filename_prefixes[0]
+                    else:
+                        merged_filename_prefix = "; ".join([','.join(fp) if isinstance(fp, list) else str(fp) for fp in filename_prefixes])
+                    
+                    merged_data = {
+                        'data_path': merged_data_path,
+                        'filenamePrefix': merged_filename_prefix
+                    }
+                
+                # Update the form fields
+                set_props("root_path", {'value': root_path})
+                set_props("data_path", {'value': merged_data['data_path']})
+                
+                # Handle filenamePrefix - convert list to comma-separated string
+                if isinstance(merged_data['filenamePrefix'], list):
+                    filename_str = ','.join(merged_data['filenamePrefix'])
+                else:
+                    filename_str = str(merged_data['filenamePrefix']) if merged_data['filenamePrefix'] else ''
+                
+                set_props("filenamePrefix", {'value': filename_str})
+                
+                set_props("alert-scan-loaded", {
+                    'is_open': True,
+                    'children': f'Successfully loaded path fields from database for scan(s): {scanNumber}',
+                    'color': 'success'
+                })
+            else:
+                set_props("alert-scan-loaded", {
+                    'is_open': True,
+                    'children': f'No catalog data found for scan(s): {scanNumber}. Using defaults.',
+                    'color': 'warning'
+                })
+        
+        except ValueError as e:
+            set_props("alert-scan-loaded", {
+                'is_open': True,
+                'children': f'Invalid scan number format: {str(e)}',
+                'color': 'danger'
+            })
+        except Exception as e:
+            set_props("alert-scan-loaded", {
+                'is_open': True,
+                'children': f'Error loading catalog data: {str(e)}',
+                'color': 'danger'
+            })
+
+
 @dash.callback(
     Output('wirerecon-filename-templates', 'children'),
     Input('wirerecon-check-filenames-btn', 'n_clicks'),
@@ -687,6 +790,7 @@ def check_filenames(n_check, n_update, data_loaded_trigger,
 #     else:
 #         raise PreventUpdate
 
+
 @dash.callback(
     Output('wirerecon-data-loaded-trigger', 'data'),
     Input('url-create-wirerecon', 'href'),
@@ -782,7 +886,7 @@ def load_scan_data_from_url(href):
                                 current_wirerecon_id = None
                         
                         # Create defaults if no wirerecon_id or if loading failed
-                        if not current_wirerecon_id:
+                        else: #if not current_wirerecon_id:
                             # Create a WireRecon object with populated defaults from metadata/scan
                             wirerecon_form_data = db_schema.WireRecon(
                                 scanNumber=current_scan_id,
