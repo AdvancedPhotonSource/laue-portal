@@ -22,7 +22,7 @@ wire_recon_form = dbc.Row(
                                         dbc.Col(
                                             dbc.Button(
                                                 "Update path fields",
-                                                id="update-path-fields-btn",
+                                                id="wirerecon-update-path-fields-btn",
                                                 color="secondary",
                                                 size="md",
                                                 style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size
@@ -51,15 +51,15 @@ wire_recon_form = dbc.Row(
                                                     _field("Filename", "filenamePrefix",
                                                             kwargs={
                                                                 "placeholder": "e.g. Si_%d.h5 or Si_*%d.h5",
-                                                                "list": "filename-templates",  # link to datalist below
+                                                                "list": "wirerecon-filename-templates",  # link to datalist below
                                                             }),
                                                     # just as example
                                                     html.Datalist(
-                                                        id="filename-templates",
+                                                        id="wirerecon-filename-templates",
                                                         children=[
                                                                 html.Option(value="Si1_PE2_%d.h5",    label="Si1_PE2_%d.h5   (files 1–245)"),
                                                                 html.Option(value="Si1_Eiger1_%d.h5", label="Si1_Eiger1_%d.h5 (files 3–198)"),
-                                                                html.Option(value="Si_*_%d.h5",        label="Si_*_%d.h5        (files 1–245)"),
+                                                                html.Option(value="Si1_*_%d.h5",        label="Si1_*_%d.h5        (files 1–245)"),
                                                             ]
                                                     ),
                                                 ]
@@ -70,7 +70,7 @@ wire_recon_form = dbc.Row(
                                         dbc.Col(
                                             dbc.Button(
                                                 "Find file names",
-                                                id="check-filenames-btn",
+                                                id="wirerecon-check-filenames-btn",
                                                 color="secondary",
                                                 size="md",
                                                 style={"minWidth": "220px", "whiteSpace": "nowrap"},
@@ -94,7 +94,7 @@ wire_recon_form = dbc.Row(
                                         dbc.Col(
                                             dbc.Button(
                                                 "Load indices from file",#"Load file indices as list",
-                                                id="load-file-indices-btn",
+                                                id="wirerecon-load-file-indices-btn",
                                                 color="secondary",
                                                 size="md",
                                                 style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size
@@ -123,7 +123,7 @@ wire_recon_form = dbc.Row(
                                                     dbc.Col(
                                                         dbc.Button(
                                                             "Use default",
-                                                            id="load-default-geo-btn",
+                                                            id="wirerecon-load-default-geo-btn",
                                                             color="secondary",
                                                             size="md",
                                                             style={"minWidth": "120px", "whiteSpace": "nowrap"},
@@ -133,7 +133,7 @@ wire_recon_form = dbc.Row(
                                                     dbc.Col(
                                                         dbc.Button(
                                                             "Edit current",
-                                                            id="view-modify-params-btn",
+                                                            id="wirerecon-view-modify-params-btn",
                                                             color="secondary",
                                                             size="md",
                                                             style={"minWidth": "220px", "whiteSpace": "nowrap"},
