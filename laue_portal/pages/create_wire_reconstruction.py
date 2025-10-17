@@ -147,13 +147,41 @@ layout = dbc.Container(
             className="mb-3",
             align="center",
         ),
-        dbc.Row(
-            dbc.Col(
-                html.Div("Validate status: Click Button Validate!"),
-                width="auto"
+        html.Div([
+            dbc.Alert(
+                dbc.Row([
+                    dbc.Col(html.H4("Validation Status", className="alert-heading mb-0"), width="auto"),
+                    dbc.Col(html.P("Click 'Validate All' button to check inputs.", className="mb-0"), width="auto"),
+                ], align="center"),
+                id="alert-validation-info",
+                color="info",
+                dismissable=False,
+                is_open=True,
+                className="mb-2"
             ),
-            className="mb-3"
-        ),
+            dbc.Alert(
+                dbc.Row([
+                    dbc.Col(html.H4("Validation Error!", className="alert-heading mb-0"), width="auto"),
+                    dbc.Col(html.P("No errors detected.", className="mb-0"), width="auto"),
+                ], align="center"),
+                id="alert-validation-error",
+                color="danger",
+                dismissable=False,
+                is_open=False,
+                className="mb-2"
+            ),
+            dbc.Alert(
+                dbc.Row([
+                    dbc.Col(html.H4("Validation Warning!", className="alert-heading mb-0"), width="auto"),
+                    dbc.Col(html.P("No warnings detected.", className="mb-0"), width="auto"),
+                ], align="center"),
+                id="alert-validation-warning",
+                color="warning",
+                dismissable=False,
+                is_open=False,
+                className="mb-2"
+            ),
+        ], className="mb-3"),
         html.Hr(),
         wire_recon_form,
         # dcc.Store(id="next-wire-recon-id"),
@@ -165,11 +193,537 @@ layout = dbc.Container(
     fluid=True
 )
 
+def validate_wire_reconstruction_inputs(ctx):
+    """
+    Validate all wire reconstruction inputs using callback context.
+    
+    Parameters:
+    - ctx: dash.callback_context containing states_list with field IDs and values
+    
+    Returns:
+        validation_result (dict): {
+            'heading': str,
+            'errors': list of str,
+            'warnings': list of str,
+            'field_highlights': dict mapping field_id to 'error'|'warning'
+        }
+    """
+    errors = []
+    warnings = []
+    field_highlights = {}
+    # Dictionary to store parsed parameter lists
+    parsed_params = {}
+    # Track parameters that failed validation (missing, parse error, or length mismatch)
+    invalid_params = set()
+    
+    # Create database session for catalog validation
+    session = Session(session_utils.get_engine())
+    
+    # Extract all parameters from callback context
+    # ctx.states is a dict with format {'component_id.prop_name': value}
+    all_params = {}
+    for key, value in ctx.states.items():
+        # Extract component_id from 'component_id.prop_name'
+        component_id = key.split('.')[0]
+        all_params[component_id] = value
+    
+    # Extract individual parameter values
+    root_path = all_params.get('root_path', '')
+    data_path = all_params.get('data_path')
+    # filenamePrefix = all_params.get('filenamePrefix')
+    # scanPoints = all_params.get('scanPoints')
+    # geoFile = all_params.get('geoFile')
+    # depth_start = all_params.get('depth_start')
+    # depth_end = all_params.get('depth_end')
+    # depth_resolution = all_params.get('depth_resolution')
+    # percent_brightest = all_params.get('percent_brightest')
+    # outputFolder = all_params.get('outputFolder')
+    # scanNumber = all_params.get('scanNumber')
+    
+    # Validate root_path directory exists
+    if not root_path:
+        errors.append("Root path is required")
+        field_highlights['root_path'] = 'error'
+        invalid_params.add('root_path')
+    elif not os.path.exists(root_path):
+        errors.append(f"Root path directory does not exist: {root_path}")
+        field_highlights['root_path'] = 'error'
+        invalid_params.add('root_path')
+    else: #Added to pass over in later loop over all_params
+        parsed_params['root_path'] = root_path
+    
+    # Helper function to safely convert to float
+    def safe_float(value, field_name):
+        try:
+            if value is None or value == '':
+                return None
+            return float(value)
+        except (ValueError, TypeError):
+            errors.append(f"{field_name} must be a valid number")
+            return None
+    
+    # Parse data_path first to determine number of scans
+    try:
+        data_path_list = parse_parameter(data_path)
+        num_inputs = len(data_path_list)
+        parsed_params['data_path'] = data_path_list
+    except ValueError as e:
+        errors.append(f"Data path parsing error: {str(e)}")
+        field_highlights['data_path'] = 'error'
+        # Close session before early return
+        session.close()
+        # Return early since we can't validate other parameters without knowing num_inputs
+        validation_result = {
+            'heading': 'Validation Error!',
+            'errors': errors,
+            'warnings': warnings,
+            'field_highlights': field_highlights
+        }
+        return validation_result
+    
+    # Check data_path separately since we already parsed it
+    if not data_path:
+        errors.append("Data path is required")
+        field_highlights['data_path'] = 'error'
+        invalid_params.add('data_path')
+    
+    # Validate all other parameters by iterating over all_params    
+    for param_name, param_value in all_params.items():
+        # Skip already handled parameters
+        if param_name in parsed_params: #{'root_path', 'data_path'}
+            continue
+        # Check 1: Is it missing/empty?
+        is_missing = False
+        if param_name in ['depth_start', 'depth_end', 'depth_resolution', 'percent_brightest']:
+            # Numeric fields: check for None or empty string (0 is valid)
+            if param_value is None or param_value == '':
+                is_missing = True
+        else:
+            # Other fields: check for falsy values
+            if not param_value:
+                is_missing = True
+        
+        if is_missing:
+            # Special case for scanNumber: only warning, not error, and not added to invalid_params
+            if param_name == 'scanNumber':
+                warnings.append(f"{param_name.replace('_', ' ').title()} is missing")
+                if param_name not in field_highlights:
+                    field_highlights[param_name] = 'warning'
+                continue  # Skip parsing but don't add to invalid_params
+            else:
+                errors.append(f"{param_name.replace('_', ' ').title()} is required")
+                field_highlights[param_name] = 'error'
+                invalid_params.add(param_name)
+                continue  # Skip parsing if missing
+        
+        # Check 2: Parse the parameter
+        try:
+            parsed_list = parse_parameter(param_value, num_inputs)
+        except ValueError as e:
+            # Special case for scanNumber: only warning, not error
+            if param_name == 'scanNumber':
+                warnings.append(f"{param_name} parsing error: {str(e)}")
+                if param_name not in field_highlights:
+                    field_highlights[param_name] = 'warning'
+                continue  # Skip length check but don't add to invalid_params
+            else:
+                errors.append(f"{param_name} parsing error: {str(e)}")
+                field_highlights[param_name] = 'error'
+                invalid_params.add(param_name)
+                continue  # Skip length check if parsing failed
+        
+        # Check 3: Verify length matches num_inputs
+        if len(parsed_list) != num_inputs:
+            # Special case for scanNumber: only warning, not error
+            if param_name == 'scanNumber':
+                warnings.append(f"{param_name} count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
+                field_highlights[param_name] = 'warning'
+                # invalid_params.add(param_name)
+                # Note: Do NOT add scanNumber to invalid_params - it's just a warning
+            else:
+                errors.append(f"{param_name} count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
+                field_highlights[param_name] = 'error'
+                invalid_params.add(param_name)
+        
+        # Store the parsed list in the dictionary
+        parsed_params[param_name] = parsed_list
+    
+    # Validate each input, skipping fields that failed global validation
+    for i in range(num_inputs):
+        input_prefix = f"Input {i+1}: " if num_inputs > 1 else ""
+        
+        # Initialize depth_span as None (will be calculated if both start and end are valid)
+        depth_span = None
+        
+        # 1. Validate depth parameters for this input
+        # Check if depth_start is None (only needs depth_start to be valid)
+        if 'depth_start' not in invalid_params:
+            current_depth_start = parsed_params['depth_start'][i]
+            if not current_depth_start:
+                errors.append(f"{input_prefix}Depth start is required")
+                field_highlights['depth_start'] = 'error'
+            depth_start_val = safe_float(current_depth_start, f"{input_prefix}Depth Start")
+            if depth_start_val is None:  # Failed conversion (not just empty)
+                field_highlights['depth_start'] = 'error'
+        
+        # Check if depth_end is None (only needs depth_end to be valid)
+        if 'depth_end' not in invalid_params:
+            current_depth_end = parsed_params['depth_end'][i]
+            if not current_depth_end:
+                errors.append(f"{input_prefix}Depth end is required")
+                field_highlights['depth_end'] = 'error'
+            depth_end_val = safe_float(current_depth_end, f"{input_prefix}Depth End")
+            if depth_end_val is None:  # Failed conversion (not just empty)
+                field_highlights['depth_end'] = 'error'
+        
+        # Check if depth_resolution is None (only needs depth_resolution to be valid)
+        if 'depth_resolution' not in invalid_params:
+            current_depth_resolution = parsed_params['depth_resolution'][i]
+            if not current_depth_resolution:
+                errors.append(f"{input_prefix}Depth resolution is required")
+                field_highlights['depth_resolution'] = 'error'
+            depth_resolution_val = safe_float(current_depth_resolution, f"{input_prefix}Depth Resolution")
+            if depth_resolution_val is None:  # Failed conversion (not just empty)
+                field_highlights['depth_resolution'] = 'error'
+        
+        # Check start < end (needs BOTH depth_start AND depth_end to be valid)
+        if 'depth_start' not in invalid_params and 'depth_end' not in invalid_params:
+            if depth_start_val is not None and depth_end_val is not None:
+                if depth_start_val >= depth_end_val:
+                    errors.append(f"{input_prefix}Depth Start must be less than Depth End")
+                    field_highlights['depth_start'] = 'error'
+                    field_highlights['depth_end'] = 'error'
+                
+                # Calculate depth_span once (used in multiple checks below)
+                depth_span = depth_end_val - depth_start_val
+                
+                # Warning: large depth range (only needs depth_start and depth_end)
+                if depth_span > 500:
+                    warnings.append(f"{input_prefix}Total depth range ({depth_span} µm) is large (> 500 µm)")
+                    if 'depth_start' not in field_highlights:
+                        field_highlights['depth_start'] = 'warning'
+                    if 'depth_end' not in field_highlights:
+                        field_highlights['depth_end'] = 'warning'
+        
+        # Check resolution value (only needs depth_resolution to be valid)
+        if 'depth_resolution' not in invalid_params:
+            if depth_resolution_val is not None:
+                # Error: resolution must be positive
+                if depth_resolution_val <= 0:
+                    errors.append(f"{input_prefix}Depth Resolution must be positive")
+                    field_highlights['depth_resolution'] = 'error'
+                # Warning: resolution too small
+                elif depth_resolution_val < 0.1:
+                    warnings.append(f"{input_prefix}Depth Resolution ({depth_resolution_val} µm) is very small (< 0.1 µm)")
+                    if 'depth_resolution' not in field_highlights:
+                        field_highlights['depth_resolution'] = 'warning'
+        
+        # Check resolution < range (needs ALL THREE to be valid)
+        if depth_span is not None:
+            if 'depth_resolution' not in invalid_params and depth_resolution_val is not None:
+                # Check if resolution is less than range
+                if depth_resolution_val > abs(depth_span):
+                    errors.append(f"{input_prefix}Depth Resolution ({depth_resolution_val} µm) must be less than or equal to depth range ({abs(depth_span)} µm)")
+                    field_highlights['depth_start'] = 'error'
+                    field_highlights['depth_end'] = 'error'
+                    field_highlights['depth_resolution'] = 'error'
+        
+        # 2. Validate percent_brightest for this input
+        if 'percent_brightest' not in invalid_params:
+            current_percent = parsed_params['percent_brightest'][i]
+            if not current_percent:
+                errors.append(f"{input_prefix}Intensity percentile is required")
+                field_highlights['percent_brightest'] = 'error'
+            percent_val = safe_float(current_percent, f"{input_prefix}Intensity percentile")
+            if percent_val is not None:
+                if percent_val <= 0 or percent_val > 100:
+                    errors.append(f"{input_prefix}Intensity percentile must be between 0 and 100")
+                    field_highlights['percent_brightest'] = 'error'
+        
+        # 3. Check if geometry file exists for this input (skip if root_path invalid)
+        if not any(p in invalid_params for p in ['root_path', 'geoFile']):
+            current_geoFile = parsed_params['geoFile'][i]
+            if not current_geoFile:
+                errors.append(f"{input_prefix}Geometry file is required")
+                field_highlights['geoFile'] = 'error'
+            full_geo_path = os.path.join(root_path, current_geoFile.lstrip('/'))
+            if not os.path.exists(full_geo_path):
+                errors.append(f"{input_prefix}Geometry file not found: {current_geoFile}")
+                field_highlights['geoFile'] = 'error'
+        
+        # 4. Check if output folder already exists for this input (skip if root_path invalid)
+        # Note: We cannot validate this properly if outputFolder contains %d placeholders
+        # because we don't know the scan number or wirerecon_id at validation time.
+        # This check is skipped if %d is present in the path.
+        if not any(p in invalid_params for p in ['root_path', 'outputFolder']):
+            current_outputFolder = parsed_params['outputFolder'][i]
+            if not current_outputFolder:
+                errors.append(f"{input_prefix}Output folder is required")
+                field_highlights['outputFolder'] = 'error'
+            if root_path and '%d' not in current_outputFolder:
+                full_output_path = os.path.join(root_path, current_outputFolder.lstrip('/'))
+                if os.path.exists(full_output_path):
+                    warnings.append(f"{input_prefix}Output folder already exists: {current_outputFolder}")
+                    if 'outputFolder' not in field_highlights:
+                        field_highlights['outputFolder'] = 'warning'
+        
+        # 5. Check if data files exist for this input (skip if root_path invalid)
+        if not any(p in invalid_params for p in ['root_path', 'data_path']):
+            current_data_path = parsed_params['data_path'][i]
+            current_full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
+            
+            # Validate scanNumber against Catalog table
+            # if 'scanNumber' not in invalid_params and all_params.get('scanNumber'):
+            if 'scanNumber' not in invalid_params and all_params.get('scanNumber') and 'scanNumber' in parsed_params:
+                try:
+                    scan_num_int = int(parsed_params['scanNumber'][i])
+                    
+                    # Get catalog data for this scan
+                    catalog_data = get_catalog_data(session, scan_num_int, root_path, CATALOG_DEFAULTS)
+                    
+                    if catalog_data:
+                        catalog_full_data_path = os.path.join(root_path, catalog_data['data_path'].lstrip('/'))
+                        if catalog_full_data_path != current_full_data_path:
+                            warnings.append(
+                                f"{input_prefix}Scan {scan_num_int} catalog path ({catalog_data['data_path']}) "
+                                f"differs from specified data path ({current_data_path})"
+                            )
+                            if 'data_path' not in field_highlights:
+                                field_highlights['data_path'] = 'warning'
+                except (ValueError, TypeError, IndexError):
+                    pass  # Already handled in scanNumber validation
+            
+            # Check if directory exists
+            if not os.path.exists(current_full_data_path):
+                errors.append(f"{input_prefix}Data directory not found: {current_data_path}")
+                field_highlights['data_path'] = 'error'
+            else:
+                # Check if directory contains any files
+                all_files = [f for f in os.listdir(current_full_data_path) if os.path.isfile(os.path.join(current_full_data_path, f))]
+                if not all_files:
+                    errors.append(f"{input_prefix}Data directory contains no files: {current_data_path}")
+                    field_highlights['data_path'] = 'error'
+                else:
+                    # Only check filename prefix if it passed global validation
+                    if 'filenamePrefix' not in invalid_params:
+                        # Parse filename prefix
+                        current_filename_prefix_str = parsed_params['filenamePrefix'][i]
+                        current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
+                        
+                        # Check for actual files using glob - pinpoint which field has the error
+                        has_prefix_error = False
+                        has_scanpoint_error = False
+                        missing_details = []
+                        
+                        for current_filename_prefix_i in current_filename_prefix:
+                            # Check if ANY files match this prefix pattern (without scan point substitution)
+                            prefix_pattern = os.path.join(current_full_data_path, current_filename_prefix_i.replace('%d', '*'))
+                            prefix_matches = glob.glob(prefix_pattern + '*')
+                            
+                            if not prefix_matches:
+                                has_prefix_error = True
+                                missing_details.append(f"No files match prefix pattern: {current_filename_prefix_i}")
+                            else:
+                                # Check specific scan points (only if scanPoints passed global validation)
+                                if 'scanPoints' not in invalid_params:
+                                    current_scanPoints = parsed_params['scanPoints'][i]
+                                    
+                                    try:
+                                        scanPoints_srange = srange(current_scanPoints)
+                                        scanPoint_nums = scanPoints_srange.list()
+                                    except Exception as e:
+                                        errors.append(f"{input_prefix}Invalid scan points format: {current_scanPoints}")
+                                        field_highlights['scanPoints'] = 'error'
+                                        continue
+                                    
+                                    for scanPoint_num in scanPoint_nums:
+                                        file_str = current_filename_prefix_i % scanPoint_num if '%d' in current_filename_prefix_i else current_filename_prefix_i
+                                        scanpoint_pattern = os.path.join(current_full_data_path, file_str)
+                                        scanpoint_matches = glob.glob(scanpoint_pattern + '*')
+                                        
+                                        if not scanpoint_matches:
+                                            has_scanpoint_error = True
+                                            missing_details.append(f"{current_filename_prefix_i} (scan point {scanPoint_num})")
+                        
+                        # Apply field highlights based on what failed
+                        if has_prefix_error:
+                            field_highlights['filenamePrefix'] = 'error'
+                        if has_scanpoint_error:
+                            field_highlights['scanPoints'] = 'error'
+                        
+                        # Build error message
+                        if missing_details:
+                            # Limit error message length for readability
+                            if len(missing_details) <= 5:
+                                missing_str = ", ".join(missing_details)
+                            else:
+                                missing_str = ", ".join(missing_details[:5]) + f", ... and {len(missing_details) - 5} more"
+                            
+                            errors.append(f"{input_prefix}Missing data files in {current_data_path}: {missing_str}")
+        
+        # 6. Validate scanNumber: check that entry is a valid integer
+        # if 'scanNumber' not in invalid_params:
+        if 'scanNumber' not in invalid_params and 'scanNumber' in parsed_params:
+            current_scanNumber = parsed_params['scanNumber'][i]
+            try:
+                current_scanNumber.isdigit()
+            except (ValueError, TypeError):
+                warnings.append(f"{input_prefix}Scan number is not a valid integer: {current_scanNumber}")
+                if 'scanNumber' not in field_highlights:
+                    field_highlights['scanNumber'] = 'warning'
+    
+    # Close database session
+    session.close()
+    
+    # Determine heading based on validation results
+    if errors:
+        heading = "Validation Error!"
+    elif warnings:
+        heading = "Validation Warning!"
+    else:
+        heading = "Validation Success!"
+    
+    validation_result = {
+        'heading': heading,
+        'errors': errors,
+        'warnings': warnings,
+        'field_highlights': field_highlights
+    }
+    return validation_result
+
+
+def apply_validation_highlights(validation_result, all_field_ids):
+    """
+    Apply field highlights based on validation results.
+    Clears highlights for fields not in error/warning list.
+    
+    Parameters:
+    - validation_result: dict returned from validate_wire_reconstruction_inputs()
+    - all_field_ids: list of field IDs to manage (from callback State params)
+    """
+    # Apply highlights for errors/warnings
+    for field_id, highlight_type in validation_result['field_highlights'].items():
+        if highlight_type == 'error':
+            set_props(field_id, {'className': 'is-invalid'})
+        elif highlight_type == 'warning':
+            set_props(field_id, {'className': 'border-warning'})
+    
+    # Clear highlights for fields not in the error/warning list
+    for field_id in all_field_ids:
+        if field_id not in validation_result['field_highlights']:
+            set_props(field_id, {'className': ''})
+
+
+def update_validation_alerts(validation_result):
+    """
+    Update validation alert components based on validation results.
+    Sets props directly for all three validation alerts.
+    
+    Parameters:
+    - validation_result: dict returned from validate_wire_reconstruction_inputs()
+    """
+    # Extract to local variables for cleaner code
+    errors = validation_result['errors']
+    warnings = validation_result['warnings']
+    heading = validation_result['heading']
+    
+    # Build error alert
+    if errors:
+        error_content = dbc.Row([
+            dbc.Col(html.H4(heading, className="alert-heading mb-0"), width="auto"),
+            dbc.Col(html.Ul([html.Li(msg) for msg in errors], className="mb-0"), width="auto"),
+        ], align="center")
+    else:
+        error_content = dbc.Row([
+            dbc.Col(html.H4("Validation Error!", className="alert-heading mb-0"), width="auto"),
+            dbc.Col(html.P("No errors detected.", className="mb-0"), width="auto"),
+        ], align="center")
+    
+    # Build warning alert
+    if warnings:
+        warning_content = dbc.Row([
+            dbc.Col(html.H4(heading, className="alert-heading mb-0"), width="auto"),
+            dbc.Col(html.Ul([html.Li(msg) for msg in warnings], className="mb-0"), width="auto"),
+        ], align="center")
+    else:
+        warning_content = dbc.Row([
+            dbc.Col(html.H4("Validation Warning!", className="alert-heading mb-0"), width="auto"),
+            dbc.Col(html.P("No warnings detected.", className="mb-0"), width="auto"),
+        ], align="center")
+    
+    # Build info alert
+    if not errors and not warnings:
+        info_content = dbc.Row([
+            dbc.Col(html.H4(heading, className="alert-heading mb-0"), width="auto"),
+            dbc.Col(html.P("All inputs are valid. You can submit the job.", className="mb-0"), width="auto"),
+        ], align="center")
+    else:
+        info_content = dbc.Row([
+            dbc.Col(html.H4("Validation Status", className="alert-heading mb-0"), width="auto"),
+            dbc.Col(html.P("Validation completed. Check errors and warnings below.", className="mb-0"), width="auto"),
+        ], align="center")
+    
+    # Determine which alerts to show
+    show_info = not errors and not warnings
+    show_error = len(errors) > 0
+    show_warning = len(warnings) > 0
+    
+    # Set props for all validation alerts
+    set_props("alert-validation-info", {'children': info_content, 'is_open': show_info})
+    set_props("alert-validation-error", {'children': error_content, 'is_open': show_error})
+    set_props("alert-validation-warning", {'children': warning_content, 'is_open': show_warning})
+
+
 """
 =======================
 Callbacks
 =======================
 """
+@dash.callback(
+    Input('validate-btn', 'n_clicks'),
+    State('data_path', 'value'),
+    State('filenamePrefix', 'value'),
+    State('scanPoints', 'value'),
+    State('geoFile', 'value'),
+    State('depth_start', 'value'),
+    State('depth_end', 'value'),
+    State('depth_resolution', 'value'),
+    State('percent_brightest', 'value'),
+    State('outputFolder', 'value'),
+    State('root_path', 'value'),
+    State('scanNumber', 'value'),
+    prevent_initial_call=True,
+)
+def validate_inputs(
+    n_clicks,
+    data_path,
+    filenamePrefix,
+    scanPoints,
+    geoFile,
+    depth_start,
+    depth_end,
+    depth_resolution,
+    percent_brightest,
+    outputFolder,
+    root_path,
+    scanNumber,
+):
+    """Handle Validate button click"""
+    
+    # Get callback context and extract State field IDs
+    ctx = dash.callback_context
+    all_field_ids = [key.split('.')[0] for key in ctx.states.keys()]
+    
+    # Run validation using ctx
+    validation_result = validate_wire_reconstruction_inputs(ctx)
+    
+    # Apply field highlights using helper function
+    apply_validation_highlights(validation_result, all_field_ids)
+    
+    # Update validation alerts using helper function
+    update_validation_alerts(validation_result)
+
+
 @dash.callback(
     Input('submit_wire', 'n_clicks'),
     
@@ -224,31 +778,55 @@ def submit_parameters(n,
     # Output
     output_folder,
 ):
-    # TODO: Input validation and response
-
     """
     Submit parameters for wire reconstruction job(s).
     Handles both single scan and pooled scan submissions.
     """
-    # Parse data_path first to get the number of scans
-    data_path_list = parse_parameter(data_path)
-    num_scans = len(data_path_list)
+    # Get callback context and extract State field IDs
+    ctx = dash.callback_context
+    all_field_ids = [key.split('.')[0] for key in ctx.states.keys()]
     
-    # Parse all other parameters with num_scans
+    # Run validation before submission using ctx
+    validation_result = validate_wire_reconstruction_inputs(ctx)
+    
+    # Apply field highlights for all cases (error, warning, success)
+    apply_validation_highlights(validation_result, all_field_ids)
+    
+    # Update validation alerts using helper function
+    update_validation_alerts(validation_result)
+    
+    # Extract to local variables for cleaner code
+    errors = validation_result['errors']
+    warnings = validation_result['warnings']
+    
+    # Block submission if there are errors
+    if errors:
+        set_props("alert-submit", {
+            'is_open': True,
+            'children': 'Submission blocked due to validation errors. Please fix the errors and try again.',
+            'color': 'danger'
+        })
+        return
+    
+    # Parse data_path first to get the number of inputs
+    data_path_list = parse_parameter(data_path)
+    num_inputs = len(data_path_list)
+    
+    # Parse all other parameters with num_inputs
     try:
-        scanNumber_list = parse_parameter(scanNumber, num_scans)
-        author_list = parse_parameter(author, num_scans)
-        notes_list = parse_parameter(notes, num_scans)
-        geoFile_list = parse_parameter(geometry_file, num_scans)
-        percent_brightest_list = parse_parameter(percent_brightest, num_scans)
-        wire_edges_list = parse_parameter(wire_edges, num_scans)
-        depth_start_list = parse_parameter(depth_start, num_scans)
-        depth_end_list = parse_parameter(depth_end, num_scans)
-        depth_resolution_list = parse_parameter(depth_resolution, num_scans)
-        scanPoints_list = parse_parameter(scanPoints, num_scans)
-        data_path_list = parse_parameter(data_path, num_scans)
-        filenamePrefix_list = parse_parameter(filenamePrefix, num_scans)
-        outputFolder_list = parse_parameter(output_folder, num_scans)
+        scanNumber_list = parse_parameter(scanNumber, num_inputs)
+        author_list = parse_parameter(author, num_inputs)
+        notes_list = parse_parameter(notes, num_inputs)
+        geoFile_list = parse_parameter(geometry_file, num_inputs)
+        percent_brightest_list = parse_parameter(percent_brightest, num_inputs)
+        wire_edges_list = parse_parameter(wire_edges, num_inputs)
+        depth_start_list = parse_parameter(depth_start, num_inputs)
+        depth_end_list = parse_parameter(depth_end, num_inputs)
+        depth_resolution_list = parse_parameter(depth_resolution, num_inputs)
+        scanPoints_list = parse_parameter(scanPoints, num_inputs)
+        data_path_list = parse_parameter(data_path, num_inputs)
+        filenamePrefix_list = parse_parameter(filenamePrefix, num_inputs)
+        outputFolder_list = parse_parameter(output_folder, num_inputs)
     except ValueError as e:
         # Error: mismatched lengths
         set_props("alert-submit", {
@@ -268,7 +846,7 @@ def submit_parameters(n,
     # First loop: Create all database entries for each listed scanNumber
     with Session(session_utils.get_engine()) as session:
         try:
-            for i in range(num_scans):
+            for i in range(num_inputs):
                 # Extract values for this scan
                 current_scanNumber = scanNumber_list[i]
                 current_output_folder = outputFolder_list[i]
@@ -423,7 +1001,7 @@ def submit_parameters(n,
                     input_file_pattern = os.path.join(full_data_path, file_str)
                     
                     # Use glob to find matching files
-                    matched_files = glob.glob(input_file_pattern)
+                    matched_files = glob.glob(input_file_pattern + '*')
                     
                     if not matched_files:
                         raise ValueError(f"No files found matching pattern: {input_file_pattern}")
@@ -578,6 +1156,138 @@ def update_path_fields_from_scan(n_clicks, scanNumber):
 
 
 @dash.callback(
+    Input('wirerecon-load-file-indices-btn', 'n_clicks'),
+    Input('wirerecon-data-loaded-trigger', 'data'),
+    State('data_path', 'value'),
+    State('filenamePrefix', 'value'),
+    prevent_initial_call=True,
+)
+def load_file_indices(n_clicks, data_loaded_trigger, data_path, filenamePrefix, num_indices=1):
+    """
+    Scan the data directory and automatically populate the scanPoints field
+    with the file indices found in the directory.
+    
+    Triggered by:
+    - wirerecon-load-file-indices-btn button click
+    - wirerecon-data-loaded-trigger data change (when scan data is loaded from URL)
+    
+    Parameters:
+    -----------
+    n_clicks : int
+        Number of button clicks (Input trigger)
+    data_loaded_trigger : str
+        Timestamp when scan data was loaded (Input trigger)
+    data_path : str
+        Path to the data directory (State)
+    filenamePrefix : str
+        Filename prefix pattern (State)
+    num_indices : int, optional
+        Number of rightmost numeric indices to capture (default=1)
+        - num_indices=1: captures rightmost number (e.g., file_123.h5 -> file_%d.h5)
+        - num_indices=2: captures two rightmost numbers (e.g., file_7_150.h5 -> file_%d_%d.h5)
+    """
+    
+    if not data_path:
+        set_props("alert-scan-loaded", {
+            'is_open': True,
+            'children': 'Please specify a data path first.',
+            'color': 'warning'
+        })
+        raise PreventUpdate
+    
+    if not filenamePrefix:
+        set_props("alert-scan-loaded", {
+            'is_open': True,
+            'children': 'Please specify a filename prefix first.',
+            'color': 'warning'
+        })
+        raise PreventUpdate
+    
+    root_path = DEFAULT_VARIABLES.get("root_path", "")
+    
+    try:
+        # Parse data_path
+        data_path_list = parse_parameter(data_path)
+        
+        # Collect all indices from all data paths
+        all_indices = set()
+        
+        for current_data_path in data_path_list:
+            current_full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
+            
+            # Check if directory exists
+            if not os.path.exists(current_full_data_path):
+                logger.warning(f"Directory does not exist: {current_full_data_path}")
+                continue
+            
+            # Parse filename prefix (handle comma-separated list)
+            filename_prefixes = [s.strip() for s in str(filenamePrefix).split(',')] if filenamePrefix else []
+            
+            # Build regex pattern to capture N rightmost numbers
+            if num_indices == 1:
+                regex_pattern = r'(\d+)(?!.*\d)'
+            else:
+                # Capture N groups of digits separated by underscores from the right
+                regex_pattern = r'_'.join([r'(\d+)'] * num_indices) + r'(?!.*\d)'
+            
+            # Extract indices from files matching the prefix pattern
+            for current_filename_prefix_i in filename_prefixes:
+                # Use glob to find files matching this prefix pattern
+                # Replace %d with * for glob matching
+                prefix_pattern = os.path.join(current_full_data_path, current_filename_prefix_i.replace('%d', '*'))
+                
+                try:
+                    prefix_matches = glob.glob(prefix_pattern + '*')
+                except Exception as e:
+                    logger.error(f"Error reading directory {current_full_data_path}: {e}")
+                    continue
+                
+                if not prefix_matches:
+                    continue  # Skip if no files match this prefix
+                
+                # Extract indices from matched files
+                for filepath in prefix_matches:
+                    filename = os.path.basename(filepath)
+                    base_name, extension = os.path.splitext(filename)
+                    match = re.search(regex_pattern, base_name)
+                    
+                    if match:
+                        # Extract the first captured group (the index)
+                        try:
+                            # For wire reconstruction, we only need the first index (scan point)
+                            index = int(match.group(1))
+                            all_indices.add(index)
+                        except (ValueError, IndexError):
+                            continue
+        
+        if all_indices:
+            # Create srange string (srange handles sorting internally)
+            indices_range = str(srange(all_indices))
+            
+            # Update the scanPoints field
+            set_props("scanPoints", {'value': indices_range})
+            
+            set_props("alert-scan-loaded", {
+                'is_open': True,
+                'children': f'Successfully loaded {len(all_indices)} file indices: {indices_range}',
+                'color': 'success'
+            })
+        else:
+            set_props("alert-scan-loaded", {
+                'is_open': True,
+                'children': 'No matching files found in the specified directory.',
+                'color': 'warning'
+            })
+    
+    except Exception as e:
+        set_props("alert-scan-loaded", {
+            'is_open': True,
+            'children': f'Error loading file indices: {str(e)}',
+            'color': 'danger'
+        })
+
+
+@dash.callback(
     Output('wirerecon-filename-templates', 'children'),
     Input('wirerecon-check-filenames-btn', 'n_clicks'),
     Input('wirerecon-update-path-fields-btn', 'n_clicks'),
@@ -595,31 +1305,48 @@ def check_filenames(n_check, n_update, data_loaded_trigger,
     Scan directory and suggest common filename patterns.
     Replaces numeric sequences with %d to find templates and shows index ranges.
     
+    Triggered by:
+    - wirerecon-check-filenames-btn button click (also auto-sets filenamePrefix to shortest pattern)
+    - wirerecon-update-path-fields-btn button click
+    - wirerecon-data-loaded-trigger data change (when scan data is loaded from URL)
+    
     Parameters:
     -----------
-    n : int
-        Number of clicks (callback trigger)
+    n_check : int
+        Number of check-filenames button clicks (Input trigger)
+    n_update : int
+        Number of update-path-fields button clicks (Input trigger)
+    data_loaded_trigger : str
+        Timestamp when scan data was loaded (Input trigger)
     data_path : str
-        Path to the data directory
+        Path to the data directory (State)
     num_indices : int, optional
         Number of rightmost numeric indices to capture (default=1)
         - num_indices=1: captures rightmost number (e.g., file_123.h5 -> file_%d.h5)
         - num_indices=2: captures two rightmost numbers (e.g., file_7_150.h5 -> file_%d_%d.h5)
+    
+    Returns:
+    --------
+    list of html.Option
+        Dropdown options with filename patterns and their file ranges
     """
+    # Get the trigger that caused this callback
+    ctx = dash.callback_context
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
     
     if not data_path:
         return [html.Option(value="", label="No data path provided")]
     
-    # Parse data_path first to get the number of scans
+    # Parse data_path first to get the number of inputs
     data_path_list = parse_parameter(data_path)
-    num_scans = len(data_path_list)
+    num_inputs = len(data_path_list)
     
     root_path = DEFAULT_VARIABLES["root_path"]
     
     # Dictionary to store pattern -> list of indices
     pattern_files = {}
 
-    for i in range(num_scans):
+    for i in range(num_inputs):
         # Get filefolder
         current_data_path = data_path_list[i]
 
@@ -677,7 +1404,7 @@ def check_filenames(n_check, n_update, data_loaded_trigger,
         if indices_list and indices_list[0]:
             if num_indices == 1:
                 # Single index: show simple range
-                label = f"{pattern} (files {str(srange(sorted(set(idx[0] for idx in indices_list))))})"
+                label = f"{pattern} (files {str(srange(set(idx[0] for idx in indices_list)))})"
             else:
                 # Multiple indices: show ranges for each dimension
                 range_labels = []
@@ -731,6 +1458,12 @@ def check_filenames(n_check, n_update, data_loaded_trigger,
                     combined_indices = sorted(set(idx[0] for idx in indices1 + indices2 if idx))
                     label = f"{wildcard_pattern} (files {str(srange(combined_indices))})"
                     pattern_options.append(html.Option(value=wildcard_pattern, label=label))
+    
+    # Find the shortest pattern from all options (including wildcards) and set it to filenamePrefix
+    # Only set filenamePrefix if triggered by the check-filenames button
+    if pattern_options and trigger_id == 'wirerecon-check-filenames-btn':
+        shortest_pattern = min(pattern_options, key=lambda opt: len(opt.value))
+        set_props("filenamePrefix", {'value': shortest_pattern.value})
     
     return pattern_options
 
