@@ -359,51 +359,51 @@ def submit_parameters(n,
     Submit parameters for peak indexing job(s).
     Handles both single scan and pooled scan submissions.
     """
-    # Parse data_path first to get the number of scans
+    # Parse data_path first to get the number of inputs
     data_path_list = parse_parameter(data_path)
-    num_scans = len(data_path_list)
+    num_inputs = len(data_path_list)
     
-    # Parse all other parameters with num_scans
+    # Parse all other parameters with num_inputs
     try:
-        scanNumber_list = parse_parameter(scanNumber, num_scans)
-        author_list = parse_parameter(author, num_scans)
-        notes_list = parse_parameter(notes, num_scans)
-        recon_id_list = parse_parameter(recon_id, num_scans)
-        wirerecon_id_list = parse_parameter(wirerecon_id, num_scans)
-        threshold_list = parse_parameter(threshold, num_scans)
-        thresholdRatio_list = parse_parameter(thresholdRatio, num_scans)
-        maxRfactor_list = parse_parameter(maxRfactor, num_scans)
-        boxsize_list = parse_parameter(boxsize, num_scans)
-        max_number_list = parse_parameter(max_number, num_scans)
-        min_separation_list = parse_parameter(min_separation, num_scans)
-        peakShape_list = parse_parameter(peakShape, num_scans)
-        scanPoints_list = parse_parameter(scanPoints, num_scans)
-        depthRange_list = parse_parameter(depthRange, num_scans)
-        detectorCropX1_list = parse_parameter(detectorCropX1, num_scans)
-        detectorCropX2_list = parse_parameter(detectorCropX2, num_scans)
-        detectorCropY1_list = parse_parameter(detectorCropY1, num_scans)
-        detectorCropY2_list = parse_parameter(detectorCropY2, num_scans)
-        min_size_list = parse_parameter(min_size, num_scans)
-        max_peaks_list = parse_parameter(max_peaks, num_scans)
-        smooth_list = parse_parameter(smooth, num_scans)
-        maskFile_list = parse_parameter(maskFile, num_scans)
-        indexKeVmaxCalc_list = parse_parameter(indexKeVmaxCalc, num_scans)
-        indexKeVmaxTest_list = parse_parameter(indexKeVmaxTest, num_scans)
-        indexAngleTolerance_list = parse_parameter(indexAngleTolerance, num_scans)
-        indexHKL_list = parse_parameter(indexHKL, num_scans)
-        indexCone_list = parse_parameter(indexCone, num_scans)
-        energyUnit_list = parse_parameter(energyUnit, num_scans)
-        exposureUnit_list = parse_parameter(exposureUnit, num_scans)
-        cosmicFilter_list = parse_parameter(cosmicFilter, num_scans)
-        recipLatticeUnit_list = parse_parameter(recipLatticeUnit, num_scans)
-        latticeParametersUnit_list = parse_parameter(latticeParametersUnit, num_scans)
-        data_path_list = parse_parameter(data_path, num_scans)
-        filenamePrefix_list = parse_parameter(filenamePrefix, num_scans)
-        outputFolder_list = parse_parameter(outputFolder, num_scans)
-        geoFile_list = parse_parameter(geometry_file, num_scans)
-        crystFile_list = parse_parameter(crystal_file, num_scans)
-        depth_list = parse_parameter(depth, num_scans)
-        beamline_list = parse_parameter(beamline, num_scans)
+        scanNumber_list = parse_parameter(scanNumber, num_inputs)
+        author_list = parse_parameter(author, num_inputs)
+        notes_list = parse_parameter(notes, num_inputs)
+        recon_id_list = parse_parameter(recon_id, num_inputs)
+        wirerecon_id_list = parse_parameter(wirerecon_id, num_inputs)
+        threshold_list = parse_parameter(threshold, num_inputs)
+        thresholdRatio_list = parse_parameter(thresholdRatio, num_inputs)
+        maxRfactor_list = parse_parameter(maxRfactor, num_inputs)
+        boxsize_list = parse_parameter(boxsize, num_inputs)
+        max_number_list = parse_parameter(max_number, num_inputs)
+        min_separation_list = parse_parameter(min_separation, num_inputs)
+        peakShape_list = parse_parameter(peakShape, num_inputs)
+        scanPoints_list = parse_parameter(scanPoints, num_inputs)
+        depthRange_list = parse_parameter(depthRange, num_inputs)
+        detectorCropX1_list = parse_parameter(detectorCropX1, num_inputs)
+        detectorCropX2_list = parse_parameter(detectorCropX2, num_inputs)
+        detectorCropY1_list = parse_parameter(detectorCropY1, num_inputs)
+        detectorCropY2_list = parse_parameter(detectorCropY2, num_inputs)
+        min_size_list = parse_parameter(min_size, num_inputs)
+        max_peaks_list = parse_parameter(max_peaks, num_inputs)
+        smooth_list = parse_parameter(smooth, num_inputs)
+        maskFile_list = parse_parameter(maskFile, num_inputs)
+        indexKeVmaxCalc_list = parse_parameter(indexKeVmaxCalc, num_inputs)
+        indexKeVmaxTest_list = parse_parameter(indexKeVmaxTest, num_inputs)
+        indexAngleTolerance_list = parse_parameter(indexAngleTolerance, num_inputs)
+        indexHKL_list = parse_parameter(indexHKL, num_inputs)
+        indexCone_list = parse_parameter(indexCone, num_inputs)
+        energyUnit_list = parse_parameter(energyUnit, num_inputs)
+        exposureUnit_list = parse_parameter(exposureUnit, num_inputs)
+        cosmicFilter_list = parse_parameter(cosmicFilter, num_inputs)
+        recipLatticeUnit_list = parse_parameter(recipLatticeUnit, num_inputs)
+        latticeParametersUnit_list = parse_parameter(latticeParametersUnit, num_inputs)
+        data_path_list = parse_parameter(data_path, num_inputs)
+        filenamePrefix_list = parse_parameter(filenamePrefix, num_inputs)
+        outputFolder_list = parse_parameter(outputFolder, num_inputs)
+        geoFile_list = parse_parameter(geometry_file, num_inputs)
+        crystFile_list = parse_parameter(crystal_file, num_inputs)
+        depth_list = parse_parameter(depth, num_inputs)
+        beamline_list = parse_parameter(beamline, num_inputs)
     except ValueError as e:
         # Error: mismatched lengths
         set_props("alert-submit", {
@@ -420,7 +420,7 @@ def submit_parameters(n,
     # First loop: Create all database entries for each listed scanNumber
     with Session(session_utils.get_engine()) as session:
         try:
-            for i in range(num_scans):
+            for i in range(num_inputs):
                 # Extract values for this scan
                 current_scanNumber = scanNumber_list[i]
                 current_recon_id = recon_id_list[i]
@@ -733,16 +733,16 @@ def check_filenames(n_check, n_update, data_loaded_trigger,
     if not data_path:
         return [html.Option(value="", label="No data path provided")]
     
-    # Parse data_path first to get the number of scans
+    # Parse data_path first to get the number of inputs
     data_path_list = parse_parameter(data_path)
-    num_scans = len(data_path_list)
+    num_inputs = len(data_path_list)
     
     root_path = DEFAULT_VARIABLES["root_path"]
     
     # Dictionary to store pattern -> list of indices
     pattern_files = {}
 
-    for i in range(num_scans):
+    for i in range(num_inputs):
         # Get filefolder
         current_data_path = data_path_list[i]
 
