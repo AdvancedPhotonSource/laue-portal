@@ -201,12 +201,14 @@ def validate_wire_reconstruction_inputs(ctx):
     - ctx: dash.callback_context containing states_list with field IDs and values
     
     Returns:
-        validation_result (dict): {
+        tuple: (validation_result, all_field_ids)
+        - validation_result (dict): {
             'heading': str,
             'errors': list of str,
             'warnings': list of str,
             'field_highlights': dict mapping field_id to 'error'|'warning'
         }
+        - all_field_ids (list): List of field IDs used for validation
     """
     errors = []
     warnings = []
@@ -216,16 +218,34 @@ def validate_wire_reconstruction_inputs(ctx):
     # Track parameters that failed validation (missing, parse error, or length mismatch)
     invalid_params = set()
     
+    # Hard-coded list of field IDs to validate (excludes 'notes')
+    all_field_ids = [
+        'data_path',
+        'filenamePrefix',
+        'scanPoints',
+        'geoFile',
+        'depth_start',
+        'depth_end',
+        'depth_resolution',
+        'percent_brightest',
+        'outputFolder',
+        'root_path',
+        'scanNumber',
+        'author',
+    ]
+    
     # Create database session for catalog validation
     session = Session(session_utils.get_engine())
     
-    # Extract all parameters from callback context
+    # Extract parameters from callback context using the hard-coded field list
     # ctx.states is a dict with format {'component_id.prop_name': value}
     all_params = {}
     for key, value in ctx.states.items():
         # Extract component_id from 'component_id.prop_name'
         component_id = key.split('.')[0]
-        all_params[component_id] = value
+        # Only include fields in our validation list
+        if component_id in all_field_ids:
+            all_params[component_id] = value
     
     # Extract individual parameter values
     root_path = all_params.get('root_path', '')
@@ -589,7 +609,7 @@ def validate_wire_reconstruction_inputs(ctx):
         'warnings': warnings,
         'field_highlights': field_highlights
     }
-    return validation_result
+    return validation_result, all_field_ids
 
 
 def apply_validation_highlights(validation_result, all_field_ids):
@@ -692,6 +712,7 @@ Callbacks
     State('outputFolder', 'value'),
     State('root_path', 'value'),
     State('scanNumber', 'value'),
+    State('author', 'value'),
     prevent_initial_call=True,
 )
 def validate_inputs(
@@ -707,15 +728,15 @@ def validate_inputs(
     outputFolder,
     root_path,
     scanNumber,
+    author,
 ):
     """Handle Validate button click"""
     
-    # Get callback context and extract State field IDs
+    # Get callback context
     ctx = dash.callback_context
-    all_field_ids = [key.split('.')[0] for key in ctx.states.keys()]
     
     # Run validation using ctx
-    validation_result = validate_wire_reconstruction_inputs(ctx)
+    validation_result, all_field_ids = validate_wire_reconstruction_inputs(ctx)
     
     # Apply field highlights using helper function
     apply_validation_highlights(validation_result, all_field_ids)
@@ -782,12 +803,11 @@ def submit_parameters(n,
     Submit parameters for wire reconstruction job(s).
     Handles both single scan and pooled scan submissions.
     """
-    # Get callback context and extract State field IDs
+    # Get callback context
     ctx = dash.callback_context
-    all_field_ids = [key.split('.')[0] for key in ctx.states.keys()]
     
     # Run validation before submission using ctx
-    validation_result = validate_wire_reconstruction_inputs(ctx)
+    validation_result, all_field_ids = validate_wire_reconstruction_inputs(ctx)
     
     # Apply field highlights for all cases (error, warning, success)
     apply_validation_highlights(validation_result, all_field_ids)
@@ -797,7 +817,7 @@ def submit_parameters(n,
     
     # Extract to local variables for cleaner code
     errors = validation_result['errors']
-    warnings = validation_result['warnings']
+    # warnings = validation_result['warnings']
     
     # Block submission if there are errors
     if errors:
