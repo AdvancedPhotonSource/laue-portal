@@ -13,13 +13,11 @@ peakindex_form = dbc.Row(
                                 dbc.Row(
                                         [
                                             dbc.Col(
-                                                dbc.InputGroup(
-                                                    [
-                                                        dbc.InputGroupText("ID Number: SN# | WR# | MR# | PI#"),
-                                                        dbc.Input(id="IDnumber", type="text", placeholder="e.g. SN123456 or WR1 or MR3 or PI4"),
-                                                    ],
-                                                    className="w-100",            # input group spans the col
-                                                ),
+                                                _field("ID Number: SN# | WR# | MR# | PI#", "IDnumber",
+                                                        kwargs={
+                                                            "type": "text",
+                                                            "placeholder": "e.g. SN123456 or WR1 or MR3 or PI4",
+                                                        }),
                                                 className="flex-grow-1",          # THIS makes it expand
                                                 style={"minWidth": 0},            # avoid overflow when very narrow
                                             ),
@@ -56,23 +54,15 @@ peakindex_form = dbc.Row(
                                 
                                 dbc.Row(
                                     [
-                                        
                                         dbc.Col(
                                             html.Div(
                                                 [
-                                                    dbc.InputGroup(
-                                                        [
-                                                            dbc.InputGroupText("Filename"),
-                                                            dbc.Input(
-                                                                id="filenamePrefix",
-                                                                type="text",
-                                                                placeholder="e.g. Si_%d.h5 or Si_*%d.h5",
-                                                                list="filename-templates",  # link to datalist below
-                                                                
-                                                            ),
-                                                        ],
-                                                        className="w-100",
-                                                    ),
+                                                    _field("Filename", "filenamePrefix",
+                                                            kwargs={
+                                                                "type": "text",
+                                                                "placeholder": "e.g. Si_%d.h5 or Si_*%d.h5",
+                                                                "list": "filename-templates",  # link to datalist below
+                                                            }),
                                                     # just as example
                                                     html.Datalist(
                                                         id="filename-templates",
@@ -87,7 +77,6 @@ peakindex_form = dbc.Row(
                                             className="flex-grow-1",
                                             style={"minWidth": 0},
                                         ),
-
                                         dbc.Col(
                                             dbc.Button(
                                                 "Update from folder",
@@ -108,29 +97,23 @@ peakindex_form = dbc.Row(
                                 dbc.Row(
                                         [
                                             dbc.Col(
-                                                dbc.InputGroup(
-                                                    [
-                                                        dbc.InputGroupText("Scan indices"),
-                                                        dbc.Input(id="scanPoints", type="text", size = "md", placeholder="e.g. 1-10 or 1,5,8,9 or 1-4,10-21"),
-                                                    ],
-                                                    className="w-100",            # input group spans the col
-                                                ),
+                                                _field("Scan indices", "scanPoints", size='md',
+                                                        kwargs={
+                                                            "type": "text",
+                                                            "placeholder": "e.g. 1-10 or 1,5,8,9 or 1-4,10-21",
+                                                        }),
                                                 className="flex-grow-1",          # THIS makes it expand
                                                 style={"minWidth": 0},            # avoid overflow when very narrow
                                             ),
-                                            
                                             dbc.Col(
-                                                dbc.InputGroup(
-                                                    [
-                                                        dbc.InputGroupText("Depth indices"),
-                                                        dbc.Input(id="depthRange", type="text", size = "md", placeholder="e.g. 1-10 or 1,5,8,9 or 1-4,10-21"),
-                                                    ],
-                                                    className="w-100",            # input group spans the col
-                                                ),
+                                                _field("Depth indices", "depthRange", size='md',
+                                                        kwargs={
+                                                            "type": "text",
+                                                            "placeholder": "e.g. 1-10 or 1,5,8,9 or 1-4,10-21",
+                                                        }),
                                                 className="flex-grow-1",          # THIS makes it expand
                                                 style={"minWidth": 0},            # avoid overflow when very narrow
                                             ),
-
                                             dbc.Col(
                                                 dbc.Button(
                                                     "Load indices from file",
@@ -159,17 +142,14 @@ peakindex_form = dbc.Row(
                                 dbc.Row(
                                     [
                                         dbc.Col(
-                                            dbc.InputGroup(
-                                                [
-                                                    dbc.InputGroupText("Geometry File"),
-                                                    dbc.Input(id="geoFile", type="text", size="md", placeholder=""),
-                                                ],
-                                                className="w-100",
-                                            ),
+                                            _field("Geometry File", "geoFile", size='md',
+                                                    kwargs={
+                                                        "type": "text",
+                                                        "placeholder": "",
+                                                    }),
                                             className="flex-grow-1",
                                             style={"minWidth": 150},
                                         ),
-
                                         dbc.Col(
                                             dbc.Row(
                                                 [
@@ -302,13 +282,11 @@ peakindex_form = dbc.Row(
                                 dbc.Row(
                                         [
                                             dbc.Col(
-                                                dbc.InputGroup(
-                                                    [
-                                                        dbc.InputGroupText("Mask File"),
-                                                        dbc.Input(id="maskFile", type="text", placeholder=""),
-                                                    ],
-                                                    className="w-100",            # input group spans the col
-                                                ),
+                                                _field("Mask File", "maskFile",
+                                                        kwargs={
+                                                            "type": "text",
+                                                            "placeholder": "",
+                                                        }),
                                                 className="flex-grow-1",          # THIS makes it expand
                                                 style={"minWidth": 0},            # avoid overflow when very narrow
                                             ),
@@ -385,13 +363,11 @@ peakindex_form = dbc.Row(
                                 dbc.Row(
                                         [
                                             dbc.Col(
-                                                dbc.InputGroup(
-                                                    [
-                                                        dbc.InputGroupText("Crystal Structure File"),
-                                                        dbc.Input(id="crystFile", type="text", placeholder=""),
-                                                    ],
-                                                    className="w-100",            # input group spans the col
-                                                ),
+                                                _field("Crystal Structure File", "crystFile",
+                                                        kwargs={
+                                                            "type": "text",
+                                                            "placeholder": "",
+                                                        }),
                                                 className="flex-grow-1",          # THIS makes it expand
                                                 style={"minWidth": 0},            # avoid overflow when very narrow
                                             ),

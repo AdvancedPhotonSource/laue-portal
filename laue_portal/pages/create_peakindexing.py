@@ -13,6 +13,7 @@ import laue_portal.database.db_schema as db_schema
 import laue_portal.components.navbar as navbar
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix, parse_parameter
 from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
+from laue_portal.components.form_base import _field
 from laue_portal.processing.redis_utils import enqueue_peakindexing, STATUS_REVERSE_MAPPING
 from laue_portal.config import DEFAULT_VARIABLES
 from srange import srange
@@ -206,16 +207,11 @@ layout = dbc.Container(
         html.Hr(),
         dbc.Row([
                 dbc.Col(
-                    dbc.InputGroup([
-                            dbc.InputGroupText("Author"),
-                            dbc.Input(
-                                type="text",
-                                id="author",
-                                placeholder="Required! Enter author or Tag for the reconstruction",
-                            ),
-                        ],
-                        className="w-100 mb-0",
-                    ),
+                    _field("Author", "author",
+                            kwargs={
+                                "type": "text",
+                                "placeholder": "Required! Enter author or Tag for the reconstruction",
+                            }),
                     md=12, xs=12,   # full row on small, wide on medium+
                     width = "auto",
                     style={"minWidth": "300px"},
