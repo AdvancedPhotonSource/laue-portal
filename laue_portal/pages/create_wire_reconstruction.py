@@ -13,6 +13,7 @@ import laue_portal.database.db_schema as db_schema
 import laue_portal.components.navbar as navbar
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix, parse_parameter
 from laue_portal.components.wire_recon_form import wire_recon_form, set_wire_recon_form_props
+from laue_portal.components.form_base import _field
 from laue_portal.processing.redis_utils import enqueue_wire_reconstruction, STATUS_REVERSE_MAPPING
 from laue_portal.config import DEFAULT_VARIABLES
 from srange import srange
@@ -83,23 +84,11 @@ layout = dbc.Container(
             is_open=False,
             color="success",
         ),
-        # html.Hr(),
-
         dbc.Row(
                 [
                     dbc.Col(
                         html.H3(id="wirerecon-title", children="New Wire Reconstruction"),
                         width="auto",   # shrink to content
-                    ),
-                    dbc.Col(
-                        dbc.Button(
-                            "Set from ...",
-                            id="upload-wireconfig",
-                            color="secondary",
-                            style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
-                        ),
-                        width="auto",
-                        className="ms-3",  # small gap from title
                     ),
                     dbc.Col(
                         dbc.Button(
@@ -114,7 +103,7 @@ layout = dbc.Container(
                     dbc.Col(
                         dbc.Button(
                             "Submit",
-                            id="submit_wire",#"submit-btn",
+                            id="submit_wire",
                             color="primary",
                             style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
                         ),
@@ -127,27 +116,6 @@ layout = dbc.Container(
                 align="center",       # CENTER vertically
             ),
         html.Hr(),
-        dbc.Row([
-                dbc.Col(
-                    dbc.InputGroup([
-                            dbc.InputGroupText("Author"),
-                            dbc.Input(
-                                type="text",
-                                id="author",
-                                placeholder="Required! Enter author or Tag for the reconstruction",
-                            ),
-                        ],
-                        className="w-100 mb-0",
-                    ),
-                    md=12, xs=12,   # full row on small, wide on medium+
-                    width = "auto",
-                    style={"minWidth": "300px"},
-                ),
-            ],
-            justify="center",
-            className="mb-3",
-            align="center",
-        ),
         html.Div([
             dbc.Alert(
                 dbc.Row([
@@ -194,7 +162,26 @@ layout = dbc.Container(
                 className="mb-2"
             ),
         ], className="mb-3"),
-        html.Hr(),
+        dbc.Row([
+                dbc.Col(
+                    dbc.Button(
+                        "Set from ...",
+                        id="upload-wireconfig",
+                        color="secondary",
+                        style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
+                    ),
+                    width="auto",
+                ),
+                dbc.Col(
+                    _field("Author", "author", kwargs={"type": "text", "placeholder": "Required! Enter author or Tag for the reconstruction"}),
+                    width="auto",
+                    style={"minWidth": "300px", "flexGrow": 1},
+                ),
+            ],
+            justify="start",
+            className="mb-0",
+        ),
+        # html.Hr(),
         wire_recon_form,
         # dcc.Store(id="next-wire-recon-id"),
         dcc.Store(id="wirerecon-data-loaded-trigger"),
@@ -478,13 +465,18 @@ def validate_wire_reconstruction_inputs(ctx):
                         # Get catalog data for this scan
                         catalog_data = get_catalog_data(session, scan_num_int, root_path, CATALOG_DEFAULTS)
                         
-                        if catalog_data:
+                        if catalog_data and catalog_data.get('data_path'):
                             catalog_full_data_path = os.path.join(root_path, catalog_data['data_path'].lstrip('/'))
                             if catalog_full_data_path != current_full_data_path:
                                 warnings.setdefault('data_path', []).append(
-                                    f"{input_prefix}Scan {scan_num_int} catalog path ({catalog_data['data_path']}) "
-                                    f"differs from specified data path ({current_data_path})"
+                                    f"{input_prefix}Catalog entry for scan {scan_num_int} has path ({catalog_data['data_path']}) "
+                                    f"that differs from specified data path ({current_data_path})"
                                 )
+                        else:
+                            # No catalog entry found for this scan number
+                            warnings.setdefault('scanNumber', []).append(
+                                f"{input_prefix}No catalog entry found for scan {scan_num_int}"
+                            )
                     except (ValueError, TypeError, IndexError):
                         pass  # Already handled in scanNumber validation
                 
