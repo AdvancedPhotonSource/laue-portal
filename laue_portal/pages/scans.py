@@ -39,13 +39,9 @@ layout = html.Div([
                         )
                     ),
                     html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("New Recon with selected (only 1 sel)", href="#", active=False)),
+                    dbc.NavItem(dbc.NavLink("New Recon + Index", href="#", active=False)),
                     html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("Stop ALL", href="#", active=False)),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("Stop Selected", href="#", active=False)),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("Set high Priority for selected (only 1 sel)", href="#", active=False)),
+                    dbc.NavItem(dbc.NavLink("Energy to K-space", href="#", active=False)),
                 ],
                 className="bg-light px-2 py-2 d-flex justify-content-end w-100")
             ], width=12)
