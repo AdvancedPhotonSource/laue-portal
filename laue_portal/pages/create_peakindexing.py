@@ -113,12 +113,10 @@ layout = dbc.Container(
             is_open=False,
             color="success",
         ),
-        html.Hr(),
-        
         dbc.Row(
                 [
                     dbc.Col(
-                        html.H3(id="peakindex-title", children="New peak indexing"),
+                        html.H3(id="peakindex-title", children="New Peak Indexing"),
                         width="auto",   # shrink to content
                     ),
                     dbc.Col(
@@ -212,7 +210,7 @@ layout = dbc.Container(
                             dbc.InputGroupText("Author"),
                             dbc.Input(
                                 type="text",
-                                id="author-input",
+                                id="author",
                                 placeholder="Required! Enter author or Tag for the reconstruction",
                             ),
                         ],
@@ -228,7 +226,6 @@ layout = dbc.Container(
             align="center",
         ),
         peakindex_form,
-        # dcc.Store(id="next-peakindex-id"),
         dcc.Store(id="peakindex-data-loaded-trigger"),
     ],
     )

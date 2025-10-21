@@ -84,25 +84,52 @@ layout = dbc.Container(
             color="success",
         ),
         # html.Hr(),
-        # html.Center(
-        #     html.Div(
-        #         [
-        #             html.Div([
-        #                     dcc.Upload(dbc.Button('Upload Config'), id='upload-wireconfig'),
-        #             ], style={'display':'inline-block'}),
-        #         ],
-        #     )
-        # ),
-        html.Hr(),
-        html.Center(
-            html.H3(id="wirerecon-title", children="New Wire Reconstruction"),
-        ),
-        html.Hr(),
+
         dbc.Row(
-            [
+                [
+                    dbc.Col(
+                        html.H3(id="wirerecon-title", children="New Wire Reconstruction"),
+                        width="auto",   # shrink to content
+                    ),
+                    dbc.Col(
+                        dbc.Button(
+                            "Set from ...",
+                            id="upload-wireconfig",
+                            color="secondary",
+                            style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
+                        ),
+                        width="auto",
+                        className="ms-3",  # small gap from title
+                    ),
+                    dbc.Col(
+                        dbc.Button(
+                            "Validate",
+                            id="validate-btn",
+                            color="secondary",
+                            style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
+                        ),
+                        width="auto",
+                        className="ms-3",  # small gap from title
+                    ),
+                    dbc.Col(
+                        dbc.Button(
+                            "Submit",
+                            id="submit_wire",#"submit-btn",
+                            color="primary",
+                            style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
+                        ),
+                        width="auto",
+                        className="ms-2",
+                    ),
+                ],
+                className="g-2",     # gutter between cols
+                justify="center",     # CENTER horizontally
+                align="center",       # CENTER vertically
+            ),
+        html.Hr(),
+        dbc.Row([
                 dbc.Col(
-                    dbc.InputGroup(
-                        [
+                    dbc.InputGroup([
                             dbc.InputGroupText("Author"),
                             dbc.Input(
                                 type="text",
@@ -110,48 +137,22 @@ layout = dbc.Container(
                                 placeholder="Required! Enter author or Tag for the reconstruction",
                             ),
                         ],
-                        className="mb-0",
+                        className="w-100 mb-0",
                     ),
-                    md=8, xs=12,   # full row on small, wide on medium+
+                    md=12, xs=12,   # full row on small, wide on medium+
+                    width = "auto",
                     style={"minWidth": "300px"},
                 ),
-                dbc.Col(
-                    dbc.Row(
-                        [
-                            dbc.Col(
-                                dbc.Button(
-                                    "Validate All",
-                                    id="validate-btn",
-                                    color="secondary",
-                                    style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
-                                ),
-                                width="auto",
-                            ),
-                            dbc.Col(
-                                dbc.Button(
-                                    "Submit",
-                                    id="submit_wire",#"submit-btn",
-                                    color="primary",
-                                    style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
-                                ),
-                                width="auto",
-                            ),
-                        ],
-                        className="g-2",   # space between the two buttons
-                        justify="start",   # align left, right after the Author field
-                    ),
-                    md=4, xs=12,
-                    className="mt-2 mt-md-0",
-                ),
             ],
+            justify="center",
             className="mb-3",
             align="center",
         ),
         html.Div([
             dbc.Alert(
                 dbc.Row([
-                    dbc.Col(html.H4("Validation Status", className="alert-heading mb-0"), width="auto"),
-                    dbc.Col(html.P("Click 'Validate All' button to check inputs.", className="mb-0"), width="auto"),
+                    dbc.Col(html.H4("Validation status", className="alert-heading mb-0"), width=2),
+                    dbc.Col(html.P("Click 'Validate' button to check inputs.", className="mb-0"), width="auto"),
                 ], align="center"),
                 id="alert-validation-info",
                 color="info",
@@ -161,8 +162,19 @@ layout = dbc.Container(
             ),
             dbc.Alert(
                 dbc.Row([
-                    dbc.Col(html.H4("Validation Error!", className="alert-heading mb-0"), width="auto"),
-                    dbc.Col(html.P("No errors detected.", className="mb-0"), width="auto"),
+                    dbc.Col(html.H4("Validate status: Success!", className="alert-heading mb-0"), width=2),
+                    dbc.Col(html.P("All inputs are valid. You can submit the job.", className="mb-0"), width="auto"),
+                ], align="center"),
+                id="alert-validation-success",
+                color="success",
+                dismissable=False,
+                is_open=False,
+                className="mb-2"
+            ),
+            dbc.Alert(
+                dbc.Row([
+                    dbc.Col(html.H4("Validate status: Error!", className="alert-heading mb-0"), width=3),
+                    dbc.Col(html.Div(id="alert-validation-error-message", className="mb-0"), width="auto"),
                 ], align="center"),
                 id="alert-validation-error",
                 color="danger",
@@ -172,8 +184,8 @@ layout = dbc.Container(
             ),
             dbc.Alert(
                 dbc.Row([
-                    dbc.Col(html.H4("Validation Warning!", className="alert-heading mb-0"), width="auto"),
-                    dbc.Col(html.P("No warnings detected.", className="mb-0"), width="auto"),
+                    dbc.Col(html.H4("Validate status: Warning!", className="alert-heading mb-0"), width=3),
+                    dbc.Col(html.Div(id="alert-validation-warning-message", className="mb-0"), width="auto"),
                 ], align="center"),
                 id="alert-validation-warning",
                 color="warning",
@@ -195,28 +207,23 @@ layout = dbc.Container(
 
 def validate_wire_reconstruction_inputs(ctx):
     """
-    Validate all wire reconstruction inputs using callback context.
+    Validate specified wire reconstruction inputs using callback context.
     
     Parameters:
     - ctx: dash.callback_context containing states_list with field IDs and values
     
     Returns:
-        tuple: (validation_result, all_field_ids)
-        - validation_result (dict): {
-            'heading': str,
-            'errors': list of str,
-            'warnings': list of str,
-            'field_highlights': dict mapping field_id to 'error'|'warning'
+        validation_result (dict): {
+            'errors': dict mapping param_name to list of error messages,
+            'warnings': dict mapping param_name to list of warning messages,
+            'successes': dict mapping param_name to empty string (for params that passed)
         }
-        - all_field_ids (list): List of field IDs used for validation
     """
-    errors = []
-    warnings = []
-    field_highlights = {}
+    errors = {}
+    warnings = {}
+    successes = {}
     # Dictionary to store parsed parameter lists
     parsed_params = {}
-    # Track parameters that failed validation (missing, parse error, or length mismatch)
-    invalid_params = set()
     
     # Hard-coded list of field IDs to validate (excludes 'notes')
     all_field_ids = [
@@ -262,24 +269,20 @@ def validate_wire_reconstruction_inputs(ctx):
     
     # Validate root_path directory exists
     if not root_path:
-        errors.append("Root path is required")
-        field_highlights['root_path'] = 'error'
-        invalid_params.add('root_path')
+        errors.setdefault('root_path', []).append("Root path is required")
     elif not os.path.exists(root_path):
-        errors.append(f"Root path directory does not exist: {root_path}")
-        field_highlights['root_path'] = 'error'
-        invalid_params.add('root_path')
+        errors.setdefault('root_path', []).append(f"Root path directory does not exist: {root_path}")
     else: #Added to pass over in later loop over all_params
         parsed_params['root_path'] = root_path
+        successes['root_path'] = ''
     
     # Helper function to safely convert to float
-    def safe_float(value, field_name):
+    def safe_float(value):
         try:
             if value is None or value == '':
                 return None
             return float(value)
         except (ValueError, TypeError):
-            errors.append(f"{field_name} must be a valid number")
             return None
     
     # Parse data_path first to determine number of scans
@@ -288,24 +291,22 @@ def validate_wire_reconstruction_inputs(ctx):
         num_inputs = len(data_path_list)
         parsed_params['data_path'] = data_path_list
     except ValueError as e:
-        errors.append(f"Data path parsing error: {str(e)}")
-        field_highlights['data_path'] = 'error'
+        errors.setdefault('data_path', []).append(f"Data path parsing error: {str(e)}")
         # Close session before early return
         session.close()
         # Return early since we can't validate other parameters without knowing num_inputs
         validation_result = {
-            'heading': 'Validation Error!',
             'errors': errors,
             'warnings': warnings,
-            'field_highlights': field_highlights
+            'successes': successes
         }
         return validation_result
     
     # Check data_path separately since we already parsed it
     if not data_path:
-        errors.append("Data path is required")
-        field_highlights['data_path'] = 'error'
-        invalid_params.add('data_path')
+        errors.setdefault('data_path', []).append("Data path is required")
+    else:
+        successes['data_path'] = ''
     
     # Validate all other parameters by iterating over all_params    
     for param_name, param_value in all_params.items():
@@ -324,16 +325,12 @@ def validate_wire_reconstruction_inputs(ctx):
                 is_missing = True
         
         if is_missing:
-            # Special case for scanNumber: only warning, not error, and not added to invalid_params
+            # Special case for scanNumber: only warning, not error
             if param_name == 'scanNumber':
-                warnings.append(f"{param_name.replace('_', ' ').title()} is missing")
-                if param_name not in field_highlights:
-                    field_highlights[param_name] = 'warning'
-                continue  # Skip parsing but don't add to invalid_params
+                warnings.setdefault(param_name, []).append("Scan Number is missing") #warnings.append(f"{param_name.replace('_', ' ').title()} is missing")
+                continue  # Skip parsing
             else:
-                errors.append(f"{param_name.replace('_', ' ').title()} is required")
-                field_highlights[param_name] = 'error'
-                invalid_params.add(param_name)
+                errors.setdefault(param_name, []).append(f"{param_name.replace('_', ' ').title()} is required")
                 continue  # Skip parsing if missing
         
         # Check 2: Parse the parameter
@@ -342,28 +339,19 @@ def validate_wire_reconstruction_inputs(ctx):
         except ValueError as e:
             # Special case for scanNumber: only warning, not error
             if param_name == 'scanNumber':
-                warnings.append(f"{param_name} parsing error: {str(e)}")
-                if param_name not in field_highlights:
-                    field_highlights[param_name] = 'warning'
-                continue  # Skip length check but don't add to invalid_params
+                warnings.setdefault(param_name, []).append(f"{param_name} parsing error: {str(e)}")
+                continue  # Skip length check
             else:
-                errors.append(f"{param_name} parsing error: {str(e)}")
-                field_highlights[param_name] = 'error'
-                invalid_params.add(param_name)
+                errors.setdefault(param_name, []).append(f"{param_name} parsing error: {str(e)}")
                 continue  # Skip length check if parsing failed
         
         # Check 3: Verify length matches num_inputs
         if len(parsed_list) != num_inputs:
             # Special case for scanNumber: only warning, not error
             if param_name == 'scanNumber':
-                warnings.append(f"{param_name} count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
-                field_highlights[param_name] = 'warning'
-                # invalid_params.add(param_name)
-                # Note: Do NOT add scanNumber to invalid_params - it's just a warning
+                warnings.setdefault(param_name, []).append(f"{param_name} count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
             else:
-                errors.append(f"{param_name} count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
-                field_highlights[param_name] = 'error'
-                invalid_params.add(param_name)
+                errors.setdefault(param_name, []).append(f"{param_name} count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
         
         # Store the parsed list in the dictionary
         parsed_params[param_name] = parsed_list
@@ -377,321 +365,283 @@ def validate_wire_reconstruction_inputs(ctx):
         
         # 1. Validate depth parameters for this input
         # Check if depth_start is None (only needs depth_start to be valid)
-        if 'depth_start' not in invalid_params:
+        if 'depth_start' not in errors:
             current_depth_start = parsed_params['depth_start'][i]
             if not current_depth_start:
-                errors.append(f"{input_prefix}Depth start is required")
-                field_highlights['depth_start'] = 'error'
-            depth_start_val = safe_float(current_depth_start, f"{input_prefix}Depth Start")
+                errors.setdefault('depth_start', []).append(f"{input_prefix}Depth start is required")
+            depth_start_val = safe_float(current_depth_start)
             if depth_start_val is None:  # Failed conversion (not just empty)
-                field_highlights['depth_start'] = 'error'
+                errors.setdefault('depth_start', []).append(f"{input_prefix}Depth start must be a valid number")
         
         # Check if depth_end is None (only needs depth_end to be valid)
-        if 'depth_end' not in invalid_params:
+        if 'depth_end' not in errors:
             current_depth_end = parsed_params['depth_end'][i]
             if not current_depth_end:
-                errors.append(f"{input_prefix}Depth end is required")
-                field_highlights['depth_end'] = 'error'
-            depth_end_val = safe_float(current_depth_end, f"{input_prefix}Depth End")
+                errors.setdefault('depth_end', []).append(f"{input_prefix}Depth end is required")
+            depth_end_val = safe_float(current_depth_end)
             if depth_end_val is None:  # Failed conversion (not just empty)
-                field_highlights['depth_end'] = 'error'
+                errors.setdefault('depth_end', []).append(f"{input_prefix}Depth end must be a valid number")
         
         # Check if depth_resolution is None (only needs depth_resolution to be valid)
-        if 'depth_resolution' not in invalid_params:
+        if 'depth_resolution' not in errors:
             current_depth_resolution = parsed_params['depth_resolution'][i]
             if not current_depth_resolution:
-                errors.append(f"{input_prefix}Depth resolution is required")
-                field_highlights['depth_resolution'] = 'error'
-            depth_resolution_val = safe_float(current_depth_resolution, f"{input_prefix}Depth Resolution")
+                errors.setdefault('depth_resolution', []).append(f"{input_prefix}Depth resolution is required")
+            depth_resolution_val = safe_float(current_depth_resolution)
             if depth_resolution_val is None:  # Failed conversion (not just empty)
-                field_highlights['depth_resolution'] = 'error'
+                errors.setdefault('depth_resolution', []).append(f"{input_prefix}Depth resolution must be a valid number")
         
         # Check start < end (needs BOTH depth_start AND depth_end to be valid)
-        if 'depth_start' not in invalid_params and 'depth_end' not in invalid_params:
+        if 'depth_start' not in errors and 'depth_end' not in errors:
             if depth_start_val is not None and depth_end_val is not None:
                 if depth_start_val >= depth_end_val:
-                    errors.append(f"{input_prefix}Depth Start must be less than Depth End")
-                    field_highlights['depth_start'] = 'error'
-                    field_highlights['depth_end'] = 'error'
+                    errors.setdefault('depth_start', []).append(f"{input_prefix}Depth Start must be less than Depth End")
+                    errors.setdefault('depth_end', []).append(f"{input_prefix}Depth Start must be less than Depth End")
                 
                 # Calculate depth_span once (used in multiple checks below)
                 depth_span = depth_end_val - depth_start_val
                 
                 # Warning: large depth range (only needs depth_start and depth_end)
                 if depth_span > 500:
-                    warnings.append(f"{input_prefix}Total depth range ({depth_span} µm) is large (> 500 µm)")
-                    if 'depth_start' not in field_highlights:
-                        field_highlights['depth_start'] = 'warning'
-                    if 'depth_end' not in field_highlights:
-                        field_highlights['depth_end'] = 'warning'
+                    if 'depth_start' not in errors:
+                        warnings.setdefault('depth_start', []).append(f"{input_prefix}Total depth range ({depth_span} µm) is large (> 500 µm)")
+                    if 'depth_end' not in errors:
+                        warnings.setdefault('depth_end', []).append(f"{input_prefix}Total depth range ({depth_span} µm) is large (> 500 µm)")
         
         # Check resolution value (only needs depth_resolution to be valid)
-        if 'depth_resolution' not in invalid_params:
+        if 'depth_resolution' not in errors:
             if depth_resolution_val is not None:
                 # Error: resolution must be positive
                 if depth_resolution_val <= 0:
-                    errors.append(f"{input_prefix}Depth Resolution must be positive")
-                    field_highlights['depth_resolution'] = 'error'
+                    errors.setdefault('depth_resolution', []).append(f"{input_prefix}Depth Resolution must be positive")
                 # Warning: resolution too small
                 elif depth_resolution_val < 0.1:
-                    warnings.append(f"{input_prefix}Depth Resolution ({depth_resolution_val} µm) is very small (< 0.1 µm)")
-                    if 'depth_resolution' not in field_highlights:
-                        field_highlights['depth_resolution'] = 'warning'
+                    warnings.setdefault('depth_resolution', []).append(f"{input_prefix}Depth Resolution ({depth_resolution_val} µm) is very small (< 0.1 µm)")
         
         # Check resolution < range (needs ALL THREE to be valid)
         if depth_span is not None:
-            if 'depth_resolution' not in invalid_params and depth_resolution_val is not None:
+            if 'depth_resolution' not in errors and depth_resolution_val is not None:
                 # Check if resolution is less than range
                 if depth_resolution_val > abs(depth_span):
-                    errors.append(f"{input_prefix}Depth Resolution ({depth_resolution_val} µm) must be less than or equal to depth range ({abs(depth_span)} µm)")
-                    field_highlights['depth_start'] = 'error'
-                    field_highlights['depth_end'] = 'error'
-                    field_highlights['depth_resolution'] = 'error'
+                    errors.setdefault('depth_start', []).append(f"{input_prefix}Depth Resolution ({depth_resolution_val} µm) must be less than or equal to depth range ({abs(depth_span)} µm)")
+                    errors.setdefault('depth_end', []).append(f"{input_prefix}Depth Resolution ({depth_resolution_val} µm) must be less than or equal to depth range ({abs(depth_span)} µm)")
+                    errors.setdefault('depth_resolution', []).append(f"{input_prefix}Depth Resolution ({depth_resolution_val} µm) must be less than or equal to depth range ({abs(depth_span)} µm)")
         
         # 2. Validate percent_brightest for this input
-        if 'percent_brightest' not in invalid_params:
+        if 'percent_brightest' not in errors:
             current_percent = parsed_params['percent_brightest'][i]
             if not current_percent:
-                errors.append(f"{input_prefix}Intensity percentile is required")
-                field_highlights['percent_brightest'] = 'error'
-            percent_val = safe_float(current_percent, f"{input_prefix}Intensity percentile")
+                errors.setdefault('percent_brightest', []).append(f"{input_prefix}Intensity percentile is required")
+            percent_val = safe_float(current_percent)
             if percent_val is not None:
                 if percent_val <= 0 or percent_val > 100:
-                    errors.append(f"{input_prefix}Intensity percentile must be between 0 and 100")
-                    field_highlights['percent_brightest'] = 'error'
+                    errors.setdefault('percent_brightest', []).append(f"{input_prefix}Intensity percentile must be between 0 and 100")
         
         # 3. Check if geometry file exists for this input (skip if root_path invalid)
-        if not any(p in invalid_params for p in ['root_path', 'geoFile']):
+        if 'root_path' not in errors and 'geoFile' not in errors:
             current_geoFile = parsed_params['geoFile'][i]
             if not current_geoFile:
-                errors.append(f"{input_prefix}Geometry file is required")
-                field_highlights['geoFile'] = 'error'
-            full_geo_path = os.path.join(root_path, current_geoFile.lstrip('/'))
-            if not os.path.exists(full_geo_path):
-                errors.append(f"{input_prefix}Geometry file not found: {current_geoFile}")
-                field_highlights['geoFile'] = 'error'
+                errors.setdefault('geoFile', []).append(f"{input_prefix}Geometry file is required")
+            else:
+                full_geo_path = os.path.join(root_path, current_geoFile.lstrip('/'))
+                if not os.path.exists(full_geo_path):
+                    errors.setdefault('geoFile', []).append(f"{input_prefix}Geometry file not found: {current_geoFile}")
         
         # 4. Check if output folder already exists for this input (skip if root_path invalid)
         # Note: We cannot validate this properly if outputFolder contains %d placeholders
         # because we don't know the scan number or wirerecon_id at validation time.
         # This check is skipped if %d is present in the path.
-        if not any(p in invalid_params for p in ['root_path', 'outputFolder']):
+        if 'root_path' not in errors and 'outputFolder' not in errors:
             current_outputFolder = parsed_params['outputFolder'][i]
             if not current_outputFolder:
-                errors.append(f"{input_prefix}Output folder is required")
-                field_highlights['outputFolder'] = 'error'
-            if root_path and '%d' not in current_outputFolder:
+                errors.setdefault('outputFolder', []).append(f"{input_prefix}Output folder is required")
+            elif root_path and '%d' not in current_outputFolder:
                 full_output_path = os.path.join(root_path, current_outputFolder.lstrip('/'))
                 if os.path.exists(full_output_path):
-                    warnings.append(f"{input_prefix}Output folder already exists: {current_outputFolder}")
-                    if 'outputFolder' not in field_highlights:
-                        field_highlights['outputFolder'] = 'warning'
+                    if 'outputFolder' not in errors:
+                        warnings.setdefault('outputFolder', []).append(f"{input_prefix}Output folder already exists: {current_outputFolder}")
         
         # 5. Check if data files exist for this input (skip if root_path invalid)
-        if not any(p in invalid_params for p in ['root_path', 'data_path']):
+        if 'root_path' not in errors and 'data_path' not in errors:
             current_data_path = parsed_params['data_path'][i]
             current_full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
             
-            # Validate scanNumber against Catalog table
-            # if 'scanNumber' not in invalid_params and all_params.get('scanNumber'):
-            if 'scanNumber' not in invalid_params and all_params.get('scanNumber') and 'scanNumber' in parsed_params:
-                try:
-                    scan_num_int = int(parsed_params['scanNumber'][i])
-                    
-                    # Get catalog data for this scan
-                    catalog_data = get_catalog_data(session, scan_num_int, root_path, CATALOG_DEFAULTS)
-                    
-                    if catalog_data:
-                        catalog_full_data_path = os.path.join(root_path, catalog_data['data_path'].lstrip('/'))
-                        if catalog_full_data_path != current_full_data_path:
-                            warnings.append(
-                                f"{input_prefix}Scan {scan_num_int} catalog path ({catalog_data['data_path']}) "
-                                f"differs from specified data path ({current_data_path})"
-                            )
-                            if 'data_path' not in field_highlights:
-                                field_highlights['data_path'] = 'warning'
-                except (ValueError, TypeError, IndexError):
-                    pass  # Already handled in scanNumber validation
-            
             # Check if directory exists
             if not os.path.exists(current_full_data_path):
-                errors.append(f"{input_prefix}Data directory not found: {current_data_path}")
-                field_highlights['data_path'] = 'error'
+                errors.setdefault('data_path', []).append(f"{input_prefix}Data directory not found: {current_data_path}")
             else:
+                # Validate scanNumber against Catalog table (after confirming directory exists)
+                if 'scanNumber' not in errors and all_params.get('scanNumber') and 'scanNumber' in parsed_params:
+                    try:
+                        scan_num_int = int(parsed_params['scanNumber'][i])
+                        
+                        # Get catalog data for this scan
+                        catalog_data = get_catalog_data(session, scan_num_int, root_path, CATALOG_DEFAULTS)
+                        
+                        if catalog_data:
+                            catalog_full_data_path = os.path.join(root_path, catalog_data['data_path'].lstrip('/'))
+                            if catalog_full_data_path != current_full_data_path:
+                                warnings.setdefault('data_path', []).append(
+                                    f"{input_prefix}Scan {scan_num_int} catalog path ({catalog_data['data_path']}) "
+                                    f"differs from specified data path ({current_data_path})"
+                                )
+                    except (ValueError, TypeError, IndexError):
+                        pass  # Already handled in scanNumber validation
+                
                 # Check if directory contains any files
                 all_files = [f for f in os.listdir(current_full_data_path) if os.path.isfile(os.path.join(current_full_data_path, f))]
                 if not all_files:
-                    errors.append(f"{input_prefix}Data directory contains no files: {current_data_path}")
-                    field_highlights['data_path'] = 'error'
+                    errors.setdefault('data_path', []).append(f"{input_prefix}Data directory contains no files: {current_data_path}")
                 else:
                     # Only check filename prefix if it passed global validation
-                    if 'filenamePrefix' not in invalid_params:
+                    if 'filenamePrefix' not in errors:
                         # Parse filename prefix
                         current_filename_prefix_str = parsed_params['filenamePrefix'][i]
                         current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
                         
                         # Check for actual files using glob - pinpoint which field has the error
-                        has_prefix_error = False
-                        has_scanpoint_error = False
-                        missing_details = []
-                        
                         for current_filename_prefix_i in current_filename_prefix:
                             # Check if ANY files match this prefix pattern (without scan point substitution)
                             prefix_pattern = os.path.join(current_full_data_path, current_filename_prefix_i.replace('%d', '*'))
                             prefix_matches = glob.glob(prefix_pattern + '*')
                             
                             if not prefix_matches:
-                                has_prefix_error = True
-                                missing_details.append(f"No files match prefix pattern: {current_filename_prefix_i}")
+                                errors.setdefault('filenamePrefix', []).append(f"{input_prefix}No files match prefix pattern: {current_filename_prefix_i}")
                             else:
                                 # Check specific scan points (only if scanPoints passed global validation)
-                                if 'scanPoints' not in invalid_params:
+                                if 'scanPoints' not in errors:
                                     current_scanPoints = parsed_params['scanPoints'][i]
                                     
                                     try:
                                         scanPoints_srange = srange(current_scanPoints)
                                         scanPoint_nums = scanPoints_srange.list()
                                     except Exception as e:
-                                        errors.append(f"{input_prefix}Invalid scan points format: {current_scanPoints}")
-                                        field_highlights['scanPoints'] = 'error'
+                                        errors.setdefault('scanPoints', []).append(f"{input_prefix}Invalid scan points format: {current_scanPoints}")
                                         continue
                                     
+                                    # Collect missing scan points for this prefix
+                                    missing_scanpoints = []
                                     for scanPoint_num in scanPoint_nums:
                                         file_str = current_filename_prefix_i % scanPoint_num if '%d' in current_filename_prefix_i else current_filename_prefix_i
                                         scanpoint_pattern = os.path.join(current_full_data_path, file_str)
                                         scanpoint_matches = glob.glob(scanpoint_pattern + '*')
                                         
                                         if not scanpoint_matches:
-                                            has_scanpoint_error = True
-                                            missing_details.append(f"{current_filename_prefix_i} (scan point {scanPoint_num})")
-                        
-                        # Apply field highlights based on what failed
-                        if has_prefix_error:
-                            field_highlights['filenamePrefix'] = 'error'
-                        if has_scanpoint_error:
-                            field_highlights['scanPoints'] = 'error'
-                        
-                        # Build error message
-                        if missing_details:
-                            # Limit error message length for readability
-                            if len(missing_details) <= 5:
-                                missing_str = ", ".join(missing_details)
-                            else:
-                                missing_str = ", ".join(missing_details[:5]) + f", ... and {len(missing_details) - 5} more"
-                            
-                            errors.append(f"{input_prefix}Missing data files in {current_data_path}: {missing_str}")
+                                            missing_scanpoints.append(str(scanPoint_num))
+                                    
+                                    # If there are missing scan points, add a single error message for this prefix
+                                    if missing_scanpoints:
+                                        # Limit the number of scan points shown
+                                        if len(missing_scanpoints) <= 5:
+                                            scanpoints_str = ", ".join(missing_scanpoints)
+                                        else:
+                                            scanpoints_str = ", ".join(missing_scanpoints[:5]) + f", ... and {len(missing_scanpoints) - 5} more"
+                                        
+                                        errors.setdefault('scanPoints', []).append(
+                                            f"{input_prefix}Missing files for {current_filename_prefix_i} (scan points: {scanpoints_str})"
+                                        )
         
         # 6. Validate scanNumber: check that entry is a valid integer
-        # if 'scanNumber' not in invalid_params:
-        if 'scanNumber' not in invalid_params and 'scanNumber' in parsed_params:
+        if 'scanNumber' not in errors and 'scanNumber' in parsed_params:
             current_scanNumber = parsed_params['scanNumber'][i]
             try:
                 current_scanNumber.isdigit()
             except (ValueError, TypeError):
-                warnings.append(f"{input_prefix}Scan number is not a valid integer: {current_scanNumber}")
-                if 'scanNumber' not in field_highlights:
-                    field_highlights['scanNumber'] = 'warning'
+                if 'scanNumber' not in errors:
+                    warnings.setdefault('scanNumber', []).append(f"{input_prefix}Scan number is not a valid integer: {current_scanNumber}")
+    
+    # Add successes for parameters that passed all validations
+    # Only add to successes if the parameter has neither errors nor warnings
+    for param_name in all_field_ids:
+        if param_name not in errors and param_name not in warnings:
+            successes[param_name] = ''
     
     # Close database session
     session.close()
     
-    # Determine heading based on validation results
-    if errors:
-        heading = "Validation Error!"
-    elif warnings:
-        heading = "Validation Warning!"
-    else:
-        heading = "Validation Success!"
-    
     validation_result = {
-        'heading': heading,
         'errors': errors,
         'warnings': warnings,
-        'field_highlights': field_highlights
+        'successes': successes
     }
-    return validation_result, all_field_ids
+    return validation_result
 
 
-def apply_validation_highlights(validation_result, all_field_ids):
+def apply_validation_highlights(validation_result):
     """
     Apply field highlights based on validation results.
-    Clears highlights for fields not in error/warning list.
+    Clears highlights for fields that passed validation.
     
     Parameters:
     - validation_result: dict returned from validate_wire_reconstruction_inputs()
-    - all_field_ids: list of field IDs to manage (from callback State params)
     """
-    # Apply highlights for errors/warnings
-    for field_id, highlight_type in validation_result['field_highlights'].items():
-        if highlight_type == 'error':
-            set_props(field_id, {'className': 'is-invalid'})
-        elif highlight_type == 'warning':
+    errors = validation_result['errors']
+    warnings = validation_result['warnings']
+    successes = validation_result['successes']
+    
+    # Apply error highlights
+    for field_id in errors.keys():
+        set_props(field_id, {'className': 'is-invalid'})
+    
+    # Apply warning highlights (only if not already in error)
+    for field_id in warnings.keys():
+        if field_id not in errors:
             set_props(field_id, {'className': 'border-warning'})
     
-    # Clear highlights for fields not in the error/warning list
-    for field_id in all_field_ids:
-        if field_id not in validation_result['field_highlights']:
-            set_props(field_id, {'className': ''})
+    # Clear highlights for fields that passed validation
+    for field_id in successes.keys():
+        set_props(field_id, {'className': ''})
 
 
 def update_validation_alerts(validation_result):
     """
     Update validation alert components based on validation results.
-    Sets props directly for all three validation alerts.
+    Deduplicates messages by removing input prefixes and grouping identical base messages.
+    Only updates the message content of alerts, not the headings (which are defined in layout).
     
     Parameters:
     - validation_result: dict returned from validate_wire_reconstruction_inputs()
     """
-    # Extract to local variables for cleaner code
     errors = validation_result['errors']
     warnings = validation_result['warnings']
-    heading = validation_result['heading']
     
-    # Build error alert
-    if errors:
-        error_content = dbc.Row([
-            dbc.Col(html.H4(heading, className="alert-heading mb-0"), width="auto"),
-            dbc.Col(html.Ul([html.Li(msg) for msg in errors], className="mb-0"), width="auto"),
-        ], align="center")
-    else:
-        error_content = dbc.Row([
-            dbc.Col(html.H4("Validation Error!", className="alert-heading mb-0"), width="auto"),
-            dbc.Col(html.P("No errors detected.", className="mb-0"), width="auto"),
-        ], align="center")
+    # Helper function to deduplicate messages
+    def deduplicate_messages(messages_dict):
+        """
+        Deduplicate messages by removing 'Input N: ' prefixes and grouping identical messages.
+        Returns a flat list of unique messages.
+        """
+        all_messages = []
+        for field_id, msg_list in messages_dict.items():
+            all_messages.extend(msg_list)
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_messages = []
+        for msg in all_messages:
+            if msg not in seen:
+                seen.add(msg)
+                unique_messages.append(msg)
+        
+        return unique_messages
     
-    # Build warning alert
-    if warnings:
-        warning_content = dbc.Row([
-            dbc.Col(html.H4(heading, className="alert-heading mb-0"), width="auto"),
-            dbc.Col(html.Ul([html.Li(msg) for msg in warnings], className="mb-0"), width="auto"),
-        ], align="center")
-    else:
-        warning_content = dbc.Row([
-            dbc.Col(html.H4("Validation Warning!", className="alert-heading mb-0"), width="auto"),
-            dbc.Col(html.P("No warnings detected.", className="mb-0"), width="auto"),
-        ], align="center")
+    # Deduplicate error and warning messages
+    error_messages = deduplicate_messages(errors)
+    warning_messages = deduplicate_messages(warnings)
     
-    # Build info alert
-    if not errors and not warnings:
-        info_content = dbc.Row([
-            dbc.Col(html.H4(heading, className="alert-heading mb-0"), width="auto"),
-            dbc.Col(html.P("All inputs are valid. You can submit the job.", className="mb-0"), width="auto"),
-        ], align="center")
-    else:
-        info_content = dbc.Row([
-            dbc.Col(html.H4("Validation Status", className="alert-heading mb-0"), width="auto"),
-            dbc.Col(html.P("Validation completed. Check errors and warnings below.", className="mb-0"), width="auto"),
-        ], align="center")
+    # Build message content only (headings are already in the layout)
+    error_message = html.Ul([html.Li(msg) for msg in error_messages], className="mb-0") if error_messages else None
+    warning_message = html.Ul([html.Li(msg) for msg in warning_messages], className="mb-0") if warning_messages else None
     
-    # Determine which alerts to show
-    show_info = not errors and not warnings
-    show_error = len(errors) > 0
-    show_warning = len(warnings) > 0
+    # Update only the message divs
+    set_props("alert-validation-error-message", {'children': error_message})
+    set_props("alert-validation-warning-message", {'children': warning_message})
     
     # Set props for all validation alerts
-    set_props("alert-validation-info", {'children': info_content, 'is_open': show_info})
-    set_props("alert-validation-error", {'children': error_content, 'is_open': show_error})
-    set_props("alert-validation-warning", {'children': warning_content, 'is_open': show_warning})
+    set_props("alert-validation-info", {'is_open': False})  # Hide the info alert when validation runs
+    set_props("alert-validation-success", {'is_open': not errors and not warnings})
+    set_props("alert-validation-error", {'is_open': bool(errors)})
+    set_props("alert-validation-warning", {'is_open': bool(warnings)})
 
 
 """
@@ -736,10 +686,10 @@ def validate_inputs(
     ctx = dash.callback_context
     
     # Run validation using ctx
-    validation_result, all_field_ids = validate_wire_reconstruction_inputs(ctx)
+    validation_result = validate_wire_reconstruction_inputs(ctx)
     
     # Apply field highlights using helper function
-    apply_validation_highlights(validation_result, all_field_ids)
+    apply_validation_highlights(validation_result)
     
     # Update validation alerts using helper function
     update_validation_alerts(validation_result)
@@ -807,10 +757,10 @@ def submit_parameters(n,
     ctx = dash.callback_context
     
     # Run validation before submission using ctx
-    validation_result, all_field_ids = validate_wire_reconstruction_inputs(ctx)
+    validation_result = validate_wire_reconstruction_inputs(ctx)
     
     # Apply field highlights for all cases (error, warning, success)
-    apply_validation_highlights(validation_result, all_field_ids)
+    apply_validation_highlights(validation_result)
     
     # Update validation alerts using helper function
     update_validation_alerts(validation_result)
