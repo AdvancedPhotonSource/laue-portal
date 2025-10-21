@@ -754,23 +754,23 @@ def get_next_id(session, table_class):
     return 1 if max_id is None else max_id + 1
 
 
-def parse_parameter(parameter_value, num_scans=None):
+def parse_parameter(parameter_value, num_inputs=None):
     """
     Parse a single parameter, splitting semicolon-separated values into a list.
-    Optionally expand single values to match the number of scans.
+    Optionally expand single values to match the number of inputs.
     
     This function is used to handle pooled scan submissions where multiple
-    scans are submitted together with their parameters separated by semicolons.
+    inputs are submitted together with their parameters separated by semicolons.
     
     Args:
         parameter_value: The parameter value (can be None, single value, or semicolon-separated string)
-        num_scans: Optional number of scans to expand single values to match
+        num_inputs: Optional number of inputs to expand single values to match
         
     Returns:
         list: A list of values for this parameter
         
     Raises:
-        ValueError: If the parameter has multiple values that don't match num_scans
+        ValueError: If the parameter has multiple values that don't match num_inputs
     """
     if parameter_value is None:
         values = [None]
@@ -796,13 +796,13 @@ def parse_parameter(parameter_value, num_scans=None):
                 # This preserves the original type for single values
                 values = [parameter_value]
     
-    # If num_scans is provided, handle expansion or validation
-    if num_scans is not None:
-        if len(values) == 1 and num_scans > 1:
-            # Expand single value to match number of scans
-            values = values * num_scans
-        elif len(values) != num_scans and len(values) != 1:
+    # If num_inputs is provided, handle expansion or validation
+    if num_inputs is not None:
+        if len(values) == 1 and num_inputs > 1:
+            # Expand single value to match number of inputs
+            values = values * num_inputs
+        elif len(values) != num_inputs and len(values) != 1:
             # Error: mismatched lengths
-            raise ValueError(f"Parameter has {len(values)} values but there are {num_scans} scans")
+            raise ValueError(f"Parameter has {len(values)} values but there are {num_inputs} inputs")
     
     return values
