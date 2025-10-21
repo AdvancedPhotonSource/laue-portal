@@ -11,23 +11,23 @@ import laue_portal.components.navbar as navbar
 from laue_portal.pages.scan import build_technique_strings
 import laue_portal.database.session_utils as session_utils
 
+from urllib.parse import urlencode
+
 dash.register_page(__name__, path='/scans')
 
 layout = html.Div([
         navbar.navbar,
-        dcc.Location(id='url', refresh=False),
+        dcc.Location(id='url', refresh=True),
         
         # Secondary action bar aligned to right
         dbc.Row([
             dbc.Col([
                 dbc.Nav([
-                    dbc.NavItem(
-                        dbc.NavLink(
-                            "New Recon",
-                            href="/create-wire-reconstruction",
-                            active=False,
-                            id="scans-page-wire-recon"
-                        )
+                    dbc.Button(
+                        "New Recon",
+                        id="scans-page-wire-recon-btn",
+                        style={"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"},
+                        className="me-2"
                     ),
                     html.Span("|", className="mx-2 text-muted"),
                     dbc.NavItem(
@@ -39,9 +39,13 @@ layout = html.Div([
                         )
                     ),
                     html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("New Recon + Index", href="#", active=False)),
+                    dbc.NavItem(dbc.NavLink("New Recon with selected (only 1 sel)", href="#", active=False)),
                     html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("Energy to K-space", href="#", active=False)),
+                    dbc.NavItem(dbc.NavLink("Stop ALL", href="#", active=False)),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("Stop Selected", href="#", active=False)),
+                    html.Span("|", className="mx-2 text-muted"),
+                    dbc.NavItem(dbc.NavLink("Set high Priority for selected (only 1 sel)", href="#", active=False)),
                 ],
                 className="bg-light px-2 py-2 d-flex justify-content-end w-100")
             ], width=12)
@@ -205,7 +209,7 @@ def _get_metadatas():
     Output('metadata-table', 'columnDefs', allow_duplicate=True),
     Output('metadata-table', 'rowData', allow_duplicate=True),
     Input('url','pathname'),
-    prevent_initial_call=True,
+    prevent_initial_call='initial_duplicate',
 )
 def get_metadatas(path):
     if path == '/scans':
@@ -214,45 +218,60 @@ def get_metadatas(path):
     else:
         raise PreventUpdate
 
-
 @dash.callback(
-    Output('scans-page-wire-recon', 'href'),
-    Input('metadata-table','selectedRows'),
-    State('scans-page-wire-recon', 'href'),
+    Output('url', 'pathname'),
+    Input('scans-page-wire-recon-btn', 'n_clicks'),
+    State('metadata-table', 'selectedRows'),
     prevent_initial_call=True,
 )
-def selected_recon_href(rows,href):
-    base_href = href.split("?")[0]
+def handle_recon_button(n_clicks, rows):
+    print("\n\nin handle_recon_button() rn\n\n")
+    if not n_clicks:
+        print("not n_clicks")
+        return dash.no_update
+
+    base_href = "/create-wire-reconstruction"
+
     if not rows:
+        print("not rows")
+        print(f"return base_href: {base_href}\n\n")
         return base_href
 
     scan_ids = []
     any_wire_scans, any_nonwire_scans = False, False
 
     for row in rows:
+        print(f"row: {row}")
         if row.get('scanNumber'):
             scan_ids.append(str(row['scanNumber']))
         else:
-            return base_href
+            return dash.no_update
 
         if row.get('aperture'):
             aperture = str(row['aperture']).lower()
             if aperture == 'none':
-                return base_href # Conflict condition: cannot be reconstructed
+                return dash.no_update
             if 'wire' in aperture:
                 any_wire_scans = True
             else:
                 any_nonwire_scans = True
-        
-            # Conflict condition: mixture of wirerecon and recon
+
             if any_wire_scans and any_nonwire_scans:
-                return base_href
+                return dash.no_update
 
     if any_nonwire_scans:
+        print("any_nonwire_scans")
         base_href = "/create-reconstruction"
-    
-    return f"{base_href}?scan_id={','.join(scan_ids)}"
+    print("\n\n the final return statement:\n\n")
 
+
+    print("\n\nDONE\n\n")
+    #return f"{base_href}?scan_id={','.join(scan_ids)}"
+
+    query_params = {'scan_id': ','.join(scan_ids)}
+    url = f"{base_href}?{urlencode(query_params)}"
+    print(f"\n\nurl: {url}\n\n")
+    return url
 
 @dash.callback(
     Output('scans-page-peakindex', 'href'),
