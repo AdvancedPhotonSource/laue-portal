@@ -11,7 +11,7 @@ import laue_portal.components.navbar as navbar
 from laue_portal.pages.scan import build_technique_strings
 import laue_portal.database.session_utils as session_utils
 
-from urllib.parse import urlencode
+from urllib.parse import unquote
 
 dash.register_page(__name__, path='/scans')
 
@@ -219,7 +219,7 @@ def get_metadatas(path):
         raise PreventUpdate
 
 @dash.callback(
-    Output('url', 'pathname'),
+    Output('url', 'href'),
     Input('scans-page-wire-recon-btn', 'n_clicks'),
     State('metadata-table', 'selectedRows'),
     prevent_initial_call=True,
@@ -262,15 +262,18 @@ def handle_recon_button(n_clicks, rows):
     if any_nonwire_scans:
         print("any_nonwire_scans")
         base_href = "/create-reconstruction"
+
     print("\n\n the final return statement:\n\n")
 
 
-    print("\n\nDONE\n\n")
-    #return f"{base_href}?scan_id={','.join(scan_ids)}"
+    print("\n\nDONE :) \n\n")
 
-    query_params = {'scan_id': ','.join(scan_ids)}
-    url = f"{base_href}?{urlencode(query_params)}"
+    
+    # Construct the URL as a proper relative path starting with '/'
+    url = f"{base_href}?scan_id={','.join(scan_ids)}"
     print(f"\n\nurl: {url}\n\n")
+
+
     return url
 
 @dash.callback(
