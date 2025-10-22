@@ -29,23 +29,34 @@ layout = html.Div([
                         style={"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"},
                         className="me-2"
                     ),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(
-                        dbc.NavLink(
-                            "New Index",
-                            href="/create-peakindexing",
-                            active=False,
-                            id="scans-page-peakindex"
-                        )
+                    #html.Span("|", className="mx-2 text-muted"),
+                    dbc.Button(
+                        "New Index",
+                        id="scans-page-peakindex-btn",
+                        style={"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"},
+                        className="me-2"
                     ),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("New Recon with selected (only 1 sel)", href="#", active=False)),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("Stop ALL", href="#", active=False)),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("Stop Selected", href="#", active=False)),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("Set high Priority for selected (only 1 sel)", href="#", active=False)),
+                    dbc.Button(
+                        "New Recon + Index",
+                        id="scans-page-peakindex-btn-filler",
+                        style={"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"},
+                        className="me-2"
+                    ),
+                    dbc.Button(
+                        "Energy to K-space",
+                        id="scans-page-peakindex-btn-filler2",
+                        style={"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"},
+                        className="me-2"
+                    ),
+
+                    #html.Span("|", className="mx-2 text-muted"),
+                    #dbc.NavItem(dbc.NavLink("New Recon with selected (only 1 sel)", href="#", active=False)),
+                    #html.Span("|", className="mx-2 text-muted"),
+                    #dbc.NavItem(dbc.NavLink("Stop ALL", href="#", active=False)),
+                    #html.Span("|", className="mx-2 text-muted"),
+                    #dbc.NavItem(dbc.NavLink("Stop Selected", href="#", active=False)),
+                    #html.Span("|", className="mx-2 text-muted"),
+                    #dbc.NavItem(dbc.NavLink("Set high Priority for selected (only 1 sel)", href="#", active=False)),
                 ],
                 className="bg-light px-2 py-2 d-flex justify-content-end w-100")
             ], width=12)
