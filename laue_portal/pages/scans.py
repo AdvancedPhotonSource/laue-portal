@@ -11,8 +11,6 @@ import laue_portal.components.navbar as navbar
 from laue_portal.pages.scan import build_technique_strings
 import laue_portal.database.session_utils as session_utils
 
-from urllib.parse import unquote
-
 dash.register_page(__name__, path='/scans')
 
 layout = html.Div([
@@ -26,25 +24,25 @@ layout = html.Div([
                     dbc.Button(
                         "New Recon",
                         id="scans-page-wire-recon-btn",
-                        style={"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"},
+                        style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
                         className="me-2"
                     ),
                     dbc.Button(
                         "New Index",
                         id="scans-page-peakindex-btn",
-                        style={"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"},
+                        style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
                         className="me-2"
                     ),
                     dbc.Button(
                         "New Recon + Index",
                         id="scans-page-recon-index-btn-placeholder",
-                        style={"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"},
+                        style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
                         className="me-2"
                     ),
                     dbc.Button(
                         "Energy to K-space",
                         id="scans-page-energy-kspace-btn-placeholder",
-                        style={"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"},
+                        style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
                         className="me-2"
                     ),
                 ],
@@ -95,6 +93,7 @@ CUSTOM_HEADER_NAMES = {
     'scan_dim': 'Scan Dim',
     'time': 'Date',
 }
+
 
 def _get_metadatas():
     with Session(session_utils.get_engine()) as session:
@@ -205,7 +204,6 @@ def _get_metadatas():
     return cols, metadatas.to_dict('records')
 
 
-
 @dash.callback(
     Output('metadata-table', 'columnDefs', allow_duplicate=True),
     Output('metadata-table', 'rowData', allow_duplicate=True),
@@ -218,6 +216,40 @@ def get_metadatas(path):
         return cols, metadatas_records
     else:
         raise PreventUpdate
+
+@dash.callback(
+    Output('scans-page-wire-recon-btn', 'disabled'),
+    Output('scans-page-wire-recon-btn', 'style'),
+    Output('scans-page-peakindex-btn', 'disabled'),
+    Output('scans-page-peakindex-btn', 'style'),
+    Output('scans-page-recon-index-btn-placeholder', 'disabled'),
+    Output('scans-page-recon-index-btn-placeholder', 'style'),
+    Output('scans-page-energy-kspace-btn-placeholder', 'disabled'),
+    Output('scans-page-energy-kspace-btn-placeholder', 'style'),
+    Input('metadata-table', 'selectedRows'),
+    prevent_initial_call=False,
+)
+def update_button_states(selected_rows):
+    enabled_style = {"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"}
+    disabled_style = {"backgroundColor": "#6c757d", "borderColor": "#6c757d"}
+
+    has_selection = selected_rows and len(selected_rows) > 0
+
+    if has_selection:
+        return (
+            False, enabled_style,  # New Recon
+            False, enabled_style,  # New Index
+            True, disabled_style,  # New Recon + Index (placeholder)
+            True, disabled_style,  # Energy to K-space (placeholder)
+        )
+    else:
+        return (
+            True, disabled_style,  # New Recon
+            True, disabled_style,  # New Index
+            True, disabled_style,  # New Recon + Index (placeholder)
+            True, disabled_style,  # Energy to K-space (placeholder)
+        )
+
 
 @dash.callback(
     Output('url', 'href'),
@@ -260,6 +292,7 @@ def handle_recon_button(n_clicks, rows):
 
     url = f"{base_href}?scan_id={','.join(scan_ids)}"
     return url
+
 
 @dash.callback(
     Output('url', 'href', allow_duplicate=True),
