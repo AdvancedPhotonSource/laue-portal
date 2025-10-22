@@ -29,7 +29,6 @@ layout = html.Div([
                         style={"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"},
                         className="me-2"
                     ),
-                    #html.Span("|", className="mx-2 text-muted"),
                     dbc.Button(
                         "New Index",
                         id="scans-page-peakindex-btn",
@@ -38,25 +37,16 @@ layout = html.Div([
                     ),
                     dbc.Button(
                         "New Recon + Index",
-                        id="scans-page-peakindex-btn-filler",
+                        id="scans-page-recon-index-btn-placeholder",
                         style={"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"},
                         className="me-2"
                     ),
                     dbc.Button(
                         "Energy to K-space",
-                        id="scans-page-peakindex-btn-filler2",
+                        id="scans-page-energy-kspace-btn-placeholder",
                         style={"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"},
                         className="me-2"
                     ),
-
-                    #html.Span("|", className="mx-2 text-muted"),
-                    #dbc.NavItem(dbc.NavLink("New Recon with selected (only 1 sel)", href="#", active=False)),
-                    #html.Span("|", className="mx-2 text-muted"),
-                    #dbc.NavItem(dbc.NavLink("Stop ALL", href="#", active=False)),
-                    #html.Span("|", className="mx-2 text-muted"),
-                    #dbc.NavItem(dbc.NavLink("Stop Selected", href="#", active=False)),
-                    #html.Span("|", className="mx-2 text-muted"),
-                    #dbc.NavItem(dbc.NavLink("Set high Priority for selected (only 1 sel)", href="#", active=False)),
                 ],
                 className="bg-light px-2 py-2 d-flex justify-content-end w-100")
             ], width=12)
@@ -236,23 +226,18 @@ def get_metadatas(path):
     prevent_initial_call=True,
 )
 def handle_recon_button(n_clicks, rows):
-    print("\n\nin handle_recon_button() rn\n\n")
     if not n_clicks:
-        print("not n_clicks")
         return dash.no_update
 
     base_href = "/create-wire-reconstruction"
 
     if not rows:
-        print("not rows")
-        print(f"return base_href: {base_href}\n\n")
         return base_href
 
     scan_ids = []
     any_wire_scans, any_nonwire_scans = False, False
 
     for row in rows:
-        print(f"row: {row}")
         if row.get('scanNumber'):
             scan_ids.append(str(row['scanNumber']))
         else:
@@ -271,39 +256,31 @@ def handle_recon_button(n_clicks, rows):
                 return dash.no_update
 
     if any_nonwire_scans:
-        print("any_nonwire_scans")
         base_href = "/create-reconstruction"
 
-    print("\n\n the final return statement:\n\n")
-
-
-    print("\n\nDONE :) \n\n")
-
-    
-    # Construct the URL as a proper relative path starting with '/'
     url = f"{base_href}?scan_id={','.join(scan_ids)}"
-    print(f"\n\nurl: {url}\n\n")
-
-
     return url
 
 @dash.callback(
-    Output('scans-page-peakindex', 'href'),
-    Input('metadata-table','selectedRows'),
-    State('scans-page-peakindex', 'href'),
+    Output('url', 'href', allow_duplicate=True),
+    Input('scans-page-peakindex-btn', 'n_clicks'),
+    State('metadata-table', 'selectedRows'),
     prevent_initial_call=True,
 )
-def selected_peakindex_href(rows,href):
-    base_href = href.split("?")[0]
+def handle_peakindex_button(n_clicks, rows):
+    if not n_clicks:
+        return dash.no_update
+    
+    base_href = "/create-peakindexing"
+    
     if not rows:
         return base_href
-
+    
     scan_ids = []
-
     for row in rows:
         if row.get('scanNumber'):
             scan_ids.append(str(row['scanNumber']))
         else:
             return base_href
-
+    
     return f"{base_href}?scan_id={','.join(scan_ids)}"
