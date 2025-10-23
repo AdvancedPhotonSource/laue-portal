@@ -14,8 +14,22 @@ import laue_portal.components.navbar as navbar
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix, parse_parameter
 from laue_portal.components.wire_recon_form import wire_recon_form, set_wire_recon_form_props
 from laue_portal.components.form_base import _field
+from laue_portal.components.validation_alerts import validation_alerts
 from laue_portal.processing.redis_utils import enqueue_wire_reconstruction, STATUS_REVERSE_MAPPING
 from laue_portal.config import DEFAULT_VARIABLES
+from laue_portal.pages.validation_helpers import (
+    apply_validation_highlights,
+    update_validation_alerts,
+    safe_float,
+    validate_numeric_range,
+    validate_file_exists,
+    validate_directory_exists
+)
+from laue_portal.pages.callback_registrars import (
+    register_update_path_fields_callback,
+    register_load_file_indices_callback,
+    register_check_filenames_callback
+)
 from srange import srange
 import laue_portal.database.session_utils as session_utils
 import re
@@ -84,6 +98,7 @@ layout = dbc.Container(
             is_open=False,
             color="success",
         ),
+        html.Hr(),
         dbc.Row(
                 [
                     dbc.Col(
@@ -116,52 +131,7 @@ layout = dbc.Container(
                 align="center",       # CENTER vertically
             ),
         html.Hr(),
-        html.Div([
-            dbc.Alert(
-                dbc.Row([
-                    dbc.Col(html.H4("Validation status", className="alert-heading mb-0"), width=2),
-                    dbc.Col(html.P("Click 'Validate' button to check inputs.", className="mb-0"), width="auto"),
-                ], align="center"),
-                id="alert-validation-info",
-                color="info",
-                dismissable=False,
-                is_open=True,
-                className="mb-2"
-            ),
-            dbc.Alert(
-                dbc.Row([
-                    dbc.Col(html.H4("Validate status: Success!", className="alert-heading mb-0"), width=2),
-                    dbc.Col(html.P("All inputs are valid. You can submit the job.", className="mb-0"), width="auto"),
-                ], align="center"),
-                id="alert-validation-success",
-                color="success",
-                dismissable=False,
-                is_open=False,
-                className="mb-2"
-            ),
-            dbc.Alert(
-                dbc.Row([
-                    dbc.Col(html.H4("Validate status: Error!", className="alert-heading mb-0"), width=3),
-                    dbc.Col(html.Div(id="alert-validation-error-message", className="mb-0"), width="auto"),
-                ], align="center"),
-                id="alert-validation-error",
-                color="danger",
-                dismissable=False,
-                is_open=False,
-                className="mb-2"
-            ),
-            dbc.Alert(
-                dbc.Row([
-                    dbc.Col(html.H4("Validate status: Warning!", className="alert-heading mb-0"), width=3),
-                    dbc.Col(html.Div(id="alert-validation-warning-message", className="mb-0"), width="auto"),
-                ], align="center"),
-                id="alert-validation-warning",
-                color="warning",
-                dismissable=False,
-                is_open=False,
-                className="mb-2"
-            ),
-        ], className="mb-3"),
+        validation_alerts,
         dbc.Row([
                 dbc.Col(
                     dbc.Button(
@@ -262,15 +232,6 @@ def validate_wire_reconstruction_inputs(ctx):
     else: #Added to pass over in later loop over all_params
         parsed_params['root_path'] = root_path
         successes['root_path'] = ''
-    
-    # Helper function to safely convert to float
-    def safe_float(value):
-        try:
-            if value is None or value == '':
-                return None
-            return float(value)
-        except (ValueError, TypeError):
-            return None
     
     # Parse data_path first to determine number of scans
     try:
@@ -557,83 +518,6 @@ def validate_wire_reconstruction_inputs(ctx):
         'successes': successes
     }
     return validation_result
-
-
-def apply_validation_highlights(validation_result):
-    """
-    Apply field highlights based on validation results.
-    Clears highlights for fields that passed validation.
-    
-    Parameters:
-    - validation_result: dict returned from validate_wire_reconstruction_inputs()
-    """
-    errors = validation_result['errors']
-    warnings = validation_result['warnings']
-    successes = validation_result['successes']
-    
-    # Apply error highlights
-    for field_id in errors.keys():
-        set_props(field_id, {'className': 'is-invalid'})
-    
-    # Apply warning highlights (only if not already in error)
-    for field_id in warnings.keys():
-        if field_id not in errors:
-            set_props(field_id, {'className': 'border-warning'})
-    
-    # Clear highlights for fields that passed validation
-    for field_id in successes.keys():
-        set_props(field_id, {'className': ''})
-
-
-def update_validation_alerts(validation_result):
-    """
-    Update validation alert components based on validation results.
-    Deduplicates messages by removing input prefixes and grouping identical base messages.
-    Only updates the message content of alerts, not the headings (which are defined in layout).
-    
-    Parameters:
-    - validation_result: dict returned from validate_wire_reconstruction_inputs()
-    """
-    errors = validation_result['errors']
-    warnings = validation_result['warnings']
-    
-    # Helper function to deduplicate messages
-    def deduplicate_messages(messages_dict):
-        """
-        Deduplicate messages by removing 'Input N: ' prefixes and grouping identical messages.
-        Returns a flat list of unique messages.
-        """
-        all_messages = []
-        for field_id, msg_list in messages_dict.items():
-            all_messages.extend(msg_list)
-        
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_messages = []
-        for msg in all_messages:
-            if msg not in seen:
-                seen.add(msg)
-                unique_messages.append(msg)
-        
-        return unique_messages
-    
-    # Deduplicate error and warning messages
-    error_messages = deduplicate_messages(errors)
-    warning_messages = deduplicate_messages(warnings)
-    
-    # Build message content only (headings are already in the layout)
-    error_message = html.Ul([html.Li(msg) for msg in error_messages], className="mb-0") if error_messages else None
-    warning_message = html.Ul([html.Li(msg) for msg in warning_messages], className="mb-0") if warning_messages else None
-    
-    # Update only the message divs
-    set_props("alert-validation-error-message", {'children': error_message})
-    set_props("alert-validation-warning-message", {'children': warning_message})
-    
-    # Set props for all validation alerts
-    set_props("alert-validation-info", {'is_open': False})  # Hide the info alert when validation runs
-    set_props("alert-validation-success", {'is_open': not errors and not warnings})
-    set_props("alert-validation-error", {'is_open': bool(errors)})
-    set_props("alert-validation-warning", {'is_open': bool(warnings)})
 
 
 """
@@ -1014,421 +898,37 @@ def submit_parameters(n,
             })
 
 
-@dash.callback(
-    Input('wirerecon-update-path-fields-btn', 'n_clicks'),
-    State('scanNumber', 'value'),
-    prevent_initial_call=True,
+# Register shared callbacks
+register_update_path_fields_callback(
+    button_id='wirerecon-update-path-fields-btn',
+    scan_number_id='scanNumber',
+    root_path_id='root_path',
+    data_path_id='data_path',
+    filename_prefix_id='filenamePrefix',
+    alert_id='alert-scan-loaded',
+    catalog_defaults=CATALOG_DEFAULTS
 )
-def update_path_fields_from_scan(n_clicks, scanNumber):
-    """
-    Update path fields (data_path, filenamePrefix) by querying the database
-    for catalog data based on the scan number.
-    """
-    if not scanNumber:
-        set_props("alert-scan-loaded", {
-            'is_open': True,
-            'children': 'Please enter a scan number first.',
-            'color': 'warning'
-        })
-        raise PreventUpdate
-    
-    root_path = DEFAULT_VARIABLES.get("root_path", "")
-    
-    with Session(session_utils.get_engine()) as session:
-        try:
-            # Parse scan number (handle semicolon-separated values for pooled scans)
-            scan_ids = [int(sid.strip()) for sid in str(scanNumber).split(';') if sid.strip()]
-            
-            if not scan_ids:
-                set_props("alert-scan-loaded", {
-                    'is_open': True,
-                    'children': 'Invalid scan number format.',
-                    'color': 'danger'
-                })
-                raise PreventUpdate
-            
-            # Get catalog data for each scan
-            catalog_data_list = []
-            for scan_id in scan_ids:
-                catalog_data = get_catalog_data(session, scan_id, root_path, CATALOG_DEFAULTS)
-                if catalog_data:
-                    catalog_data_list.append(catalog_data)
-            
-            if catalog_data_list:
-                # If multiple scans, merge the data
-                if len(catalog_data_list) == 1:
-                    merged_data = catalog_data_list[0]
-                else:
-                    # Merge data paths and filename prefixes
-                    data_paths = [cd['data_path'] for cd in catalog_data_list]
-                    filename_prefixes = [cd['filenamePrefix'] for cd in catalog_data_list]
-                    
-                    # Check if all values are the same
-                    if all(dp == data_paths[0] for dp in data_paths):
-                        merged_data_path = data_paths[0]
-                    else:
-                        merged_data_path = "; ".join(data_paths)
-                    
-                    if all(fp == filename_prefixes[0] for fp in filename_prefixes):
-                        merged_filename_prefix = filename_prefixes[0]
-                    else:
-                        merged_filename_prefix = "; ".join([','.join(fp) if isinstance(fp, list) else str(fp) for fp in filename_prefixes])
-                    
-                    merged_data = {
-                        'data_path': merged_data_path,
-                        'filenamePrefix': merged_filename_prefix
-                    }
-                
-                # Update the form fields
-                set_props("root_path", {'value': root_path})
-                set_props("data_path", {'value': merged_data['data_path']})
-                
-                # Handle filenamePrefix - convert list to comma-separated string
-                if isinstance(merged_data['filenamePrefix'], list):
-                    filename_str = ','.join(merged_data['filenamePrefix'])
-                else:
-                    filename_str = str(merged_data['filenamePrefix']) if merged_data['filenamePrefix'] else ''
-                
-                set_props("filenamePrefix", {'value': filename_str})
-                
-                set_props("alert-scan-loaded", {
-                    'is_open': True,
-                    'children': f'Successfully loaded path fields from database for scan(s): {scanNumber}',
-                    'color': 'success'
-                })
-            else:
-                set_props("alert-scan-loaded", {
-                    'is_open': True,
-                    'children': f'No catalog data found for scan(s): {scanNumber}. Using defaults.',
-                    'color': 'warning'
-                })
-        
-        except ValueError as e:
-            set_props("alert-scan-loaded", {
-                'is_open': True,
-                'children': f'Invalid scan number format: {str(e)}',
-                'color': 'danger'
-            })
-        except Exception as e:
-            set_props("alert-scan-loaded", {
-                'is_open': True,
-                'children': f'Error loading catalog data: {str(e)}',
-                'color': 'danger'
-            })
 
-
-@dash.callback(
-    Input('wirerecon-load-file-indices-btn', 'n_clicks'),
-    Input('wirerecon-data-loaded-trigger', 'data'),
-    State('data_path', 'value'),
-    State('filenamePrefix', 'value'),
-    prevent_initial_call=True,
+register_load_file_indices_callback(
+    button_id='wirerecon-load-file-indices-btn',
+    data_loaded_trigger_id='wirerecon-data-loaded-trigger',
+    data_path_id='data_path',
+    filename_prefix_id='filenamePrefix',
+    scan_points_id='scanPoints',
+    depth_range_id=None,  # Wire recon doesn't use depth range
+    alert_id='alert-scan-loaded',
+    num_indices=1
 )
-def load_file_indices(n_clicks, data_loaded_trigger, data_path, filenamePrefix, num_indices=1):
-    """
-    Scan the data directory and automatically populate the scanPoints field
-    with the file indices found in the directory.
-    
-    Triggered by:
-    - wirerecon-load-file-indices-btn button click
-    - wirerecon-data-loaded-trigger data change (when scan data is loaded from URL)
-    
-    Parameters:
-    -----------
-    n_clicks : int
-        Number of button clicks (Input trigger)
-    data_loaded_trigger : str
-        Timestamp when scan data was loaded (Input trigger)
-    data_path : str
-        Path to the data directory (State)
-    filenamePrefix : str
-        Filename prefix pattern (State)
-    num_indices : int, optional
-        Number of rightmost numeric indices to capture (default=1)
-        - num_indices=1: captures rightmost number (e.g., file_123.h5 -> file_%d.h5)
-        - num_indices=2: captures two rightmost numbers (e.g., file_7_150.h5 -> file_%d_%d.h5)
-    """
-    
-    if not data_path:
-        set_props("alert-scan-loaded", {
-            'is_open': True,
-            'children': 'Please specify a data path first.',
-            'color': 'warning'
-        })
-        raise PreventUpdate
-    
-    if not filenamePrefix:
-        set_props("alert-scan-loaded", {
-            'is_open': True,
-            'children': 'Please specify a filename prefix first.',
-            'color': 'warning'
-        })
-        raise PreventUpdate
-    
-    root_path = DEFAULT_VARIABLES.get("root_path", "")
-    
-    try:
-        # Parse data_path
-        data_path_list = parse_parameter(data_path)
-        
-        # Collect all indices from all data paths
-        all_indices = set()
-        
-        for current_data_path in data_path_list:
-            current_full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
-            
-            # Check if directory exists
-            if not os.path.exists(current_full_data_path):
-                logger.warning(f"Directory does not exist: {current_full_data_path}")
-                continue
-            
-            # Parse filename prefix (handle comma-separated list)
-            filename_prefixes = [s.strip() for s in str(filenamePrefix).split(',')] if filenamePrefix else []
-            
-            # Build regex pattern to capture N rightmost numbers
-            if num_indices == 1:
-                regex_pattern = r'(\d+)(?!.*\d)'
-            else:
-                # Capture N groups of digits separated by underscores from the right
-                regex_pattern = r'_'.join([r'(\d+)'] * num_indices) + r'(?!.*\d)'
-            
-            # Extract indices from files matching the prefix pattern
-            for current_filename_prefix_i in filename_prefixes:
-                # Use glob to find files matching this prefix pattern
-                # Replace %d with * for glob matching
-                prefix_pattern = os.path.join(current_full_data_path, current_filename_prefix_i.replace('%d', '*'))
-                
-                try:
-                    prefix_matches = glob.glob(prefix_pattern + '*')
-                except Exception as e:
-                    logger.error(f"Error reading directory {current_full_data_path}: {e}")
-                    continue
-                
-                if not prefix_matches:
-                    continue  # Skip if no files match this prefix
-                
-                # Extract indices from matched files
-                for filepath in prefix_matches:
-                    filename = os.path.basename(filepath)
-                    base_name, extension = os.path.splitext(filename)
-                    match = re.search(regex_pattern, base_name)
-                    
-                    if match:
-                        # Extract the first captured group (the index)
-                        try:
-                            # For wire reconstruction, we only need the first index (scan point)
-                            index = int(match.group(1))
-                            all_indices.add(index)
-                        except (ValueError, IndexError):
-                            continue
-        
-        if all_indices:
-            # Create srange string (srange handles sorting internally)
-            indices_range = str(srange(all_indices))
-            
-            # Update the scanPoints field
-            set_props("scanPoints", {'value': indices_range})
-            
-            set_props("alert-scan-loaded", {
-                'is_open': True,
-                'children': f'Successfully loaded {len(all_indices)} file indices: {indices_range}',
-                'color': 'success'
-            })
-        else:
-            set_props("alert-scan-loaded", {
-                'is_open': True,
-                'children': 'No matching files found in the specified directory.',
-                'color': 'warning'
-            })
-    
-    except Exception as e:
-        set_props("alert-scan-loaded", {
-            'is_open': True,
-            'children': f'Error loading file indices: {str(e)}',
-            'color': 'danger'
-        })
 
-
-@dash.callback(
-    Output('wirerecon-filename-templates', 'children'),
-    Input('wirerecon-check-filenames-btn', 'n_clicks'),
-    Input('wirerecon-update-path-fields-btn', 'n_clicks'),
-    Input('wirerecon-data-loaded-trigger', 'data'),
-    # Files
-    State('data_path', 'value'),
-    prevent_initial_call=True,
+register_check_filenames_callback(
+    check_button_id='wirerecon-check-filenames-btn',
+    update_button_id='wirerecon-update-path-fields-btn',
+    data_loaded_trigger_id='wirerecon-data-loaded-trigger',
+    data_path_id='data_path',
+    filename_prefix_id='filenamePrefix',
+    filename_templates_id='wirerecon-filename-templates',
+    num_indices=1
 )
-def check_filenames(n_check, n_update, data_loaded_trigger,
-    # Files
-    data_path,
-    num_indices=1,
-):
-    """
-    Scan directory and suggest common filename patterns.
-    Replaces numeric sequences with %d to find templates and shows index ranges.
-    
-    Triggered by:
-    - wirerecon-check-filenames-btn button click (also auto-sets filenamePrefix to shortest pattern)
-    - wirerecon-update-path-fields-btn button click
-    - wirerecon-data-loaded-trigger data change (when scan data is loaded from URL)
-    
-    Parameters:
-    -----------
-    n_check : int
-        Number of check-filenames button clicks (Input trigger)
-    n_update : int
-        Number of update-path-fields button clicks (Input trigger)
-    data_loaded_trigger : str
-        Timestamp when scan data was loaded (Input trigger)
-    data_path : str
-        Path to the data directory (State)
-    num_indices : int, optional
-        Number of rightmost numeric indices to capture (default=1)
-        - num_indices=1: captures rightmost number (e.g., file_123.h5 -> file_%d.h5)
-        - num_indices=2: captures two rightmost numbers (e.g., file_7_150.h5 -> file_%d_%d.h5)
-    
-    Returns:
-    --------
-    list of html.Option
-        Dropdown options with filename patterns and their file ranges
-    """
-    # Get the trigger that caused this callback
-    ctx = dash.callback_context
-    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
-    
-    if not data_path:
-        return [html.Option(value="", label="No data path provided")]
-    
-    # Parse data_path first to get the number of inputs
-    data_path_list = parse_parameter(data_path)
-    num_inputs = len(data_path_list)
-    
-    root_path = DEFAULT_VARIABLES["root_path"]
-    
-    # Dictionary to store pattern -> list of indices
-    pattern_files = {}
-
-    for i in range(num_inputs):
-        # Get filefolder
-        current_data_path = data_path_list[i]
-
-        # Build full path
-        current_full_data_path=os.path.join(root_path, current_data_path.lstrip('/'))
-        
-        # Check if directory exists
-        if not os.path.exists(current_full_data_path):
-            logger.warning(f"Directory does not exist: {current_full_data_path}")
-            continue
-        
-        # List all files in directory
-        try:
-            files = [f for f in os.listdir(current_full_data_path) if os.path.isfile(os.path.join(current_full_data_path, f))]
-        except Exception as e:
-            logger.error(f"Error reading directory {current_full_data_path}: {e}")
-            continue
-        
-        # Extract patterns and indices
-        for filename in files:
-            base_name, extension = os.path.splitext(filename)
-            
-            # Build regex pattern to capture N rightmost numbers
-            # For num_indices=1: (\d+)(?!.*\d)
-            # For num_indices=2: (\d+)_(\d+)(?!.*\d)
-            if num_indices == 1:
-                regex_pattern = r'(\d+)(?!.*\d)'
-            else:
-                # Capture N groups of digits separated by underscores from the right
-                regex_pattern = r'_'.join([r'(\d+)'] * num_indices) + r'(?!.*\d)'
-            
-            match = re.search(regex_pattern, base_name)
-            
-            if match:
-                # Extract all captured groups as integers
-                indices = [int(match.group(i)) for i in range(1, num_indices + 1)]
-                
-                # Create pattern with appropriate number of %d placeholders
-                pattern_placeholder = '_'.join(['%d'] * num_indices)
-                pattern = base_name[:match.start()] + pattern_placeholder + base_name[match.end():] + extension
-                
-                pattern_files.setdefault(pattern, []).append(indices)
-            else:
-                # No numeric pattern found
-                pattern_files.setdefault(filename, []).append([])
-    
-    if not pattern_files:
-        return [html.Option(value="", label="No files found in specified path(s)")]
-    
-    # Sort by file count and create options for top 10 patterns
-    sorted_patterns = sorted(pattern_files.items(), key=lambda x: len(x[1]), reverse=True)[:10]
-    pattern_options = []
-    
-    for pattern, indices_list in sorted_patterns:
-        if indices_list and indices_list[0]:
-            if num_indices == 1:
-                # Single index: show simple range
-                label = f"{pattern} (files {str(srange(set(idx[0] for idx in indices_list)))})"
-            else:
-                # Multiple indices: show ranges for each dimension
-                range_labels = []
-                for dim in range(num_indices):
-                    dim_values = sorted(set(idx[dim] for idx in indices_list if len(idx) > dim))
-                    if dim_values:
-                        range_labels.append(f"dim{dim+1}: {str(srange(dim_values))}")
-                
-                if range_labels:
-                    label = f"{pattern} ({', '.join(range_labels)})"
-                else:
-                    label = f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
-        else:
-            label = f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
-        pattern_options.append(html.Option(value=pattern, label=label))
-    
-    # Generate combined wildcard patterns for similar patterns
-    if len(sorted_patterns) > 1:
-        seen_wildcards = set()
-        
-        for (pattern1, indices1), (pattern2, indices2) in combinations(sorted_patterns, 2):
-            # Find matching and differing sections
-            matcher = SequenceMatcher(None, pattern1, pattern2)
-            wildcard_parts = []
-            last_pos = 0
-            
-            for match_start1, match_start2, match_length in matcher.get_matching_blocks():
-                # Handle the gap before this match (differences)
-                if match_start1 > last_pos:
-                    diff1 = pattern1[last_pos:match_start1]
-                    diff2 = pattern2[last_pos:match_start2]
-                    
-                    # Skip if differences contain %d
-                    if '%d' in diff1 or '%d' in diff2:
-                        break
-                    
-                    wildcard_parts.append('*')
-                
-                # Add the matching section
-                if match_length > 0:
-                    wildcard_parts.append(pattern1[match_start1:match_start1 + match_length])
-                
-                last_pos = match_start1 + match_length
-            else:
-                # Only create wildcard if pattern contains wildcards and hasn't been seen before
-                wildcard_pattern = ''.join(wildcard_parts)
-                if '*' in wildcard_pattern and wildcard_pattern not in seen_wildcards:
-                    seen_wildcards.add(wildcard_pattern)
-                    
-                    # Combine indices from both patterns
-                    combined_indices = sorted(set(idx[0] for idx in indices1 + indices2 if idx))
-                    label = f"{wildcard_pattern} (files {str(srange(combined_indices))})"
-                    pattern_options.append(html.Option(value=wildcard_pattern, label=label))
-    
-    # Find the shortest pattern from all options (including wildcards) and set it to filenamePrefix
-    # Only set filenamePrefix if triggered by the check-filenames button
-    if pattern_options and trigger_id == 'wirerecon-check-filenames-btn':
-        shortest_pattern = min(pattern_options, key=lambda opt: len(opt.value))
-        set_props("filenamePrefix", {'value': shortest_pattern.value})
-    
-    return pattern_options
-
 
 # @dash.callback(
 #     Input('url-create-wirerecon','pathname'),

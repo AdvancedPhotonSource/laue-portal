@@ -14,8 +14,23 @@ import laue_portal.components.navbar as navbar
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix, parse_parameter
 from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
 from laue_portal.components.form_base import _field
+from laue_portal.components.validation_alerts import validation_alerts
 from laue_portal.processing.redis_utils import enqueue_peakindexing, STATUS_REVERSE_MAPPING
 from laue_portal.config import DEFAULT_VARIABLES
+from laue_portal.pages.validation_helpers import (
+    apply_validation_highlights,
+    update_validation_alerts,
+    safe_float,
+    safe_int,
+    validate_numeric_range,
+    validate_file_exists,
+    validate_directory_exists
+)
+from laue_portal.pages.callback_registrars import (
+    register_update_path_fields_callback,
+    register_load_file_indices_callback,
+    register_check_filenames_callback
+)
 from srange import srange
 import laue_portal.database.session_utils as session_utils
 import re
@@ -114,6 +129,7 @@ layout = dbc.Container(
             is_open=False,
             color="success",
         ),
+        html.Hr(),
         dbc.Row(
                 [
                     dbc.Col(
@@ -156,55 +172,7 @@ layout = dbc.Container(
                 align="center",       # CENTER vertically
             ),
         html.Hr(),
-    
-        dbc.Row([
-                dbc.Col(
-                    dbc.Alert([
-                                html.H4("Validate status: Warning !", className="alert-heading"),
-                                html.Hr(),
-                                html.P("Press button Validate! or Some parameter (which one) seems to be too big! Better check it! ", className="mb-0"),
-                            ],
-                            color="warning",  # <- set the color here
-                    ),
-                ),
-                ],
-                className="g-0",            # g-0 removes row gutters
-                align="center",
-        ),
-        ######## Below are other examples of the Alert 
-        # this is just example  but it should be changable to something like that if Error
-        dbc.Row([
-                dbc.Col(
-                    dbc.Alert([
-                                html.H4("Validate status: Error !", className="alert-heading"),
-                                html.Hr(),
-                                html.P("Check your file inputs! or check Peak Search parameters! or Check Index Parameters!", className="mb-0"),
-                            ],
-                            color="danger",  # <- set the color here
-                    ),
-                ),
-        
-                ],
-                className="g-0",            # g-0 removes row gutters
-                align="center",
-        ),
-        # this is just example  but it should be changable to something like that if Success
-        dbc.Row([
-                dbc.Col(
-                    dbc.Alert([
-                                html.H4("Validate status: Success !", className="alert-heading"),
-                                html.Hr(),
-                                html.P("You can Submit!", className="mb-0"),
-                            ],
-                            color="success",  # <- set the color here
-                    ),
-                 ),
-                ],
-                className="g-0",            # g-0 removes row gutters
-                align="center",
-        ),
-        
-        html.Hr(),
+        validation_alerts,
         dbc.Row([
                 dbc.Col(
                     _field("Author", "author",
@@ -230,11 +198,540 @@ layout = dbc.Container(
     fluid=True
 )
 
+def validate_peakindexing_inputs(ctx):
+    """
+    Validate specified peak indexing inputs using callback context.
+    
+    Parameters:
+    - ctx: dash.callback_context containing states_list with field IDs and values
+    
+    Returns:
+        validation_result (dict): {
+            'errors': dict mapping param_name to list of error messages,
+            'warnings': dict mapping param_name to list of warning messages,
+            'successes': dict mapping param_name to empty string (for params that passed)
+        }
+    """
+    errors = {}
+    warnings = {}
+    successes = {}
+    # Dictionary to store parsed parameter lists
+    parsed_params = {}
+    
+    # Hard-coded list of field IDs to validate (excludes 'notes')
+    all_field_ids = [
+        'data_path',
+        'filenamePrefix',
+        'scanPoints',
+        'depthRange',
+        'geoFile',
+        'crystFile',
+        'outputFolder',
+        'root_path',
+        'scanNumber',
+        'author',
+        'threshold',
+        'thresholdRatio',
+        'maxRfactor',
+        'boxsize',
+        'max_number',
+        'min_separation',
+        'min_size',
+        'max_peaks',
+        'indexKeVmaxCalc',
+        'indexKeVmaxTest',
+        'indexAngleTolerance',
+        'indexCone',
+        'indexHKL',
+        'detectorCropX1',
+        'detectorCropX2',
+        'detectorCropY1',
+        'detectorCropY2',
+    ]
+    
+    # Create database session for catalog validation
+    session = Session(session_utils.get_engine())
+    
+    # Extract parameters from callback context using the hard-coded field list
+    # ctx.states is a dict with format {'component_id.prop_name': value}
+    all_params = {}
+    for key, value in ctx.states.items():
+        # Extract component_id from 'component_id.prop_name'
+        component_id = key.split('.')[0]
+        # Only include fields in our validation list
+        if component_id in all_field_ids:
+            all_params[component_id] = value
+    
+    # Extract individual parameter values
+    root_path = all_params.get('root_path', '')
+    data_path = all_params.get('data_path')
+    # filenamePrefix = all_params.get('filenamePrefix')
+    # scanPoints = all_params.get('scanPoints')
+    # depthRange = all_params.get('depthRange')
+    # geoFile = all_params.get('geoFile')
+    # crystFile = all_params.get('crystFile')
+    # outputFolder = all_params.get('outputFolder')
+    # scanNumber = all_params.get('scanNumber')
+    # threshold = all_params.get('threshold')
+    # thresholdRatio = all_params.get('thresholdRatio')
+    # maxRfactor = all_params.get('maxRfactor')
+    # boxsize = all_params.get('boxsize')
+    # max_number = all_params.get('max_number')
+    # min_separation = all_params.get('min_separation')
+    # min_size = all_params.get('min_size')
+    # max_peaks = all_params.get('max_peaks')
+    # indexKeVmaxCalc = all_params.get('indexKeVmaxCalc')
+    # indexKeVmaxTest = all_params.get('indexKeVmaxTest')
+    # indexAngleTolerance = all_params.get('indexAngleTolerance')
+    # indexCone = all_params.get('indexCone')
+    # indexHKL = all_params.get('indexHKL')
+    # detectorCropX1 = all_params.get('detectorCropX1')
+    # detectorCropX2 = all_params.get('detectorCropX2')
+    # detectorCropY1 = all_params.get('detectorCropY1')
+    # detectorCropY2 = all_params.get('detectorCropY2')
+    
+    # Validate root_path directory exists
+    if not root_path:
+        errors.setdefault('root_path', []).append("Root path is required")
+    elif not os.path.exists(root_path):
+        errors.setdefault('root_path', []).append(f"Root path directory does not exist: {root_path}")
+    else: #Added to pass over in later loop over all_params
+        parsed_params['root_path'] = root_path
+        successes['root_path'] = ''
+    
+    # Parse data_path first to determine number of scans
+    try:
+        data_path_list = parse_parameter(data_path)
+        num_inputs = len(data_path_list)
+        parsed_params['data_path'] = data_path_list
+    except ValueError as e:
+        errors.setdefault('data_path', []).append(f"Data path parsing error: {str(e)}")
+        # Close session before early return
+        session.close()
+        # Return early since we can't validate other parameters without knowing num_inputs
+        validation_result = {
+            'errors': errors,
+            'warnings': warnings,
+            'successes': successes
+        }
+        return validation_result
+    
+    # Check data_path separately since we already parsed it
+    if not data_path:
+        errors.setdefault('data_path', []).append("Data path is required")
+    else:
+        successes['data_path'] = ''
+    
+    # Validate all other parameters by iterating over all_params    
+    for param_name, param_value in all_params.items():
+        # Skip already handled parameters
+        if param_name in parsed_params: #{'root_path', 'data_path'}
+            continue
+        # Check 1: Is it missing/empty?
+        is_missing = False
+        if param_name in ['threshold', 'thresholdRatio', 'maxRfactor', 'boxsize', 'max_number', 
+                          'min_separation', 'min_size', 'max_peaks', 'indexKeVmaxCalc', 
+                          'indexKeVmaxTest', 'indexAngleTolerance', 'indexCone',
+                          'detectorCropX1', 'detectorCropX2', 'detectorCropY1', 'detectorCropY2']:
+            # Numeric fields: check for None or empty string (0 is valid)
+            if param_value is None or param_value == '':
+                is_missing = True
+        else:
+            # Other fields: check for falsy values
+            if not param_value:
+                is_missing = True
+        
+        if is_missing:
+            # Special case for scanNumber: only warning, not error
+            if param_name == 'scanNumber':
+                warnings.setdefault(param_name, []).append("Scan Number is missing")
+                continue  # Skip parsing
+            # Special case for threshold and thresholdRatio: optional parameters
+            elif param_name in ['threshold', 'thresholdRatio']:
+                continue  # Skip - these are optional
+            else:
+                errors.setdefault(param_name, []).append(f"{param_name.replace('_', ' ').title()} is required")
+                continue  # Skip parsing if missing
+        
+        # Check 2: Parse the parameter
+        try:
+            parsed_list = parse_parameter(param_value, num_inputs)
+        except ValueError as e:
+            # Special case for scanNumber: only warning, not error
+            if param_name == 'scanNumber':
+                warnings.setdefault(param_name, []).append(f"{param_name} parsing error: {str(e)}")
+                continue  # Skip length check
+            else:
+                errors.setdefault(param_name, []).append(f"{param_name} parsing error: {str(e)}")
+                continue  # Skip length check if parsing failed
+        
+        # Check 3: Verify length matches num_inputs
+        if len(parsed_list) != num_inputs:
+            # Special case for scanNumber: only warning, not error
+            if param_name == 'scanNumber':
+                warnings.setdefault(param_name, []).append(f"{param_name} count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
+            else:
+                errors.setdefault(param_name, []).append(f"{param_name} count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
+        
+        # Store the parsed list in the dictionary
+        parsed_params[param_name] = parsed_list
+    
+    # Validate each input, skipping fields that failed global validation
+    for i in range(num_inputs):
+        input_prefix = f"Input {i+1}: " if num_inputs > 1 else ""
+        
+        # 1. Validate detector crop parameters for this input
+        if all(k not in errors for k in ['detectorCropX1', 'detectorCropX2', 'detectorCropY1', 'detectorCropY2']):
+            x1_val = safe_int(parsed_params.get('detectorCropX1', [0])[i])
+            x2_val = safe_int(parsed_params.get('detectorCropX2', [2047])[i])
+            y1_val = safe_int(parsed_params.get('detectorCropY1', [0])[i])
+            y2_val = safe_int(parsed_params.get('detectorCropY2', [2047])[i])
+            
+            # Check X1 < X2
+            if x1_val is not None and x2_val is not None:
+                if x1_val >= x2_val:
+                    errors.setdefault('detectorCropX1', []).append(f"{input_prefix}Detector Crop X1 must be less than X2")
+                    errors.setdefault('detectorCropX2', []).append(f"{input_prefix}Detector Crop X1 must be less than X2")
+            
+            # Check Y1 < Y2
+            if y1_val is not None and y2_val is not None:
+                if y1_val >= y2_val:
+                    errors.setdefault('detectorCropY1', []).append(f"{input_prefix}Detector Crop Y1 must be less than Y2")
+                    errors.setdefault('detectorCropY2', []).append(f"{input_prefix}Detector Crop Y1 must be less than Y2")
+        
+        # 2. Validate numeric parameters for this input
+        # maxRfactor: must be between 0 and 1
+        if 'maxRfactor' not in errors and 'maxRfactor' in parsed_params:
+            current_maxRfactor = parsed_params['maxRfactor'][i]
+            maxRfactor_val = safe_float(current_maxRfactor)
+            if maxRfactor_val is not None:
+                if maxRfactor_val < 0 or maxRfactor_val > 1:
+                    errors.setdefault('maxRfactor', []).append(f"{input_prefix}Max R-factor must be between 0 and 1")
+        
+        # boxsize: must be positive
+        if 'boxsize' not in errors and 'boxsize' in parsed_params:
+            current_boxsize = parsed_params['boxsize'][i]
+            boxsize_val = safe_int(current_boxsize)
+            if boxsize_val is not None and boxsize_val <= 0:
+                errors.setdefault('boxsize', []).append(f"{input_prefix}Box size must be positive")
+        
+        # max_number: must be positive
+        if 'max_number' not in errors and 'max_number' in parsed_params:
+            current_max_number = parsed_params['max_number'][i]
+            max_number_val = safe_int(current_max_number)
+            if max_number_val is not None and max_number_val <= 0:
+                errors.setdefault('max_number', []).append(f"{input_prefix}Max number must be positive")
+        
+        # min_separation: must be non-negative
+        if 'min_separation' not in errors and 'min_separation' in parsed_params:
+            current_min_separation = parsed_params['min_separation'][i]
+            min_separation_val = safe_float(current_min_separation)
+            if min_separation_val is not None and min_separation_val < 0:
+                errors.setdefault('min_separation', []).append(f"{input_prefix}Min separation must be non-negative")
+        
+        # min_size: must be non-negative
+        if 'min_size' not in errors and 'min_size' in parsed_params:
+            current_min_size = parsed_params['min_size'][i]
+            min_size_val = safe_float(current_min_size)
+            if min_size_val is not None and min_size_val < 0:
+                errors.setdefault('min_size', []).append(f"{input_prefix}Min size must be non-negative")
+        
+        # max_peaks: must be positive
+        if 'max_peaks' not in errors and 'max_peaks' in parsed_params:
+            current_max_peaks = parsed_params['max_peaks'][i]
+            max_peaks_val = safe_int(current_max_peaks)
+            if max_peaks_val is not None and max_peaks_val <= 0:
+                errors.setdefault('max_peaks', []).append(f"{input_prefix}Max peaks must be positive")
+        
+        # indexKeVmaxCalc: must be positive
+        if 'indexKeVmaxCalc' not in errors and 'indexKeVmaxCalc' in parsed_params:
+            current_indexKeVmaxCalc = parsed_params['indexKeVmaxCalc'][i]
+            indexKeVmaxCalc_val = safe_float(current_indexKeVmaxCalc)
+            if indexKeVmaxCalc_val is not None and indexKeVmaxCalc_val <= 0:
+                errors.setdefault('indexKeVmaxCalc', []).append(f"{input_prefix}Index keV max calc must be positive")
+        
+        # indexKeVmaxTest: must be positive
+        if 'indexKeVmaxTest' not in errors and 'indexKeVmaxTest' in parsed_params:
+            current_indexKeVmaxTest = parsed_params['indexKeVmaxTest'][i]
+            indexKeVmaxTest_val = safe_float(current_indexKeVmaxTest)
+            if indexKeVmaxTest_val is not None and indexKeVmaxTest_val <= 0:
+                errors.setdefault('indexKeVmaxTest', []).append(f"{input_prefix}Index keV max test must be positive")
+        
+        # indexAngleTolerance: must be non-negative
+        if 'indexAngleTolerance' not in errors and 'indexAngleTolerance' in parsed_params:
+            current_indexAngleTolerance = parsed_params['indexAngleTolerance'][i]
+            indexAngleTolerance_val = safe_float(current_indexAngleTolerance)
+            if indexAngleTolerance_val is not None and indexAngleTolerance_val < 0:
+                errors.setdefault('indexAngleTolerance', []).append(f"{input_prefix}Index angle tolerance must be non-negative")
+        
+        # indexCone: must be between 0 and 180
+        if 'indexCone' not in errors and 'indexCone' in parsed_params:
+            current_indexCone = parsed_params['indexCone'][i]
+            indexCone_val = safe_float(current_indexCone)
+            if indexCone_val is not None:
+                if indexCone_val < 0 or indexCone_val > 180:
+                    errors.setdefault('indexCone', []).append(f"{input_prefix}Index cone must be between 0 and 180 degrees")
+        
+        # 3. Validate indexHKL for this input
+        if 'indexHKL' not in errors and 'indexHKL' in parsed_params:
+            current_indexHKL = str(parsed_params['indexHKL'][i])
+            if len(current_indexHKL) != 3:
+                errors.setdefault('indexHKL', []).append(f"{input_prefix}Index HKL must be 3 digits (e.g., '001')")
+            else:
+                try:
+                    int(current_indexHKL[0])
+                    int(current_indexHKL[1])
+                    int(current_indexHKL[2])
+                except ValueError:
+                    errors.setdefault('indexHKL', []).append(f"{input_prefix}Index HKL must contain only digits")
+        
+        # 4. Check if geometry file exists for this input (skip if root_path invalid)
+        if 'root_path' not in errors and 'geoFile' not in errors:
+            current_geoFile = parsed_params['geoFile'][i]
+            if not current_geoFile:
+                errors.setdefault('geoFile', []).append(f"{input_prefix}Geometry file is required")
+            else:
+                full_geo_path = os.path.join(root_path, current_geoFile.lstrip('/'))
+                if not os.path.exists(full_geo_path):
+                    errors.setdefault('geoFile', []).append(f"{input_prefix}Geometry file not found: {current_geoFile}")
+        
+        # 5. Check if crystal file exists for this input (skip if root_path invalid)
+        if 'root_path' not in errors and 'crystFile' not in errors:
+            current_crystFile = parsed_params['crystFile'][i]
+            if not current_crystFile:
+                errors.setdefault('crystFile', []).append(f"{input_prefix}Crystal file is required")
+            else:
+                full_cryst_path = os.path.join(root_path, current_crystFile.lstrip('/'))
+                if not os.path.exists(full_cryst_path):
+                    errors.setdefault('crystFile', []).append(f"{input_prefix}Crystal file not found: {current_crystFile}")
+        
+        # 6. Check if output folder already exists for this input (skip if root_path invalid)
+        # Note: We cannot validate this properly if outputFolder contains %d placeholders
+        # because we don't know the scan number or peakindex_id at validation time.
+        # This check is skipped if %d is present in the path.
+        if 'root_path' not in errors and 'outputFolder' not in errors:
+            current_outputFolder = parsed_params['outputFolder'][i]
+            if not current_outputFolder:
+                errors.setdefault('outputFolder', []).append(f"{input_prefix}Output folder is required")
+            elif root_path and '%d' not in current_outputFolder:
+                full_output_path = os.path.join(root_path, current_outputFolder.lstrip('/'))
+                if os.path.exists(full_output_path):
+                    if 'outputFolder' not in errors:
+                        warnings.setdefault('outputFolder', []).append(f"{input_prefix}Output folder already exists: {current_outputFolder}")
+        
+        # 7. Check if data files exist for this input (skip if root_path invalid)
+        if 'root_path' not in errors and 'data_path' not in errors:
+            current_data_path = parsed_params['data_path'][i]
+            current_full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
+            
+            # Check if directory exists
+            if not os.path.exists(current_full_data_path):
+                errors.setdefault('data_path', []).append(f"{input_prefix}Data directory not found: {current_data_path}")
+            else:
+                # Validate scanNumber against Catalog table (after confirming directory exists)
+                if 'scanNumber' not in errors and all_params.get('scanNumber') and 'scanNumber' in parsed_params:
+                    try:
+                        scan_num_int = int(parsed_params['scanNumber'][i])
+                        
+                        # Get catalog data for this scan
+                        catalog_data = get_catalog_data(session, scan_num_int, root_path, CATALOG_DEFAULTS)
+                        
+                        if catalog_data and catalog_data.get('data_path'):
+                            catalog_full_data_path = os.path.join(root_path, catalog_data['data_path'].lstrip('/'))
+                            if catalog_full_data_path != current_full_data_path:
+                                warnings.setdefault('data_path', []).append(
+                                    f"{input_prefix}Catalog entry for scan {scan_num_int} has path ({catalog_data['data_path']}) "
+                                    f"that differs from specified data path ({current_data_path})"
+                                )
+                        else:
+                            # No catalog entry found for this scan number
+                            warnings.setdefault('scanNumber', []).append(
+                                f"{input_prefix}No catalog entry found for scan {scan_num_int}"
+                            )
+                    except (ValueError, TypeError, IndexError):
+                        pass  # Already handled in scanNumber validation
+                
+                # Check if directory contains any files
+                all_files = [f for f in os.listdir(current_full_data_path) if os.path.isfile(os.path.join(current_full_data_path, f))]
+                if not all_files:
+                    errors.setdefault('data_path', []).append(f"{input_prefix}Data directory contains no files: {current_data_path}")
+                else:
+                    # Only check filename prefix if it passed global validation
+                    if 'filenamePrefix' not in errors:
+                        # Parse filename prefix
+                        current_filename_prefix_str = parsed_params['filenamePrefix'][i]
+                        current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
+                        
+                        # Check for actual files using glob - pinpoint which field has the error
+                        for current_filename_prefix_i in current_filename_prefix:
+                            # Check if ANY files match this prefix pattern (without scan point substitution)
+                            prefix_pattern = os.path.join(current_full_data_path, current_filename_prefix_i.replace('%d', '*'))
+                            prefix_matches = glob.glob(prefix_pattern + '*')
+                            
+                            if not prefix_matches:
+                                errors.setdefault('filenamePrefix', []).append(f"{input_prefix}No files match prefix pattern: {current_filename_prefix_i}")
+                            else:
+                                # Check specific scan points and depth range (only if both passed global validation)
+                                if 'scanPoints' not in errors:
+                                    current_scanPoints = parsed_params['scanPoints'][i]
+                                    
+                                    try:
+                                        scanPoints_srange = srange(current_scanPoints)
+                                        scanPoint_nums = scanPoints_srange.list()
+                                    except Exception as e:
+                                        errors.setdefault('scanPoints', []).append(f"{input_prefix}Invalid scan points format: {current_scanPoints}")
+                                        continue
+                                    
+                                    # Get depth range if provided
+                                    depthRange_nums = [None]
+                                    if 'depthRange' in parsed_params:
+                                        current_depthRange = parsed_params['depthRange'][i]
+                                        if current_depthRange and current_depthRange.strip():
+                                            try:
+                                                depthRange_srange = srange(current_depthRange)
+                                                depthRange_nums = depthRange_srange.list()
+                                            except Exception as e:
+                                                errors.setdefault('depthRange', []).append(f"{input_prefix}Invalid depth range format: {current_depthRange}")
+                                                continue
+                                    
+                                    # Collect missing files for this prefix
+                                    missing_files = []
+                                    for scanPoint_num in scanPoint_nums:
+                                        for depthRange_num in depthRange_nums:
+                                            file_str = current_filename_prefix_i % scanPoint_num if '%d' in current_filename_prefix_i else current_filename_prefix_i
+                                            
+                                            # Add depth index if processing reconstruction data
+                                            if depthRange_num is not None:
+                                                file_str += f"_{depthRange_num}"
+                                            
+                                            scanpoint_pattern = os.path.join(current_full_data_path, file_str)
+                                            scanpoint_matches = glob.glob(scanpoint_pattern + '*')
+                                            
+                                            if not scanpoint_matches:
+                                                if depthRange_num is not None:
+                                                    missing_files.append(f"{scanPoint_num}_{depthRange_num}")
+                                                else:
+                                                    missing_files.append(str(scanPoint_num))
+                                    
+                                    # If there are missing files, add a single error message for this prefix
+                                    if missing_files:
+                                        # Limit the number of files shown
+                                        if len(missing_files) <= 5:
+                                            files_str = ", ".join(missing_files)
+                                        else:
+                                            files_str = ", ".join(missing_files[:5]) + f", ... and {len(missing_files) - 5} more"
+                                        
+                                        errors.setdefault('scanPoints', []).append(
+                                            f"{input_prefix}Missing files for {current_filename_prefix_i} (indices: {files_str})"
+                                        )
+        
+        # 8. Validate scanNumber: check that entry is a valid integer
+        if 'scanNumber' not in errors and 'scanNumber' in parsed_params:
+            current_scanNumber = parsed_params['scanNumber'][i]
+            try:
+                current_scanNumber.isdigit()
+            except (ValueError, TypeError):
+                if 'scanNumber' not in errors:
+                    warnings.setdefault('scanNumber', []).append(f"{input_prefix}Scan number is not a valid integer: {current_scanNumber}")
+    
+    # Add successes for parameters that passed all validations
+    # Only add to successes if the parameter has neither errors nor warnings
+    for param_name in all_field_ids:
+        if param_name not in errors and param_name not in warnings:
+            successes[param_name] = ''
+    
+    # Close database session
+    session.close()
+    
+    validation_result = {
+        'errors': errors,
+        'warnings': warnings,
+        'successes': successes
+    }
+    return validation_result
+
+
 """
 =======================
 Callbacks
 =======================
 """
+@dash.callback(
+    Input('validate-btn', 'n_clicks'),
+    State('data_path', 'value'),
+    State('filenamePrefix', 'value'),
+    State('scanPoints', 'value'),
+    State('depthRange', 'value'),
+    State('geoFile', 'value'),
+    State('crystFile', 'value'),
+    State('outputFolder', 'value'),
+    State('root_path', 'value'),
+    State('scanNumber', 'value'),
+    State('author', 'value'),
+    State('threshold', 'value'),
+    State('thresholdRatio', 'value'),
+    State('maxRfactor', 'value'),
+    State('boxsize', 'value'),
+    State('max_number', 'value'),
+    State('min_separation', 'value'),
+    State('min_size', 'value'),
+    State('max_peaks', 'value'),
+    State('indexKeVmaxCalc', 'value'),
+    State('indexKeVmaxTest', 'value'),
+    State('indexAngleTolerance', 'value'),
+    State('indexCone', 'value'),
+    State('indexHKL', 'value'),
+    State('detectorCropX1', 'value'),
+    State('detectorCropX2', 'value'),
+    State('detectorCropY1', 'value'),
+    State('detectorCropY2', 'value'),
+    prevent_initial_call=True,
+)
+def validate_inputs(
+    n_clicks,
+    data_path,
+    filenamePrefix,
+    scanPoints,
+    depthRange,
+    geoFile,
+    crystFile,
+    outputFolder,
+    root_path,
+    scanNumber,
+    author,
+    threshold,
+    thresholdRatio,
+    maxRfactor,
+    boxsize,
+    max_number,
+    min_separation,
+    min_size,
+    max_peaks,
+    indexKeVmaxCalc,
+    indexKeVmaxTest,
+    indexAngleTolerance,
+    indexCone,
+    indexHKL,
+    detectorCropX1,
+    detectorCropX2,
+    detectorCropY1,
+    detectorCropY2,
+):
+    """Handle Validate button click"""
+    
+    # Get callback context
+    ctx = dash.callback_context
+    
+    # Run validation using ctx
+    validation_result = validate_peakindexing_inputs(ctx)
+    
+    # Apply field highlights using helper function
+    apply_validation_highlights(validation_result)
+    
+    # Update validation alerts using helper function
+    update_validation_alerts(validation_result)
+
+
 @dash.callback(
     Input('submit_peakindexing', 'n_clicks'),
     
@@ -346,12 +843,35 @@ def submit_parameters(n,
     beamline,
     
 ):
-    # TODO: Input validation and response
-
     """
     Submit parameters for peak indexing job(s).
     Handles both single scan and pooled scan submissions.
     """
+    # Get callback context
+    ctx = dash.callback_context
+    
+    # Run validation before submission using ctx
+    validation_result = validate_peakindexing_inputs(ctx)
+    
+    # Apply field highlights for all cases (error, warning, success)
+    apply_validation_highlights(validation_result)
+    
+    # Update validation alerts using helper function
+    update_validation_alerts(validation_result)
+    
+    # Extract to local variables for cleaner code
+    errors = validation_result['errors']
+    # warnings = validation_result['warnings']
+    
+    # Block submission if there are errors
+    if errors:
+        set_props("alert-submit", {
+            'is_open': True,
+            'children': 'Submission blocked due to validation errors. Please fix the errors and try again.',
+            'color': 'danger'
+        })
+        return
+    
     # Parse data_path first to get the number of inputs
     data_path_list = parse_parameter(data_path)
     num_inputs = len(data_path_list)
@@ -691,166 +1211,37 @@ def submit_parameters(n,
                                         'color': 'danger'})
 
 
-@dash.callback(
-    Output('peakindex-filename-templates', 'children', allow_duplicate=True),
-    Input('peakindex-check-filenames-btn', 'n_clicks'),
-    Input('peakindex-update-path-fields-btn', 'n_clicks'),
-    Input('peakindex-data-loaded-trigger', 'data'),
-    # Files
-    State('data_path', 'value'),
-    prevent_initial_call=True,
+# Register shared callbacks
+register_update_path_fields_callback(
+    button_id='peakindex-update-path-fields-btn',
+    scan_number_id='scanNumber',
+    root_path_id='root_path',
+    data_path_id='data_path',
+    filename_prefix_id='filenamePrefix',
+    alert_id='alert-scan-loaded',
+    catalog_defaults=CATALOG_DEFAULTS
 )
-def check_filenames(n_check, n_update, data_loaded_trigger,
-    # Files
-    data_path,
-    num_indices=2,
-):
-    """
-    Scan directory and suggest common filename patterns.
-    Replaces numeric sequences with %d to find templates and shows index ranges.
-    
-    For peak indexing, this captures TWO rightmost numbers:
-    - First number: scanPoint (e.g., 7 in file_7_150.h5)
-    - Second number: depthRange (e.g., 150 in file_7_150.h5)
-    
-    Parameters:
-    -----------
-    n : int
-        Number of clicks (callback trigger)
-    data_path : str
-        Path to the data directory
-    num_indices : int, optional
-        Number of rightmost numeric indices to capture (default=2 for peak indexing)
-    """
-    
-    if not data_path:
-        return [html.Option(value="", label="No data path provided")]
-    
-    # Parse data_path first to get the number of inputs
-    data_path_list = parse_parameter(data_path)
-    num_inputs = len(data_path_list)
-    
-    root_path = DEFAULT_VARIABLES["root_path"]
-    
-    # Dictionary to store pattern -> list of indices
-    pattern_files = {}
 
-    for i in range(num_inputs):
-        # Get filefolder
-        current_data_path = data_path_list[i]
+register_load_file_indices_callback(
+    button_id='peakindex-load-file-indices-btn',
+    data_loaded_trigger_id='peakindex-data-loaded-trigger',
+    data_path_id='data_path',
+    filename_prefix_id='filenamePrefix',
+    scan_points_id='scanPoints',
+    depth_range_id='depthRange',  # Peak indexing uses depth range
+    alert_id='alert-scan-loaded',
+    num_indices=2
+)
 
-        # Build full path
-        current_full_data_path=os.path.join(root_path, current_data_path.lstrip('/'))
-        
-        # Check if directory exists
-        if not os.path.exists(current_full_data_path):
-            logger.warning(f"Directory does not exist: {current_full_data_path}")
-            continue
-        
-        # List all files in directory
-        try:
-            files = [f for f in os.listdir(current_full_data_path) if os.path.isfile(os.path.join(current_full_data_path, f))]
-        except Exception as e:
-            logger.error(f"Error reading directory {current_full_data_path}: {e}")
-            continue
-        
-        # Extract patterns and indices
-        for filename in files:
-            base_name, extension = os.path.splitext(filename)
-            
-            # Build regex pattern to capture N rightmost numbers
-            # For num_indices=1: (\d+)(?!.*\d)
-            # For num_indices=2: (\d+)_(\d+)(?!.*\d)
-            if num_indices == 1:
-                regex_pattern = r'(\d+)(?!.*\d)'
-            else:
-                # Capture N groups of digits separated by underscores from the right
-                regex_pattern = r'_'.join([r'(\d+)'] * num_indices) + r'(?!.*\d)'
-            
-            match = re.search(regex_pattern, base_name)
-            
-            if match:
-                # Extract all captured groups as integers
-                indices = [int(match.group(i)) for i in range(1, num_indices + 1)]
-                
-                # Create pattern with appropriate number of %d placeholders
-                pattern_placeholder = '_'.join(['%d'] * num_indices)
-                pattern = base_name[:match.start()] + pattern_placeholder + base_name[match.end():] + extension
-                
-                pattern_files.setdefault(pattern, []).append(indices)
-            else:
-                # No numeric pattern found
-                pattern_files.setdefault(filename, []).append([])
-    
-    if not pattern_files:
-        return [html.Option(value="", label="No files found in specified path(s)")]
-    
-    # Sort by file count and create options for top 10 patterns
-    sorted_patterns = sorted(pattern_files.items(), key=lambda x: len(x[1]), reverse=True)[:10]
-    pattern_options = []
-    
-    for pattern, indices_list in sorted_patterns:
-        if indices_list and indices_list[0]:
-            if num_indices == 1:
-                # Single index: show simple range
-                label = f"{pattern} (files {str(srange(sorted(set(idx[0] for idx in indices_list))))})"
-            else:
-                # Multiple indices: show ranges for each dimension
-                range_labels = []
-                dim_names = ['scanPoints', 'depths'] if num_indices == 2 else [f"dim{i+1}" for i in range(num_indices)]
-                
-                for dim in range(num_indices):
-                    dim_values = sorted(set(idx[dim] for idx in indices_list if len(idx) > dim))
-                    if dim_values:
-                        range_labels.append(f"{dim_names[dim]}: {str(srange(dim_values))}")
-                
-                if range_labels:
-                    label = f"{pattern} ({', '.join(range_labels)})"
-                else:
-                    label = f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
-        else:
-            label = f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
-        pattern_options.append(html.Option(value=pattern, label=label))
-    
-    # Generate combined wildcard patterns for similar patterns
-    if len(sorted_patterns) > 1:
-        seen_wildcards = set()
-        
-        for (pattern1, indices1), (pattern2, indices2) in combinations(sorted_patterns, 2):
-            # Find matching and differing sections
-            matcher = SequenceMatcher(None, pattern1, pattern2)
-            wildcard_parts = []
-            last_pos = 0
-            
-            for match_start1, match_start2, match_length in matcher.get_matching_blocks():
-                # Handle the gap before this match (differences)
-                if match_start1 > last_pos:
-                    diff1 = pattern1[last_pos:match_start1]
-                    diff2 = pattern2[last_pos:match_start2]
-                    
-                    # Skip if differences contain %d
-                    if '%d' in diff1 or '%d' in diff2:
-                        break
-                    
-                    wildcard_parts.append('*')
-                
-                # Add the matching section
-                if match_length > 0:
-                    wildcard_parts.append(pattern1[match_start1:match_start1 + match_length])
-                
-                last_pos = match_start1 + match_length
-            else:
-                # Only create wildcard if pattern contains wildcards and hasn't been seen before
-                wildcard_pattern = ''.join(wildcard_parts)
-                if '*' in wildcard_pattern and wildcard_pattern not in seen_wildcards:
-                    seen_wildcards.add(wildcard_pattern)
-                    
-                    # Combine indices from both patterns
-                    combined_indices = sorted(set(idx[0] for idx in indices1 + indices2 if idx))
-                    label = f"{wildcard_pattern} (files {str(srange(combined_indices))})"
-                    pattern_options.append(html.Option(value=wildcard_pattern, label=label))
-    
-    return pattern_options
+register_check_filenames_callback(
+    check_button_id='peakindex-check-filenames-btn',
+    update_button_id='peakindex-update-path-fields-btn',
+    data_loaded_trigger_id='peakindex-data-loaded-trigger',
+    data_path_id='data_path',
+    filename_prefix_id='filenamePrefix',
+    filename_templates_id='peakindex-filename-templates',
+    num_indices=2
+)
 
 
 # @dash.callback(
