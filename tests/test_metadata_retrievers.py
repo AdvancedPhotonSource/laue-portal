@@ -130,6 +130,6 @@ class TestMetadataRetrievers:
             
             # Verify specific expected columns are present
             column_fields = [col['field'] for col in cols]
-            expected_columns = ['scanNumber', 'sample_name', 'aperture', 'user_name', 'time', 'scan_dim', 'actions', 'notes']
+            expected_columns = ['checkbox', 'scanNumber', 'sample_name', 'aperture', 'scan_dim', 'technique', 'user_name', 'time', 'notes']
             for expected_col in expected_columns:
                 assert expected_col in column_fields, f"Column {expected_col} should be present in column definitions"

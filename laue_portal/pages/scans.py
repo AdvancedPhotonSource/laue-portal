@@ -15,37 +15,36 @@ dash.register_page(__name__, path='/scans')
 
 layout = html.Div([
         navbar.navbar,
-        dcc.Location(id='url', refresh=False),
+        dcc.Location(id='url', refresh=True),
         
         # Secondary action bar aligned to right
         dbc.Row([
             dbc.Col([
                 dbc.Nav([
-                    dbc.NavItem(
-                        dbc.NavLink(
-                            "New Recon",
-                            href="/create-wire-reconstruction",
-                            active=False,
-                            id="scans-page-wire-recon"
-                        )
+                    dbc.Button(
+                        "New Recon",
+                        id="scans-page-wire-recon-btn",
+                        style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
+                        className="me-2"
                     ),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(
-                        dbc.NavLink(
-                            "New Index",
-                            href="/create-peakindexing",
-                            active=False,
-                            id="scans-page-peakindex"
-                        )
+                    dbc.Button(
+                        "New Index",
+                        id="scans-page-peakindex-btn",
+                        style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
+                        className="me-2"
                     ),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("New Recon with selected (only 1 sel)", href="#", active=False)),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("Stop ALL", href="#", active=False)),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("Stop Selected", href="#", active=False)),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("Set high Priority for selected (only 1 sel)", href="#", active=False)),
+                    dbc.Button(
+                        "New Recon + Index",
+                        id="scans-page-recon-index-btn-placeholder",
+                        style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
+                        className="me-2"
+                    ),
+                    dbc.Button(
+                        "Energy to K-space",
+                        id="scans-page-energy-kspace-btn-placeholder",
+                        style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
+                        className="me-2"
+                    ),
                 ],
                 className="bg-light px-2 py-2 d-flex justify-content-end w-100")
             ], width=12)
@@ -94,6 +93,7 @@ CUSTOM_HEADER_NAMES = {
     'scan_dim': 'Scan Dim',
     'time': 'Date',
 }
+
 
 def _get_metadatas():
     with Session(session_utils.get_engine()) as session:
@@ -189,27 +189,14 @@ def _get_metadatas():
         'unSortIcon': True,
     })
 
-    # Add the custom actions column
-    cols.insert(-1, {
-        'headerName': 'Actions',
-        'field': 'actions',  # This field doesn't need to exist in the data
-        'cellRenderer': 'ActionButtonsRenderer',
-        'sortable': False,
-        'filter': False,
-        'resizable': True, # Or False, depending on preference
-        'suppressMenu': True, # Or False
-        'width': 200, # Adjusted width for DBC buttons
-    })
-
     return cols, metadatas.to_dict('records')
-
 
 
 @dash.callback(
     Output('metadata-table', 'columnDefs', allow_duplicate=True),
     Output('metadata-table', 'rowData', allow_duplicate=True),
     Input('url','pathname'),
-    prevent_initial_call=True,
+    prevent_initial_call='initial_duplicate',
 )
 def get_metadatas(path):
     if path == '/scans':
@@ -218,15 +205,52 @@ def get_metadatas(path):
     else:
         raise PreventUpdate
 
+@dash.callback(
+    Output('scans-page-wire-recon-btn', 'disabled'),
+    Output('scans-page-wire-recon-btn', 'style'),
+    Output('scans-page-peakindex-btn', 'disabled'),
+    Output('scans-page-peakindex-btn', 'style'),
+    Output('scans-page-recon-index-btn-placeholder', 'disabled'),
+    Output('scans-page-recon-index-btn-placeholder', 'style'),
+    Output('scans-page-energy-kspace-btn-placeholder', 'disabled'),
+    Output('scans-page-energy-kspace-btn-placeholder', 'style'),
+    Input('metadata-table', 'selectedRows'),
+    prevent_initial_call=False,
+)
+def update_button_states(selected_rows):
+    enabled_style = {"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"}
+    disabled_style = {"backgroundColor": "#6c757d", "borderColor": "#6c757d"}
+
+    has_selection = selected_rows and len(selected_rows) > 0
+
+    if has_selection:
+        return (
+            False, enabled_style,  # New Recon
+            False, enabled_style,  # New Index
+            True, disabled_style,  # New Recon + Index (placeholder)
+            True, disabled_style,  # Energy to K-space (placeholder)
+        )
+    else:
+        return (
+            True, disabled_style,  # New Recon
+            True, disabled_style,  # New Index
+            True, disabled_style,  # New Recon + Index (placeholder)
+            True, disabled_style,  # Energy to K-space (placeholder)
+        )
+
 
 @dash.callback(
-    Output('scans-page-wire-recon', 'href'),
-    Input('metadata-table','selectedRows'),
-    State('scans-page-wire-recon', 'href'),
+    Output('url', 'href'),
+    Input('scans-page-wire-recon-btn', 'n_clicks'),
+    State('metadata-table', 'selectedRows'),
     prevent_initial_call=True,
 )
-def selected_recon_href(rows,href):
-    base_href = href.split("?")[0]
+def handle_recon_button(n_clicks, rows):
+    if not n_clicks:
+        return dash.no_update
+
+    base_href = "/create-wire-reconstruction"
+
     if not rows:
         return base_href
 
@@ -237,44 +261,47 @@ def selected_recon_href(rows,href):
         if row.get('scanNumber'):
             scan_ids.append(str(row['scanNumber']))
         else:
-            return base_href
+            return dash.no_update
 
         if row.get('aperture'):
             aperture = str(row['aperture']).lower()
             if aperture == 'none':
-                return base_href # Conflict condition: cannot be reconstructed
+                return dash.no_update
             if 'wire' in aperture:
                 any_wire_scans = True
             else:
                 any_nonwire_scans = True
-        
-            # Conflict condition: mixture of wirerecon and recon
+
             if any_wire_scans and any_nonwire_scans:
-                return base_href
+                return dash.no_update
 
     if any_nonwire_scans:
         base_href = "/create-reconstruction"
-    
-    return f"{base_href}?scan_id={','.join(scan_ids)}"
+
+    url = f"{base_href}?scan_id={','.join(scan_ids)}"
+    return url
 
 
 @dash.callback(
-    Output('scans-page-peakindex', 'href'),
-    Input('metadata-table','selectedRows'),
-    State('scans-page-peakindex', 'href'),
+    Output('url', 'href', allow_duplicate=True),
+    Input('scans-page-peakindex-btn', 'n_clicks'),
+    State('metadata-table', 'selectedRows'),
     prevent_initial_call=True,
 )
-def selected_peakindex_href(rows,href):
-    base_href = href.split("?")[0]
+def handle_peakindex_button(n_clicks, rows):
+    if not n_clicks:
+        return dash.no_update
+    
+    base_href = "/create-peakindexing"
+    
     if not rows:
         return base_href
-
+    
     scan_ids = []
-
     for row in rows:
         if row.get('scanNumber'):
             scan_ids.append(str(row['scanNumber']))
         else:
             return base_href
-
+    
     return f"{base_href}?scan_id={','.join(scan_ids)}"
