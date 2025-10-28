@@ -9,6 +9,171 @@ import os
 from dash import html, set_props
 
 
+def format_param_name(param_name):
+    """Convert param_name to display format only if it contains underscores."""
+    if '_' in param_name:
+        return param_name.replace('_', ' ').title()
+    return param_name
+
+
+def add_validation_message(validation_result, result_key, param_name, input_prefix='', custom_message=None, display_name=None):
+    """
+    Add a validation message to the validation_result dict.
+    
+    Parameters:
+    - validation_result: dict with 'errors', 'warnings', 'successes' keys
+    - result_key: which key to add to ('errors', 'warnings', or 'successes')
+    - param_name: name of the parameter (base name without prefix)
+    - input_prefix: optional prefix for the message (e.g., "Input 1: ")
+    - custom_message: optional custom message. Supports %s placeholder(s) for parameter name(s).
+    - display_name: optional custom display name or list of names for %s replacement.
+                   If not provided with %s in custom_message, auto-generated from param_name.
+    
+    Example usage:
+        # Global validation - auto-generated display name
+        add_validation_message(validation_result, 'errors', 'data_path')
+        # Adds: "Data Path is required"
+        
+        # Per-input validation - auto-generated display name
+        add_validation_message(validation_result, 'errors', 'geoFile', input_prefix='Input 1: ')
+        # Adds: "Input 1: geoFile is required"
+        
+        # Custom display name for special cases
+        add_validation_message(validation_result, 'errors', 'geoFile', 
+                              input_prefix='Input 1: ',
+                              display_name='Geometry File')
+        # Adds: "Input 1: Geometry File is required"
+        
+        # Custom message with auto-generated %s replacement
+        add_validation_message(validation_result, 'errors', 'depth_start', 
+                              input_prefix='Input 1: ',
+                              custom_message="%s must be less than Depth End")
+        # Adds: "Input 1: Depth Start must be less than Depth End"
+        
+        # Custom message with explicit display_name for %s
+        add_validation_message(validation_result, 'errors', 'depth_start', 
+                              input_prefix='Input 1: ',
+                              custom_message="%s must be positive",
+                              display_name="Depth Start Value")
+        # Adds: "Input 1: Depth Start Value must be positive"
+        
+        # Custom message with multiple %s placeholders
+        add_validation_message(validation_result, 'errors', 'depth_resolution', 
+                              input_prefix='Input 1: ',
+                              custom_message=f"%s ({depth_resolution_val} µm) must be ≤ %s ({abs(depth_span)} µm)",
+                              display_name=['Depth Resolution', 'depth range'])
+        # Adds: "Input 1: Depth Resolution (1.5 µm) must be ≤ depth range (200 µm)"
+        
+        # Custom message without %s (hard-coded display names)
+        add_validation_message(validation_result, 'errors', 'depth_start', 
+                              input_prefix='Input 1: ',
+                              custom_message="Depth Start must be less than Depth End")
+        # Adds: "Input 1: Depth Start must be less than Depth End"
+    """
+    if custom_message:
+        # Handle %s placeholder replacement in custom messages
+        if '%s' in custom_message:
+            # Determine what to use for %s replacement
+            if display_name is None:
+                # Auto-generate from param_name
+                display_name = format_param_name(param_name)
+            
+            # Perform replacement based on display_name type
+            if isinstance(display_name, (list, tuple)):
+                # Multiple %s placeholders - replace with tuple
+                message = custom_message % tuple(display_name)
+            else:
+                # Single %s placeholder - replace with string
+                message = custom_message % display_name
+        else:
+            # No %s in custom_message, use as-is
+            message = custom_message
+    else:
+        # Generate default message
+        if display_name is None:
+            display_name = format_param_name(param_name)
+        
+        if result_key == 'errors':
+            message = f"{display_name} is required"
+        elif result_key == 'warnings':
+            message = f"{display_name} is missing"
+        else:  # successes
+            message = ''
+    
+    # Prepend input_prefix to entire message
+    if input_prefix:
+        message = f"{input_prefix}{message}"
+    
+    # Append message to the list for this param_name in the appropriate result category
+    validation_result[result_key].setdefault(param_name, []).append(message)
+
+
+def validate_param_value(validation_result, parsed_params, param_name, index, input_prefix='',
+                         converter=None, required=True, display_name=None):
+    """
+    Extract, validate, and convert a parameter value from parsed_params.
+    
+    This comprehensive helper handles the complete validation pattern:
+    1. Check if param exists in parsed_params (skip if failed global validation)
+    2. Extract the value at the given index
+    3. Check if value is None/empty (if required)
+    4. Apply type conversion (if converter provided)
+    5. Add appropriate error messages
+    
+    Parameters:
+    - validation_result: dict with 'errors', 'warnings', 'successes' keys
+    - parsed_params: dict of parsed parameter lists
+    - param_name: name of the parameter to extract
+    - index: index in the parameter list
+    - input_prefix: optional prefix for the message (e.g., "Input 1: ")
+    - converter: optional function to convert the value (e.g., safe_int, safe_float)
+    - required: whether the value is required (default True)
+    - display_name: optional custom display name (if not provided, auto-generated from param_name)
+    
+    Returns:
+    - The extracted (and optionally converted) value, or None if validation failed
+    
+    Example:
+        # Auto-generated display name
+        input_prefix = f"Input {i+1}: " if num_inputs > 1 else ""
+        depth_start_val = validate_param_value(
+            validation_result, parsed_params, 'depth_start', i, input_prefix,
+            converter=safe_float
+        )
+        
+        # Custom display name for special cases
+        geo_file = validate_param_value(
+            validation_result, parsed_params, 'geoFile', i, input_prefix,
+            display_name='Geometry File'
+        )
+    """
+    # Skip if parameter failed global validation
+    if param_name not in parsed_params:
+        return None
+    
+    # Extract the value
+    value = parsed_params[param_name][index]
+    
+    # Check if value is None/empty
+    if value is None or value == '':
+        if required:
+            add_validation_message(validation_result, 'errors', param_name, input_prefix, 
+                                 display_name=display_name)
+        return None
+    
+    # Apply converter if provided
+    if converter is not None:
+        converted_value = converter(value)
+        if converted_value is None:
+            add_validation_message(validation_result, 'errors', param_name, input_prefix,
+                                 custom_message=f"{param_name} must be a valid number",
+                                 display_name=display_name)
+            return None
+        return converted_value
+    
+    return value
+
+
 def apply_validation_highlights(validation_result):
     """
     Apply field highlights based on validation results.

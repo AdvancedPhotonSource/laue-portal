@@ -20,7 +20,10 @@ from laue_portal.config import DEFAULT_VARIABLES
 from laue_portal.pages.validation_helpers import (
     apply_validation_highlights,
     update_validation_alerts,
+    add_validation_message,
     safe_float,
+    safe_int,
+    validate_param_value,
     validate_numeric_range,
     validate_file_exists,
     validate_directory_exists
@@ -32,9 +35,6 @@ from laue_portal.pages.callback_registrars import (
 )
 from srange import srange
 import laue_portal.database.session_utils as session_utils
-import re
-from difflib import SequenceMatcher
-from itertools import combinations
 
 logger = logging.getLogger(__name__)
 
@@ -176,9 +176,12 @@ def validate_wire_reconstruction_inputs(ctx):
             'successes': dict mapping param_name to empty string (for params that passed)
         }
     """
-    errors = {}
-    warnings = {}
-    successes = {}
+    # Initialize validation result dict
+    validation_result = {
+        'errors': {},
+        'warnings': {},
+        'successes': {}
+    }
     # Dictionary to store parsed parameter lists
     parsed_params = {}
     
@@ -226,12 +229,13 @@ def validate_wire_reconstruction_inputs(ctx):
     
     # Validate root_path directory exists
     if not root_path:
-        errors.setdefault('root_path', []).append("Root path is required")
+        add_validation_message(validation_result, 'errors', 'root_path')
     elif not os.path.exists(root_path):
-        errors.setdefault('root_path', []).append(f"Root path directory does not exist: {root_path}")
+        add_validation_message(validation_result, 'errors', 'root_path', 
+                              custom_message="Root Path does not exist")
     else: #Added to pass over in later loop over all_params
         parsed_params['root_path'] = root_path
-        successes['root_path'] = ''
+        add_validation_message(validation_result, 'successes', 'root_path')
     
     # Parse data_path first to determine number of scans
     try:
@@ -239,22 +243,18 @@ def validate_wire_reconstruction_inputs(ctx):
         num_inputs = len(data_path_list)
         parsed_params['data_path'] = data_path_list
     except ValueError as e:
-        errors.setdefault('data_path', []).append(f"Data path parsing error: {str(e)}")
+        add_validation_message(validation_result, 'errors', 'data_path', 
+                              custom_message=f"Data Path parsing error: {str(e)}")
         # Close session before early return
         session.close()
         # Return early since we can't validate other parameters without knowing num_inputs
-        validation_result = {
-            'errors': errors,
-            'warnings': warnings,
-            'successes': successes
-        }
         return validation_result
     
     # Check data_path separately since we already parsed it
     if not data_path:
-        errors.setdefault('data_path', []).append("Data path is required")
+        add_validation_message(validation_result, 'errors', 'data_path')
     else:
-        successes['data_path'] = ''
+        add_validation_message(validation_result, 'successes', 'data_path')
     
     # Validate all other parameters by iterating over all_params    
     for param_name, param_value in all_params.items():
@@ -275,10 +275,10 @@ def validate_wire_reconstruction_inputs(ctx):
         if is_missing:
             # Special case for scanNumber: only warning, not error
             if param_name == 'scanNumber':
-                warnings.setdefault(param_name, []).append("Scan Number is missing") #warnings.append(f"{param_name.replace('_', ' ').title()} is missing")
+                add_validation_message(validation_result, 'warnings', param_name, display_name="Scan Number")
                 continue  # Skip parsing
             else:
-                errors.setdefault(param_name, []).append(f"{param_name.replace('_', ' ').title()} is required")
+                add_validation_message(validation_result, 'errors', param_name)
                 continue  # Skip parsing if missing
         
         # Check 2: Parse the parameter
@@ -287,19 +287,23 @@ def validate_wire_reconstruction_inputs(ctx):
         except ValueError as e:
             # Special case for scanNumber: only warning, not error
             if param_name == 'scanNumber':
-                warnings.setdefault(param_name, []).append(f"{param_name} parsing error: {str(e)}")
+                add_validation_message(validation_result, 'warnings', param_name, 
+                                     custom_message=f"Scan Number parsing error: {str(e)}")
                 continue  # Skip length check
             else:
-                errors.setdefault(param_name, []).append(f"{param_name} parsing error: {str(e)}")
+                add_validation_message(validation_result, 'errors', param_name, 
+                                     custom_message=f"%s parsing error: {str(e)}")
                 continue  # Skip length check if parsing failed
         
         # Check 3: Verify length matches num_inputs
         if len(parsed_list) != num_inputs:
             # Special case for scanNumber: only warning, not error
             if param_name == 'scanNumber':
-                warnings.setdefault(param_name, []).append(f"{param_name} count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
+                add_validation_message(validation_result, 'warnings', param_name, 
+                                     custom_message=f"Scan Number count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
             else:
-                errors.setdefault(param_name, []).append(f"{param_name} count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
+                add_validation_message(validation_result, 'errors', param_name, 
+                                     custom_message=f"%s count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
         
         # Store the parsed list in the dictionary
         parsed_params[param_name] = parsed_list
@@ -308,215 +312,230 @@ def validate_wire_reconstruction_inputs(ctx):
     for i in range(num_inputs):
         input_prefix = f"Input {i+1}: " if num_inputs > 1 else ""
         
-        # Initialize depth_span as None (will be calculated if both start and end are valid)
-        depth_span = None
-        
-        # 1. Validate depth parameters for this input
-        # Check if depth_start is None (only needs depth_start to be valid)
-        if 'depth_start' not in errors:
-            current_depth_start = parsed_params['depth_start'][i]
-            if not current_depth_start:
-                errors.setdefault('depth_start', []).append(f"{input_prefix}Depth start is required")
-            depth_start_val = safe_float(current_depth_start)
-            if depth_start_val is None:  # Failed conversion (not just empty)
-                errors.setdefault('depth_start', []).append(f"{input_prefix}Depth start must be a valid number")
-        
-        # Check if depth_end is None (only needs depth_end to be valid)
-        if 'depth_end' not in errors:
-            current_depth_end = parsed_params['depth_end'][i]
-            if not current_depth_end:
-                errors.setdefault('depth_end', []).append(f"{input_prefix}Depth end is required")
-            depth_end_val = safe_float(current_depth_end)
-            if depth_end_val is None:  # Failed conversion (not just empty)
-                errors.setdefault('depth_end', []).append(f"{input_prefix}Depth end must be a valid number")
-        
-        # Check if depth_resolution is None (only needs depth_resolution to be valid)
-        if 'depth_resolution' not in errors:
-            current_depth_resolution = parsed_params['depth_resolution'][i]
-            if not current_depth_resolution:
-                errors.setdefault('depth_resolution', []).append(f"{input_prefix}Depth resolution is required")
-            depth_resolution_val = safe_float(current_depth_resolution)
-            if depth_resolution_val is None:  # Failed conversion (not just empty)
-                errors.setdefault('depth_resolution', []).append(f"{input_prefix}Depth resolution must be a valid number")
-        
-        # Check start < end (needs BOTH depth_start AND depth_end to be valid)
-        if 'depth_start' not in errors and 'depth_end' not in errors:
-            if depth_start_val is not None and depth_end_val is not None:
-                if depth_start_val >= depth_end_val:
-                    errors.setdefault('depth_start', []).append(f"{input_prefix}Depth Start must be less than Depth End")
-                    errors.setdefault('depth_end', []).append(f"{input_prefix}Depth Start must be less than Depth End")
+        # 1. Check if data files exist for this input (skip if root_path or data_path invalid)
+        if 'root_path' not in validation_result['errors'] and 'data_path' not in validation_result['errors']:
+            current_data_path = validate_param_value(
+                validation_result, parsed_params, 'data_path', i, input_prefix
+            )
+            if current_data_path is not None:
+                current_full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
                 
-                # Calculate depth_span once (used in multiple checks below)
-                depth_span = depth_end_val - depth_start_val
-                
-                # Warning: large depth range (only needs depth_start and depth_end)
-                if depth_span > 500:
-                    if 'depth_start' not in errors:
-                        warnings.setdefault('depth_start', []).append(f"{input_prefix}Total depth range ({depth_span} µm) is large (> 500 µm)")
-                    if 'depth_end' not in errors:
-                        warnings.setdefault('depth_end', []).append(f"{input_prefix}Total depth range ({depth_span} µm) is large (> 500 µm)")
-        
-        # Check resolution value (only needs depth_resolution to be valid)
-        if 'depth_resolution' not in errors:
-            if depth_resolution_val is not None:
-                # Error: resolution must be positive
-                if depth_resolution_val <= 0:
-                    errors.setdefault('depth_resolution', []).append(f"{input_prefix}Depth Resolution must be positive")
-                # Warning: resolution too small
-                elif depth_resolution_val < 0.1:
-                    warnings.setdefault('depth_resolution', []).append(f"{input_prefix}Depth Resolution ({depth_resolution_val} µm) is very small (< 0.1 µm)")
-        
-        # Check resolution < range (needs ALL THREE to be valid)
-        if depth_span is not None:
-            if 'depth_resolution' not in errors and depth_resolution_val is not None:
-                # Check if resolution is less than range
-                if depth_resolution_val > abs(depth_span):
-                    errors.setdefault('depth_start', []).append(f"{input_prefix}Depth Resolution ({depth_resolution_val} µm) must be less than or equal to depth range ({abs(depth_span)} µm)")
-                    errors.setdefault('depth_end', []).append(f"{input_prefix}Depth Resolution ({depth_resolution_val} µm) must be less than or equal to depth range ({abs(depth_span)} µm)")
-                    errors.setdefault('depth_resolution', []).append(f"{input_prefix}Depth Resolution ({depth_resolution_val} µm) must be less than or equal to depth range ({abs(depth_span)} µm)")
-        
-        # 2. Validate percent_brightest for this input
-        if 'percent_brightest' not in errors:
-            current_percent = parsed_params['percent_brightest'][i]
-            if not current_percent:
-                errors.setdefault('percent_brightest', []).append(f"{input_prefix}Intensity percentile is required")
-            percent_val = safe_float(current_percent)
-            if percent_val is not None:
-                if percent_val <= 0 or percent_val > 100:
-                    errors.setdefault('percent_brightest', []).append(f"{input_prefix}Intensity percentile must be between 0 and 100")
-        
-        # 3. Check if geometry file exists for this input (skip if root_path invalid)
-        if 'root_path' not in errors and 'geoFile' not in errors:
-            current_geoFile = parsed_params['geoFile'][i]
-            if not current_geoFile:
-                errors.setdefault('geoFile', []).append(f"{input_prefix}Geometry file is required")
-            else:
-                full_geo_path = os.path.join(root_path, current_geoFile.lstrip('/'))
-                if not os.path.exists(full_geo_path):
-                    errors.setdefault('geoFile', []).append(f"{input_prefix}Geometry file not found: {current_geoFile}")
-        
-        # 4. Check if output folder already exists for this input (skip if root_path invalid)
-        # Note: We cannot validate this properly if outputFolder contains %d placeholders
-        # because we don't know the scan number or wirerecon_id at validation time.
-        # This check is skipped if %d is present in the path.
-        if 'root_path' not in errors and 'outputFolder' not in errors:
-            current_outputFolder = parsed_params['outputFolder'][i]
-            if not current_outputFolder:
-                errors.setdefault('outputFolder', []).append(f"{input_prefix}Output folder is required")
-            elif root_path and '%d' not in current_outputFolder:
-                full_output_path = os.path.join(root_path, current_outputFolder.lstrip('/'))
-                if os.path.exists(full_output_path):
-                    if 'outputFolder' not in errors:
-                        warnings.setdefault('outputFolder', []).append(f"{input_prefix}Output folder already exists: {current_outputFolder}")
-        
-        # 5. Check if data files exist for this input (skip if root_path invalid)
-        if 'root_path' not in errors and 'data_path' not in errors:
-            current_data_path = parsed_params['data_path'][i]
-            current_full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
-            
-            # Check if directory exists
-            if not os.path.exists(current_full_data_path):
-                errors.setdefault('data_path', []).append(f"{input_prefix}Data directory not found: {current_data_path}")
-            else:
-                # Validate scanNumber against Catalog table (after confirming directory exists)
-                if 'scanNumber' not in errors and all_params.get('scanNumber') and 'scanNumber' in parsed_params:
-                    try:
-                        scan_num_int = int(parsed_params['scanNumber'][i])
-                        
-                        # Get catalog data for this scan
-                        catalog_data = get_catalog_data(session, scan_num_int, root_path, CATALOG_DEFAULTS)
-                        
-                        if catalog_data and catalog_data.get('data_path'):
-                            catalog_full_data_path = os.path.join(root_path, catalog_data['data_path'].lstrip('/'))
-                            if catalog_full_data_path != current_full_data_path:
-                                warnings.setdefault('data_path', []).append(
-                                    f"{input_prefix}Catalog entry for scan {scan_num_int} has path ({catalog_data['data_path']}) "
-                                    f"that differs from specified data path ({current_data_path})"
-                                )
-                        else:
-                            # No catalog entry found for this scan number
-                            warnings.setdefault('scanNumber', []).append(
-                                f"{input_prefix}No catalog entry found for scan {scan_num_int}"
-                            )
-                    except (ValueError, TypeError, IndexError):
-                        pass  # Already handled in scanNumber validation
-                
-                # Check if directory contains any files
-                all_files = [f for f in os.listdir(current_full_data_path) if os.path.isfile(os.path.join(current_full_data_path, f))]
-                if not all_files:
-                    errors.setdefault('data_path', []).append(f"{input_prefix}Data directory contains no files: {current_data_path}")
+                # Check if directory exists
+                if not os.path.exists(current_full_data_path):
+                    add_validation_message(validation_result, 'errors', 'data_path', input_prefix, 
+                                         custom_message="Data Path directory not found")
                 else:
-                    # Only check filename prefix if it passed global validation
-                    if 'filenamePrefix' not in errors:
-                        # Parse filename prefix
-                        current_filename_prefix_str = parsed_params['filenamePrefix'][i]
-                        current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
-                        
-                        # Check for actual files using glob - pinpoint which field has the error
-                        for current_filename_prefix_i in current_filename_prefix:
-                            # Check if ANY files match this prefix pattern (without scan point substitution)
-                            prefix_pattern = os.path.join(current_full_data_path, current_filename_prefix_i.replace('%d', '*'))
-                            prefix_matches = glob.glob(prefix_pattern + '*')
+                    # Validate scanNumber against Catalog table (after confirming directory exists)
+                    current_scanNumber = validate_param_value(
+                        validation_result, parsed_params, 'scanNumber', i, input_prefix,
+                        required=False, display_name="Scan Number"
+                    )
+                    if current_scanNumber is not None:
+                        try:
+                            scan_num_int = int(current_scanNumber)
                             
-                            if not prefix_matches:
-                                errors.setdefault('filenamePrefix', []).append(f"{input_prefix}No files match prefix pattern: {current_filename_prefix_i}")
+                            # Get catalog data for this scan
+                            catalog_data = get_catalog_data(session, scan_num_int, root_path, CATALOG_DEFAULTS)
+                            
+                            if catalog_data and catalog_data.get('data_path'):
+                                catalog_full_data_path = os.path.join(root_path, catalog_data['data_path'].lstrip('/'))
+                                if catalog_full_data_path != current_full_data_path:
+                                    add_validation_message(
+                                        validation_result, 'warnings', 'data_path', input_prefix,
+                                        custom_message=f"Catalog entry for Scan Number {scan_num_int} has different path ({catalog_data['data_path']})"
+                                    )
                             else:
-                                # Check specific scan points (only if scanPoints passed global validation)
-                                if 'scanPoints' not in errors:
-                                    current_scanPoints = parsed_params['scanPoints'][i]
-                                    
-                                    try:
-                                        scanPoints_srange = srange(current_scanPoints)
-                                        scanPoint_nums = scanPoints_srange.list()
-                                    except Exception as e:
-                                        errors.setdefault('scanPoints', []).append(f"{input_prefix}Invalid scan points format: {current_scanPoints}")
-                                        continue
-                                    
-                                    # Collect missing scan points for this prefix
-                                    missing_scanpoints = []
-                                    for scanPoint_num in scanPoint_nums:
-                                        file_str = current_filename_prefix_i % scanPoint_num if '%d' in current_filename_prefix_i else current_filename_prefix_i
-                                        scanpoint_pattern = os.path.join(current_full_data_path, file_str)
-                                        scanpoint_matches = glob.glob(scanpoint_pattern + '*')
+                                # No catalog entry found for this scan number
+                                add_validation_message(
+                                    validation_result, 'warnings', 'scanNumber', input_prefix,
+                                    custom_message=f"Catalog entry not found for Scan Number {scan_num_int}"
+                                )
+                        except (ValueError, TypeError):
+                            add_validation_message(
+                                validation_result, 'warnings', 'scanNumber', input_prefix,
+                                custom_message="Scan Number is not a valid integer"
+                            )
+                    
+                    # Check if directory contains any files
+                    all_files = [f for f in os.listdir(current_full_data_path) if os.path.isfile(os.path.join(current_full_data_path, f))]
+                    if not all_files:
+                        add_validation_message(validation_result, 'errors', 'data_path', input_prefix, 
+                                             custom_message="Data Path directory contains no files")
+                    else:
+                        # Get filename prefix
+                        current_filename_prefix_str = validate_param_value(
+                            validation_result, parsed_params, 'filenamePrefix', i, input_prefix,
+                            display_name="Filename Prefix"
+                        )
+                        if current_filename_prefix_str is not None:
+                            current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
+                            
+                            # Check for actual files using glob - pinpoint which field has the error
+                            for current_filename_prefix_i in current_filename_prefix:
+                                # Check if ANY files match this prefix pattern (without scan point substitution)
+                                prefix_pattern = os.path.join(current_full_data_path, current_filename_prefix_i.replace('%d', '*'))
+                                prefix_matches = glob.glob(prefix_pattern + '*')
+                                
+                                if not prefix_matches:
+                                    add_validation_message(validation_result, 'errors', 'filenamePrefix', input_prefix, 
+                                                         custom_message=f"No files match Filename prefix pattern '{current_filename_prefix_i}'")
+                                else:
+                                    # Get scan points
+                                    current_scanPoints = validate_param_value(
+                                        validation_result, parsed_params, 'scanPoints', i, input_prefix,
+                                        display_name="Scan Points"
+                                    )
+                                    if current_scanPoints is not None:
+                                        try:
+                                            scanPoints_srange = srange(current_scanPoints)
+                                            scanPoint_nums = scanPoints_srange.list()
+                                        except Exception as e:
+                                            add_validation_message(validation_result, 'errors', 'scanPoints', input_prefix, 
+                                                                 custom_message="Scan Points entry has invalid format")
+                                            continue
                                         
-                                        if not scanpoint_matches:
-                                            missing_scanpoints.append(str(scanPoint_num))
-                                    
-                                    # If there are missing scan points, add a single error message for this prefix
-                                    if missing_scanpoints:
-                                        # Limit the number of scan points shown
-                                        if len(missing_scanpoints) <= 5:
-                                            scanpoints_str = ", ".join(missing_scanpoints)
-                                        else:
-                                            scanpoints_str = ", ".join(missing_scanpoints[:5]) + f", ... and {len(missing_scanpoints) - 5} more"
+                                        # Collect missing scan points for this prefix
+                                        missing_scanpoints = []
+                                        for scanPoint_num in scanPoint_nums:
+                                            file_str = current_filename_prefix_i % scanPoint_num if '%d' in current_filename_prefix_i else current_filename_prefix_i
+                                            scanpoint_pattern = os.path.join(current_full_data_path, file_str)
+                                            scanpoint_matches = glob.glob(scanpoint_pattern + '*')
+                                            
+                                            if not scanpoint_matches:
+                                                missing_scanpoints.append(str(scanPoint_num))
                                         
-                                        errors.setdefault('scanPoints', []).append(
-                                            f"{input_prefix}Missing files for {current_filename_prefix_i} (scan points: {scanpoints_str})"
-                                        )
+                                        # If there are missing scan points, add a single error message for this prefix
+                                        if missing_scanpoints:
+                                            # Limit the number of scan points shown
+                                            if len(missing_scanpoints) <= 5:
+                                                scanpoints_str = ", ".join(missing_scanpoints)
+                                            else:
+                                                scanpoints_str = ", ".join(missing_scanpoints[:5]) + f", ... and {len(missing_scanpoints) - 5} more"
+                                            
+                                            add_validation_message(
+                                                validation_result, 'errors', 'scanPoints', input_prefix,
+                                                custom_message=f"Missing files for Filename prefix '{current_filename_prefix_i}' (Scan Points: {scanpoints_str})"
+                                            )
         
-        # 6. Validate scanNumber: check that entry is a valid integer
-        if 'scanNumber' not in errors and 'scanNumber' in parsed_params:
+        # 2. Validate scanNumber: check that entry is a valid integer
+        if 'scanNumber' not in validation_result['errors'] and 'scanNumber' in parsed_params:
             current_scanNumber = parsed_params['scanNumber'][i]
             try:
                 current_scanNumber.isdigit()
             except (ValueError, TypeError):
-                if 'scanNumber' not in errors:
-                    warnings.setdefault('scanNumber', []).append(f"{input_prefix}Scan number is not a valid integer: {current_scanNumber}")
+                add_validation_message(
+                    validation_result, 'warnings', 'scanNumber', input_prefix,
+                    custom_message="Scan Number is not a valid integer"
+                    )
+        
+        # 3. Check if output folder already exists for this input (skip if root_path invalid)
+        # Note: We cannot validate this properly if outputFolder contains %d placeholders
+        # because we don't know the scan number or wirerecon_id at validation time.
+        # This check is skipped if %d is present in the path.
+        current_outputFolder = validate_param_value(
+            validation_result, parsed_params, 'outputFolder', i, input_prefix,
+            display_name="Output Folder"
+        )
+        if current_outputFolder is not None:
+            if 'root_path' not in validation_result['errors']:
+                if '%d' not in current_outputFolder:
+                    full_output_path = os.path.join(root_path, current_outputFolder.lstrip('/'))
+                    if os.path.exists(full_output_path):
+                        add_validation_message(validation_result, 'warnings', 'outputFolder', input_prefix, 
+                                             custom_message="Output Folder already exists")
+        
+        # 4. Check if geometry file exists for this input (skip if root_path invalid)
+        current_geoFile = validate_param_value(
+            validation_result, parsed_params, 'geoFile', i, input_prefix,
+            display_name="Geometry File"
+        )
+        if current_geoFile is not None:
+            if 'root_path' not in validation_result['errors']:
+                full_geo_path = os.path.join(root_path, current_geoFile.lstrip('/'))
+                if not os.path.exists(full_geo_path):
+                    add_validation_message(validation_result, 'errors', 'geoFile', input_prefix, 
+                                         custom_message="Geometry File not found")
+        
+        # 5. Validate depth parameters for this input using the universal helper
+        depth_start_val = validate_param_value(
+            validation_result, parsed_params, 'depth_start', i, input_prefix,
+            converter=safe_float
+        )
+        
+        depth_end_val = validate_param_value(
+            validation_result, parsed_params, 'depth_end', i, input_prefix,
+            converter=safe_float
+        )
+        
+        depth_resolution_val = validate_param_value(
+            validation_result, parsed_params, 'depth_resolution', i, input_prefix,
+            converter=safe_float
+        )
+        
+        # Initialize depth_span as None (will be calculated if both start and end are valid)
+        depth_span = None
+
+        # Check start < end (only if both values are valid)
+        if depth_start_val is not None and depth_end_val is not None:
+            if depth_start_val >= depth_end_val:
+                add_validation_message(validation_result, 'errors', 'depth_start', input_prefix, 
+                                     custom_message="Depth Start must be less than Depth End")
+                add_validation_message(validation_result, 'errors', 'depth_end', input_prefix, 
+                                     custom_message="Depth Start must be less than Depth End")
+            
+            # Calculate depth_span once (used in multiple checks below)
+            depth_span = depth_end_val - depth_start_val
+            
+            # Warning: large depth range
+            if depth_span > 500:
+                add_validation_message(validation_result, 'warnings', 'depth_start', input_prefix, 
+                                     custom_message=f"Total depth range ({depth_span} µm) is large (> 500 µm)")
+                add_validation_message(validation_result, 'warnings', 'depth_end', input_prefix, 
+                                     custom_message=f"Total depth range ({depth_span} µm) is large (> 500 µm)")
+        
+        # Check resolution value (only needs depth_resolution to be valid)
+        if depth_resolution_val is not None:
+            # Error: resolution must be positive
+            if depth_resolution_val <= 0:
+                add_validation_message(validation_result, 'errors', 'depth_resolution', input_prefix, 
+                                     custom_message="Depth Resolution must be positive")
+            # Warning: resolution too small
+            elif depth_resolution_val < 0.1:
+                add_validation_message(validation_result, 'warnings', 'depth_resolution', input_prefix, 
+                                     custom_message=f"Depth Resolution ({depth_resolution_val} µm) is very small (< 0.1 µm)")
+            
+            # Check resolution < range (needs ALL THREE to be valid, and no prior errors on depth_resolution)
+            if 'depth_resolution' not in validation_result['errors']:
+                if depth_span is not None:
+                    # Check if resolution is less than range
+                    if depth_resolution_val > abs(depth_span):
+                        add_validation_message(validation_result, 'errors', 'depth_start', input_prefix, 
+                                             custom_message=f"Depth Start: resolution ({depth_resolution_val} µm) must be ≤ depth range ({abs(depth_span)} µm)")
+                        add_validation_message(validation_result, 'errors', 'depth_end', input_prefix, 
+                                             custom_message=f"Depth End: resolution ({depth_resolution_val} µm) must be ≤ depth range ({abs(depth_span)} µm)")
+                        add_validation_message(validation_result, 'errors', 'depth_resolution', input_prefix, 
+                                             custom_message=f"Depth Resolution ({depth_resolution_val} µm) must be ≤ depth range ({abs(depth_span)} µm)")
+        
+        # 6. Validate percent_brightest for this input
+        percent_val = validate_param_value(
+            validation_result, parsed_params, 'percent_brightest', i, input_prefix,
+            converter=safe_float, display_name="Intensity Percentile"
+        )
+        if percent_val is not None:
+            if percent_val <= 0 or percent_val > 100:
+                add_validation_message(validation_result, 'errors', 'percent_brightest', input_prefix, 
+                                     custom_message="Intensity Percentile must be between 0 and 100")
+        
     
     # Add successes for parameters that passed all validations
     # Only add to successes if the parameter has neither errors nor warnings
     for param_name in all_field_ids:
-        if param_name not in errors and param_name not in warnings:
-            successes[param_name] = ''
+        if param_name not in validation_result['errors'] and param_name not in validation_result['warnings']:
+            add_validation_message(validation_result, 'successes', param_name)
     
     # Close database session
     session.close()
     
-    validation_result = {
-        'errors': errors,
-        'warnings': warnings,
-        'successes': successes
-    }
     return validation_result
 
 
