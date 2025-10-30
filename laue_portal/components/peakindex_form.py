@@ -13,20 +13,18 @@ peakindex_form = dbc.Row(
                                 dbc.Row(
                                         [
                                             dbc.Col(
-                                                dbc.InputGroup(
-                                                    [
-                                                        dbc.InputGroupText("ID Number: SN# | WR# | MR# | PI#"),
-                                                        dbc.Input(id="IDnumber", type="text", placeholder="e.g. SN123456 or WR1 or MR3 or PI4"),
-                                                    ],
-                                                    className="w-100",            # input group spans the col
-                                                ),
+                                                _field("ID Number: SN# | WR# | MR# | PI#", "IDnumber",
+                                                        kwargs={
+                                                            "type": "text",
+                                                            "placeholder": "e.g. SN123456 or WR1 or MR3 or PI4",
+                                                        }),
                                                 className="flex-grow-1",          # THIS makes it expand
                                                 style={"minWidth": 0},            # avoid overflow when very narrow
                                             ),
                                             dbc.Col(
                                                 dbc.Button(
                                                     "Update path fields",
-                                                    id="update-path-fields-btn",
+                                                    id="peakindex-update-path-fields-btn",
                                                     color="secondary",
                                                     size="md",
                                                     style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size
@@ -56,26 +54,18 @@ peakindex_form = dbc.Row(
                                 
                                 dbc.Row(
                                     [
-                                        
                                         dbc.Col(
                                             html.Div(
                                                 [
-                                                    dbc.InputGroup(
-                                                        [
-                                                            dbc.InputGroupText("Filename"),
-                                                            dbc.Input(
-                                                                id="filenamePrefix",
-                                                                type="text",
-                                                                placeholder="e.g. Si_%d.h5 or Si_*%d.h5",
-                                                                list="filename-templates",  # link to datalist below
-                                                                
-                                                            ),
-                                                        ],
-                                                        className="w-100",
-                                                    ),
+                                                    _field("Filename", "filenamePrefix",
+                                                            kwargs={
+                                                                "type": "text",
+                                                                "placeholder": "e.g. Si_%d.h5 or Si_*%d.h5",
+                                                                "list": "peakindex-filename-templates",  # link to datalist below
+                                                            }),
                                                     # just as example
                                                     html.Datalist(
-                                                        id="filename-templates",
+                                                        id="peakindex-filename-templates",
                                                         children=[
                                                                 html.Option(value="Si1_PE2_%d.h5",    label="Si1_PE2_%d.h5   (files 1–245)"),
                                                                 html.Option(value="Si1_Eiger1_%d.h5", label="Si1_Eiger1_%d.h5 (files 3–198)"),
@@ -87,11 +77,10 @@ peakindex_form = dbc.Row(
                                             className="flex-grow-1",
                                             style={"minWidth": 0},
                                         ),
-
                                         dbc.Col(
                                             dbc.Button(
-                                                "Update from folder",
-                                                id="check-filenames-btn",
+                                                "Find file names",
+                                                id="peakindex-check-filenames-btn",
                                                 color="secondary",
                                                 size="md",
                                                 style={"minWidth": "220px", "whiteSpace": "nowrap"},
@@ -108,33 +97,27 @@ peakindex_form = dbc.Row(
                                 dbc.Row(
                                         [
                                             dbc.Col(
-                                                dbc.InputGroup(
-                                                    [
-                                                        dbc.InputGroupText("Scan indices"),
-                                                        dbc.Input(id="scanPoints", type="text", size = "md", placeholder="e.g. 1-10 or 1,5,8,9 or 1-4,10-21"),
-                                                    ],
-                                                    className="w-100",            # input group spans the col
-                                                ),
+                                                _field("Scan indices", "scanPoints", size='md',
+                                                        kwargs={
+                                                            "type": "text",
+                                                            "placeholder": "e.g. 1-10 or 1,5,8,9 or 1-4,10-21",
+                                                        }),
                                                 className="flex-grow-1",          # THIS makes it expand
                                                 style={"minWidth": 0},            # avoid overflow when very narrow
                                             ),
-                                            
                                             dbc.Col(
-                                                dbc.InputGroup(
-                                                    [
-                                                        dbc.InputGroupText("Depth indices"),
-                                                        dbc.Input(id="depthRange", type="text", size = "md", placeholder="e.g. 1-10 or 1,5,8,9 or 1-4,10-21"),
-                                                    ],
-                                                    className="w-100",            # input group spans the col
-                                                ),
+                                                _field("Depth indices", "depthRange", size='md',
+                                                        kwargs={
+                                                            "type": "text",
+                                                            "placeholder": "e.g. 1-10 or 1,5,8,9 or 1-4,10-21",
+                                                        }),
                                                 className="flex-grow-1",          # THIS makes it expand
                                                 style={"minWidth": 0},            # avoid overflow when very narrow
                                             ),
-
                                             dbc.Col(
                                                 dbc.Button(
                                                     "Load indices from file",
-                                                    id="load-file-indices-btn",
+                                                    id="peakindex-load-file-indices-btn",
                                                     color="secondary",
                                                     size="md",
                                                     style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size
@@ -159,24 +142,21 @@ peakindex_form = dbc.Row(
                                 dbc.Row(
                                     [
                                         dbc.Col(
-                                            dbc.InputGroup(
-                                                [
-                                                    dbc.InputGroupText("Geometry File"),
-                                                    dbc.Input(id="geoFile", type="text", size="md", placeholder=""),
-                                                ],
-                                                className="w-100",
-                                            ),
+                                            _field("Geometry File", "geoFile", size='md',
+                                                    kwargs={
+                                                        "type": "text",
+                                                        "placeholder": "",
+                                                    }),
                                             className="flex-grow-1",
                                             style={"minWidth": 150},
                                         ),
-
                                         dbc.Col(
                                             dbc.Row(
                                                 [
                                                     dbc.Col(
                                                         dbc.Button(
                                                             "Load default",
-                                                            id="load-default-geo-btn",
+                                                            id="peakindex-load-default-geo-btn",
                                                             color="secondary",
                                                             size="md",
                                                             style={"minWidth": "120px", "whiteSpace": "nowrap"},
@@ -186,7 +166,7 @@ peakindex_form = dbc.Row(
                                                     dbc.Col(
                                                         dbc.Button(
                                                             "Load...",
-                                                            id="load-from-geo-btn",
+                                                            id="peakindex-load-from-geo-btn",
                                                             color="secondary",
                                                             size="md",
                                                             style={"minWidth": "120px", "whiteSpace": "nowrap"},
@@ -196,7 +176,7 @@ peakindex_form = dbc.Row(
                                                     dbc.Col(
                                                         dbc.Button(
                                                             "Edit",
-                                                            id="edit-modify-params-btn",
+                                                            id="peakindex-edit-modify-params-btn",
                                                             color="secondary",
                                                             size="md",
                                                             style={"minWidth": "120px", "whiteSpace": "nowrap"},
@@ -302,20 +282,18 @@ peakindex_form = dbc.Row(
                                 dbc.Row(
                                         [
                                             dbc.Col(
-                                                dbc.InputGroup(
-                                                    [
-                                                        dbc.InputGroupText("Mask File"),
-                                                        dbc.Input(id="maskFile", type="text", placeholder=""),
-                                                    ],
-                                                    className="w-100",            # input group spans the col
-                                                ),
+                                                _field("Mask File", "maskFile",
+                                                        kwargs={
+                                                            "type": "text",
+                                                            "placeholder": "",
+                                                        }),
                                                 className="flex-grow-1",          # THIS makes it expand
                                                 style={"minWidth": 0},            # avoid overflow when very narrow
                                             ),
                                             dbc.Col(
                                                 dbc.Button(
                                                     "Load...",
-                                                    id="load-mask-file-btn",
+                                                    id="peakindex-load-mask-file-btn",
                                                     color="secondary",
                                                     size="md",
                                                     style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size
@@ -385,20 +363,18 @@ peakindex_form = dbc.Row(
                                 dbc.Row(
                                         [
                                             dbc.Col(
-                                                dbc.InputGroup(
-                                                    [
-                                                        dbc.InputGroupText("Crystal Structure File"),
-                                                        dbc.Input(id="crystFile", type="text", placeholder=""),
-                                                    ],
-                                                    className="w-100",            # input group spans the col
-                                                ),
+                                                _field("Crystal Structure File", "crystFile",
+                                                        kwargs={
+                                                            "type": "text",
+                                                            "placeholder": "",
+                                                        }),
                                                 className="flex-grow-1",          # THIS makes it expand
                                                 style={"minWidth": 0},            # avoid overflow when very narrow
                                             ),
                                             dbc.Col(
                                                 dbc.Button(
                                                     "Load...",
-                                                    id="load-cryst-file-btn",
+                                                    id="peakindex-load-cryst-file-btn",
                                                     color="secondary",
                                                     size="md",
                                                     style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size

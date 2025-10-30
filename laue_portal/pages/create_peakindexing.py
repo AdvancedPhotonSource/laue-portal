@@ -13,13 +13,28 @@ import laue_portal.database.db_schema as db_schema
 import laue_portal.components.navbar as navbar
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix, parse_parameter
 from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
+from laue_portal.components.form_base import _field
+from laue_portal.components.validation_alerts import validation_alerts
 from laue_portal.processing.redis_utils import enqueue_peakindexing, STATUS_REVERSE_MAPPING
 from laue_portal.config import DEFAULT_VARIABLES
+from laue_portal.pages.validation_helpers import (
+    apply_validation_highlights,
+    update_validation_alerts,
+    add_validation_message,
+    safe_float,
+    safe_int,
+    validate_param_value,
+    validate_numeric_range,
+    validate_file_exists,
+    validate_directory_exists
+)
+from laue_portal.pages.callback_registrars import (
+    register_update_path_fields_callback,
+    register_load_file_indices_callback,
+    register_check_filenames_callback
+)
 from srange import srange
 import laue_portal.database.session_utils as session_utils
-import re
-from difflib import SequenceMatcher
-from itertools import combinations
 
 logger = logging.getLogger(__name__)
 
@@ -114,11 +129,10 @@ layout = dbc.Container(
             color="success",
         ),
         html.Hr(),
-        
         dbc.Row(
                 [
                     dbc.Col(
-                        html.H3(id="peakindex-title", children="New peak indexing"),
+                        html.H3(id="peakindex-title", children="New Peak Indexing"),
                         width="auto",   # shrink to content
                     ),
                     dbc.Col(
@@ -157,67 +171,14 @@ layout = dbc.Container(
                 align="center",       # CENTER vertically
             ),
         html.Hr(),
-    
+        validation_alerts,
         dbc.Row([
                 dbc.Col(
-                    dbc.Alert([
-                                html.H4("Validate status: Warning !", className="alert-heading"),
-                                html.Hr(),
-                                html.P("Press button Validate! or Some parameter (which one) seems to be too big! Better check it! ", className="mb-0"),
-                            ],
-                            color="warning",  # <- set the color here
-                    ),
-                ),
-                ],
-                className="g-0",            # g-0 removes row gutters
-                align="center",
-        ),
-        ######## Below are other examples of the Alert 
-        # this is just example  but it should be changable to something like that if Error
-        dbc.Row([
-                dbc.Col(
-                    dbc.Alert([
-                                html.H4("Validate status: Error !", className="alert-heading"),
-                                html.Hr(),
-                                html.P("Check your file inputs! or check Peak Search parameters! or Check Index Parameters!", className="mb-0"),
-                            ],
-                            color="danger",  # <- set the color here
-                    ),
-                ),
-        
-                ],
-                className="g-0",            # g-0 removes row gutters
-                align="center",
-        ),
-        # this is just example  but it should be changable to something like that if Success
-        dbc.Row([
-                dbc.Col(
-                    dbc.Alert([
-                                html.H4("Validate status: Success !", className="alert-heading"),
-                                html.Hr(),
-                                html.P("You can Submit!", className="mb-0"),
-                            ],
-                            color="success",  # <- set the color here
-                    ),
-                 ),
-                ],
-                className="g-0",            # g-0 removes row gutters
-                align="center",
-        ),
-        
-        html.Hr(),
-        dbc.Row([
-                dbc.Col(
-                    dbc.InputGroup([
-                            dbc.InputGroupText("Author"),
-                            dbc.Input(
-                                type="text",
-                                id="author-input",
-                                placeholder="Required! Enter author or Tag for the reconstruction",
-                            ),
-                        ],
-                        className="w-100 mb-0",
-                    ),
+                    _field("Author", "author",
+                            kwargs={
+                                "type": "text",
+                                "placeholder": "Required! Enter author or Tag for the reconstruction",
+                            }),
                     md=12, xs=12,   # full row on small, wide on medium+
                     width = "auto",
                     style={"minWidth": "300px"},
@@ -228,7 +189,6 @@ layout = dbc.Container(
             align="center",
         ),
         peakindex_form,
-        # dcc.Store(id="next-peakindex-id"),
         dcc.Store(id="peakindex-data-loaded-trigger"),
     ],
     )
@@ -237,11 +197,625 @@ layout = dbc.Container(
     fluid=True
 )
 
+def validate_peakindexing_inputs(ctx):
+    """
+    Validate specified peak indexing inputs using callback context.
+    
+    Parameters:
+    - ctx: dash.callback_context containing states_list with field IDs and values
+    
+    Returns:
+        validation_result (dict): {
+            'errors': dict mapping param_name to list of error messages,
+            'warnings': dict mapping param_name to list of warning messages,
+            'successes': dict mapping param_name to empty string (for params that passed)
+        }
+    """
+    # Initialize validation result dict
+    validation_result = {
+        'errors': {},
+        'warnings': {},
+        'successes': {}
+    }
+    # Dictionary to store parsed parameter lists
+    parsed_params = {}
+    
+    # Hard-coded list of field IDs to validate (excludes 'notes')
+    all_field_ids = [
+        'data_path',
+        'filenamePrefix',
+        'scanPoints',
+        'depthRange',
+        'geoFile',
+        'crystFile',
+        'outputFolder',
+        'root_path',
+        'scanNumber',
+        'author',
+        'threshold',
+        'thresholdRatio',
+        'maxRfactor',
+        'boxsize',
+        'max_number',
+        'min_separation',
+        'min_size',
+        'max_peaks',
+        'indexKeVmaxCalc',
+        'indexKeVmaxTest',
+        'indexAngleTolerance',
+        'indexCone',
+        'indexHKL',
+        'detectorCropX1',
+        'detectorCropX2',
+        'detectorCropY1',
+        'detectorCropY2',
+    ]
+    
+    # Create database session for catalog validation
+    session = Session(session_utils.get_engine())
+    
+    # Extract parameters from callback context using the hard-coded field list
+    # ctx.states is a dict with format {'component_id.prop_name': value}
+    all_params = {}
+    for key, value in ctx.states.items():
+        # Extract component_id from 'component_id.prop_name'
+        component_id = key.split('.')[0]
+        # Only include fields in our validation list
+        if component_id in all_field_ids:
+            all_params[component_id] = value
+    
+    # Extract individual parameter values
+    root_path = all_params.get('root_path', '')
+    data_path = all_params.get('data_path')
+    # filenamePrefix = all_params.get('filenamePrefix')
+    # scanPoints = all_params.get('scanPoints')
+    # depthRange = all_params.get('depthRange')
+    # geoFile = all_params.get('geoFile')
+    # crystFile = all_params.get('crystFile')
+    # outputFolder = all_params.get('outputFolder')
+    # scanNumber = all_params.get('scanNumber')
+    # threshold = all_params.get('threshold')
+    # thresholdRatio = all_params.get('thresholdRatio')
+    # maxRfactor = all_params.get('maxRfactor')
+    # boxsize = all_params.get('boxsize')
+    # max_number = all_params.get('max_number')
+    # min_separation = all_params.get('min_separation')
+    # min_size = all_params.get('min_size')
+    # max_peaks = all_params.get('max_peaks')
+    # indexKeVmaxCalc = all_params.get('indexKeVmaxCalc')
+    # indexKeVmaxTest = all_params.get('indexKeVmaxTest')
+    # indexAngleTolerance = all_params.get('indexAngleTolerance')
+    # indexCone = all_params.get('indexCone')
+    # indexHKL = all_params.get('indexHKL')
+    # detectorCropX1 = all_params.get('detectorCropX1')
+    # detectorCropX2 = all_params.get('detectorCropX2')
+    # detectorCropY1 = all_params.get('detectorCropY1')
+    # detectorCropY2 = all_params.get('detectorCropY2')
+    
+    # Validate root_path directory exists
+    if not root_path:
+        add_validation_message(validation_result, 'errors', 'root_path')
+    elif not os.path.exists(root_path):
+        add_validation_message(validation_result, 'errors', 'root_path', 
+                              custom_message="Root Path does not exist")
+    else: #Added to pass over in later loop over all_params
+        parsed_params['root_path'] = root_path
+        add_validation_message(validation_result, 'successes', 'root_path')
+    
+    # Parse data_path first to determine number of scans
+    try:
+        data_path_list = parse_parameter(data_path)
+        num_inputs = len(data_path_list)
+        parsed_params['data_path'] = data_path_list
+    except ValueError as e:
+        add_validation_message(validation_result, 'errors', 'data_path', 
+                              custom_message=f"Data Path parsing error: {str(e)}")
+        # Close session before early return
+        session.close()
+        # Return early since we can't validate other parameters without knowing num_inputs
+        return validation_result
+    
+    # Check data_path separately since we already parsed it
+    if not data_path:
+        add_validation_message(validation_result, 'errors', 'data_path')
+    else:
+        add_validation_message(validation_result, 'successes', 'data_path')
+    
+    # Validate all other parameters by iterating over all_params    
+    for param_name, param_value in all_params.items():
+        # Skip already handled parameters
+        if param_name in parsed_params: #{'root_path', 'data_path'}
+            continue
+        # Check 1: Is it missing/empty?
+        is_missing = False
+        if param_name in ['threshold', 'thresholdRatio', 'maxRfactor', 'boxsize', 'max_number', 
+                          'min_separation', 'min_size', 'max_peaks', 'indexKeVmaxCalc', 
+                          'indexKeVmaxTest', 'indexAngleTolerance', 'indexCone',
+                          'detectorCropX1', 'detectorCropX2', 'detectorCropY1', 'detectorCropY2']:
+            # Numeric fields: check for None or empty string (0 is valid)
+            if param_value is None or param_value == '':
+                is_missing = True
+        else:
+            # Other fields: check for falsy values
+            if not param_value:
+                is_missing = True
+        
+        if is_missing:
+            # Special case for scanNumber: only warning, not error
+            if param_name == 'scanNumber':
+                add_validation_message(validation_result, 'warnings', param_name, display_name="Scan Number")
+                continue  # Skip parsing
+            # Special case for depthRange: optional parameter
+            elif param_name == 'depthRange':
+                continue  # Skip - this is optional
+            else:
+                add_validation_message(validation_result, 'errors', param_name)
+                continue  # Skip parsing if missing
+        
+        # Check 2: Parse the parameter
+        try:
+            parsed_list = parse_parameter(param_value, num_inputs)
+        except ValueError as e:
+            # Special case for scanNumber: only warning, not error
+            if param_name == 'scanNumber':
+                add_validation_message(validation_result, 'warnings', param_name, 
+                                     custom_message=f"Scan Number parsing error: {str(e)}")
+                continue  # Skip length check
+            else:
+                add_validation_message(validation_result, 'errors', param_name, 
+                                     custom_message=f"%s parsing error: {str(e)}")
+                continue  # Skip length check if parsing failed
+        
+        # Check 3: Verify length matches num_inputs
+        if len(parsed_list) != num_inputs:
+            # Special case for scanNumber: only warning, not error
+            if param_name == 'scanNumber':
+                add_validation_message(validation_result, 'warnings', param_name, 
+                                     custom_message=f"Scan Number count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
+            else:
+                add_validation_message(validation_result, 'errors', param_name, 
+                                     custom_message=f"%s count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
+        
+        # Store the parsed list in the dictionary
+        parsed_params[param_name] = parsed_list
+    
+    # Validate each input, skipping fields that failed global validation
+    for i in range(num_inputs):
+        input_prefix = f"Input {i+1}: " if num_inputs > 1 else ""
+        
+        # 1. Check if data files exist for this input (skip if root_path or data_path invalid)
+        if 'root_path' not in validation_result['errors'] and 'data_path' not in validation_result['errors']:
+            current_data_path = validate_param_value(
+                validation_result, parsed_params, 'data_path', i, input_prefix
+            )
+            if current_data_path is not None:
+                current_full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
+                
+                # Check if directory exists
+                if not os.path.exists(current_full_data_path):
+                    add_validation_message(validation_result, 'errors', 'data_path', input_prefix, 
+                                         custom_message="Data Path directory not found")
+                else:
+                    # Validate scanNumber against Catalog table (after confirming directory exists)
+                    current_scanNumber = validate_param_value(
+                        validation_result, parsed_params, 'scanNumber', i, input_prefix,
+                        required=False, display_name="Scan Number"
+                    )
+                    if current_scanNumber is not None:
+                        try:
+                            scan_num_int = int(current_scanNumber)
+                            
+                            # Get catalog data for this scan
+                            catalog_data = get_catalog_data(session, scan_num_int, root_path, CATALOG_DEFAULTS)
+                            
+                            if catalog_data and catalog_data.get('data_path'):
+                                catalog_full_data_path = os.path.join(root_path, catalog_data['data_path'].lstrip('/'))
+                                if catalog_full_data_path != current_full_data_path:
+                                    add_validation_message(
+                                        validation_result, 'warnings', 'data_path', input_prefix,
+                                        custom_message=f"Catalog entry for Scan Number {scan_num_int} has different path ({catalog_data['data_path']})"
+                                    )
+                            else:
+                                # No catalog entry found for this scan number
+                                add_validation_message(
+                                    validation_result, 'warnings', 'scanNumber', input_prefix,
+                                    custom_message=f"Catalog entry not found for Scan Number {scan_num_int}"
+                                )
+                        except (ValueError, TypeError):
+                            add_validation_message(
+                                validation_result, 'warnings', 'scanNumber', input_prefix,
+                                custom_message="Scan Number is not a valid integer"
+                            )
+                    
+                    # Check if directory contains any files
+                    all_files = [f for f in os.listdir(current_full_data_path) if os.path.isfile(os.path.join(current_full_data_path, f))]
+                    if not all_files:
+                        add_validation_message(validation_result, 'errors', 'data_path', input_prefix, 
+                                             custom_message="Data Path directory contains no files")
+                    else:
+                        # Get filename prefix
+                        current_filename_prefix_str = validate_param_value(
+                            validation_result, parsed_params, 'filenamePrefix', i, input_prefix,
+                            display_name="Filename Prefix"
+                        )
+                        if current_filename_prefix_str is not None:
+                            current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
+                            
+                            # Check for actual files using glob - pinpoint which field has the error
+                            for current_filename_prefix_i in current_filename_prefix:
+                                # Check if ANY files match this prefix pattern (without scan point substitution)
+                                prefix_pattern = os.path.join(current_full_data_path, current_filename_prefix_i.replace('%d', '*'))
+                                prefix_matches = glob.glob(prefix_pattern + '*')
+                                
+                                if not prefix_matches:
+                                    add_validation_message(validation_result, 'errors', 'filenamePrefix', input_prefix, 
+                                                         custom_message=f"No files match Filename prefix pattern '{current_filename_prefix_i}'")
+                                else:
+                                    # Get scan points
+                                    current_scanPoints = validate_param_value(
+                                        validation_result, parsed_params, 'scanPoints', i, input_prefix,
+                                        display_name="Scan Points"
+                                    )
+                                    if current_scanPoints is not None:
+                                        try:
+                                            scanPoints_srange = srange(current_scanPoints)
+                                            scanPoint_nums = scanPoints_srange.list()
+                                        except Exception as e:
+                                            add_validation_message(validation_result, 'errors', 'scanPoints', input_prefix, 
+                                                                 custom_message="Scan Points entry has invalid format")
+                                            continue
+                                        
+                                        # Get depth range if provided
+                                        depthRange_nums = [None]
+                                        current_depthRange = validate_param_value(
+                                            validation_result, parsed_params, 'depthRange', i, input_prefix,
+                                            required=False, display_name="Depth Range"
+                                        )
+                                        if current_depthRange:
+                                            try:
+                                                depthRange_srange = srange(current_depthRange)
+                                                depthRange_nums = depthRange_srange.list()
+                                            except Exception as e:
+                                                add_validation_message(validation_result, 'errors', 'depthRange', input_prefix, 
+                                                                     custom_message="Depth Range entry has invalid format")
+                                                continue
+                                        
+                                        # Collect missing files for this prefix
+                                        missing_files = []
+                                        for scanPoint_num in scanPoint_nums:
+                                            for depthRange_num in depthRange_nums:
+                                                file_str = current_filename_prefix_i % scanPoint_num if '%d' in current_filename_prefix_i else current_filename_prefix_i
+                                                
+                                                # Add depth index if processing reconstruction data
+                                                if depthRange_num is not None:
+                                                    file_str += f"_{depthRange_num}"
+                                                
+                                                scanpoint_pattern = os.path.join(current_full_data_path, file_str)
+                                                scanpoint_matches = glob.glob(scanpoint_pattern + '*')
+                                                
+                                                if not scanpoint_matches:
+                                                    if depthRange_num is not None:
+                                                        missing_files.append(f"{scanPoint_num}_{depthRange_num}")
+                                                    else:
+                                                        missing_files.append(str(scanPoint_num))
+                                        
+                                        # If there are missing files, add a single error message for this prefix
+                                        if missing_files:
+                                            # Limit the number of files shown
+                                            if len(missing_files) <= 5:
+                                                files_str = ", ".join(missing_files)
+                                            else:
+                                                files_str = ", ".join(missing_files[:5]) + f", ... and {len(missing_files) - 5} more"
+                                            
+                                            add_validation_message(
+                                                validation_result, 'errors', 'scanPoints', input_prefix,
+                                                custom_message=f"Missing files for Filename prefix '{current_filename_prefix_i}' (indices: {files_str})"
+                                            )
+        
+        # 2. Validate scanNumber: check that entry is a valid integer
+        if 'scanNumber' not in validation_result['errors'] and 'scanNumber' in parsed_params:
+            current_scanNumber = parsed_params['scanNumber'][i]
+            try:
+                current_scanNumber.isdigit()
+            except (ValueError, TypeError):
+                add_validation_message(
+                    validation_result, 'warnings', 'scanNumber', input_prefix,
+                    custom_message="Scan Number is not a valid integer"
+                )
+        
+        # 3. Check if output folder already exists for this input (skip if root_path invalid)
+        # Note: We cannot validate this properly if outputFolder contains %d placeholders
+        # because we don't know the scan number or peakindex_id at validation time.
+        # This check is skipped if %d is present in the path.
+        current_outputFolder = validate_param_value(
+            validation_result, parsed_params, 'outputFolder', i, input_prefix,
+            display_name="Output Folder"
+        )
+        if current_outputFolder is not None:
+            if 'root_path' not in validation_result['errors']:
+                if '%d' not in current_outputFolder:
+                    full_output_path = os.path.join(root_path, current_outputFolder.lstrip('/'))
+                    if os.path.exists(full_output_path):
+                        add_validation_message(validation_result, 'warnings', 'outputFolder', input_prefix, 
+                                             custom_message="Output Folder already exists")
+        
+        # 4. Check if geometry file exists for this input (skip if root_path invalid)
+        current_geoFile = validate_param_value(
+            validation_result, parsed_params, 'geoFile', i, input_prefix,
+            display_name="Geometry File"
+        )
+        if current_geoFile is not None:
+            if 'root_path' not in validation_result['errors']:
+                full_geo_path = os.path.join(root_path, current_geoFile.lstrip('/'))
+                if not os.path.exists(full_geo_path):
+                    add_validation_message(validation_result, 'errors', 'geoFile', input_prefix, 
+                                         custom_message="Geometry File not found")
+        
+        # 5. Check if crystal file exists for this input (skip if root_path invalid)
+        current_crystFile = validate_param_value(
+            validation_result, parsed_params, 'crystFile', i, input_prefix,
+            display_name="Crystal File"
+        )
+        if current_crystFile is not None:
+            if 'root_path' not in validation_result['errors']:
+                full_cryst_path = os.path.join(root_path, current_crystFile.lstrip('/'))
+                if not os.path.exists(full_cryst_path):
+                    add_validation_message(validation_result, 'errors', 'crystFile', input_prefix, 
+                                         custom_message="Crystal File not found")
+        
+        # 6. Validate detector crop parameters for this input
+        x1_val = validate_param_value(
+            validation_result, parsed_params, 'detectorCropX1', i, input_prefix,
+            converter=safe_int
+        )
+        
+        x2_val = validate_param_value(
+            validation_result, parsed_params, 'detectorCropX2', i, input_prefix,
+            converter=safe_int
+        )
+        
+        y1_val = validate_param_value(
+            validation_result, parsed_params, 'detectorCropY1', i, input_prefix,
+            converter=safe_int
+        )
+        
+        y2_val = validate_param_value(
+            validation_result, parsed_params, 'detectorCropY2', i, input_prefix,
+            converter=safe_int
+        )
+        
+        # Check X1 < X2 (only if both values are valid)
+        if x1_val is not None and x2_val is not None and x1_val >= x2_val:
+            add_validation_message(validation_result, 'errors', 'detectorCropX1', input_prefix, 
+                                 custom_message="Detector Crop X1 must be less than X2")
+            add_validation_message(validation_result, 'errors', 'detectorCropX2', input_prefix, 
+                                 custom_message="Detector Crop X1 must be less than X2")
+        
+        # Check Y1 < Y2 (only if both values are valid)
+        if y1_val is not None and y2_val is not None and y1_val >= y2_val:
+            add_validation_message(validation_result, 'errors', 'detectorCropY1', input_prefix, 
+                                 custom_message="Detector Crop Y1 must be less than Y2")
+            add_validation_message(validation_result, 'errors', 'detectorCropY2', input_prefix, 
+                                 custom_message="Detector Crop Y1 must be less than Y2")
+        
+        # 7. Validate numeric parameters for this input
+        threshold_val = validate_param_value(
+            validation_result, parsed_params, 'threshold', i, input_prefix,
+            converter=safe_int
+        )
+        if threshold_val is not None:
+            if threshold_val < 0:
+                add_validation_message(validation_result, 'errors', 'threshold', input_prefix, 
+                                     custom_message="Threshold must be non-negative")
+        
+        thresholdRatio_val = validate_param_value(
+            validation_result, parsed_params, 'thresholdRatio', i, input_prefix,
+            converter=safe_int
+        )
+        if thresholdRatio_val is not None:
+            if thresholdRatio_val < 0:
+                add_validation_message(validation_result, 'errors', 'thresholdRatio', input_prefix, 
+                                     custom_message="Threshold Ratio must be non-negative")
+        
+        maxRfactor_val = validate_param_value(
+            validation_result, parsed_params, 'maxRfactor', i, input_prefix,
+            converter=safe_float
+        )
+        if maxRfactor_val is not None:
+            if maxRfactor_val < 0 or maxRfactor_val > 1:
+                add_validation_message(validation_result, 'errors', 'maxRfactor', input_prefix, 
+                                     custom_message="Max Rfactor must be between 0 and 1")
+        
+        boxsize_val = validate_param_value(
+            validation_result, parsed_params, 'boxsize', i, input_prefix,
+            converter=safe_int
+        )
+        if boxsize_val is not None:
+            if boxsize_val <= 0:
+                add_validation_message(validation_result, 'errors', 'boxsize', input_prefix, 
+                                     custom_message="Boxsize must be positive")
+        
+        max_number_val = validate_param_value(
+            validation_result, parsed_params, 'max_number', i, input_prefix,
+            converter=safe_int
+        )
+        if max_number_val is not None:
+            if max_number_val <= 0:
+                add_validation_message(validation_result, 'errors', 'max_number', input_prefix, 
+                                     custom_message="Max Number must be positive")
+        
+        min_separation_val = validate_param_value(
+            validation_result, parsed_params, 'min_separation', i, input_prefix,
+            converter=safe_float
+        )
+        if min_separation_val is not None:
+            if min_separation_val < 0:
+                add_validation_message(validation_result, 'errors', 'min_separation', input_prefix, 
+                                     custom_message="Min Separation must be non-negative")
+        
+        min_size_val = validate_param_value(
+            validation_result, parsed_params, 'min_size', i, input_prefix,
+            converter=safe_float
+        )
+        if min_size_val is not None:
+            if min_size_val < 0:
+                add_validation_message(validation_result, 'errors', 'min_size', input_prefix, 
+                                     custom_message="Min Size must be non-negative")
+        
+        max_peaks_val = validate_param_value(
+            validation_result, parsed_params, 'max_peaks', i, input_prefix,
+            converter=safe_int
+        )
+        if max_peaks_val is not None:
+            if max_peaks_val <= 0:
+                add_validation_message(validation_result, 'errors', 'max_peaks', input_prefix, 
+                                     custom_message="Max Peaks must be positive")
+        
+        indexKeVmaxCalc_val = validate_param_value(
+            validation_result, parsed_params, 'indexKeVmaxCalc', i, input_prefix,
+            converter=safe_float
+        )
+        if indexKeVmaxCalc_val is not None:
+            if indexKeVmaxCalc_val <= 0:
+                add_validation_message(validation_result, 'errors', 'indexKeVmaxCalc', input_prefix, 
+                                     custom_message="Index Ke Vmax Calc must be positive")
+        
+        indexKeVmaxTest_val = validate_param_value(
+            validation_result, parsed_params, 'indexKeVmaxTest', i, input_prefix,
+            converter=safe_float
+        )
+        if indexKeVmaxTest_val is not None:
+            if indexKeVmaxTest_val <= 0:
+                add_validation_message(validation_result, 'errors', 'indexKeVmaxTest', input_prefix, 
+                                     custom_message="Index Ke Vmax Test must be positive")
+        
+        indexAngleTolerance_val = validate_param_value(
+            validation_result, parsed_params, 'indexAngleTolerance', i, input_prefix,
+            converter=safe_float
+        )
+        if indexAngleTolerance_val is not None:
+            if indexAngleTolerance_val < 0:
+                add_validation_message(validation_result, 'errors', 'indexAngleTolerance', input_prefix, 
+                                     custom_message="Index Angle Tolerance must be non-negative")
+        
+        indexCone_val = validate_param_value(
+            validation_result, parsed_params, 'indexCone', i, input_prefix,
+            converter=safe_float
+        )
+        if indexCone_val is not None:
+            if indexCone_val < 0 or indexCone_val > 180:
+                add_validation_message(validation_result, 'errors', 'indexCone', input_prefix, 
+                                     custom_message="Index Cone must be between 0 and 180 degrees")
+        
+        # 8. Validate indexHKL for this input
+        if 'indexHKL' not in validation_result['errors']:
+            current_indexHKL = str(parsed_params['indexHKL'][i])
+            if len(current_indexHKL) != 3:
+                add_validation_message(validation_result, 'errors', 'indexHKL', input_prefix, 
+                                     custom_message="Index HKL must be 3 digits (e.g., '001')")
+            else:
+                try:
+                    int(current_indexHKL[0])
+                    int(current_indexHKL[1])
+                    int(current_indexHKL[2])
+                except ValueError:
+                    add_validation_message(validation_result, 'errors', 'indexHKL', input_prefix, 
+                                         custom_message="Index HKL must contain only digits")
+        
+    
+    # Add successes for parameters that passed all validations
+    # Only add to successes if the parameter has neither errors nor warnings
+    for param_name in all_field_ids:
+        if param_name not in validation_result['errors'] and param_name not in validation_result['warnings']:
+            add_validation_message(validation_result, 'successes', param_name)
+    
+    # Close database session
+    session.close()
+    
+    return validation_result
+
+
 """
 =======================
 Callbacks
 =======================
 """
+@dash.callback(
+    Input('validate-btn', 'n_clicks'),
+    State('data_path', 'value'),
+    State('filenamePrefix', 'value'),
+    State('scanPoints', 'value'),
+    State('depthRange', 'value'),
+    State('geoFile', 'value'),
+    State('crystFile', 'value'),
+    State('outputFolder', 'value'),
+    State('root_path', 'value'),
+    State('scanNumber', 'value'),
+    State('author', 'value'),
+    State('threshold', 'value'),
+    State('thresholdRatio', 'value'),
+    State('maxRfactor', 'value'),
+    State('boxsize', 'value'),
+    State('max_number', 'value'),
+    State('min_separation', 'value'),
+    State('min_size', 'value'),
+    State('max_peaks', 'value'),
+    State('indexKeVmaxCalc', 'value'),
+    State('indexKeVmaxTest', 'value'),
+    State('indexAngleTolerance', 'value'),
+    State('indexCone', 'value'),
+    State('indexHKL', 'value'),
+    State('detectorCropX1', 'value'),
+    State('detectorCropX2', 'value'),
+    State('detectorCropY1', 'value'),
+    State('detectorCropY2', 'value'),
+    prevent_initial_call=True,
+)
+def validate_inputs(
+    n_clicks,
+    data_path,
+    filenamePrefix,
+    scanPoints,
+    depthRange,
+    geoFile,
+    crystFile,
+    outputFolder,
+    root_path,
+    scanNumber,
+    author,
+    threshold,
+    thresholdRatio,
+    maxRfactor,
+    boxsize,
+    max_number,
+    min_separation,
+    min_size,
+    max_peaks,
+    indexKeVmaxCalc,
+    indexKeVmaxTest,
+    indexAngleTolerance,
+    indexCone,
+    indexHKL,
+    detectorCropX1,
+    detectorCropX2,
+    detectorCropY1,
+    detectorCropY2,
+):
+    """Handle Validate button click"""
+    
+    # Get callback context
+    ctx = dash.callback_context
+    
+    # Run validation using ctx
+    validation_result = validate_peakindexing_inputs(ctx)
+    
+    # Apply field highlights using helper function
+    apply_validation_highlights(validation_result)
+    
+    # Update validation alerts using helper function
+    update_validation_alerts(validation_result)
+
+
 @dash.callback(
     Input('submit_peakindexing', 'n_clicks'),
     
@@ -353,12 +927,35 @@ def submit_parameters(n,
     beamline,
     
 ):
-    # TODO: Input validation and response
-
     """
     Submit parameters for peak indexing job(s).
     Handles both single scan and pooled scan submissions.
     """
+    # Get callback context
+    ctx = dash.callback_context
+    
+    # Run validation before submission using ctx
+    validation_result = validate_peakindexing_inputs(ctx)
+    
+    # Apply field highlights for all cases (error, warning, success)
+    apply_validation_highlights(validation_result)
+    
+    # Update validation alerts using helper function
+    update_validation_alerts(validation_result)
+    
+    # Extract to local variables for cleaner code
+    errors = validation_result['errors']
+    # warnings = validation_result['warnings']
+    
+    # Block submission if there are errors
+    if errors:
+        set_props("alert-submit", {
+            'is_open': True,
+            'children': 'Submission blocked due to validation errors. Please fix the errors and try again.',
+            'color': 'danger'
+        })
+        return
+    
     # Parse data_path first to get the number of inputs
     data_path_list = parse_parameter(data_path)
     num_inputs = len(data_path_list)
@@ -698,166 +1295,37 @@ def submit_parameters(n,
                                         'color': 'danger'})
 
 
-@dash.callback(
-    Output('peakindex-filename-templates', 'children', allow_duplicate=True),
-    Input('peakindex-check-filenames-btn', 'n_clicks'),
-    Input('peakindex-update-path-fields-btn', 'n_clicks'),
-    Input('peakindex-data-loaded-trigger', 'data'),
-    # Files
-    State('data_path', 'value'),
-    prevent_initial_call=True,
+# Register shared callbacks
+register_update_path_fields_callback(
+    button_id='peakindex-update-path-fields-btn',
+    scan_number_id='scanNumber',
+    root_path_id='root_path',
+    data_path_id='data_path',
+    filename_prefix_id='filenamePrefix',
+    alert_id='alert-scan-loaded',
+    catalog_defaults=CATALOG_DEFAULTS
 )
-def check_filenames(n_check, n_update, data_loaded_trigger,
-    # Files
-    data_path,
-    num_indices=2,
-):
-    """
-    Scan directory and suggest common filename patterns.
-    Replaces numeric sequences with %d to find templates and shows index ranges.
-    
-    For peak indexing, this captures TWO rightmost numbers:
-    - First number: scanPoint (e.g., 7 in file_7_150.h5)
-    - Second number: depthRange (e.g., 150 in file_7_150.h5)
-    
-    Parameters:
-    -----------
-    n : int
-        Number of clicks (callback trigger)
-    data_path : str
-        Path to the data directory
-    num_indices : int, optional
-        Number of rightmost numeric indices to capture (default=2 for peak indexing)
-    """
-    
-    if not data_path:
-        return [html.Option(value="", label="No data path provided")]
-    
-    # Parse data_path first to get the number of inputs
-    data_path_list = parse_parameter(data_path)
-    num_inputs = len(data_path_list)
-    
-    root_path = DEFAULT_VARIABLES["root_path"]
-    
-    # Dictionary to store pattern -> list of indices
-    pattern_files = {}
 
-    for i in range(num_inputs):
-        # Get filefolder
-        current_data_path = data_path_list[i]
+register_load_file_indices_callback(
+    button_id='peakindex-load-file-indices-btn',
+    data_loaded_trigger_id='peakindex-data-loaded-trigger',
+    data_path_id='data_path',
+    filename_prefix_id='filenamePrefix',
+    scan_points_id='scanPoints',
+    depth_range_id='depthRange',  # Peak indexing uses depth range
+    alert_id='alert-scan-loaded',
+    num_indices=2
+)
 
-        # Build full path
-        current_full_data_path=os.path.join(root_path, current_data_path.lstrip('/'))
-        
-        # Check if directory exists
-        if not os.path.exists(current_full_data_path):
-            logger.warning(f"Directory does not exist: {current_full_data_path}")
-            continue
-        
-        # List all files in directory
-        try:
-            files = [f for f in os.listdir(current_full_data_path) if os.path.isfile(os.path.join(current_full_data_path, f))]
-        except Exception as e:
-            logger.error(f"Error reading directory {current_full_data_path}: {e}")
-            continue
-        
-        # Extract patterns and indices
-        for filename in files:
-            base_name, extension = os.path.splitext(filename)
-            
-            # Build regex pattern to capture N rightmost numbers
-            # For num_indices=1: (\d+)(?!.*\d)
-            # For num_indices=2: (\d+)_(\d+)(?!.*\d)
-            if num_indices == 1:
-                regex_pattern = r'(\d+)(?!.*\d)'
-            else:
-                # Capture N groups of digits separated by underscores from the right
-                regex_pattern = r'_'.join([r'(\d+)'] * num_indices) + r'(?!.*\d)'
-            
-            match = re.search(regex_pattern, base_name)
-            
-            if match:
-                # Extract all captured groups as integers
-                indices = [int(match.group(i)) for i in range(1, num_indices + 1)]
-                
-                # Create pattern with appropriate number of %d placeholders
-                pattern_placeholder = '_'.join(['%d'] * num_indices)
-                pattern = base_name[:match.start()] + pattern_placeholder + base_name[match.end():] + extension
-                
-                pattern_files.setdefault(pattern, []).append(indices)
-            else:
-                # No numeric pattern found
-                pattern_files.setdefault(filename, []).append([])
-    
-    if not pattern_files:
-        return [html.Option(value="", label="No files found in specified path(s)")]
-    
-    # Sort by file count and create options for top 10 patterns
-    sorted_patterns = sorted(pattern_files.items(), key=lambda x: len(x[1]), reverse=True)[:10]
-    pattern_options = []
-    
-    for pattern, indices_list in sorted_patterns:
-        if indices_list and indices_list[0]:
-            if num_indices == 1:
-                # Single index: show simple range
-                label = f"{pattern} (files {str(srange(sorted(set(idx[0] for idx in indices_list))))})"
-            else:
-                # Multiple indices: show ranges for each dimension
-                range_labels = []
-                dim_names = ['scanPoints', 'depths'] if num_indices == 2 else [f"dim{i+1}" for i in range(num_indices)]
-                
-                for dim in range(num_indices):
-                    dim_values = sorted(set(idx[dim] for idx in indices_list if len(idx) > dim))
-                    if dim_values:
-                        range_labels.append(f"{dim_names[dim]}: {str(srange(dim_values))}")
-                
-                if range_labels:
-                    label = f"{pattern} ({', '.join(range_labels)})"
-                else:
-                    label = f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
-        else:
-            label = f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
-        pattern_options.append(html.Option(value=pattern, label=label))
-    
-    # Generate combined wildcard patterns for similar patterns
-    if len(sorted_patterns) > 1:
-        seen_wildcards = set()
-        
-        for (pattern1, indices1), (pattern2, indices2) in combinations(sorted_patterns, 2):
-            # Find matching and differing sections
-            matcher = SequenceMatcher(None, pattern1, pattern2)
-            wildcard_parts = []
-            last_pos = 0
-            
-            for match_start1, match_start2, match_length in matcher.get_matching_blocks():
-                # Handle the gap before this match (differences)
-                if match_start1 > last_pos:
-                    diff1 = pattern1[last_pos:match_start1]
-                    diff2 = pattern2[last_pos:match_start2]
-                    
-                    # Skip if differences contain %d
-                    if '%d' in diff1 or '%d' in diff2:
-                        break
-                    
-                    wildcard_parts.append('*')
-                
-                # Add the matching section
-                if match_length > 0:
-                    wildcard_parts.append(pattern1[match_start1:match_start1 + match_length])
-                
-                last_pos = match_start1 + match_length
-            else:
-                # Only create wildcard if pattern contains wildcards and hasn't been seen before
-                wildcard_pattern = ''.join(wildcard_parts)
-                if '*' in wildcard_pattern and wildcard_pattern not in seen_wildcards:
-                    seen_wildcards.add(wildcard_pattern)
-                    
-                    # Combine indices from both patterns
-                    combined_indices = sorted(set(idx[0] for idx in indices1 + indices2 if idx))
-                    label = f"{wildcard_pattern} (files {str(srange(combined_indices))})"
-                    pattern_options.append(html.Option(value=wildcard_pattern, label=label))
-    
-    return pattern_options
+register_check_filenames_callback(
+    check_button_id='peakindex-check-filenames-btn',
+    update_button_id='peakindex-update-path-fields-btn',
+    data_loaded_trigger_id='peakindex-data-loaded-trigger',
+    data_path_id='data_path',
+    filename_prefix_id='filenamePrefix',
+    filename_templates_id='peakindex-filename-templates',
+    num_indices=2
+)
 
 
 # @dash.callback(
