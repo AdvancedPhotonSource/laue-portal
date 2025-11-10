@@ -10,7 +10,7 @@ Usage:
     
     register_update_path_fields_callback(
         button_id='wirerecon-update-path-fields-btn',
-        scan_number_id='scanNumber',
+        id_number_id='IDnumber',
         alert_id='alert-scan-loaded',
         data_path_id='data_path',
         filename_prefix_id='filenamePrefix',
@@ -32,51 +32,135 @@ from dash.exceptions import PreventUpdate
 from sqlalchemy.orm import Session
 
 import laue_portal.database.session_utils as session_utils
-from laue_portal.database.db_utils import get_catalog_data, parse_parameter
-from laue_portal.config import DEFAULT_VARIABLES
+from laue_portal.database.db_utils import get_data_from_id, parse_parameter
+from laue_portal.config import DEFAULT_VARIABLES, VALID_HDF_EXTENSIONS
+from laue_portal.components.peakindex_form import parse_IDnumber
 from srange import srange
 
 logger = logging.getLogger(__name__)
 
 
+def _filter_files_by_extension(directory_path):
+    """
+    List and filter files in a directory by valid HDF extensions.
+    
+    This helper function reads all files from a directory and filters them
+    to only include files with valid HDF extensions as configured in
+    VALID_HDF_EXTENSIONS.
+    
+    Parameters:
+    - directory_path: Full path to the directory to scan
+    
+    Returns:
+    - List of filenames that match the valid HDF extensions
+    
+    Raises:
+    - Exception: If there's an error reading the directory
+    """
+    all_files = [f for f in os.listdir(directory_path) if os.path.isfile(os.path.join(directory_path, f))]
+    
+    # Filter by valid HDF extensions if configured
+    if VALID_HDF_EXTENSIONS:
+        filtered_files = [f for f in all_files if any(f.lower().endswith(ext.lower()) for ext in VALID_HDF_EXTENSIONS)]
+        return filtered_files
+    else:
+        return all_files
+
+
+def _extract_indices_from_files(files, num_indices):
+    """
+    Extract indices from filenames by adaptively trying to match num_indices down to 1.
+    
+    This helper function processes a list of filenames and extracts numeric indices
+    by trying to match patterns with decreasing numbers of indices (from num_indices
+    down to 1). This allows handling files with varying numbers of indices.
+    
+    Parameters:
+    - files: List of filenames to process
+    - num_indices: Maximum number of rightmost numeric indices to try matching
+    
+    Returns:
+    - Dictionary mapping patterns to lists of indices
+      e.g., {'Si-wire_%d.h5': [[7], [8], [9]], 'Si-wire_%d_%d.h5': [[7,5], [8,5]]}
+    """
+    pattern_files = {}
+    
+    for filename in files:
+        base_name, extension = os.path.splitext(filename)
+        
+        # Try matching with num_indices, then num_indices-1, down to 1
+        matched = False
+        for n in range(num_indices, 0, -1):
+            # Build regex pattern to capture N rightmost numbers
+            if n == 1:
+                regex_pattern = r'(\d+)(?!.*\d)'
+            else:
+                # Capture N groups of digits separated by underscores from the right
+                regex_pattern = r'_'.join([r'(\d+)'] * n) + r'(?!.*\d)'
+            
+            match = re.search(regex_pattern, base_name)
+            
+            if match:
+                # Extract all captured groups as integers
+                indices = [int(match.group(i)) for i in range(1, n + 1)]
+                
+                # Create pattern with appropriate number of %d placeholders
+                pattern_placeholder = '_'.join(['%d'] * n)
+                pattern = base_name[:match.start()] + pattern_placeholder + base_name[match.end():] + extension
+                
+                pattern_files.setdefault(pattern, []).append(indices)
+                matched = True
+                break  # Stop trying fewer indices once we found a match
+        
+        if not matched:
+            # No numeric pattern found
+            pattern_files.setdefault(filename, []).append([])
+    
+    return pattern_files
+
+
 def register_update_path_fields_callback(
     button_id: str,
-    scan_number_id: str,
     alert_id: str,
     data_path_id: str,
     filename_prefix_id: str,
     root_path_id: str,
-    catalog_defaults: dict
+    catalog_defaults: dict,
+    id_number_id: str = None
 ):
     """
     Register a callback to update path fields (data_path, filenamePrefix) by querying
-    the database for catalog data based on the scan number.
+    the database for catalog data based on the ID number.
     
     Parameters:
     - button_id: ID of the button that triggers the update
-    - scan_number_id: ID of the scan number input field
     - alert_id: ID of the alert component for status messages
     - data_path_id: ID of the data path field to update
     - filename_prefix_id: ID of the filename prefix field to update
     - root_path_id: ID of the root path field to update
     - catalog_defaults: Dictionary of catalog default values
+    - id_number_id: ID of the ID number input field (optional, for IDnumber field)
     
     Returns:
     - The registered callback function
     """
     
+    # Validate that id_number_id is provided
+    if not id_number_id:
+        raise ValueError("id_number_id must be provided")
+    
     @dash.callback(
         Input(button_id, 'n_clicks'),
-        State(scan_number_id, 'value'),
+        State(id_number_id, 'value'),
         prevent_initial_call=True,
     )
-    def update_path_fields_from_scan(n_clicks, scanNumber):
-        """Update path fields by querying catalog data based on scan number."""
+    def update_path_fields_from_id(n_clicks, field_value):
+        """Update path fields by querying reconstruction/catalog data based on ID number."""
         
-        if not scanNumber:
+        if not field_value:
             set_props(alert_id, {
                 'is_open': True,
-                'children': 'Please enter a scan number first.',
+                'children': 'Please enter an ID number first.',
                 'color': 'warning'
             })
             raise PreventUpdate
@@ -85,32 +169,37 @@ def register_update_path_fields_callback(
         
         with Session(session_utils.get_engine()) as session:
             try:
-                # Parse scan number (handle semicolon-separated values for pooled scans)
-                scan_ids = [int(sid.strip()) for sid in str(scanNumber).split(';') if sid.strip()]
+                # Parse ID number to get all IDs (handles semicolon-separated values)
+                id_numbers = [s.strip() for s in str(field_value).split(';') if s]
                 
-                if not scan_ids:
+                if not id_numbers:
                     set_props(alert_id, {
                         'is_open': True,
-                        'children': 'Invalid scan number format.',
+                        'children': 'Invalid ID number format.',
                         'color': 'danger'
                     })
                     raise PreventUpdate
                 
-                # Get catalog data for each scan
-                catalog_data_list = []
-                for scan_id in scan_ids:
-                    catalog_data = get_catalog_data(session, scan_id, root_path, catalog_defaults)
-                    if catalog_data:
-                        catalog_data_list.append(catalog_data)
+                # Get data for each ID
+                id_data_list = []
+                for id_num in id_numbers:
+                    try:
+                        id_dict = parse_IDnumber(id_num, session)
+                        id_data = get_data_from_id(session, id_dict, root_path, catalog_defaults)
+                        if id_data and id_data.get('data_path'):
+                            id_data_list.append(id_data)
+                    except ValueError as e:
+                        logger.warning(f"Could not parse ID number '{id_num}': {e}")
+                        continue
                 
-                if catalog_data_list:
-                    # If multiple scans, merge the data
-                    if len(catalog_data_list) == 1:
-                        merged_data = catalog_data_list[0]
+                if id_data_list:
+                    # If multiple IDs, merge the data
+                    if len(id_data_list) == 1:
+                        merged_data = id_data_list[0]
                     else:
                         # Merge data paths and filename prefixes
-                        data_paths = [cd['data_path'] for cd in catalog_data_list]
-                        filename_prefixes = [cd['filenamePrefix'] for cd in catalog_data_list]
+                        data_paths = [d['data_path'] for d in id_data_list]
+                        filename_prefixes = [d['filenamePrefix'] for d in id_data_list]
                         
                         # Check if all values are the same
                         if all(dp == data_paths[0] for dp in data_paths):
@@ -142,30 +231,30 @@ def register_update_path_fields_callback(
                     
                     set_props(alert_id, {
                         'is_open': True,
-                        'children': f'Successfully loaded path fields from database for scan(s): {scanNumber}',
+                        'children': f'Successfully loaded path fields from database for IDs: {field_value}',
                         'color': 'success'
                     })
                 else:
                     set_props(alert_id, {
                         'is_open': True,
-                        'children': f'No catalog data found for scan(s): {scanNumber}. Using defaults.',
+                        'children': f'No data found for IDs: {field_value}. Using defaults.',
                         'color': 'warning'
                     })
             
             except ValueError as e:
                 set_props(alert_id, {
                     'is_open': True,
-                    'children': f'Invalid scan number format: {str(e)}',
+                    'children': f'Invalid ID number format: {str(e)}',
                     'color': 'danger'
                 })
             except Exception as e:
                 set_props(alert_id, {
                     'is_open': True,
-                    'children': f'Error loading catalog data: {str(e)}',
+                    'children': f'Error loading data: {str(e)}',
                     'color': 'danger'
                 })
     
-    return update_path_fields_from_scan
+    return update_path_fields_from_id
 
 
 def register_load_file_indices_callback(
@@ -240,52 +329,27 @@ def register_load_file_indices_callback(
                     logger.warning(f"Directory does not exist: {current_full_data_path}")
                     continue
                 
-                # Parse filename prefix (handle comma-separated list)
-                filename_prefixes = [s.strip() for s in str(filenamePrefix).split(',')] if filenamePrefix else []
+                # List all files in directory, filtering by valid extensions
+                try:
+                    files = _filter_files_by_extension(current_full_data_path)
+                except Exception as e:
+                    logger.error(f"Error reading directory {current_full_data_path}: {e}")
+                    continue
                 
-                # Build regex pattern to capture N rightmost numbers
-                if num_indices == 1:
-                    regex_pattern = r'(\d+)(?!.*\d)'
-                else:
-                    # Capture N groups of digits separated by underscores from the right
-                    regex_pattern = r'_'.join([r'(\d+)'] * num_indices) + r'(?!.*\d)'
+                # Extract patterns and indices using helper function
+                pattern_files = _extract_indices_from_files(files, num_indices)
                 
-                # Extract indices from files matching the prefix pattern
-                for current_filename_prefix_i in filename_prefixes:
-                    # Use glob to find files matching this prefix pattern
-                    # Replace %d with * for glob matching
-                    ext_wildcard = '*' if '.' in current_filename_prefix_i else '.*'
-                    prefix_pattern = os.path.join(current_full_data_path, current_filename_prefix_i.replace('_'.join(['%d'] * num_indices), '_'.join(['*'] * num_indices)) + ext_wildcard)
-                    
-                    try:
-                        prefix_matches = glob.glob(prefix_pattern)
-                    except Exception as e:
-                        logger.error(f"Error reading directory {current_full_data_path}: {e}")
-                        continue
-                    
-                    if not prefix_matches:
-                        continue  # Skip if no files match this prefix
-                    
-                    # Extract indices from matched files
-                    for filepath in prefix_matches:
-                        filename = os.path.basename(filepath)
-                        base_name, extension = os.path.splitext(filename)
-                        match = re.search(regex_pattern, base_name)
-                        
-                        if match:
-                            try:
-                                if num_indices == 1:
-                                    # Single index: scanPoint only
-                                    scanpoint_index = int(match.group(1))
-                                    all_scanpoint_indices.add(scanpoint_index)
-                                else:
-                                    # Two indices: scanPoint and depth
-                                    scanpoint_index = int(match.group(1))
-                                    depth_index = int(match.group(2))
-                                    all_scanpoint_indices.add(scanpoint_index)
-                                    all_depth_indices.add(depth_index)
-                            except (ValueError, IndexError):
-                                continue
+                # Extract scanpoint and depth indices from all patterns
+                for pattern, indices_list in pattern_files.items():
+                    for indices in indices_list:
+                        if indices:  # Skip empty index lists (files without numeric patterns)
+                            if len(indices) == 1:
+                                # Single index: scanPoint only
+                                all_scanpoint_indices.add(indices[0])
+                            elif len(indices) >= 2:
+                                # Two or more indices: scanPoint and depth
+                                all_scanpoint_indices.add(indices[0])
+                                all_depth_indices.add(indices[1])
             
             if all_scanpoint_indices:
                 # Create srange strings (srange handles sorting internally)
@@ -347,7 +411,7 @@ def register_check_filenames_callback(
     - data_path_id: ID of the data path field
     - filename_prefix_id: ID of the filename prefix field to auto-set
     - filename_templates_id: ID of the filename templates dropdown to populate with patterns
-    - num_indices: Number of rightmost numeric indices to capture
+    - num_indices: Maximum number of rightmost numeric indices to capture (will try this and fewer)
     
     Returns:
     - The registered callback function
@@ -388,38 +452,19 @@ def register_check_filenames_callback(
                 logger.warning(f"Directory does not exist: {current_full_data_path}")
                 continue
             
-            # List all files in directory
+            # List all files in directory, filtering by valid extensions
             try:
-                files = [f for f in os.listdir(current_full_data_path) if os.path.isfile(os.path.join(current_full_data_path, f))]
+                files = _filter_files_by_extension(current_full_data_path)
             except Exception as e:
                 logger.error(f"Error reading directory {current_full_data_path}: {e}")
                 continue
             
-            # Extract patterns and indices
-            for filename in files:
-                base_name, extension = os.path.splitext(filename)
-                
-                # Build regex pattern to capture N rightmost numbers
-                if num_indices == 1:
-                    regex_pattern = r'(\d+)(?!.*\d)'
-                else:
-                    # Capture N groups of digits separated by underscores from the right
-                    regex_pattern = r'_'.join([r'(\d+)'] * num_indices) + r'(?!.*\d)'
-                
-                match = re.search(regex_pattern, base_name)
-                
-                if match:
-                    # Extract all captured groups as integers
-                    indices = [int(match.group(i)) for i in range(1, num_indices + 1)]
-                    
-                    # Create pattern with appropriate number of %d placeholders
-                    pattern_placeholder = '_'.join(['%d'] * num_indices)
-                    pattern = base_name[:match.start()] + pattern_placeholder + base_name[match.end():] + extension
-                    
-                    pattern_files.setdefault(pattern, []).append(indices)
-                else:
-                    # No numeric pattern found
-                    pattern_files.setdefault(filename, []).append([])
+            # Extract patterns and indices using helper function
+            current_pattern_files = _extract_indices_from_files(files, num_indices)
+            
+            # Merge into main pattern_files dictionary
+            for pattern, indices_list in current_pattern_files.items():
+                pattern_files.setdefault(pattern, []).extend(indices_list)
         
         if not pattern_files:
             return [html.Option(value="", label="No files found in specified path(s)")]
@@ -430,15 +475,18 @@ def register_check_filenames_callback(
         
         for pattern, indices_list in sorted_patterns:
             if indices_list and indices_list[0]:
-                if num_indices == 1:
+                # Determine actual number of indices in this pattern
+                actual_num_indices = len(indices_list[0])
+                
+                if actual_num_indices == 1:
                     # Single index: show simple range
                     label = f"{pattern} (files {str(srange(set(idx[0] for idx in indices_list)))})"
-                else:
+                elif actual_num_indices > 1:
                     # Multiple indices: show ranges for each dimension
                     range_labels = []
-                    dim_names = ['scanPoints', 'depths'] if num_indices == 2 else [f"dim{i+1}" for i in range(num_indices)]
+                    dim_names = ['scanPoints', 'depths'] if actual_num_indices == 2 else [f"dim{i+1}" for i in range(actual_num_indices)]
                     
-                    for dim in range(num_indices):
+                    for dim in range(actual_num_indices):
                         dim_values = sorted(set(idx[dim] for idx in indices_list if len(idx) > dim))
                         if dim_values:
                             range_labels.append(f"{dim_names[dim]}: {str(srange(dim_values))}")
@@ -447,11 +495,15 @@ def register_check_filenames_callback(
                         label = f"{pattern} ({', '.join(range_labels)})"
                     else:
                         label = f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
+                else:
+                    # No indices (shouldn't happen with our logic, but handle it)
+                    label = f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
             else:
                 label = f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
             pattern_options.append(html.Option(value=pattern, label=label))
         
         # Generate combined wildcard patterns for similar patterns
+        # Use smart wildcard detection: preserve %d when both patterns have it
         if len(sorted_patterns) > 1:
             seen_wildcards = set()
             
@@ -464,13 +516,6 @@ def register_check_filenames_callback(
                 for match_start1, match_start2, match_length in matcher.get_matching_blocks():
                     # Handle the gap before this match (differences)
                     if match_start1 > last_pos:
-                        diff1 = pattern1[last_pos:match_start1]
-                        diff2 = pattern2[last_pos:match_start2]
-                        
-                        # Skip if differences contain %d
-                        if '%d' in diff1 or '%d' in diff2:
-                            break
-                        
                         wildcard_parts.append('*')
                     
                     # Add the matching section
@@ -478,26 +523,55 @@ def register_check_filenames_callback(
                         wildcard_parts.append(pattern1[match_start1:match_start1 + match_length])
                     
                     last_pos = match_start1 + match_length
-                else:
-                    # Only create wildcard if pattern contains wildcards and hasn't been seen before
-                    wildcard_pattern = ''.join(wildcard_parts)
-                    if '*' in wildcard_pattern and wildcard_pattern not in seen_wildcards:
-                        seen_wildcards.add(wildcard_pattern)
-                        
-                        # Combine indices from both patterns
+                
+                # Create wildcard pattern if it has differences and hasn't been seen
+                wildcard_pattern = ''.join(wildcard_parts)
+                if '*' in wildcard_pattern and wildcard_pattern not in seen_wildcards:
+                    seen_wildcards.add(wildcard_pattern)
+                    
+                    # Combine indices from both patterns for label
+                    if num_indices == 1:
                         combined_indices = sorted(set(idx[0] for idx in indices1 + indices2 if idx))
                         label = f"{wildcard_pattern} (files {str(srange(combined_indices))})"
-                        pattern_options.append(html.Option(value=wildcard_pattern, label=label))
+                    else:
+                        # Multiple indices: show ranges for each dimension
+                        combined_indices_list = indices1 + indices2
+                        range_labels = []
+                        dim_names = ['scanPoints', 'depths'] if num_indices == 2 else [f"dim{i+1}" for i in range(num_indices)]
+                        
+                        for dim in range(num_indices):
+                            dim_values = sorted(set(idx[dim] for idx in combined_indices_list if len(idx) > dim))
+                            if dim_values:
+                                range_labels.append(f"{dim_names[dim]}: {str(srange(dim_values))}")
+                        
+                        if range_labels:
+                            label = f"{wildcard_pattern} ({', '.join(range_labels)})"
+                        else:
+                            label = f"{wildcard_pattern} ({len(combined_indices_list)} files)"
+                    
+                    pattern_options.append(html.Option(value=wildcard_pattern, label=label))
         
         # Get the trigger that caused this callback
         ctx = dash.callback_context
         trigger_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
         
-        # Find the shortest pattern from all options (including wildcards) and set it to filenamePrefix
+        # Smart pattern selection: prefer patterns with * (captures all files), then %d, then plain
         # Only set filenamePrefix if triggered by the check-filenames button
         if pattern_options and trigger_id == check_button_id:
-            shortest_pattern = min(pattern_options, key=lambda opt: len(opt.value))
-            set_props(filename_prefix_id, {'value': shortest_pattern.value})
+            # Separate patterns by type
+            patterns_with_asterisk = [opt for opt in pattern_options if '*' in opt.value]
+            patterns_with_percent_d = [opt for opt in pattern_options if '%d' in opt.value and '*' not in opt.value]
+            patterns_plain = [opt for opt in pattern_options if '*' not in opt.value and '%d' not in opt.value]
+            
+            # Decision tree: prefer * patterns (captures all files), then %d, then plain
+            if patterns_with_asterisk:
+                selected_pattern = min(patterns_with_asterisk, key=lambda opt: len(opt.value)).value
+            elif patterns_with_percent_d:
+                selected_pattern = min(patterns_with_percent_d, key=lambda opt: len(opt.value)).value
+            else:
+                selected_pattern = min(patterns_plain, key=lambda opt: len(opt.value)).value
+            
+            set_props(filename_prefix_id, {'value': selected_pattern})
         
         return pattern_options
     

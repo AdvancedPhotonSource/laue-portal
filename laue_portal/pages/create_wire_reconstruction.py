@@ -23,10 +23,11 @@ from laue_portal.pages.validation_helpers import (
     add_validation_message,
     safe_float,
     safe_int,
-    validate_param_value,
+    validate_field_value,
     validate_numeric_range,
     validate_file_exists,
-    validate_directory_exists
+    validate_directory_exists,
+    get_num_inputs_from_fields
 )
 from laue_portal.pages.callback_registrars import (
     register_update_path_fields_callback,
@@ -108,7 +109,7 @@ layout = dbc.Container(
                     dbc.Col(
                         dbc.Button(
                             "Validate",
-                            id="validate-btn",
+                            id="wirerecon-validate-btn",
                             color="secondary",
                             style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
                         ),
@@ -171,9 +172,9 @@ def validate_wire_reconstruction_inputs(ctx):
     
     Returns:
         validation_result (dict): {
-            'errors': dict mapping param_name to list of error messages,
-            'warnings': dict mapping param_name to list of warning messages,
-            'successes': dict mapping param_name to empty string (for params that passed)
+            'errors': dict mapping field_name to list of error messages,
+            'warnings': dict mapping field_name to list of warning messages,
+            'successes': dict mapping field_name to empty string (for fields that passed)
         }
     """
     # Initialize validation result dict
@@ -182,8 +183,8 @@ def validate_wire_reconstruction_inputs(ctx):
         'warnings': {},
         'successes': {}
     }
-    # Dictionary to store parsed parameter lists
-    parsed_params = {}
+    # Dictionary to store parsed field value lists
+    parsed_fields = {}
     
     # Hard-coded list of field IDs to validate (excludes 'notes')
     all_field_ids = [
@@ -204,19 +205,19 @@ def validate_wire_reconstruction_inputs(ctx):
     # Create database session for catalog validation
     session = Session(session_utils.get_engine())
     
-    # Extract parameters from callback context using the hard-coded field list
+    # Extract field values from callback context using the hard-coded field list
     # ctx.states is a dict with format {'component_id.prop_name': value}
-    all_params = {}
+    all_fields = {}
     for key, value in ctx.states.items():
         # Extract component_id from 'component_id.prop_name'
         component_id = key.split('.')[0]
         # Only include fields in our validation list
         if component_id in all_field_ids:
-            all_params[component_id] = value
+            all_fields[component_id] = value
     
-    # Extract individual parameter values
-    root_path = all_params.get('root_path', '')
-    data_path = all_params.get('data_path')
+    # Extract individual field values
+    root_path = all_fields.get('root_path', '')
+    data_path = all_fields.get('data_path')
     # filenamePrefix = all_params.get('filenamePrefix')
     # scanPoints = all_params.get('scanPoints')
     # geoFile = all_params.get('geoFile')
@@ -233,21 +234,21 @@ def validate_wire_reconstruction_inputs(ctx):
     elif not os.path.exists(root_path):
         add_validation_message(validation_result, 'errors', 'root_path', 
                               custom_message="Root Path does not exist")
-    else: #Added to pass over in later loop over all_params
-        parsed_params['root_path'] = root_path
+    else: #Added to pass over in later loop over all_fields
+        parsed_fields['root_path'] = root_path
         add_validation_message(validation_result, 'successes', 'root_path')
     
     # Parse data_path first to determine number of scans
     try:
         data_path_list = parse_parameter(data_path)
         num_inputs = len(data_path_list)
-        parsed_params['data_path'] = data_path_list
+        parsed_fields['data_path'] = data_path_list
     except ValueError as e:
         add_validation_message(validation_result, 'errors', 'data_path', 
                               custom_message=f"Data Path parsing error: {str(e)}")
         # Close session before early return
         session.close()
-        # Return early since we can't validate other parameters without knowing num_inputs
+        # Return early since we can't validate other fields without knowing num_inputs
         return validation_result
     
     # Check data_path separately since we already parsed it
@@ -256,57 +257,57 @@ def validate_wire_reconstruction_inputs(ctx):
     else:
         add_validation_message(validation_result, 'successes', 'data_path')
     
-    # Validate all other parameters by iterating over all_params    
-    for param_name, param_value in all_params.items():
-        # Skip already handled parameters
-        if param_name in parsed_params: #{'root_path', 'data_path'}
+    # Validate all other fields by iterating over all_fields    
+    for field_name, field_value in all_fields.items():
+        # Skip already handled fields
+        if field_name in parsed_fields: #{'root_path', 'data_path'}
             continue
         # Check 1: Is it missing/empty?
         is_missing = False
-        if param_name in ['depth_start', 'depth_end', 'depth_resolution', 'percent_brightest']:
+        if field_name in ['depth_start', 'depth_end', 'depth_resolution', 'percent_brightest']:
             # Numeric fields: check for None or empty string (0 is valid)
-            if param_value is None or param_value == '':
+            if field_value is None or field_value == '':
                 is_missing = True
         else:
             # Other fields: check for falsy values
-            if not param_value:
+            if not field_value:
                 is_missing = True
         
         if is_missing:
             # Special case for scanNumber: only warning, not error
-            if param_name == 'scanNumber':
-                add_validation_message(validation_result, 'warnings', param_name, display_name="Scan Number")
+            if field_name == 'scanNumber':
+                add_validation_message(validation_result, 'warnings', field_name, display_name="Scan Number")
                 continue  # Skip parsing
             else:
-                add_validation_message(validation_result, 'errors', param_name)
+                add_validation_message(validation_result, 'errors', field_name)
                 continue  # Skip parsing if missing
         
-        # Check 2: Parse the parameter
+        # Check 2: Parse the field value
         try:
-            parsed_list = parse_parameter(param_value, num_inputs)
+            parsed_list = parse_parameter(field_value, num_inputs)
         except ValueError as e:
             # Special case for scanNumber: only warning, not error
-            if param_name == 'scanNumber':
-                add_validation_message(validation_result, 'warnings', param_name, 
+            if field_name == 'scanNumber':
+                add_validation_message(validation_result, 'warnings', field_name, 
                                      custom_message=f"Scan Number parsing error: {str(e)}")
                 continue  # Skip length check
             else:
-                add_validation_message(validation_result, 'errors', param_name, 
+                add_validation_message(validation_result, 'errors', field_name, 
                                      custom_message=f"%s parsing error: {str(e)}")
                 continue  # Skip length check if parsing failed
         
         # Check 3: Verify length matches num_inputs
         if len(parsed_list) != num_inputs:
             # Special case for scanNumber: only warning, not error
-            if param_name == 'scanNumber':
-                add_validation_message(validation_result, 'warnings', param_name, 
+            if field_name == 'scanNumber':
+                add_validation_message(validation_result, 'warnings', field_name, 
                                      custom_message=f"Scan Number count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
             else:
-                add_validation_message(validation_result, 'errors', param_name, 
+                add_validation_message(validation_result, 'errors', field_name, 
                                      custom_message=f"%s count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
         
         # Store the parsed list in the dictionary
-        parsed_params[param_name] = parsed_list
+        parsed_fields[field_name] = parsed_list
     
     # Validate each input, skipping fields that failed global validation
     for i in range(num_inputs):
@@ -314,8 +315,8 @@ def validate_wire_reconstruction_inputs(ctx):
         
         # 1. Check if data files exist for this input (skip if root_path or data_path invalid)
         if 'root_path' not in validation_result['errors'] and 'data_path' not in validation_result['errors']:
-            current_data_path = validate_param_value(
-                validation_result, parsed_params, 'data_path', i, input_prefix
+            current_data_path = validate_field_value(
+                validation_result, parsed_fields, 'data_path', i, input_prefix
             )
             if current_data_path is not None:
                 current_full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
@@ -326,8 +327,8 @@ def validate_wire_reconstruction_inputs(ctx):
                                          custom_message="Data Path directory not found")
                 else:
                     # Validate scanNumber against Catalog table (after confirming directory exists)
-                    current_scanNumber = validate_param_value(
-                        validation_result, parsed_params, 'scanNumber', i, input_prefix,
+                    current_scanNumber = validate_field_value(
+                        validation_result, parsed_fields, 'scanNumber', i, input_prefix,
                         required=False, display_name="Scan Number"
                     )
                     if current_scanNumber is not None:
@@ -363,8 +364,8 @@ def validate_wire_reconstruction_inputs(ctx):
                                              custom_message="Data Path directory contains no files")
                     else:
                         # Get filename prefix
-                        current_filename_prefix_str = validate_param_value(
-                            validation_result, parsed_params, 'filenamePrefix', i, input_prefix,
+                        current_filename_prefix_str = validate_field_value(
+                            validation_result, parsed_fields, 'filenamePrefix', i, input_prefix,
                             display_name="Filename Prefix"
                         )
                         if current_filename_prefix_str is not None:
@@ -381,8 +382,8 @@ def validate_wire_reconstruction_inputs(ctx):
                                                          custom_message=f"No files match Filename prefix pattern '{current_filename_prefix_i}'")
                                 else:
                                     # Get scan points
-                                    current_scanPoints = validate_param_value(
-                                        validation_result, parsed_params, 'scanPoints', i, input_prefix,
+                                    current_scanPoints = validate_field_value(
+                                        validation_result, parsed_fields, 'scanPoints', i, input_prefix,
                                         display_name="Scan Points"
                                     )
                                     if current_scanPoints is not None:
@@ -418,8 +419,8 @@ def validate_wire_reconstruction_inputs(ctx):
                                             )
         
         # 2. Validate scanNumber: check that entry is a valid integer
-        if 'scanNumber' not in validation_result['errors'] and 'scanNumber' in parsed_params:
-            current_scanNumber = parsed_params['scanNumber'][i]
+        if 'scanNumber' not in validation_result['errors'] and 'scanNumber' in parsed_fields:
+            current_scanNumber = parsed_fields['scanNumber'][i]
             try:
                 current_scanNumber.isdigit()
             except (ValueError, TypeError):
@@ -432,8 +433,8 @@ def validate_wire_reconstruction_inputs(ctx):
         # Note: We cannot validate this properly if outputFolder contains %d placeholders
         # because we don't know the scan number or wirerecon_id at validation time.
         # This check is skipped if %d is present in the path.
-        current_outputFolder = validate_param_value(
-            validation_result, parsed_params, 'outputFolder', i, input_prefix,
+        current_outputFolder = validate_field_value(
+            validation_result, parsed_fields, 'outputFolder', i, input_prefix,
             display_name="Output Folder"
         )
         if current_outputFolder is not None:
@@ -445,8 +446,8 @@ def validate_wire_reconstruction_inputs(ctx):
                                              custom_message="Output Folder already exists")
         
         # 4. Check if geometry file exists for this input (skip if root_path invalid)
-        current_geoFile = validate_param_value(
-            validation_result, parsed_params, 'geoFile', i, input_prefix,
+        current_geoFile = validate_field_value(
+            validation_result, parsed_fields, 'geoFile', i, input_prefix,
             display_name="Geometry File"
         )
         if current_geoFile is not None:
@@ -457,18 +458,18 @@ def validate_wire_reconstruction_inputs(ctx):
                                          custom_message="Geometry File not found")
         
         # 5. Validate depth parameters for this input using the universal helper
-        depth_start_val = validate_param_value(
-            validation_result, parsed_params, 'depth_start', i, input_prefix,
+        depth_start_val = validate_field_value(
+            validation_result, parsed_fields, 'depth_start', i, input_prefix,
             converter=safe_float
         )
         
-        depth_end_val = validate_param_value(
-            validation_result, parsed_params, 'depth_end', i, input_prefix,
+        depth_end_val = validate_field_value(
+            validation_result, parsed_fields, 'depth_end', i, input_prefix,
             converter=safe_float
         )
         
-        depth_resolution_val = validate_param_value(
-            validation_result, parsed_params, 'depth_resolution', i, input_prefix,
+        depth_resolution_val = validate_field_value(
+            validation_result, parsed_fields, 'depth_resolution', i, input_prefix,
             converter=safe_float
         )
         
@@ -517,8 +518,8 @@ def validate_wire_reconstruction_inputs(ctx):
                                              custom_message=f"Depth Resolution ({depth_resolution_val} µm) must be ≤ depth range ({abs(depth_span)} µm)")
         
         # 6. Validate percent_brightest for this input
-        percent_val = validate_param_value(
-            validation_result, parsed_params, 'percent_brightest', i, input_prefix,
+        percent_val = validate_field_value(
+            validation_result, parsed_fields, 'percent_brightest', i, input_prefix,
             converter=safe_float, display_name="Intensity Percentile"
         )
         if percent_val is not None:
@@ -527,11 +528,11 @@ def validate_wire_reconstruction_inputs(ctx):
                                      custom_message="Intensity Percentile must be between 0 and 100")
         
     
-    # Add successes for parameters that passed all validations
-    # Only add to successes if the parameter has neither errors nor warnings
-    for param_name in all_field_ids:
-        if param_name not in validation_result['errors'] and param_name not in validation_result['warnings']:
-            add_validation_message(validation_result, 'successes', param_name)
+    # Add successes for fields that passed all validations
+    # Only add to successes if the field has neither errors nor warnings
+    for field_name in all_field_ids:
+        if field_name not in validation_result['errors'] and field_name not in validation_result['warnings']:
+            add_validation_message(validation_result, 'successes', field_name)
     
     # Close database session
     session.close()
@@ -545,7 +546,7 @@ Callbacks
 =======================
 """
 @dash.callback(
-    Input('validate-btn', 'n_clicks'),
+    Input('wirerecon-validate-btn', 'n_clicks'),
     State('data_path', 'value'),
     State('filenamePrefix', 'value'),
     State('scanPoints', 'value'),
@@ -920,7 +921,8 @@ def submit_parameters(n,
 # Register shared callbacks
 register_update_path_fields_callback(
     button_id='wirerecon-update-path-fields-btn',
-    scan_number_id='scanNumber',
+    # scan_number_id='scanNumber',
+    id_number_id='IDnumber',
     root_path_id='root_path',
     data_path_id='data_path',
     filename_prefix_id='filenamePrefix',

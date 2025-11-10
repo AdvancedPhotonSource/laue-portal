@@ -9,25 +9,25 @@ import os
 from dash import html, set_props
 
 
-def format_param_name(param_name):
-    """Convert param_name to display format only if it contains underscores."""
-    if '_' in param_name:
-        return param_name.replace('_', ' ').title()
-    return param_name
+def format_field_name(field_name):
+    """Convert field_name to display format only if it contains underscores."""
+    if '_' in field_name:
+        return field_name.replace('_', ' ').title()
+    return field_name
 
 
-def add_validation_message(validation_result, result_key, param_name, input_prefix='', custom_message=None, display_name=None):
+def add_validation_message(validation_result, result_key, field_name, input_prefix='', custom_message=None, display_name=None):
     """
     Add a validation message to the validation_result dict.
     
     Parameters:
     - validation_result: dict with 'errors', 'warnings', 'successes' keys
     - result_key: which key to add to ('errors', 'warnings', or 'successes')
-    - param_name: name of the parameter (base name without prefix)
+    - field_name: name of the field (base name without prefix)
     - input_prefix: optional prefix for the message (e.g., "Input 1: ")
-    - custom_message: optional custom message. Supports %s placeholder(s) for parameter name(s).
+    - custom_message: optional custom message. Supports %s placeholder(s) for field name(s).
     - display_name: optional custom display name or list of names for %s replacement.
-                   If not provided with %s in custom_message, auto-generated from param_name.
+                   If not provided with %s in custom_message, auto-generated from field_name.
     
     Example usage:
         # Global validation - auto-generated display name
@@ -75,8 +75,8 @@ def add_validation_message(validation_result, result_key, param_name, input_pref
         if '%s' in custom_message:
             # Determine what to use for %s replacement
             if display_name is None:
-                # Auto-generate from param_name
-                display_name = format_param_name(param_name)
+                # Auto-generate from field_name
+                display_name = format_field_name(field_name)
             
             # Perform replacement based on display_name type
             if isinstance(display_name, (list, tuple)):
@@ -91,7 +91,7 @@ def add_validation_message(validation_result, result_key, param_name, input_pref
     else:
         # Generate default message
         if display_name is None:
-            display_name = format_param_name(param_name)
+            display_name = format_field_name(field_name)
         
         if result_key == 'errors':
             message = f"{display_name} is required"
@@ -104,17 +104,17 @@ def add_validation_message(validation_result, result_key, param_name, input_pref
     if input_prefix:
         message = f"{input_prefix}{message}"
     
-    # Append message to the list for this param_name in the appropriate result category
-    validation_result[result_key].setdefault(param_name, []).append(message)
+    # Append message to the list for this field_name in the appropriate result category
+    validation_result[result_key].setdefault(field_name, []).append(message)
 
 
-def validate_param_value(validation_result, parsed_params, param_name, index, input_prefix='',
+def validate_field_value(validation_result, parsed_fields, field_name, index, input_prefix='',
                          converter=None, required=True, display_name=None):
     """
-    Extract, validate, and convert a parameter value from parsed_params.
+    Extract, validate, and convert a field value from parsed_fields.
     
     This comprehensive helper handles the complete validation pattern:
-    1. Check if param exists in parsed_params (skip if failed global validation)
+    1. Check if field exists in parsed_fields (skip if failed global validation)
     2. Extract the value at the given index
     3. Check if value is None/empty (if required)
     4. Apply type conversion (if converter provided)
@@ -122,13 +122,13 @@ def validate_param_value(validation_result, parsed_params, param_name, index, in
     
     Parameters:
     - validation_result: dict with 'errors', 'warnings', 'successes' keys
-    - parsed_params: dict of parsed parameter lists
-    - param_name: name of the parameter to extract
-    - index: index in the parameter list
+    - parsed_fields: dict of parsed field value lists
+    - field_name: name of the field to extract
+    - index: index in the field value list
     - input_prefix: optional prefix for the message (e.g., "Input 1: ")
     - converter: optional function to convert the value (e.g., safe_int, safe_float)
     - required: whether the value is required (default True)
-    - display_name: optional custom display name (if not provided, auto-generated from param_name)
+    - display_name: optional custom display name (if not provided, auto-generated from field_name)
     
     Returns:
     - The extracted (and optionally converted) value, or None if validation failed
@@ -136,28 +136,28 @@ def validate_param_value(validation_result, parsed_params, param_name, index, in
     Example:
         # Auto-generated display name
         input_prefix = f"Input {i+1}: " if num_inputs > 1 else ""
-        depth_start_val = validate_param_value(
-            validation_result, parsed_params, 'depth_start', i, input_prefix,
+        depth_start_val = validate_field_value(
+            validation_result, parsed_fields, 'depth_start', i, input_prefix,
             converter=safe_float
         )
         
         # Custom display name for special cases
-        geo_file = validate_param_value(
-            validation_result, parsed_params, 'geoFile', i, input_prefix,
+        geo_file = validate_field_value(
+            validation_result, parsed_fields, 'geoFile', i, input_prefix,
             display_name='Geometry File'
         )
     """
-    # Skip if parameter failed global validation
-    if param_name not in parsed_params:
+    # Skip if field failed global validation
+    if field_name not in parsed_fields:
         return None
     
     # Extract the value
-    value = parsed_params[param_name][index]
+    value = parsed_fields[field_name][index]
     
     # Check if value is None/empty
     if value is None or value == '':
         if required:
-            add_validation_message(validation_result, 'errors', param_name, input_prefix, 
+            add_validation_message(validation_result, 'errors', field_name, input_prefix, 
                                  display_name=display_name)
         return None
     
@@ -165,8 +165,8 @@ def validate_param_value(validation_result, parsed_params, param_name, index, in
     if converter is not None:
         converted_value = converter(value)
         if converted_value is None:
-            add_validation_message(validation_result, 'errors', param_name, input_prefix,
-                                 custom_message=f"{param_name} must be a valid number",
+            add_validation_message(validation_result, 'errors', field_name, input_prefix,
+                                 custom_message=f"{field_name} must be a valid number",
                                  display_name=display_name)
             return None
         return converted_value
@@ -386,3 +386,40 @@ def safe_int(value):
         return int(value)
     except (ValueError, TypeError):
         return None
+
+
+def get_num_inputs_from_fields(fields_dict, delimiter="; "):
+    """
+    Determine the number of inputs by finding the maximum number of 
+    semicolon-separated entries across all form fields.
+    
+    This handles the case where pooled data may have identical values
+    that get collapsed to a single value during pooling, while other
+    fields retain their semicolon-separated format.
+    
+    Parameters:
+    - fields_dict: Dictionary of field names to values
+    - delimiter: The delimiter used to separate multiple values (default "; ")
+    
+    Returns:
+    - int: The maximum number of inputs found across all fields (minimum 1)
+    
+    Example:
+        fields = {
+            'data_path': 'data/scan_276994',  # Same for all (collapsed)
+            'scanNumber': '276994; 276995; 276996',  # Different (3 entries)
+            'threshold': '250'  # Same for all (collapsed)
+        }
+        num_inputs = get_num_inputs_from_fields(fields)  # Returns 3
+    """
+    num_inputs = 1  # Default to 1
+    
+    # Scan all fields to find the maximum number of semicolon-separated entries
+    for field_name, field_value in fields_dict.items():
+        if field_value is not None and field_value != '':
+            # Count semicolon-separated entries
+            value_str = str(field_value)
+            entries = [s.strip() for s in value_str.split(delimiter)]
+            num_inputs = max(num_inputs, len(entries))
+    
+    return num_inputs

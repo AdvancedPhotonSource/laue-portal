@@ -11,7 +11,7 @@ from .subjob import SubJob
 from .calib import Calib
 from .recon import Recon
 from .wire_recon import WireRecon
-from .peak_index import PeakIndex
+from .peakindex import PeakIndex
 
 __all__ = [
     "Base",

@@ -10,6 +10,16 @@ DEFAULT_VARIABLES:
   memory_limit_mb: 50000
   verbose: 1
 
+# Valid HDF file extensions for data files
+VALID_HDF_EXTENSIONS:
+  - .hdf
+  - .h4
+  - .hdf4
+  - .he2
+  - .h5
+  - .hdf5
+  - .he5
+
 # Redis server configuration
 REDIS_CONFIG:
   host: localhost

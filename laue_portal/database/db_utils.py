@@ -727,6 +727,62 @@ def get_catalog_data(session, scan_number, root_path="", CATALOG_DEFAULTS=None):
             }
 
 
+def get_data_from_id(session, id_dict, root_path, catalog_defaults=None):
+    """
+    Get data_path and filenamePrefix based on ID priority.
+    
+    This is the analog of get_catalog_data() but with broader scope,
+    querying the appropriate table based on which ID is present.
+    
+    Priority order:
+    1. If recon_id exists → query Recon table (MR prefix)
+    2. Else if wirerecon_id exists → query WireRecon table (WR prefix)
+    3. Else if scanNumber exists → call get_catalog_data() (SN prefix)
+    
+    Args:
+        session: SQLAlchemy session object
+        id_dict: Dict from parse_IDnumber() with keys:
+                 scanNumber, wirerecon_id, recon_id, peakindex_id
+        root_path: Root path for file operations
+        catalog_defaults: Defaults for catalog fallback (optional)
+    
+    Returns:
+        dict: {'data_path': str, 'filenamePrefix': list or str}
+    """
+    recon_id = id_dict.get('recon_id')
+    wirerecon_id = id_dict.get('wirerecon_id')
+    scanNumber = id_dict.get('scanNumber')
+    
+    # Priority 1: Regular reconstruction (MR)
+    if recon_id:
+        recon_data = session.query(db_schema.Recon).filter_by(
+            recon_id=int(recon_id)
+        ).first()
+        if recon_data and recon_data.file_output:
+            return {
+                'data_path': remove_root_path_prefix(recon_data.file_output, root_path),
+                'filenamePrefix': getattr(recon_data, 'filenamePrefix', []) or []
+            }
+    
+    # Priority 2: Wire reconstruction (WR)
+    if wirerecon_id:
+        wirerecon_data = session.query(db_schema.WireRecon).filter_by(
+            wirerecon_id=int(wirerecon_id)
+        ).first()
+        if wirerecon_data and wirerecon_data.outputFolder:
+            return {
+                'data_path': remove_root_path_prefix(wirerecon_data.outputFolder, root_path),
+                'filenamePrefix': wirerecon_data.filenamePrefix or []
+            }
+    
+    # Priority 3: Fallback to catalog data (SN)
+    if scanNumber:
+        return get_catalog_data(session, int(scanNumber), root_path, catalog_defaults)
+    
+    # No valid ID found
+    return {'data_path': '', 'filenamePrefix': []}
+
+
 def get_next_id(session, table_class):
     """
     Get the next available ID for a given table by finding the maximum ID and incrementing it.
