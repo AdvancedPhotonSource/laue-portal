@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
 import laue_portal.components.navbar as navbar
-from laue_portal.database.db_utils import get_catalog_data, get_data_from_id, remove_root_path_prefix, parse_parameter
-from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props, parse_IDnumber
+from laue_portal.database.db_utils import get_catalog_data, get_data_from_id, remove_root_path_prefix, parse_parameter, parse_IDnumber
+from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
 from laue_portal.components.form_base import _field
 from laue_portal.components.validation_alerts import validation_alerts
 from laue_portal.processing.redis_utils import enqueue_peakindexing, STATUS_REVERSE_MAPPING
@@ -335,7 +335,7 @@ def validate_peakindexing_inputs(ctx):
     
     # Extract individual field values
     root_path = all_fields.get('root_path', '')
-    IDnumber = all_fields.get('IDnumber', '')  # New: IDnumber field
+    IDnumber = all_fields.get('IDnumber', '')
     # Old individual ID fields (now parsed from IDnumber):
     # scanNumber = all_params.get('scanNumber')
     # recon_id = all_params.get('recon_id')
@@ -675,8 +675,9 @@ def validate_peakindexing_inputs(ctx):
                                             custom_message=f"Missing files for Filename prefix '{current_filename_prefix_i}' (indices: {files_str})"
                                         )
         
-        # 2. Validate scanNumber: check that entry is a valid integer (only if parsed from IDnumber)
-        # Note: parse_IDnumber already validates integers from database, but we double-check here
+        # 2. Validate scanNumber: check that entry is a valid integer
+        # Note: Database-sourced scanNumbers (from PI/MR/WR lookups) are already integers,
+        # but SN-prefixed IDs are parsed as strings and need validation
         if 'scanNumber' in parsed_fields and 'scanNumber' not in validation_result['errors']:
             current_scanNumber = parsed_fields['scanNumber'][i]
             try:
@@ -1131,7 +1132,7 @@ def submit_parameters(n,
             scanNumber = id_dict.get('scanNumber')
             wirerecon_id = id_dict.get('wirerecon_id')
             recon_id = id_dict.get('recon_id')
-            peakindex_id = id_dict.get('peakindex_id')
+            # peakindex_id = id_dict.get('peakindex_id')
         except ValueError as e:
             set_props("alert-submit", {
                 'is_open': True,
@@ -1140,49 +1141,18 @@ def submit_parameters(n,
             })
             return
     
+    # Build all_submit_params from ctx.states (consistent with validation approach)
+    all_submit_params = {}
+    for key, value in ctx.states.items():
+        component_id = key.split('.')[0]
+        all_submit_params[component_id] = value
+    
+    # Add parsed IDs to the params dict
+    all_submit_params['scanNumber'] = scanNumber
+    all_submit_params['wirerecon_id'] = wirerecon_id
+    all_submit_params['recon_id'] = recon_id
+    
     # Determine num_inputs from longest semicolon-separated list across all fields
-    # Collect all parameter values into a dict
-    all_submit_params = {
-        'scanNumber': scanNumber,
-        'author': author,
-        'notes': notes,
-        'recon_id': recon_id,
-        'wirerecon_id': wirerecon_id,
-        'threshold': threshold,
-        'thresholdRatio': thresholdRatio,
-        'maxRfactor': maxRfactor,
-        'boxsize': boxsize,
-        'max_number': max_number,
-        'min_separation': min_separation,
-        'peakShape': peakShape,
-        'scanPoints': scanPoints,
-        'depthRange': depthRange,
-        'detectorCropX1': detectorCropX1,
-        'detectorCropX2': detectorCropX2,
-        'detectorCropY1': detectorCropY1,
-        'detectorCropY2': detectorCropY2,
-        'min_size': min_size,
-        'max_peaks': max_peaks,
-        'smooth': smooth,
-        'maskFile': maskFile,
-        'indexKeVmaxCalc': indexKeVmaxCalc,
-        'indexKeVmaxTest': indexKeVmaxTest,
-        'indexAngleTolerance': indexAngleTolerance,
-        'indexHKL': indexHKL,
-        'indexCone': indexCone,
-        'energyUnit': energyUnit,
-        'exposureUnit': exposureUnit,
-        'cosmicFilter': cosmicFilter,
-        'recipLatticeUnit': recipLatticeUnit,
-        'latticeParametersUnit': latticeParametersUnit,
-        'data_path': data_path,
-        'filenamePrefix': filenamePrefix,
-        'outputFolder': outputFolder,
-        'geoFile': geometry_file,
-        'crystFile': crystal_file,
-        'depth': depth,
-        'beamline': beamline
-    }
     num_inputs = get_num_inputs_from_fields(all_submit_params)
     
     # Parse all other parameters with num_inputs

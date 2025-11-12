@@ -19,7 +19,6 @@ Usage:
     )
 """
 
-import glob
 import logging
 import os
 import re
@@ -32,9 +31,8 @@ from dash.exceptions import PreventUpdate
 from sqlalchemy.orm import Session
 
 import laue_portal.database.session_utils as session_utils
-from laue_portal.database.db_utils import get_data_from_id, parse_parameter
+from laue_portal.database.db_utils import get_data_from_id, parse_parameter, parse_IDnumber
 from laue_portal.config import DEFAULT_VARIABLES, VALID_HDF_EXTENSIONS
-from laue_portal.components.peakindex_form import parse_IDnumber
 from srange import srange
 
 logger = logging.getLogger(__name__)

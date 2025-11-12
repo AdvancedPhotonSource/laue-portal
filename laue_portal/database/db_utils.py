@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 import sqlalchemy
 from datetime import datetime
 from laue_portal.config import MOTOR_GROUPS
+import re
 
 
 def parse_metadata(xml,xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog",scan_no=2,empty='\n\t\t'):
@@ -862,3 +863,270 @@ def parse_parameter(parameter_value, num_inputs=None):
             raise ValueError(f"Parameter has {len(values)} values but there are {num_inputs} inputs")
     
     return values
+
+
+def get_num_inputs_from_fields(fields_dict, delimiter="; "):
+    """
+    Determine the number of inputs by finding the maximum number of 
+    semicolon-separated entries across all form fields.
+    
+    This handles the case where pooled data may have identical values
+    that get collapsed to a single value during pooling, while other
+    fields retain their semicolon-separated format.
+    
+    Parameters:
+    - fields_dict: Dictionary of field names to values
+    - delimiter: The delimiter used to separate multiple values (default "; ")
+    
+    Returns:
+    - int: The maximum number of inputs found across all fields (minimum 1)
+    
+    Example:
+        fields = {
+            'data_path': 'data/scan_276994',  # Same for all (collapsed)
+            'scanNumber': '276994; 276995; 276996',  # Different (3 entries)
+            'threshold': '250'  # Same for all (collapsed)
+        }
+        num_inputs = get_num_inputs_from_fields(fields)  # Returns 3
+    """
+    num_inputs = 1  # Default to 1
+    
+    # Scan all fields to find the maximum number of semicolon-separated entries
+    for field_name, field_value in fields_dict.items():
+        if field_value is not None and field_value != '':
+            # Count semicolon-separated entries
+            value_str = str(field_value)
+            entries = [s.strip() for s in value_str.split(delimiter)]
+            num_inputs = max(num_inputs, len(entries))
+    
+    return num_inputs
+
+
+def make_IDnumber(SN=None, WR=None, MR=None, PI=None, delimiter="; "):
+    """
+    Create ID number string from scan, wire recon, recon, and peakindex IDs.
+    Handles None values, "None" strings, and pooled values.
+    
+    Parameters:
+    - SN: Scan number(s) - can be single value or semicolon-delimited string
+    - WR: Wire recon ID(s) - can be single value or semicolon-delimited string
+    - MR: Recon ID(s) - can be single value or semicolon-delimited string
+    - PI: Peak index ID(s) - can be single value or semicolon-delimited string
+    - delimiter: Delimiter used to separate multiple values (default "; ")
+    
+    Returns:
+    - String with ID number(s) in priority order (PI > MR > WR > SN)
+    - Returns None if all inputs are None or no valid entries found
+    - Deduplicates if all entries are identical
+    
+    Raises:
+    - ValueError: If field lengths don't match expected pattern (1 or max_len)
+    """
+    # Helper function to check if value is None or "None"
+    def is_none_value(val):
+        return val is None or str(val).strip().lower() == 'none'
+    
+    # Build params dict for get_num_inputs_from_fields
+    params_dict = {
+        'SN': SN,
+        'WR': WR,
+        'MR': MR,
+        'PI': PI
+    }
+    
+    # Get max length across all parameters
+    max_len = get_num_inputs_from_fields(params_dict, delimiter)
+    
+    # Build ID_lists directly from params_dict, excluding None values
+    ID_lists = {}
+    for key, value in params_dict.items():
+        if not is_none_value(value):
+            # Split into entries
+            entries = str(value).split(delimiter)
+            
+            # Validate and pad to max_len
+            if len(entries) == 1 and max_len > 1:
+                # Duplicate single value (collapsed from pooling)
+                ID_lists[key] = entries * max_len
+            elif len(entries) == max_len:
+                # Already correct length
+                ID_lists[key] = entries
+            else:
+                # Unexpected length - this shouldn't happen with proper pooling
+                raise ValueError(
+                    f"Field {key} has {len(entries)} entries but expected 1 or {max_len}. "
+                    f"Value: {value}"
+                )
+    
+    # If all are None, return None
+    if not ID_lists:
+        return None
+    
+    # Build ID strings with priority: PI > MR > WR > SN
+    IDnumbers = []
+    for i in range(max_len):
+        if 'PI' in ID_lists and ID_lists['PI'][i] and not is_none_value(ID_lists['PI'][i]):
+            IDnumbers.append(f"PI{ID_lists['PI'][i]}")
+        elif 'MR' in ID_lists and ID_lists['MR'][i] and not is_none_value(ID_lists['MR'][i]):
+            IDnumbers.append(f"MR{ID_lists['MR'][i]}")
+        elif 'WR' in ID_lists and ID_lists['WR'][i] and not is_none_value(ID_lists['WR'][i]):
+            IDnumbers.append(f"WR{ID_lists['WR'][i]}")
+        elif 'SN' in ID_lists and ID_lists['SN'][i] and not is_none_value(ID_lists['SN'][i]):
+            IDnumbers.append(f"SN{ID_lists['SN'][i]}")
+    
+    # If no valid entries were found, return None
+    if not IDnumbers:
+        return None
+    
+    # If all entries are identical, return just one
+    if all(id_num == IDnumbers[0] for id_num in IDnumbers):
+        return IDnumbers[0]
+    
+    return delimiter.join(IDnumbers)
+
+
+def parse_IDnumber(IDnumber, session, delimiter="; "):
+    """
+    Parse IDnumber string and query database for parent IDs.
+    Reverses the operation of make_IDnumber and fills in parent relationships.
+    
+    Parameters:
+    - IDnumber: String like "PI5", "MR3; MR4", "WR1", "SN276994", etc.
+                Can also be None or empty string.
+    - session: SQLAlchemy session for database queries
+    - delimiter: Delimiter used in the IDnumber string (default "; ")
+    
+    Returns:
+    - dict: {'scanNumber': value, 'wirerecon_id': value, 'recon_id': value, 'peakindex_id': value}
+      where value can be:
+      - None (if that ID type wasn't present in any entry)
+      - Single value string (if all entries were identical, e.g., "5")
+      - Semicolon-delimited string (if multiple different values, e.g., "3; 4; 5")
+      - Semicolon-delimited string with None (e.g., "3; None; 5" for pooled data where some entries lack that parent ID)
+    
+    Database Lookup Rules:
+    - If peakindex_id is provided: Queries PeakIndex table for scanNumber, recon_id, wirerecon_id
+    - If recon_id is provided: Queries Recon table for scanNumber
+    - If wirerecon_id is provided: Queries WireRecon table for scanNumber
+    - If scanNumber is provided: No database query needed (it's the root)
+    - Does NOT query for child IDs (e.g., if scanNumber provided, doesn't look up wirerecon_id/recon_id/peakindex_id)
+    
+    Raises:
+    - ValueError: If IDnumber format is invalid
+    
+    Examples:
+    - parse_IDnumber("PI5", session) 
+      → Queries PeakIndex.peakindex_id=5
+      → Returns {'scanNumber': '276994', 'wirerecon_id': None, 'recon_id': '3', 'peakindex_id': '5'}
+      
+    - parse_IDnumber("MR3; MR4", session)
+      → Queries Recon.recon_id IN (3,4)
+      → Returns {'scanNumber': '100; 101', 'wirerecon_id': None, 'recon_id': '3; 4', 'peakindex_id': None}
+      
+    - parse_IDnumber("WR1", session)
+      → Queries WireRecon.wirerecon_id=1
+      → Returns {'scanNumber': '276994', 'wirerecon_id': '1', 'recon_id': None, 'peakindex_id': None}
+      
+    - parse_IDnumber("SN276994", session)
+      → No database query
+      → Returns {'scanNumber': '276994', 'wirerecon_id': None, 'recon_id': None, 'peakindex_id': None}
+      
+    - parse_IDnumber("PI5; PI6", session)
+      → Queries PeakIndex.peakindex_id IN (5,6)
+      → If PI5 has recon_id=3 but PI6 has recon_id=None
+      → Returns {'scanNumber': '276994; 276995', 'wirerecon_id': None, 'recon_id': '3; None', 'peakindex_id': '5; 6'}
+    """
+    # Initialize result dict with proper field names, each containing a list
+    result = {
+        'scanNumber': [],
+        'wirerecon_id': [],
+        'recon_id': [],
+        'peakindex_id': []
+    }
+    
+    # Handle None or empty input
+    if not IDnumber or str(IDnumber).strip().lower() in ['none', '']:
+        return {k: None for k in result.keys()}
+    
+    # Split by delimiter to get individual ID entries
+    entries = str(IDnumber).split(delimiter)
+    
+    # Define prefix to field name mapping
+    prefix_map = {
+        'SN': 'scanNumber',
+        'WR': 'wirerecon_id',
+        'MR': 'recon_id',
+        'PI': 'peakindex_id'
+    }
+    
+    # Process each entry
+    for entry in entries:
+        if not entry or entry.lower() == 'none':
+            continue
+        
+        # Use regex to match prefix and number
+        # Pattern: (SN|WR|MR|PI) followed by one or more digits
+        match = re.match(r'^(SN|WR|MR|PI)(\d+)$', entry.upper())
+        
+        if match:
+            prefix = match.group(1)
+            number_str = match.group(2)
+            field_name = prefix_map[prefix]
+            
+            # Add to result list for this field
+            result[field_name].append(number_str)
+            
+            # Query database for parent IDs based on field_name
+            if field_name == 'peakindex_id':
+                pi_id_int = int(number_str)
+                peakindex_data = session.query(db_schema.PeakIndex).filter(
+                    db_schema.PeakIndex.peakindex_id == pi_id_int
+                ).first()
+                
+                if peakindex_data:
+                    result['scanNumber'].append(str(peakindex_data.scanNumber))
+                    # Always append, even if None
+                    result['recon_id'].append(str(peakindex_data.recon_id) if peakindex_data.recon_id else None)
+                    result['wirerecon_id'].append(str(peakindex_data.wirerecon_id) if peakindex_data.wirerecon_id else None)
+                else:
+                    raise ValueError(f"PeakIndex ID {number_str} not found in database")
+            
+            elif field_name == 'recon_id':
+                mr_id_int = int(number_str)
+                recon_data = session.query(db_schema.Recon).filter(
+                    db_schema.Recon.recon_id == mr_id_int
+                ).first()
+                
+                if recon_data:
+                    result['scanNumber'].append(str(recon_data.scanNumber))
+                else:
+                    raise ValueError(f"Recon ID {number_str} not found in database")
+            
+            elif field_name == 'wirerecon_id':
+                wr_id_int = int(number_str)
+                wirerecon_data = session.query(db_schema.WireRecon).filter(
+                    db_schema.WireRecon.wirerecon_id == wr_id_int
+                ).first()
+                
+                if wirerecon_data:
+                    result['scanNumber'].append(str(wirerecon_data.scanNumber))
+                else:
+                    raise ValueError(f"WireRecon ID {number_str} not found in database")
+            
+            # If field_name == 'scanNumber', no database query needed
+        else:
+            raise ValueError(f"Invalid IDnumber entry: '{entry}' - expected format: (SN|WR|MR|PI)###")
+    
+    # Convert lists to final format (None, single value, or delimited string)
+    final_result = {}
+    for field_name, id_list in result.items():
+        if not id_list:
+            final_result[field_name] = None
+        elif all(id_val == id_list[0] for id_val in id_list):
+            # All values are identical, return single value
+            final_result[field_name] = id_list[0]
+        else:
+            # Return semicolon-delimited string
+            final_result[field_name] = delimiter.join(str(v) for v in id_list)
+    
+    return final_result

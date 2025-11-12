@@ -7,6 +7,7 @@ both wire reconstruction and peak indexing validation functions.
 
 import os
 from dash import html, set_props
+from laue_portal.database.db_utils import get_num_inputs_from_fields
 
 
 def format_field_name(field_name):
@@ -386,40 +387,3 @@ def safe_int(value):
         return int(value)
     except (ValueError, TypeError):
         return None
-
-
-def get_num_inputs_from_fields(fields_dict, delimiter="; "):
-    """
-    Determine the number of inputs by finding the maximum number of 
-    semicolon-separated entries across all form fields.
-    
-    This handles the case where pooled data may have identical values
-    that get collapsed to a single value during pooling, while other
-    fields retain their semicolon-separated format.
-    
-    Parameters:
-    - fields_dict: Dictionary of field names to values
-    - delimiter: The delimiter used to separate multiple values (default "; ")
-    
-    Returns:
-    - int: The maximum number of inputs found across all fields (minimum 1)
-    
-    Example:
-        fields = {
-            'data_path': 'data/scan_276994',  # Same for all (collapsed)
-            'scanNumber': '276994; 276995; 276996',  # Different (3 entries)
-            'threshold': '250'  # Same for all (collapsed)
-        }
-        num_inputs = get_num_inputs_from_fields(fields)  # Returns 3
-    """
-    num_inputs = 1  # Default to 1
-    
-    # Scan all fields to find the maximum number of semicolon-separated entries
-    for field_name, field_value in fields_dict.items():
-        if field_value is not None and field_value != '':
-            # Count semicolon-separated entries
-            value_str = str(field_value)
-            entries = [s.strip() for s in value_str.split(delimiter)]
-            num_inputs = max(num_inputs, len(entries))
-    
-    return num_inputs

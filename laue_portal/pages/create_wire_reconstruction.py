@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
 import laue_portal.components.navbar as navbar
-from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix, parse_parameter
+from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix, parse_parameter, parse_IDnumber
 from laue_portal.components.wire_recon_form import wire_recon_form, set_wire_recon_form_props
 from laue_portal.components.form_base import _field
 from laue_portal.components.validation_alerts import validation_alerts
@@ -198,7 +198,8 @@ def validate_wire_reconstruction_inputs(ctx):
         'percent_brightest',
         'outputFolder',
         'root_path',
-        'scanNumber',
+        'IDnumber',  # Replaced scanNumber with IDnumber
+        # 'scanNumber',  # Now parsed from IDnumber
         'author',
     ]
     
@@ -215,9 +216,18 @@ def validate_wire_reconstruction_inputs(ctx):
         if component_id in all_field_ids:
             all_fields[component_id] = value
     
+    # Determine num_inputs from longest semicolon-separated list across all fields
+    num_inputs = get_num_inputs_from_fields(all_fields)
+    
     # Extract individual field values
     root_path = all_fields.get('root_path', '')
-    data_path = all_fields.get('data_path')
+    IDnumber = all_fields.get('IDnumber', '')
+    # Old individual ID fields (now parsed from IDnumber):
+    # scanNumber = all_params.get('scanNumber')
+    # wirerecon_id = all_params.get('wirerecon_id')
+    
+    # Other parameters (kept as comments for reference):
+    # data_path = all_fields.get('data_path')
     # filenamePrefix = all_params.get('filenamePrefix')
     # scanPoints = all_params.get('scanPoints')
     # geoFile = all_params.get('geoFile')
@@ -238,24 +248,21 @@ def validate_wire_reconstruction_inputs(ctx):
         parsed_fields['root_path'] = root_path
         add_validation_message(validation_result, 'successes', 'root_path')
     
-    # Parse data_path first to determine number of scans
-    try:
-        data_path_list = parse_parameter(data_path)
-        num_inputs = len(data_path_list)
-        parsed_fields['data_path'] = data_path_list
-    except ValueError as e:
-        add_validation_message(validation_result, 'errors', 'data_path', 
-                              custom_message=f"Data Path parsing error: {str(e)}")
-        # Close session before early return
-        session.close()
-        # Return early since we can't validate other fields without knowing num_inputs
-        return validation_result
-    
-    # Check data_path separately since we already parsed it
-    if not data_path:
-        add_validation_message(validation_result, 'errors', 'data_path')
+    # Parse IDnumber to get scanNumber, wirerecon_id
+    if IDnumber:
+        try:
+            id_dict = parse_IDnumber(IDnumber, session)
+            # Add parsed IDs to parsed_fields for use in validation
+            for key, value in id_dict.items():
+                if value is not None:
+                    parsed_fields[key] = parse_parameter(value, num_inputs)
+            add_validation_message(validation_result, 'successes', 'IDnumber')
+        except ValueError as e:
+            add_validation_message(validation_result, 'errors', 'IDnumber', 
+                                  custom_message=f"ID Number parsing error: {str(e)}")
     else:
-        add_validation_message(validation_result, 'successes', 'data_path')
+        # IDnumber is optional - if not provided, just skip
+        pass
     
     # Validate all other fields by iterating over all_fields    
     for field_name, field_value in all_fields.items():
@@ -419,10 +426,12 @@ def validate_wire_reconstruction_inputs(ctx):
                                             )
         
         # 2. Validate scanNumber: check that entry is a valid integer
+        # Note: Database-sourced scanNumbers (from WR lookups) are already integers,
+        # but SN-prefixed IDs are parsed as strings and need validation
         if 'scanNumber' not in validation_result['errors'] and 'scanNumber' in parsed_fields:
             current_scanNumber = parsed_fields['scanNumber'][i]
             try:
-                current_scanNumber.isdigit()
+                int(current_scanNumber)  # Actually convert to test validity
             except (ValueError, TypeError):
                 add_validation_message(
                     validation_result, 'warnings', 'scanNumber', input_prefix,
@@ -557,7 +566,8 @@ Callbacks
     State('percent_brightest', 'value'),
     State('outputFolder', 'value'),
     State('root_path', 'value'),
-    State('scanNumber', 'value'),
+    State('IDnumber', 'value'),  # Replaced scanNumber with IDnumber
+    # State('scanNumber', 'value'),  # Old - now parsed from IDnumber
     State('author', 'value'),
     prevent_initial_call=True,
 )
@@ -573,7 +583,8 @@ def validate_inputs(
     percent_brightest,
     outputFolder,
     root_path,
-    scanNumber,
+    IDnumber,  # Replaced scanNumber with IDnumber
+    # scanNumber,  # Old - now parsed from IDnumber
     author,
 ):
     """Handle Validate button click"""
@@ -594,7 +605,8 @@ def validate_inputs(
 @dash.callback(
     Input('submit_wire', 'n_clicks'),
     
-    State('scanNumber', 'value'),
+    State('IDnumber', 'value'),  # Replaced scanNumber with IDnumber
+    # State('scanNumber', 'value'),  # Old - now parsed from IDnumber
     
     # User text
     State('author', 'value'),
@@ -621,7 +633,8 @@ def validate_inputs(
     prevent_initial_call=True,
 )
 def submit_parameters(n,
-    scanNumber,
+    IDnumber,  # Replaced scanNumber with IDnumber
+    # scanNumber,  # Old - now parsed from IDnumber
     
     # User text
     author,
@@ -674,9 +687,31 @@ def submit_parameters(n,
         })
         return
     
-    # Parse data_path first to get the number of inputs
-    data_path_list = parse_parameter(data_path)
-    num_inputs = len(data_path_list)
+    # Parse IDnumber to get individual IDs
+    with Session(session_utils.get_engine()) as temp_session:
+        try:
+            id_dict = parse_IDnumber(IDnumber, temp_session)
+            scanNumber = id_dict.get('scanNumber')
+            # wirerecon_id = id_dict.get('wirerecon_id')
+        except ValueError as e:
+            set_props("alert-submit", {
+                'is_open': True,
+                'children': f'Invalid ID Number: {str(e)}',
+                'color': 'danger'
+            })
+            return
+    
+    # Build all_submit_params from ctx.states (consistent with validation approach)
+    all_submit_params = {}
+    for key, value in ctx.states.items():
+        component_id = key.split('.')[0]
+        all_submit_params[component_id] = value
+    
+    # Add parsed ID to the params dict
+    all_submit_params['scanNumber'] = scanNumber
+    
+    # Determine num_inputs from longest semicolon-separated list across all fields
+    num_inputs = get_num_inputs_from_fields(all_submit_params)
     
     # Parse all other parameters with num_inputs
     try:
