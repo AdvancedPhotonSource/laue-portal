@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
 import laue_portal.components.navbar as navbar
-from laue_portal.database.db_utils import get_catalog_data, get_data_from_id, remove_root_path_prefix, parse_parameter, parse_IDnumber
+from laue_portal.database.db_utils import get_data_from_id, remove_root_path_prefix, parse_parameter, parse_IDnumber
 from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
 from laue_portal.components.form_base import _field
 from laue_portal.components.validation_alerts import validation_alerts
@@ -456,7 +456,56 @@ def validate_peakindexing_inputs(ctx):
     for i in range(num_inputs):
         input_prefix = f"Input {i+1}: " if num_inputs > 1 else ""
         
-        # 1. Check if data files exist for this input (skip if root_path or data_path invalid)
+        # 1. Validate ID integers (scanNumber, wirerecon_id, recon_id)
+        # Convert scanNumber to integer if present
+        scan_num_int = None
+        if 'scanNumber' in parsed_fields:
+            current_scanNumber = validate_field_value(
+                validation_result, parsed_fields, 'scanNumber', i, input_prefix,
+                required=False, display_name="Scan Number"
+            )
+            if current_scanNumber:
+                try:
+                    scan_num_int = int(current_scanNumber)
+                except (ValueError, TypeError):
+                    add_validation_message(
+                        validation_result, 'warnings', 'IDnumber', input_prefix,
+                        custom_message="Scan Number is not a valid integer"
+                    )
+        
+        # Convert wirerecon_id to integer if present
+        wirerecon_id_int = None
+        if 'wirerecon_id' in parsed_fields:
+            wirerecon_val = validate_field_value(
+                validation_result, parsed_fields, 'wirerecon_id', i, input_prefix,
+                required=False, display_name="Wire Recon ID"
+            )
+            if wirerecon_val:
+                try:
+                    wirerecon_id_int = int(wirerecon_val)
+                except (ValueError, TypeError):
+                    add_validation_message(
+                        validation_result, 'warnings', 'IDnumber', input_prefix,
+                        custom_message="Wire Recon ID is not a valid integer"
+                    )
+        
+        # Convert recon_id to integer if present
+        recon_id_int = None
+        if 'recon_id' in parsed_fields:
+            recon_val = validate_field_value(
+                validation_result, parsed_fields, 'recon_id', i, input_prefix,
+                required=False, display_name="Recon ID"
+            )
+            if recon_val:
+                try:
+                    recon_id_int = int(recon_val)
+                except (ValueError, TypeError):
+                    add_validation_message(
+                        validation_result, 'warnings', 'IDnumber', input_prefix,
+                        custom_message="Recon ID is not a valid integer"
+                    )
+        
+        # 2. Check if data files exist for this input (skip if root_path or data_path invalid)
         if 'root_path' not in validation_result['errors'] and 'data_path' not in validation_result['errors']:
             current_data_path = validate_field_value(
                 validation_result, parsed_fields, 'data_path', i, input_prefix
@@ -469,38 +518,30 @@ def validate_peakindexing_inputs(ctx):
                     add_validation_message(validation_result, 'errors', 'data_path', input_prefix, 
                                          custom_message="Data Path directory not found")
                 else:
-                    # Validate scanNumber against Catalog table (after confirming directory exists)
-                    # Only validate if scanNumber was parsed from IDnumber
-                    if 'scanNumber' in parsed_fields:
-                        current_scanNumber = validate_field_value(
-                            validation_result, parsed_fields, 'scanNumber', i, input_prefix,
-                            required=False, display_name="Scan Number"
-                        )
-                        if current_scanNumber is not None:
-                            try:
-                                scan_num_int = int(current_scanNumber)
-                                
-                                # Get catalog data for this scan
-                                catalog_data = get_catalog_data(session, scan_num_int, root_path, CATALOG_DEFAULTS)
-                                
-                                if catalog_data and catalog_data.get('data_path'):
-                                    catalog_full_data_path = os.path.join(root_path, catalog_data['data_path'].lstrip('/'))
-                                    if catalog_full_data_path != current_full_data_path:
-                                        add_validation_message(
-                                            validation_result, 'warnings', 'data_path', input_prefix,
-                                            custom_message=f"Catalog entry for Scan Number {scan_num_int} has different path ({catalog_data['data_path']})"
-                                        )
-                                else:
-                                    # No catalog entry found for this scan number
-                                    add_validation_message(
-                                        validation_result, 'warnings', 'IDnumber', input_prefix,
-                                        custom_message=f"Catalog entry not found for Scan Number {scan_num_int}"
-                                    )
-                            except (ValueError, TypeError):
+                    # Validate against database if we have any ID (uses IDs validated above)
+                    if any([scan_num_int, wirerecon_id_int, recon_id_int]):
+                        id_dict = {
+                            'scanNumber': scan_num_int,
+                            'wirerecon_id': wirerecon_id_int,
+                            'recon_id': recon_id_int,
+                        }
+                        
+                        # Get data from appropriate table based on ID priority
+                        id_data = get_data_from_id(session, id_dict, root_path, CATALOG_DEFAULTS)
+                        
+                        if id_data and id_data.get('data_path'):
+                            id_full_data_path = os.path.join(root_path, id_data['data_path'].lstrip('/'))
+                            if id_full_data_path != current_full_data_path:
                                 add_validation_message(
-                                    validation_result, 'warnings', 'IDnumber', input_prefix,
-                                    custom_message="Scan Number is not a valid integer"
+                                    validation_result, 'warnings', 'data_path', input_prefix,
+                                    custom_message=f"{id_data['source']} database entry has different path ({id_data['data_path']})"
                                 )
+                        else:
+                            # No entry found for this ID
+                            add_validation_message(
+                                validation_result, 'warnings', 'IDnumber', input_prefix,
+                                custom_message=f"{id_data.get('source', 'Data')} database entry not found"
+                            )
                     
                     # Check if directory contains any files
                     all_files = [f for f in os.listdir(current_full_data_path) if os.path.isfile(os.path.join(current_full_data_path, f))]
@@ -674,19 +715,6 @@ def validate_peakindexing_inputs(ctx):
                                             validation_result, 'errors', 'scanPoints', input_prefix,
                                             custom_message=f"Missing files for Filename prefix '{current_filename_prefix_i}' (indices: {files_str})"
                                         )
-        
-        # 2. Validate scanNumber: check that entry is a valid integer
-        # Note: Database-sourced scanNumbers (from PI/MR/WR lookups) are already integers,
-        # but SN-prefixed IDs are parsed as strings and need validation
-        if 'scanNumber' in parsed_fields and 'scanNumber' not in validation_result['errors']:
-            current_scanNumber = parsed_fields['scanNumber'][i]
-            try:
-                int(current_scanNumber)  # Actually convert to test validity
-            except (ValueError, TypeError):
-                add_validation_message(
-                    validation_result, 'warnings', 'IDnumber', input_prefix,
-                    custom_message="Scan Number is not a valid integer"
-                )
         
         # 3. Check if output folder already exists for this input (skip if root_path invalid)
         # Note: We cannot validate this properly if outputFolder contains %d placeholders
@@ -986,6 +1014,7 @@ def validate_inputs(
 @dash.callback(
     Input('submit_peakindexing', 'n_clicks'),
     
+    State('root_path', 'value'),
     State('IDnumber', 'value'),  # Replaced individual ID fields with IDnumber
     # State('scanNumber', 'value'),  # Old - now parsed from IDnumber
     State('author', 'value'),
@@ -1006,10 +1035,10 @@ def validate_inputs(
     # State('depthRangeEnd', 'value'),
     State('scanPoints', 'value'),
     State('depthRange', 'value'),
-    State('detectorCropX1', 'value'),
-    State('detectorCropX2', 'value'),
-    State('detectorCropY1', 'value'),
-    State('detectorCropY2', 'value'),
+    # State('detectorCropX1', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
+    # State('detectorCropX2', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
+    # State('detectorCropY1', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
+    # State('detectorCropY2', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
     State('min_size', 'value'),
     State('max_peaks', 'value'),
     State('smooth', 'value'),
@@ -1022,11 +1051,11 @@ def validate_inputs(
     # State('indexK', 'value'),
     # State('indexL', 'value'),
     State('indexCone', 'value'),
-    State('energyUnit', 'value'),
-    State('exposureUnit', 'value'),
+    # State('energyUnit', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
+    # State('exposureUnit', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
     State('cosmicFilter', 'value'),
-    State('recipLatticeUnit', 'value'),
-    State('latticeParametersUnit', 'value'),
+    # State('recipLatticeUnit', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
+    # State('latticeParametersUnit', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
     # State('peaksearchPath', 'value'),
     # State('p2qPath', 'value'),
     # State('indexingPath', 'value'),
@@ -1037,11 +1066,12 @@ def validate_inputs(
     State('geoFile', 'value'),
     State('crystFile', 'value'),
     State('depth', 'value'),
-    State('beamline', 'value'),
+    # State('beamline', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
     
     prevent_initial_call=True,
 )
 def submit_parameters(n,
+    root_path,
     IDnumber,  # Replaced individual ID fields with IDnumber
     # scanNumber,  # Old - now parsed from IDnumber
     author,
@@ -1062,10 +1092,10 @@ def submit_parameters(n,
     # depthRangeEnd,
     scanPoints,
     depthRange,
-    detectorCropX1,
-    detectorCropX2,
-    detectorCropY1,
-    detectorCropY2,
+    # detectorCropX1,  # Not in form - using PEAKINDEX_DEFAULTS
+    # detectorCropX2,  # Not in form - using PEAKINDEX_DEFAULTS
+    # detectorCropY1,  # Not in form - using PEAKINDEX_DEFAULTS
+    # detectorCropY2,  # Not in form - using PEAKINDEX_DEFAULTS
     min_size,
     max_peaks,
     smooth,
@@ -1078,11 +1108,11 @@ def submit_parameters(n,
     # indexK,
     # indexL,
     indexCone,
-    energyUnit,
-    exposureUnit,
+    # energyUnit,  # Not in form - using PEAKINDEX_DEFAULTS
+    # exposureUnit,  # Not in form - using PEAKINDEX_DEFAULTS
     cosmicFilter,
-    recipLatticeUnit,
-    latticeParametersUnit,
+    # recipLatticeUnit,  # Not in form - using PEAKINDEX_DEFAULTS
+    # latticeParametersUnit,  # Not in form - using PEAKINDEX_DEFAULTS
     # peaksearchPath,
     # p2qPath,
     # indexingPath,
@@ -1093,7 +1123,7 @@ def submit_parameters(n,
     geometry_file,
     crystal_file,
     depth,
-    beamline,
+    # beamline,  # Not in form - using PEAKINDEX_DEFAULTS
     
 ):
     """
@@ -1171,10 +1201,11 @@ def submit_parameters(n,
         peakShape_list = parse_parameter(peakShape, num_inputs)
         scanPoints_list = parse_parameter(scanPoints, num_inputs)
         depthRange_list = parse_parameter(depthRange, num_inputs)
-        detectorCropX1_list = parse_parameter(detectorCropX1, num_inputs)
-        detectorCropX2_list = parse_parameter(detectorCropX2, num_inputs)
-        detectorCropY1_list = parse_parameter(detectorCropY1, num_inputs)
-        detectorCropY2_list = parse_parameter(detectorCropY2, num_inputs)
+        # Detector crop parameters are not in the form, so use defaults from PEAKINDEX_DEFAULTS
+        detectorCropX1_list = parse_parameter(PEAKINDEX_DEFAULTS["detectorCropX1"], num_inputs)
+        detectorCropX2_list = parse_parameter(PEAKINDEX_DEFAULTS["detectorCropX2"], num_inputs)
+        detectorCropY1_list = parse_parameter(PEAKINDEX_DEFAULTS["detectorCropY1"], num_inputs)
+        detectorCropY2_list = parse_parameter(PEAKINDEX_DEFAULTS["detectorCropY2"], num_inputs)
         min_size_list = parse_parameter(min_size, num_inputs)
         max_peaks_list = parse_parameter(max_peaks, num_inputs)
         smooth_list = parse_parameter(smooth, num_inputs)
@@ -1184,18 +1215,21 @@ def submit_parameters(n,
         indexAngleTolerance_list = parse_parameter(indexAngleTolerance, num_inputs)
         indexHKL_list = parse_parameter(indexHKL, num_inputs)
         indexCone_list = parse_parameter(indexCone, num_inputs)
-        energyUnit_list = parse_parameter(energyUnit, num_inputs)
-        exposureUnit_list = parse_parameter(exposureUnit, num_inputs)
+        # Beam units are not in the form, so use defaults from PEAKINDEX_DEFAULTS
+        energyUnit_list = parse_parameter(PEAKINDEX_DEFAULTS["energyUnit"], num_inputs)
+        exposureUnit_list = parse_parameter(PEAKINDEX_DEFAULTS["exposureUnit"], num_inputs)
         cosmicFilter_list = parse_parameter(cosmicFilter, num_inputs)
-        recipLatticeUnit_list = parse_parameter(recipLatticeUnit, num_inputs)
-        latticeParametersUnit_list = parse_parameter(latticeParametersUnit, num_inputs)
+        # Lattice units are not in the form, so use defaults from PEAKINDEX_DEFAULTS
+        recipLatticeUnit_list = parse_parameter(PEAKINDEX_DEFAULTS["recipLatticeUnit"], num_inputs)
+        latticeParametersUnit_list = parse_parameter(PEAKINDEX_DEFAULTS["latticeParametersUnit"], num_inputs)
         data_path_list = parse_parameter(data_path, num_inputs)
         filenamePrefix_list = parse_parameter(filenamePrefix, num_inputs)
         outputFolder_list = parse_parameter(outputFolder, num_inputs)
         geoFile_list = parse_parameter(geometry_file, num_inputs)
         crystFile_list = parse_parameter(crystal_file, num_inputs)
         depth_list = parse_parameter(depth, num_inputs)
-        beamline_list = parse_parameter(beamline, num_inputs)
+        # beamline name is not in the form, so use default from PEAKINDEX_DEFAULTS
+        beamline_list = parse_parameter(PEAKINDEX_DEFAULTS["beamline"], num_inputs)
     except ValueError as e:
         # Error: mismatched lengths
         set_props("alert-submit", {
@@ -1204,8 +1238,6 @@ def submit_parameters(n,
             'color': 'danger'
         })
         return
-    
-    root_path = DEFAULT_VARIABLES["root_path"]
     
     peakindexes_to_enqueue = []
 
@@ -1223,6 +1255,45 @@ def submit_parameters(n,
                 current_scanPoints = scanPoints_list[i]
                 current_depthRange = depthRange_list[i]
 
+                # Convert scanNumber to integer if present
+                scan_num_int = None
+                if current_scanNumber:
+                    try:
+                        scan_num_int = int(current_scanNumber)
+                    except (ValueError, TypeError) as e:
+                        logger.error(f"Failed to convert scanNumber '{current_scanNumber}' to integer: {e}")
+                        set_props("alert-submit", {
+                            'is_open': True,
+                            'children': f'Invalid scan number: {current_scanNumber}',
+                            'color': 'danger'
+                        })
+
+                # Convert wirerecon_id to integer if present
+                wirerecon_id_int = None
+                if current_wirerecon_id:
+                    try:
+                        wirerecon_id_int = int(current_wirerecon_id)
+                    except (ValueError, TypeError) as e:
+                        logger.error(f"Failed to convert wirerecon_id '{current_wirerecon_id}' to integer: {e}")
+                        set_props("alert-submit", {
+                            'is_open': True,
+                            'children': f'Invalid wire reconstruction ID: {current_wirerecon_id}',
+                            'color': 'danger'
+                        })
+
+                # Convert recon_id to integer if present
+                recon_id_int = None
+                if current_recon_id:
+                    try:
+                        recon_id_int = int(current_recon_id)
+                    except (ValueError, TypeError) as e:
+                        logger.error(f"Failed to convert recon_id '{current_recon_id}' to integer: {e}")
+                        set_props("alert-submit", {
+                            'is_open': True,
+                            'children': f'Invalid reconstruction ID: {current_recon_id}',
+                            'color': 'danger'
+                        })
+
                 # Convert relative paths to full paths
                 full_geometry_file = os.path.join(root_path, current_geo_file.lstrip('/'))
                 full_crystal_file = os.path.join(root_path, current_crystal_file.lstrip('/'))
@@ -1231,16 +1302,27 @@ def submit_parameters(n,
                 # Now that we have the ID, format the output folder path
                 try:
                     if '%d' in current_output_folder:
-                        if current_wirerecon_id:
-                            formatted_output_folder = current_output_folder % (current_scanNumber, current_wirerecon_id, next_peakindex_id)
-                        elif current_recon_id:
-                            formatted_output_folder = current_output_folder % (current_scanNumber, current_recon_id, next_peakindex_id)
+                        # Case 1: scanNumber with wirerecon_id or recon_id
+                        if scan_num_int is not None and wirerecon_id_int is not None:
+                            formatted_output_folder = current_output_folder % (scan_num_int, wirerecon_id_int, next_peakindex_id)
+                        elif scan_num_int is not None and recon_id_int is not None:
+                            formatted_output_folder = current_output_folder % (scan_num_int, recon_id_int, next_peakindex_id)
+                        # Case 2: scanNumber without wirerecon_id or recon_id
+                        elif scan_num_int is not None:
+                            formatted_output_folder = current_output_folder % (scan_num_int, next_peakindex_id)
+                        # Case 3: wirerecon_id or recon_id without scanNumber
+                        elif wirerecon_id_int is not None:
+                            formatted_output_folder = current_output_folder % (wirerecon_id_int, next_peakindex_id)
+                        elif recon_id_int is not None:
+                            formatted_output_folder = current_output_folder % (recon_id_int, next_peakindex_id)
+                        # Case 4: Fallback - only peakindex_id
                         else:
-                            formatted_output_folder = current_output_folder % (current_scanNumber, next_peakindex_id)
+                            formatted_output_folder = current_output_folder % next_peakindex_id
                     else:
                         formatted_output_folder = current_output_folder
-                except TypeError:
-                    formatted_output_folder = current_output_folder # Fallback if formatting fails
+                except (TypeError, ValueError) as e:
+                    logger.error(f"Failed to format output folder '{current_output_folder}': {e}")
+                    formatted_output_folder = current_output_folder  # Fallback if formatting fails
                 
                 full_output_folder = os.path.join(root_path, formatted_output_folder.lstrip('/'))
                 
@@ -1310,12 +1392,12 @@ def submit_parameters(n,
                 current_full_data_path=os.path.join(root_path, current_data_path.lstrip('/'))
                 
                 peakindex = db_schema.PeakIndex(
-                    scanNumber = current_scanNumber,
+                    scanNumber = scan_num_int,
                     job_id = job_id,
                     author = author_list[i],
                     notes = notes_list[i],
-                    recon_id = current_recon_id,
-                    wirerecon_id = current_wirerecon_id,
+                    recon_id = recon_id_int,
+                    wirerecon_id = wirerecon_id_int,
                     filefolder=current_full_data_path,
                     filenamePrefix=current_filename_prefix,
 

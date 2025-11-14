@@ -320,7 +320,24 @@ def validate_wire_reconstruction_inputs(ctx):
     for i in range(num_inputs):
         input_prefix = f"Input {i+1}: " if num_inputs > 1 else ""
         
-        # 1. Check if data files exist for this input (skip if root_path or data_path invalid)
+        # 1. Validate ID integers (scanNumber)
+        # Convert scanNumber to integer if present
+        scan_num_int = None
+        if 'scanNumber' in parsed_fields:
+            current_scanNumber = validate_field_value(
+                validation_result, parsed_fields, 'scanNumber', i, input_prefix,
+                required=False, display_name="Scan Number"
+            )
+            if current_scanNumber is not None:
+                try:
+                    scan_num_int = int(current_scanNumber)
+                except (ValueError, TypeError):
+                    add_validation_message(
+                        validation_result, 'warnings', 'scanNumber', input_prefix,
+                        custom_message="Scan Number is not a valid integer"
+                    )
+        
+        # 2. Check if data files exist for this input (skip if root_path or data_path invalid)
         if 'root_path' not in validation_result['errors'] and 'data_path' not in validation_result['errors']:
             current_data_path = validate_field_value(
                 validation_result, parsed_fields, 'data_path', i, input_prefix
@@ -333,35 +350,23 @@ def validate_wire_reconstruction_inputs(ctx):
                     add_validation_message(validation_result, 'errors', 'data_path', input_prefix, 
                                          custom_message="Data Path directory not found")
                 else:
-                    # Validate scanNumber against Catalog table (after confirming directory exists)
-                    current_scanNumber = validate_field_value(
-                        validation_result, parsed_fields, 'scanNumber', i, input_prefix,
-                        required=False, display_name="Scan Number"
-                    )
-                    if current_scanNumber is not None:
-                        try:
-                            scan_num_int = int(current_scanNumber)
-                            
-                            # Get catalog data for this scan
-                            catalog_data = get_catalog_data(session, scan_num_int, root_path, CATALOG_DEFAULTS)
-                            
-                            if catalog_data and catalog_data.get('data_path'):
-                                catalog_full_data_path = os.path.join(root_path, catalog_data['data_path'].lstrip('/'))
-                                if catalog_full_data_path != current_full_data_path:
-                                    add_validation_message(
-                                        validation_result, 'warnings', 'data_path', input_prefix,
-                                        custom_message=f"Catalog entry for Scan Number {scan_num_int} has different path ({catalog_data['data_path']})"
-                                    )
-                            else:
-                                # No catalog entry found for this scan number
+                    # Validate against database if we have a valid scan number (uses ID validated above)
+                    if scan_num_int is not None:
+                        # Get catalog data for this scan
+                        catalog_data = get_catalog_data(session, scan_num_int, root_path, CATALOG_DEFAULTS)
+                        
+                        if catalog_data and catalog_data.get('data_path'):
+                            catalog_full_data_path = os.path.join(root_path, catalog_data['data_path'].lstrip('/'))
+                            if catalog_full_data_path != current_full_data_path:
                                 add_validation_message(
-                                    validation_result, 'warnings', 'scanNumber', input_prefix,
-                                    custom_message=f"Catalog entry not found for Scan Number {scan_num_int}"
+                                    validation_result, 'warnings', 'data_path', input_prefix,
+                                    custom_message=f"Catalog entry for Scan Number {scan_num_int} has different path ({catalog_data['data_path']})"
                                 )
-                        except (ValueError, TypeError):
+                        else:
+                            # No catalog entry found for this scan number
                             add_validation_message(
                                 validation_result, 'warnings', 'scanNumber', input_prefix,
-                                custom_message="Scan Number is not a valid integer"
+                                custom_message=f"Catalog entry not found for Scan Number {scan_num_int}"
                             )
                     
                     # Check if directory contains any files
@@ -424,19 +429,6 @@ def validate_wire_reconstruction_inputs(ctx):
                                                 validation_result, 'errors', 'scanPoints', input_prefix,
                                                 custom_message=f"Missing files for Filename prefix '{current_filename_prefix_i}' (Scan Points: {scanpoints_str})"
                                             )
-        
-        # 2. Validate scanNumber: check that entry is a valid integer
-        # Note: Database-sourced scanNumbers (from WR lookups) are already integers,
-        # but SN-prefixed IDs are parsed as strings and need validation
-        if 'scanNumber' not in validation_result['errors'] and 'scanNumber' in parsed_fields:
-            current_scanNumber = parsed_fields['scanNumber'][i]
-            try:
-                int(current_scanNumber)  # Actually convert to test validity
-            except (ValueError, TypeError):
-                add_validation_message(
-                    validation_result, 'warnings', 'scanNumber', input_prefix,
-                    custom_message="Scan Number is not a valid integer"
-                    )
         
         # 3. Check if output folder already exists for this input (skip if root_path invalid)
         # Note: We cannot validate this properly if outputFolder contains %d placeholders
@@ -605,6 +597,7 @@ def validate_inputs(
 @dash.callback(
     Input('submit_wire', 'n_clicks'),
     
+    State('root_path', 'value'),
     State('IDnumber', 'value'),  # Replaced scanNumber with IDnumber
     # State('scanNumber', 'value'),  # Old - now parsed from IDnumber
     
@@ -633,6 +626,7 @@ def validate_inputs(
     prevent_initial_call=True,
 )
 def submit_parameters(n,
+    root_path,
     IDnumber,  # Replaced scanNumber with IDnumber
     # scanNumber,  # Old - now parsed from IDnumber
     
@@ -737,7 +731,6 @@ def submit_parameters(n,
         })
         return
     
-    root_path = DEFAULT_VARIABLES["root_path"]
     num_threads = DEFAULT_VARIABLES["num_threads"]
     memory_limit_mb = DEFAULT_VARIABLES["memory_limit_mb"]
     verbose = DEFAULT_VARIABLES["verbose"]
@@ -754,6 +747,18 @@ def submit_parameters(n,
                 current_geo_file = geoFile_list[i]
                 current_scanPoints = scanPoints_list[i]
 
+                # Convert scanNumber to integer if present
+                if current_scanNumber:    
+                    try:
+                        scan_num_int = int(current_scanNumber)
+                    except (ValueError, TypeError) as e:
+                        logger.error(f"Failed to convert scanNumber '{current_scanNumber}' to integer: {e}")
+                        set_props("alert-submit", {
+                            'is_open': True,
+                            'children': f'Invalid scan number: {current_scanNumber}',
+                            'color': 'danger'
+                        })
+
                 # Convert relative paths to full paths
                 full_geometry_file = os.path.join(root_path, current_geo_file.lstrip('/'))
 
@@ -761,11 +766,17 @@ def submit_parameters(n,
                 # Now that we have the ID, format the output folder path
                 try:
                     if '%d' in current_output_folder:
-                        formatted_output_folder = current_output_folder % (current_scanNumber, next_wirerecon_id)
+                        # Case 1: scanNumber present
+                        if scan_num_int is not None:
+                            formatted_output_folder = current_output_folder % (scan_num_int, next_wirerecon_id)
+                        # Case 2: Fallback - only wirerecon_id
+                        else:
+                            formatted_output_folder = current_output_folder % next_wirerecon_id
                     else:
                         formatted_output_folder = current_output_folder
-                except TypeError:
-                    formatted_output_folder = current_output_folder # Fallback if formatting fails
+                except (TypeError, ValueError) as e:
+                    logger.error(f"Failed to format output folder '{current_output_folder}': {e}")
+                    formatted_output_folder = current_output_folder  # Fallback if formatting fails
                 
                 full_output_folder = os.path.join(root_path, formatted_output_folder.lstrip('/'))
                 
@@ -818,7 +829,7 @@ def submit_parameters(n,
                 current_full_data_path=os.path.join(root_path, current_data_path.lstrip('/'))
 
                 wirerecon = db_schema.WireRecon(
-                    scanNumber=current_scanNumber,
+                    scanNumber=scan_num_int,
                     job_id=job_id,
                     filefolder=current_full_data_path,
                     filenamePrefix=current_filename_prefix,
@@ -867,7 +878,7 @@ def submit_parameters(n,
                     "memory_limit_mb": memory_limit_mb,
                     "num_threads": num_threads,
                     "verbose": verbose,
-                    "scanNumber": current_scanNumber,
+                    "scanNumber": scan_num_int,
                 })
 
             session.commit()

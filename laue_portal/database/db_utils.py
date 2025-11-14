@@ -748,7 +748,9 @@ def get_data_from_id(session, id_dict, root_path, catalog_defaults=None):
         catalog_defaults: Defaults for catalog fallback (optional)
     
     Returns:
-        dict: {'data_path': str, 'filenamePrefix': list or str}
+        dict: {'data_path': str, 'filenamePrefix': list or str, 'source': str}
+              where 'source' indicates which table the data came from
+              ('Recon', 'WireRecon', or 'Catalog')
     """
     recon_id = id_dict.get('recon_id')
     wirerecon_id = id_dict.get('wirerecon_id')
@@ -762,7 +764,8 @@ def get_data_from_id(session, id_dict, root_path, catalog_defaults=None):
         if recon_data and recon_data.file_output:
             return {
                 'data_path': remove_root_path_prefix(recon_data.file_output, root_path),
-                'filenamePrefix': getattr(recon_data, 'filenamePrefix', []) or []
+                'filenamePrefix': getattr(recon_data, 'filenamePrefix', []) or [],
+                'source': 'Recon'
             }
     
     # Priority 2: Wire reconstruction (WR)
@@ -773,15 +776,18 @@ def get_data_from_id(session, id_dict, root_path, catalog_defaults=None):
         if wirerecon_data and wirerecon_data.outputFolder:
             return {
                 'data_path': remove_root_path_prefix(wirerecon_data.outputFolder, root_path),
-                'filenamePrefix': wirerecon_data.filenamePrefix or []
+                'filenamePrefix': wirerecon_data.filenamePrefix or [],
+                'source': 'WireRecon'
             }
     
     # Priority 3: Fallback to catalog data (SN)
     if scanNumber:
-        return get_catalog_data(session, int(scanNumber), root_path, catalog_defaults)
+        catalog_result = get_catalog_data(session, int(scanNumber), root_path, catalog_defaults)
+        catalog_result['source'] = 'Catalog'
+        return catalog_result
     
     # No valid ID found
-    return {'data_path': '', 'filenamePrefix': []}
+    return {'data_path': '', 'filenamePrefix': [], 'source': 'Unknown'}
 
 
 def get_next_id(session, table_class):
