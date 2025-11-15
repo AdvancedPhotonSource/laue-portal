@@ -39,6 +39,46 @@ import laue_portal.database.session_utils as session_utils
 
 logger = logging.getLogger(__name__)
 
+
+def build_output_folder_template(scan_num_int, data_path, 
+                                 wirerecon_id_int=None, recon_id_int=None):
+    """
+    Build output folder template based on available IDs from database chain.
+    Only the final action ID remains as %d.
+    
+    Parameters:
+    - scan_num_int: scanNumber (int or None)
+    - data_path: data path to use if scanNumber unknown
+    - root_path: root path
+    - wirerecon_id_int: wirerecon_id (int or None) - for peakindexing only
+    - recon_id_int: recon_id (int or None) - for peakindexing only
+    
+    Returns:
+    - Output folder template path (relative, without root_path prefix)
+    """
+    path_parts = ["analysis"]
+    
+    # Add scan directory only if scanNumber is known
+    if scan_num_int is not None:
+        path_parts.append(f"scan_{scan_num_int}")
+    else:
+        # If scanNumber is unknown, use data_path for context
+        if data_path:
+            clean_data_path = data_path.strip('/')
+            path_parts.append(clean_data_path)
+    
+    # For peakindexing: add rec directory if wirerecon_id OR recon_id is known
+    if wirerecon_id_int is not None:
+        path_parts.append(f"rec_{wirerecon_id_int}")
+    elif recon_id_int is not None:
+        path_parts.append(f"rec_{recon_id_int}")
+    
+    # Add final action placeholder for peakindexing
+    path_parts.append("index_%d")
+    
+    return os.path.join(*path_parts)
+
+
 JOB_DEFAULTS = {
     "computer_name": 'example_computer',
     "status": 0, #pending, running, finished, stopped
@@ -1298,26 +1338,12 @@ def submit_parameters(n,
                 full_geometry_file = os.path.join(root_path, current_geo_file.lstrip('/'))
                 full_crystal_file = os.path.join(root_path, current_crystal_file.lstrip('/'))
 
+                # Get next ID for this action
                 next_peakindex_id = db_utils.get_next_id(session, db_schema.PeakIndex)
-                # Now that we have the ID, format the output folder path
+                # Now that we have the ID, format the output folder path by replacement of the final %d in the template
                 try:
                     if '%d' in current_output_folder:
-                        # Case 1: scanNumber with wirerecon_id or recon_id
-                        if scan_num_int is not None and wirerecon_id_int is not None:
-                            formatted_output_folder = current_output_folder % (scan_num_int, wirerecon_id_int, next_peakindex_id)
-                        elif scan_num_int is not None and recon_id_int is not None:
-                            formatted_output_folder = current_output_folder % (scan_num_int, recon_id_int, next_peakindex_id)
-                        # Case 2: scanNumber without wirerecon_id or recon_id
-                        elif scan_num_int is not None:
-                            formatted_output_folder = current_output_folder % (scan_num_int, next_peakindex_id)
-                        # Case 3: wirerecon_id or recon_id without scanNumber
-                        elif wirerecon_id_int is not None:
-                            formatted_output_folder = current_output_folder % (wirerecon_id_int, next_peakindex_id)
-                        elif recon_id_int is not None:
-                            formatted_output_folder = current_output_folder % (recon_id_int, next_peakindex_id)
-                        # Case 4: Fallback - only peakindex_id
-                        else:
-                            formatted_output_folder = current_output_folder % next_peakindex_id
+                        formatted_output_folder = current_output_folder % next_peakindex_id
                     else:
                         formatted_output_folder = current_output_folder
                 except (TypeError, ValueError) as e:
@@ -1581,7 +1607,9 @@ register_update_path_fields_callback(
     data_path_id='data_path',
     filename_prefix_id='filenamePrefix',
     alert_id='alert-scan-loaded',
-    catalog_defaults=CATALOG_DEFAULTS
+    catalog_defaults=CATALOG_DEFAULTS,
+    output_folder_id='outputFolder',
+    build_template_func=build_output_folder_template
 )
 
 register_load_file_indices_callback(
@@ -1770,9 +1798,9 @@ def load_scan_data_from_url(href):
                             found_items.append(f"scan {current_scan_id}")
 
                         # Determine output folder format based on if reconstruction ID
-                        outputFolder = PEAKINDEX_DEFAULTS["outputFolder"]
-                        if current_recon_id or current_wirerecon_id:
-                            outputFolder = outputFolder.replace("index_%d", "rec_%d/index_%d") #"analysis/scan_%d/rec_%d/index_%d"
+                        # outputFolder = PEAKINDEX_DEFAULTS["outputFolder"]
+                        # if current_recon_id or current_wirerecon_id:
+                        #     outputFolder = outputFolder.replace("index_%d", "rec_%d/index_%d") #"analysis/scan_%d/rec_%d/index_%d"
                         
                         # # Format output folder with scan number and IDs
                         # try:
@@ -1786,6 +1814,14 @@ def load_scan_data_from_url(href):
                         #     # If formatting fails, use the original string
                         #     pass
                         # next_peakindex_id += 1
+                        
+                        # Build output folder template based on available IDs
+                        outputFolder = build_output_folder_template(
+                            scan_num_int=current_scan_id,
+                            data_path=None,  # Will be set later from id_data
+                            wirerecon_id_int=current_wirerecon_id,
+                            recon_id_int=current_recon_id
+                        )
 
                         # If peakindex_id is provided, load existing peakindex data
                         if current_peakindex_id:

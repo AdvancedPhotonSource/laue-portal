@@ -124,11 +124,13 @@ def register_update_path_fields_callback(
     filename_prefix_id: str,
     root_path_id: str,
     catalog_defaults: dict,
-    id_number_id: str = None
+    id_number_id: str = None,
+    output_folder_id: str = None,
+    build_template_func = None
 ):
     """
-    Register a callback to update path fields (data_path, filenamePrefix) by querying
-    the database for catalog data based on the ID number.
+    Register a callback to update path fields (data_path, filenamePrefix, and optionally outputFolder)
+    by querying the database for catalog data based on the ID number.
     
     Parameters:
     - button_id: ID of the button that triggers the update
@@ -138,6 +140,8 @@ def register_update_path_fields_callback(
     - root_path_id: ID of the root path field to update
     - catalog_defaults: Dictionary of catalog default values
     - id_number_id: ID of the ID number input field (optional, for IDnumber field)
+    - output_folder_id: ID of the output folder field to update (optional)
+    - build_template_func: Function to build output folder template (optional, signature: func(scan_num_int, data_path, **kwargs))
     
     Returns:
     - The registered callback function
@@ -226,6 +230,59 @@ def register_update_path_fields_callback(
                         filename_str = str(merged_data['filenamePrefix']) if merged_data['filenamePrefix'] else ''
                     
                     set_props(filename_prefix_id, {'value': filename_str})
+                    
+                    # Update output folder if build_template_func and output_folder_id are provided
+                    if build_template_func and output_folder_id:
+                        try:
+                            # Parse ID numbers to extract individual IDs for template building
+                            output_folders = []
+                            for id_num in id_numbers:
+                                id_dict = parse_IDnumber(id_num, session)
+                                scan_num_int = id_dict.get('scanNumber')
+                                
+                                # Convert to int if present
+                                if scan_num_int:
+                                    try:
+                                        scan_num_int = int(scan_num_int)
+                                    except (ValueError, TypeError):
+                                        scan_num_int = None
+                                
+                                # Get data_path for this ID (use first one if multiple)
+                                current_data_path = merged_data['data_path'].split(';')[0].strip() if ';' in merged_data['data_path'] else merged_data['data_path']
+                                
+                                # Build template with available IDs (kwargs will contain wirerecon_id_int, recon_id_int for peakindexing)
+                                template_kwargs = {}
+                                if 'wirerecon_id' in id_dict and id_dict['wirerecon_id']:
+                                    try:
+                                        template_kwargs['wirerecon_id_int'] = int(id_dict['wirerecon_id'])
+                                    except (ValueError, TypeError):
+                                        pass
+                                if 'recon_id' in id_dict and id_dict['recon_id']:
+                                    try:
+                                        template_kwargs['recon_id_int'] = int(id_dict['recon_id'])
+                                    except (ValueError, TypeError):
+                                        pass
+                                
+                                output_folder = build_template_func(
+                                    scan_num_int=scan_num_int,
+                                    data_path=current_data_path,
+                                    **template_kwargs
+                                )
+                                output_folders.append(output_folder)
+                            
+                            # Merge output folders
+                            if len(output_folders) == 1:
+                                merged_output_folder = output_folders[0]
+                            else:
+                                # Check if all are the same
+                                if all(of == output_folders[0] for of in output_folders):
+                                    merged_output_folder = output_folders[0]
+                                else:
+                                    merged_output_folder = "; ".join(output_folders)
+                            
+                            set_props(output_folder_id, {'value': merged_output_folder})
+                        except Exception as e:
+                            logger.warning(f"Could not build output folder template: {e}")
                     
                     set_props(alert_id, {
                         'is_open': True,

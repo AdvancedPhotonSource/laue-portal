@@ -39,6 +39,38 @@ import laue_portal.database.session_utils as session_utils
 
 logger = logging.getLogger(__name__)
 
+
+def build_output_folder_template(scan_num_int, data_path):
+    """
+    Build output folder template based on available IDs from database chain.
+    Only the final action ID remains as %d.
+    
+    Parameters:
+    - scan_num_int: scanNumber (int or None)
+    - data_path: data path to use if scanNumber unknown
+    - root_path: root path
+    
+    Returns:
+    - Output folder template path (relative, without root_path prefix)
+    """
+    path_parts = ["analysis"]
+    
+    # Add scan directory only if scanNumber is known
+    if scan_num_int is not None:
+        path_parts.append(f"scan_{scan_num_int}")
+    else:
+        # If scanNumber is unknown, use data_path for context
+        if data_path:
+            clean_data_path = data_path.strip('/')
+            path_parts.append(clean_data_path)
+    
+    # Add final action placeholder for wire recon
+    path_parts.append("rec_%d")
+    path_parts.append("data")
+    
+    return os.path.join(*path_parts)
+
+
 JOB_DEFAULTS = {
     "computer_name": 'example_computer',
     "status": 0, #pending, running, finished, stopped
@@ -748,6 +780,7 @@ def submit_parameters(n,
                 current_scanPoints = scanPoints_list[i]
 
                 # Convert scanNumber to integer if present
+                scan_num_int = None
                 if current_scanNumber:    
                     try:
                         scan_num_int = int(current_scanNumber)
@@ -762,22 +795,13 @@ def submit_parameters(n,
                 # Convert relative paths to full paths
                 full_geometry_file = os.path.join(root_path, current_geo_file.lstrip('/'))
 
+                # Get next ID for this action
                 next_wirerecon_id = db_utils.get_next_id(session, db_schema.WireRecon)
-                # Now that we have the ID, format the output folder path
-                try:
-                    if '%d' in current_output_folder:
-                        # Case 1: scanNumber present
-                        if scan_num_int is not None:
-                            formatted_output_folder = current_output_folder % (scan_num_int, next_wirerecon_id)
-                        # Case 2: Fallback - only wirerecon_id
-                        else:
-                            formatted_output_folder = current_output_folder % next_wirerecon_id
-                    else:
-                        formatted_output_folder = current_output_folder
-                except (TypeError, ValueError) as e:
-                    logger.error(f"Failed to format output folder '{current_output_folder}': {e}")
-                    formatted_output_folder = current_output_folder  # Fallback if formatting fails
                 
+                # Now that we have the ID, format the output folder path by replacement of the final %d in the template
+                formatted_output_folder = current_output_folder % next_wirerecon_id
+                
+                # Build full path
                 full_output_folder = os.path.join(root_path, formatted_output_folder.lstrip('/'))
                 
                 # Create output directory if it doesn't exist
@@ -973,7 +997,9 @@ register_update_path_fields_callback(
     data_path_id='data_path',
     filename_prefix_id='filenamePrefix',
     alert_id='alert-scan-loaded',
-    catalog_defaults=CATALOG_DEFAULTS
+    catalog_defaults=CATALOG_DEFAULTS,
+    output_folder_id='outputFolder',
+    build_template_func=build_output_folder_template
 )
 
 register_load_file_indices_callback(
@@ -1117,7 +1143,7 @@ def load_scan_data_from_url(href):
                         else:
                             found_items.append(f"scan {current_scan_id}")
                         
-                        output_folder = WIRERECON_DEFAULTS["outputFolder"]
+                        # output_folder = WIRERECON_DEFAULTS["outputFolder"]
                         
                         # # Format output folder with scan number and wirerecon_id
                         # try:
@@ -1126,6 +1152,12 @@ def load_scan_data_from_url(href):
                         #     # If formatting fails, use the original string
                         #     pass
                         # next_wirerecon_id += 1
+                        
+                        # Build output folder template based on available IDs
+                        output_folder = build_output_folder_template(
+                            scan_num_int=current_scan_id,
+                            data_path=None,  # Will be set later from catalog_data
+                        )
                         
                         # If wirerecon_id is provided, load existing wirerecon data
                         if current_wirerecon_id:
