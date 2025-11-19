@@ -32,7 +32,8 @@ from laue_portal.pages.validation_helpers import (
 from laue_portal.pages.callback_registrars import (
     register_update_path_fields_callback,
     register_load_file_indices_callback,
-    register_check_filenames_callback
+    register_check_filenames_callback,
+    _merge_field_values
 )
 from srange import srange
 import laue_portal.database.session_utils as session_utils
@@ -1020,6 +1021,7 @@ register_check_filenames_callback(
     data_path_id='data_path',
     filename_prefix_id='filenamePrefix',
     filename_templates_id='wirerecon-filename-templates',
+    suggested_patterns_store_id='wirerecon-suggested-patterns',
     num_indices=1
 )
 
@@ -1223,10 +1225,8 @@ def load_scan_data_from_url(href):
                                 values.append(getattr(d, attr))
                         
                         if values:
-                            if all(v == values[0] for v in values):
-                                setattr(pooled_wirerecon_form_data, attr, values[0])
-                            else:
-                                setattr(pooled_wirerecon_form_data, attr, "; ".join(map(str, values)))
+                            pooled_value = _merge_field_values(values, attr)
+                            setattr(pooled_wirerecon_form_data, attr, pooled_value)
                     
                     # User text
                     pooled_wirerecon_form_data.author = DEFAULT_VARIABLES['author']

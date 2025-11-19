@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import html, set_props
+from dash import html, dcc, set_props
 from laue_portal.components.form_base import _stack, _field, _select, _ckbx
 from laue_portal.database.db_utils import make_IDnumber, parse_IDnumber
 import laue_portal.database.db_schema as db_schema
@@ -74,6 +74,8 @@ peakindex_form = dbc.Row(
                                                                 html.Option(value="Si_*_%d.h5",        label="Si_*_%d.h5        (files 1–245)"),
                                                             ]
                                                     ),
+                                                    # Hidden store for suggested patterns per path
+                                                    dcc.Store(id='peakindex-suggested-patterns', data={}),
                                                 ]
                                             ),
                                             className="flex-grow-1",
@@ -508,7 +510,7 @@ def set_peakindex_form_props(peakindex, read_only=False):
     # set_props("scanNumber", {'value':peakindex.scanNumber, 'readonly':read_only})
     set_props("root_path", {'value':peakindex.root_path, 'readonly':read_only})
     set_props("data_path", {'value':peakindex.data_path, 'readonly':read_only})
-    set_props("filenamePrefix", {'value':','.join(peakindex.filenamePrefix), 'readonly':read_only})
+    set_props("filenamePrefix", {'value':peakindex.filenamePrefix, 'readonly':read_only})
     # set_props("recon_id", {'value':peakindex.recon_id, 'readonly':read_only})
     # set_props("wirerecon_id", {'value':peakindex.wirerecon_id, 'readonly':read_only})
     

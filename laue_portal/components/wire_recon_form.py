@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import html, set_props
+from dash import html, dcc, set_props
 from laue_portal.components.form_base import _stack, _field, _select, _notes
 from laue_portal.database.db_utils import make_IDnumber, parse_IDnumber
 
@@ -65,6 +65,8 @@ wire_recon_form = dbc.Row(
                                                                 html.Option(value="Si1_*_%d.h5",        label="Si1_*_%d.h5        (files 1–245)"),
                                                             ]
                                                     ),
+                                                    # Hidden store for suggested patterns per path
+                                                    dcc.Store(id='wirerecon-suggested-patterns', data={}),
                                                 ]
                                             ),
                                             className="flex-grow-1",
@@ -235,7 +237,7 @@ def set_wire_recon_form_props(wirerecon, read_only=False):
     # File paths
     set_props("root_path", {'value':wirerecon.root_path, 'readonly':read_only})
     set_props("data_path", {'value':wirerecon.data_path, 'readonly':read_only})
-    set_props("filenamePrefix", {'value':','.join(wirerecon.filenamePrefix), 'readonly':read_only})
+    set_props("filenamePrefix", {'value':wirerecon.filenamePrefix, 'readonly':read_only})
     
     # User text
     # set_props("author", {'value':wirerecon.author, 'readonly':read_only})
