@@ -1420,10 +1420,7 @@ def save_note(n_clicks, scanNumber, note):
     State("aperture", "value"),
     State("sample_name", "value"),
     State("filefolder", "value"),
-    State("filenamePrefix1", "value"),
-    State("filenamePrefix2", "value"),
-    State("filenamePrefix3", "value"),
-    State("filenamePrefix4", "value"),
+    State("filenamePrefix", "value"),
     State("notes", "value"),
     prevent_initial_call=True,
 )
@@ -1432,10 +1429,7 @@ def update_catalog(n,
     aperture,
     sample_name,
     filefolder,
-    filenamePrefix1,
-    filenamePrefix2,
-    filenamePrefix3,
-    filenamePrefix4,
+    filenamePrefix,
     notes,
 ):
     # TODO: Input validation and response
@@ -1452,11 +1446,16 @@ def update_catalog(n,
                     db_schema.Catalog.scanNumber == scanNumber
                 ).first()
                 
-                filenamePrefix = [prefix for prefix in [filenamePrefix1, filenamePrefix2, filenamePrefix3, filenamePrefix4] if prefix]
+                # Parse comma-separated string into list for database
+                if filenamePrefix:
+                    filenamePrefix_list = [prefix.strip() for prefix in filenamePrefix.split(',') if prefix.strip()]
+                else:
+                    filenamePrefix_list = []
+                
                 if catalog_data:
                     # Update existing catalog entry
                     catalog_data.filefolder = filefolder
-                    catalog_data.filenamePrefix = filenamePrefix
+                    catalog_data.filenamePrefix = filenamePrefix_list
                     catalog_data.aperture = aperture
                     catalog_data.sample_name = sample_name
                     catalog_data.notes = notes
@@ -1466,7 +1465,7 @@ def update_catalog(n,
                     catalog = db_schema.Catalog(
                         scanNumber=scanNumber,
                         filefolder=filefolder,
-                        filenamePrefix=filenamePrefix,
+                        filenamePrefix=filenamePrefix_list,
                         aperture=aperture,
                         sample_name=sample_name,
                         notes=notes,
