@@ -65,8 +65,8 @@ wire_recon_form = dbc.Row(
                                                                 html.Option(value="Si1_*_%d.h5",        label="Si1_*_%d.h5        (files 1–245)"),
                                                             ]
                                                     ),
-                                                    # Hidden store for suggested patterns per path
-                                                    dcc.Store(id='wirerecon-suggested-patterns', data={}),
+                                                    # Hidden store for cached patterns per path
+                                                    dcc.Store(id='wirerecon-cached-patterns', data={}),
                                                 ]
                                             ),
                                             className="flex-grow-1",

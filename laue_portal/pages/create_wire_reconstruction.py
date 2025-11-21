@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
 import laue_portal.components.navbar as navbar
-from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix, parse_parameter, parse_IDnumber
+from laue_portal.database.db_utils import get_catalog_data, get_data_from_id, remove_root_path_prefix, parse_parameter, parse_IDnumber
 from laue_portal.components.wire_recon_form import wire_recon_form, set_wire_recon_form_props
 from laue_portal.components.form_base import _field
 from laue_portal.components.validation_alerts import validation_alerts
@@ -188,7 +188,7 @@ layout = dbc.Container(
         # html.Hr(),
         wire_recon_form,
         # dcc.Store(id="next-wire-recon-id"),
-        dcc.Store(id="wirerecon-data-loaded-trigger"),
+        dcc.Store(id="wirerecon-data-loaded-signal"),
     ],
     )
     ],
@@ -991,7 +991,7 @@ def submit_parameters(n,
 
 # Register shared callbacks
 register_update_path_fields_callback(
-    button_id='wirerecon-update-path-fields-btn',
+    update_paths_id='wirerecon-update-path-fields-btn',
     # scan_number_id='scanNumber',
     id_number_id='IDnumber',
     root_path_id='root_path',
@@ -1005,7 +1005,7 @@ register_update_path_fields_callback(
 
 register_load_file_indices_callback(
     button_id='wirerecon-load-file-indices-btn',
-    data_loaded_trigger_id='wirerecon-data-loaded-trigger',
+    data_loaded_signal_id='wirerecon-data-loaded-signal',
     data_path_id='data_path',
     filename_prefix_id='filenamePrefix',
     scan_points_id='scanPoints',
@@ -1015,13 +1015,13 @@ register_load_file_indices_callback(
 )
 
 register_check_filenames_callback(
-    check_button_id='wirerecon-check-filenames-btn',
-    update_button_id='wirerecon-update-path-fields-btn',
-    data_loaded_trigger_id='wirerecon-data-loaded-trigger',
+    find_filenames_id='wirerecon-check-filenames-btn',
+    update_paths_id='wirerecon-update-path-fields-btn',
+    data_loaded_signal_id='wirerecon-data-loaded-signal',
     data_path_id='data_path',
     filename_prefix_id='filenamePrefix',
     filename_templates_id='wirerecon-filename-templates',
-    suggested_patterns_store_id='wirerecon-suggested-patterns',
+    cached_patterns_store_id='wirerecon-cached-patterns',
     num_indices=1
 )
 
@@ -1082,7 +1082,7 @@ register_check_filenames_callback(
 
 
 @dash.callback(
-    Output('wirerecon-data-loaded-trigger', 'data'),
+    Output('wirerecon-data-loaded-signal', 'data'),
     Input('url-create-wirerecon', 'href'),
     prevent_initial_call=True,
 )
@@ -1092,6 +1092,7 @@ def load_scan_data_from_url(href):
     URL format: /create-wire-reconstruction?scan_id={scan_id}
     Pooled URL format: /create-wire-reconstruction?scan_id={scan_ids}
     With wirerecon_id: /create-wire-reconstruction?scan_id={scan_id}&wirerecon_id={wirerecon_id}
+    With peakindex_id: /create-wire-reconstruction?scan_id={scan_id}&peakindex_id={peakindex_id}
     Pooled with wirerecon_id: /create-wire-reconstruction?scan_id={scan_ids}&wirerecon_id={wirerecon_ids}
     """
     if not href:
@@ -1102,6 +1103,7 @@ def load_scan_data_from_url(href):
     
     scan_id_str = query_params.get('scan_id', [None])[0]
     wirerecon_id_str = query_params.get('wirerecon_id', [None])[0]
+    peakindex_id_str = query_params.get('peakindex_id', [None])[0]
 
     root_path = DEFAULT_VARIABLES.get("root_path", "")
 
@@ -1120,13 +1122,20 @@ def load_scan_data_from_url(href):
                 # Handle pooled wirerecon IDs
                 wirerecon_ids = [int(wid) if wid and wid.lower() != 'none' else None for wid in (wirerecon_id_str.split(',') if wirerecon_id_str else [])]
                 
+                # Handle pooled peakindex IDs
+                peakindex_ids = [int(pid) if pid and pid.lower() != 'none' else None for pid in (peakindex_id_str.split(',') if peakindex_id_str else [])]
+                
                 # Validate that lists have matching lengths
                 if wirerecon_ids and len(wirerecon_ids) != len(scan_ids):
                     raise ValueError(f"Mismatch: {len(scan_ids)} scan IDs but {len(wirerecon_ids)} wirerecon IDs")
+                if peakindex_ids and len(peakindex_ids) != len(scan_ids):
+                    raise ValueError(f"Mismatch: {len(scan_ids)} scan IDs but {len(peakindex_ids)} peakindex IDs")
                 
                 # If no wirerecon IDs provided, fill with None
                 if not wirerecon_ids:
                     wirerecon_ids = [None] * len(scan_ids)
+                if not peakindex_ids:
+                    peakindex_ids = [None] * len(scan_ids)
                 
                 # Collect data paths and filename prefixes for each scan
                 wirerecon_form_data_list = []
@@ -1134,13 +1143,16 @@ def load_scan_data_from_url(href):
                 not_found_items = []
                 for i, current_scan_id in enumerate(scan_ids):
                     current_wirerecon_id = wirerecon_ids[i]
+                    current_peakindex_id = peakindex_ids[i]
                     
-                    # Query metadata for current scan
+                    # Query metadata and scan data
                     metadata_data = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == current_scan_id).first()
-                    # scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_id).all()
+                    # scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == current_scan_id).all()
                     
                     if metadata_data:
-                        if current_wirerecon_id:
+                        if current_peakindex_id:
+                            found_items.append(f"peak index {current_peakindex_id}")
+                        elif current_wirerecon_id:
                             found_items.append(f"wire reconstruction {current_wirerecon_id}")
                         else:
                             found_items.append(f"scan {current_scan_id}")
@@ -1158,13 +1170,29 @@ def load_scan_data_from_url(href):
                         # Build output folder template based on available IDs
                         output_folder = build_output_folder_template(
                             scan_num_int=current_scan_id,
-                            data_path=None,  # Will be set later from catalog_data
+                            data_path=None,  # Will be set later from id_data
                         )
+                        
+                        # If peakindex_id is provided, query to get parent wirerecon_id
+                        if current_peakindex_id:
+                            try:
+                                peakindex_data = session.query(db_schema.PeakIndex).filter(
+                                    db_schema.PeakIndex.peakindex_id == current_peakindex_id
+                                ).first()
+                                if peakindex_data:
+                                    # Get parent IDs from peakindex
+                                    current_wirerecon_id = peakindex_data.wirerecon_id
+                                    current_scan_id = peakindex_data.scanNumber
+                            except (ValueError, Exception):
+                                # If peakindex_id is not valid or not found, clear it
+                                current_peakindex_id = None
                         
                         # If wirerecon_id is provided, load existing wirerecon data
                         if current_wirerecon_id:
                             try:
-                                wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == current_wirerecon_id).first()
+                                wirerecon_data = session.query(db_schema.WireRecon).filter(
+                                    db_schema.WireRecon.wirerecon_id == current_wirerecon_id
+                                ).first()
                                 if wirerecon_data:
                                     # Use existing wirerecon data as the base
                                     wirerecon_form_data = wirerecon_data
@@ -1176,13 +1204,15 @@ def load_scan_data_from_url(href):
                                         wirerecon_form_data.data_path = remove_root_path_prefix(wirerecon_data.filefolder, root_path)
                                     if wirerecon_data.filenamePrefix:
                                         wirerecon_form_data.filenamePrefix = wirerecon_data.filenamePrefix
-                            
-                            except (ValueError, Exception):
-                                # If wirerecon_id is not valid or not found, create defaults
+                                else:
+                                    # WireRecon ID not found, create defaults
+                                    current_wirerecon_id = None
+                            except Exception as e:
+                                logger.warning(f"Error loading wirerecon {current_wirerecon_id}: {e}")
                                 current_wirerecon_id = None
                         
                         # Create defaults if no wirerecon_id or if loading failed
-                        else: #if not current_wirerecon_id:
+                        if not current_wirerecon_id:
                             # Create a WireRecon object with populated defaults from metadata/scan
                             wirerecon_form_data = db_schema.WireRecon(
                                 scanNumber=current_scan_id,
@@ -1193,18 +1223,32 @@ def load_scan_data_from_url(href):
                         # Add root_path from DEFAULT_VARIABLES
                         wirerecon_form_data.root_path = root_path
                         
-                        if not all([hasattr(wirerecon_form_data, 'data_path'), getattr(wirerecon_form_data, 'filenamePrefix')]):
-                            # Retrieve data_path and filenamePrefix from catalog data
-                            catalog_data = get_catalog_data(session, current_scan_id, root_path, CATALOG_DEFAULTS)
-                        if not hasattr(wirerecon_form_data, 'data_path'):
-                            wirerecon_form_data.data_path = catalog_data.get('data_path', '')
-                        if not getattr(wirerecon_form_data, 'filenamePrefix'):
-                            # wirerecon_form_data.filenamePrefix = catalog_data.get('filenamePrefix', '')
-                            wirerecon_form_data.filenamePrefix = catalog_data.get('filenamePrefix', [])
+                        # Only query database if data_path or filenamePrefix are not already populated
+                        if not all([hasattr(wirerecon_form_data, 'data_path') and wirerecon_form_data.data_path,
+                                    hasattr(wirerecon_form_data, 'filenamePrefix') and wirerecon_form_data.filenamePrefix]):
+                            # Build id_dict for this scan
+                            id_dict = {
+                                'scanNumber': current_scan_id,
+                                'wirerecon_id': current_wirerecon_id,
+                                'recon_id': None,
+                                'peakindex_id': current_peakindex_id
+                            }
+                            
+                            # Get data from appropriate table (WireRecon or Catalog)
+                            id_data = get_data_from_id(session, id_dict, root_path, CATALOG_DEFAULTS)
+                            
+                            # Set missing fields from the query result
+                            if id_data:
+                                if not (hasattr(wirerecon_form_data, 'data_path') and wirerecon_form_data.data_path):
+                                    wirerecon_form_data.data_path = id_data.get('data_path', '')
+                                if not (hasattr(wirerecon_form_data, 'filenamePrefix') and wirerecon_form_data.filenamePrefix):
+                                    wirerecon_form_data.filenamePrefix = id_data.get('filenamePrefix', [])
 
                         wirerecon_form_data_list.append(wirerecon_form_data)
                     else:
-                        if current_wirerecon_id:
+                        if current_peakindex_id:
+                            not_found_items.append(f"peak index {current_peakindex_id}")
+                        elif current_wirerecon_id:
                             not_found_items.append(f"wire reconstruction {current_wirerecon_id}")
                         else:
                             not_found_items.append(f"scan {current_scan_id}")
@@ -1217,22 +1261,24 @@ def load_scan_data_from_url(href):
                     all_attrs = list(db_schema.WireRecon.__table__.columns.keys()) + ['root_path', 'data_path', 'filenamePrefix']
                     
                     for attr in all_attrs:
-                        if attr == 'wirerecon_id': continue
-                        
                         values = []
                         for d in wirerecon_form_data_list:
                             if hasattr(d, attr):
                                 values.append(getattr(d, attr))
                         
                         if values:
-                            pooled_value = _merge_field_values(values, attr)
+                            pooled_value = _merge_field_values(values)
                             setattr(pooled_wirerecon_form_data, attr, pooled_value)
                     
                     # User text
                     pooled_wirerecon_form_data.author = DEFAULT_VARIABLES['author']
                     pooled_wirerecon_form_data.notes = DEFAULT_VARIABLES['notes']
-                    # # Add root_path from DEFAULT_VARIABLES
-                    # pooled_wirerecon_form_data.root_path = root_path
+                    
+                    # Manually set wirerecon_id from the collected IDs for proper IDnumber generation
+                    # Keep None values to maintain list length consistency
+                    if wirerecon_ids:
+                        pooled_wirerecon_form_data.wirerecon_id = _merge_field_values(wirerecon_ids)
+                    
                     # Populate the form with the defaults
                     set_wire_recon_form_props(pooled_wirerecon_form_data)
 

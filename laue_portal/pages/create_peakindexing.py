@@ -231,7 +231,7 @@ layout = dbc.Container(
             align="center",
         ),
         peakindex_form,
-        dcc.Store(id="peakindex-data-loaded-trigger"),
+        dcc.Store(id="peakindex-data-loaded-signal"),
     ],
     )
     ],
@@ -1601,7 +1601,7 @@ def submit_parameters(n,
 
 # Register shared callbacks
 register_update_path_fields_callback(
-    button_id='peakindex-update-path-fields-btn',
+    update_paths_id='peakindex-update-path-fields-btn',
     # scan_number_id='scanNumber',
     id_number_id='IDnumber',
     root_path_id='root_path',
@@ -1615,7 +1615,7 @@ register_update_path_fields_callback(
 
 register_load_file_indices_callback(
     button_id='peakindex-load-file-indices-btn',
-    data_loaded_trigger_id='peakindex-data-loaded-trigger',
+    data_loaded_signal_id='peakindex-data-loaded-signal',
     data_path_id='data_path',
     filename_prefix_id='filenamePrefix',
     scan_points_id='scanPoints',
@@ -1625,13 +1625,13 @@ register_load_file_indices_callback(
 )
 
 register_check_filenames_callback(
-    check_button_id='peakindex-check-filenames-btn',
-    update_button_id='peakindex-update-path-fields-btn',
-    data_loaded_trigger_id='peakindex-data-loaded-trigger',
+    find_filenames_id='peakindex-check-filenames-btn',
+    update_paths_id='peakindex-update-path-fields-btn',
+    data_loaded_signal_id='peakindex-data-loaded-signal',
     data_path_id='data_path',
     filename_prefix_id='filenamePrefix',
     filename_templates_id='peakindex-filename-templates',
-    suggested_patterns_store_id='peakindex-suggested-patterns',
+    cached_patterns_store_id='peakindex-cached-patterns',
     num_indices=2
 )
 
@@ -1916,7 +1916,7 @@ def load_scan_data_from_url(href):
                                 values.append(getattr(d, attr))
                         
                         if values:
-                            pooled_value = _merge_field_values(values, attr)
+                            pooled_value = _merge_field_values(values)
                             setattr(pooled_peakindex_form_data, attr, pooled_value)
                     
                     # User text
