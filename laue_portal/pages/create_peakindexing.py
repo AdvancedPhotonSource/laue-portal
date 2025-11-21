@@ -1610,7 +1610,8 @@ register_update_path_fields_callback(
     alert_id='alert-scan-loaded',
     catalog_defaults=CATALOG_DEFAULTS,
     output_folder_id='outputFolder',
-    build_template_func=build_output_folder_template
+    build_template_func=build_output_folder_template,
+    context='peakindex'
 )
 
 register_load_file_indices_callback(
@@ -1880,7 +1881,7 @@ def load_scan_data_from_url(href):
                             }
                             
                             # Get data from appropriate table (WireRecon, Recon, or Catalog)
-                            id_data = get_data_from_id(session, id_dict, root_path, CATALOG_DEFAULTS)
+                            id_data = get_data_from_id(session, id_dict, root_path, 'peakindex', CATALOG_DEFAULTS)
                             
                             # Set missing fields from the query result
                             if id_data:

@@ -222,6 +222,7 @@ def register_update_path_fields_callback(
     filename_prefix_id: str,
     root_path_id: str,
     catalog_defaults: dict,
+    context: str,
     id_number_id: str = None,
     output_folder_id: str = None,
     build_template_func = None
@@ -237,6 +238,7 @@ def register_update_path_fields_callback(
     - filename_prefix_id: ID of the filename prefix field to update
     - root_path_id: ID of the root path field to update
     - catalog_defaults: Dictionary of catalog default values
+    - context: The context for get_data_from_id ('wire_recon', 'recon', or 'peakindex')
     - id_number_id: ID of the ID number input field (optional, for IDnumber field)
     - output_folder_id: ID of the output folder field to update (optional)
     - build_template_func: Function to build output folder template (optional, signature: func(scan_num_int, data_path, **kwargs))
@@ -285,7 +287,7 @@ def register_update_path_fields_callback(
                 for id_num in id_numbers:
                     try:
                         id_dict = parse_IDnumber(id_num, session)
-                        id_data = get_data_from_id(session, id_dict, root_path, catalog_defaults)
+                        id_data = get_data_from_id(session, id_dict, root_path, context, catalog_defaults)
                         if id_data and id_data.get('data_path'):
                             id_data_list.append(id_data)
                     except ValueError as e:

@@ -728,17 +728,37 @@ def get_catalog_data(session, scan_number, root_path="", CATALOG_DEFAULTS=None):
             }
 
 
-def get_data_from_id(session, id_dict, root_path, catalog_defaults=None):
+def get_data_from_id(session, id_dict, root_path, context='scan', catalog_defaults=None):
     """
-    Get data_path and filenamePrefix based on ID priority.
+    Get data_path and filenamePrefix based on ID priority and context.
     
     This is the analog of get_catalog_data() but with broader scope,
     querying the appropriate table based on which ID is present.
     
-    Priority order:
-    1. If recon_id exists → query Recon table (MR prefix)
-    2. Else if wirerecon_id exists → query WireRecon table (WR prefix)
-    3. Else if scanNumber exists → call get_catalog_data() (SN prefix)
+    Context-aware behavior:
+    - context='scan': Returns original scan data (from Catalog)
+                      Only expects scanNumber in id_dict
+                      Default context (not used for jobs)
+    - context='wire_recon': Returns reconstruction input data paths
+                            Used in create_wire_reconstruction page
+    - context='recon': Returns reconstruction input data paths
+                       Used in create_reconstruction page
+    - context='peakindex': Returns reconstruction output folders (WR/MR outputs)
+                           Used in create_peakindexing page
+    
+    For 'scan' context:
+    - Query Catalog for original scan data using scanNumber
+    - Return Catalog data
+    
+    For 'wire_recon' and 'recon' contexts:
+    - If recon_id is provided → Query Recon table and return recon_data.file_path (the input data path used for that reconstruction)
+    - If wirerecon_id is provided → Query WireRecon table and return wirerecon_data.filefolder (the input data path used for that wire reconstruction)
+    - If only scanNumber is provided → Query Catalog table and return the original scan data path
+    
+    For 'peakindex' context:
+    - If recon_id is provided → Query Recon table and return recon_data.file_output (the output folder from reconstruction)
+    - If wirerecon_id is provided → Query WireRecon table and return wirerecon_data.outputFolder (the output folder from wire reconstruction)
+    - If only scanNumber is provided → Query Catalog table and return the original scan data path
     
     Args:
         session: SQLAlchemy session object
@@ -746,45 +766,96 @@ def get_data_from_id(session, id_dict, root_path, catalog_defaults=None):
                  scanNumber, wirerecon_id, recon_id, peakindex_id
         root_path: Root path for file operations
         catalog_defaults: Defaults for catalog fallback (optional)
+        context: Required - must be 'scan', 'wire_recon', 'recon', or 'peakindex'
     
     Returns:
         dict: {'data_path': str, 'filenamePrefix': list or str, 'source': str}
               where 'source' indicates which table the data came from
               ('Recon', 'WireRecon', or 'Catalog')
+    
+    Raises:
+        ValueError: If context is not provided or invalid
     """
+    # Validate context parameter
+    valid_contexts = ['scan', 'wire_recon', 'recon', 'peakindex']
+    if context not in valid_contexts:
+        raise ValueError(f"context must be one of {valid_contexts}, got: {context}")
+    
     recon_id = id_dict.get('recon_id')
     wirerecon_id = id_dict.get('wirerecon_id')
     scanNumber = id_dict.get('scanNumber')
     
-    # Priority 1: Regular reconstruction (MR)
-    if recon_id:
-        recon_data = session.query(db_schema.Recon).filter_by(
-            recon_id=int(recon_id)
-        ).first()
-        if recon_data and recon_data.file_output:
-            return {
-                'data_path': remove_root_path_prefix(recon_data.file_output, root_path),
-                'filenamePrefix': getattr(recon_data, 'filenamePrefix', []) or [],
-                'source': 'Recon'
-            }
+    # For 'scan' context: Return original scan data (no reconstruction IDs expected)
+    if context == 'scan':
+        # Query Catalog for original scan data
+        if scanNumber:
+            catalog_result = get_catalog_data(session, int(scanNumber), root_path, catalog_defaults)
+            catalog_result['source'] = 'Catalog'
+            return catalog_result
     
-    # Priority 2: Wire reconstruction (WR)
-    if wirerecon_id:
-        wirerecon_data = session.query(db_schema.WireRecon).filter_by(
-            wirerecon_id=int(wirerecon_id)
-        ).first()
-        if wirerecon_data and wirerecon_data.outputFolder:
-            return {
-                'data_path': remove_root_path_prefix(wirerecon_data.outputFolder, root_path),
-                'filenamePrefix': wirerecon_data.filenamePrefix or [],
-                'source': 'WireRecon'
-            }
+    # For 'wire_recon' and 'recon' contexts: Return reconstruction input data paths
+    elif context in ['wire_recon', 'recon']:
+        # Priority 1: Mask reconstruction (MR) - use input path
+        if recon_id:
+            recon_data = session.query(db_schema.Recon).filter_by(
+                recon_id=int(recon_id)
+            ).first()
+            if recon_data and recon_data.file_path:
+                return {
+                    'data_path': remove_root_path_prefix(recon_data.file_path, root_path),
+                    'filenamePrefix': getattr(recon_data, 'filenamePrefix', []) or [],
+                    'source': 'Recon'
+                }
+        
+        # Priority 2: Wire reconstruction (WR) - use input path
+        if wirerecon_id:
+            wirerecon_data = session.query(db_schema.WireRecon).filter_by(
+                wirerecon_id=int(wirerecon_id)
+            ).first()
+            if wirerecon_data and wirerecon_data.filefolder:
+                return {
+                    'data_path': remove_root_path_prefix(wirerecon_data.filefolder, root_path),
+                    'filenamePrefix': wirerecon_data.filenamePrefix or [],
+                    'source': 'WireRecon'
+                }
+        
+        # Fallback: Query Catalog for original scan data if only scanNumber provided
+        if scanNumber:
+            catalog_result = get_catalog_data(session, int(scanNumber), root_path, catalog_defaults)
+            catalog_result['source'] = 'Catalog'
+            return catalog_result
     
-    # Priority 3: Fallback to catalog data (SN)
-    if scanNumber:
-        catalog_result = get_catalog_data(session, int(scanNumber), root_path, catalog_defaults)
-        catalog_result['source'] = 'Catalog'
-        return catalog_result
+    # For 'peakindex' context: Return reconstruction output folders
+    elif context == 'peakindex':
+        # Priority 1: Regular reconstruction (MR)
+        if recon_id:
+            recon_data = session.query(db_schema.Recon).filter_by(
+                recon_id=int(recon_id)
+            ).first()
+            if recon_data and recon_data.file_output:
+                return {
+                    'data_path': remove_root_path_prefix(recon_data.file_output, root_path),
+                    'filenamePrefix': getattr(recon_data, 'filenamePrefix', []) or [],
+                    'source': 'Recon'
+                }
+        
+        # Priority 2: Wire reconstruction (WR)
+        if wirerecon_id:
+            wirerecon_data = session.query(db_schema.WireRecon).filter_by(
+                wirerecon_id=int(wirerecon_id)
+            ).first()
+            if wirerecon_data and wirerecon_data.outputFolder:
+                return {
+                    'data_path': remove_root_path_prefix(wirerecon_data.outputFolder, root_path),
+                    'filenamePrefix': wirerecon_data.filenamePrefix or [],
+                    'source': 'WireRecon'
+                }
+        
+        # Fallback to query Catalog for original scan data if no reconstruction IDs
+        if scanNumber:
+            catalog_result = get_catalog_data(session, int(scanNumber), root_path, catalog_defaults)
+            catalog_result['source'] = 'Catalog'
+            return catalog_result
     
     # No valid ID found
     return {'data_path': '', 'filenamePrefix': [], 'source': 'Unknown'}
