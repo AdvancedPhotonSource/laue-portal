@@ -1139,6 +1139,9 @@ def parse_IDnumber(IDnumber, session, delimiter="; "):
     # Process each entry
     for entry in entries:
         if not entry or entry.lower() == 'none':
+            # Add None to all fields for this entry
+            for field in result.keys():
+                result[field].append(None)
             continue
         
         # Use regex to match prefix and number
@@ -1150,8 +1153,11 @@ def parse_IDnumber(IDnumber, session, delimiter="; "):
             number_str = match.group(2)
             field_name = prefix_map[prefix]
             
-            # Add to result list for this field
-            result[field_name].append(number_str)
+            # Initialize this entry with None for all fields
+            entry_data = {k: None for k in result.keys()}
+            
+            # Set the current field
+            entry_data[field_name] = number_str
             
             # Query database for parent IDs based on field_name
             if field_name == 'peakindex_id':
@@ -1161,10 +1167,11 @@ def parse_IDnumber(IDnumber, session, delimiter="; "):
                 ).first()
                 
                 if peakindex_data:
-                    result['scanNumber'].append(str(peakindex_data.scanNumber))
-                    # Always append, even if None
-                    result['recon_id'].append(str(peakindex_data.recon_id) if peakindex_data.recon_id else None)
-                    result['wirerecon_id'].append(str(peakindex_data.wirerecon_id) if peakindex_data.wirerecon_id else None)
+                    entry_data['scanNumber'] = str(peakindex_data.scanNumber)
+                    if peakindex_data.recon_id:
+                        entry_data['recon_id'] = str(peakindex_data.recon_id)
+                    if peakindex_data.wirerecon_id:
+                        entry_data['wirerecon_id'] = str(peakindex_data.wirerecon_id)
                 else:
                     raise ValueError(f"PeakIndex ID {number_str} not found in database")
             
@@ -1175,7 +1182,7 @@ def parse_IDnumber(IDnumber, session, delimiter="; "):
                 ).first()
                 
                 if recon_data:
-                    result['scanNumber'].append(str(recon_data.scanNumber))
+                    entry_data['scanNumber'] = str(recon_data.scanNumber)
                 else:
                     raise ValueError(f"Recon ID {number_str} not found in database")
             
@@ -1186,11 +1193,15 @@ def parse_IDnumber(IDnumber, session, delimiter="; "):
                 ).first()
                 
                 if wirerecon_data:
-                    result['scanNumber'].append(str(wirerecon_data.scanNumber))
+                    entry_data['scanNumber'] = str(wirerecon_data.scanNumber)
                 else:
                     raise ValueError(f"WireRecon ID {number_str} not found in database")
             
             # If field_name == 'scanNumber', no database query needed
+            
+            # Append entry_data to result lists
+            for field in result.keys():
+                result[field].append(entry_data[field])
         else:
             raise ValueError(f"Invalid IDnumber entry: '{entry}' - expected format: (SN|WR|MR|PI)###")
     
@@ -1203,7 +1214,7 @@ def parse_IDnumber(IDnumber, session, delimiter="; "):
             # All values are identical, return single value
             final_result[field_name] = id_list[0]
         else:
-            # Return semicolon-delimited string
-            final_result[field_name] = delimiter.join(str(v) for v in id_list)
+            # Return semicolon-delimited string, converting None to empty string for joining
+            final_result[field_name] = delimiter.join(str(v) if v is not None else '' for v in id_list)
     
     return final_result
