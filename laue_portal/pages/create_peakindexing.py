@@ -1724,7 +1724,7 @@ register_check_filenames_callback(
 #         raise PreventUpdate
 
 @dash.callback(
-    Output('peakindex-data-loaded-trigger', 'data'),
+    Output('peakindex-data-loaded-signal', 'data'),
     Input('url-create-peakindexing', 'href'),
     prevent_initial_call=True,
 )

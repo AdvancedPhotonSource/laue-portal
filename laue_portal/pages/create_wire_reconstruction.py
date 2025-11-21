@@ -1275,11 +1275,6 @@ def load_scan_data_from_url(href):
                     pooled_wirerecon_form_data.author = DEFAULT_VARIABLES['author']
                     pooled_wirerecon_form_data.notes = DEFAULT_VARIABLES['notes']
                     
-                    # Manually set wirerecon_id from the collected IDs for proper IDnumber generation
-                    # Keep None values to maintain list length consistency
-                    if wirerecon_ids:
-                        pooled_wirerecon_form_data.wirerecon_id = _merge_field_values(wirerecon_ids)
-                    
                     # Populate the form with the defaults
                     set_wire_recon_form_props(pooled_wirerecon_form_data)
 
