@@ -446,16 +446,22 @@ def register_load_file_indices_callback(
             # Parse data_path
             data_path_list = parse_parameter(data_path)
             
-            # Collect all indices from all data paths
-            all_scanpoint_indices = set()
-            all_depth_indices = set()
+            # Track indices separately per data path (not merged)
+            scanpoint_indices_per_path = []  # List of sets, one per data path
+            depth_indices_per_path = []  # List of sets, one per data path
             
             for current_data_path in data_path_list:
                 current_full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
                 
+                # Initialize sets for this path
+                path_scanpoint_indices = set()
+                path_depth_indices = set()
+                
                 # Check if directory exists
                 if not os.path.exists(current_full_data_path):
                     logger.warning(f"Directory does not exist: {current_full_data_path}")
+                    scanpoint_indices_per_path.append(path_scanpoint_indices)
+                    depth_indices_per_path.append(path_depth_indices)
                     continue
                 
                 # List all files in directory, filtering by valid extensions
@@ -463,44 +469,74 @@ def register_load_file_indices_callback(
                     files = _filter_files_by_extension(current_full_data_path)
                 except Exception as e:
                     logger.error(f"Error reading directory {current_full_data_path}: {e}")
+                    scanpoint_indices_per_path.append(path_scanpoint_indices)
+                    depth_indices_per_path.append(path_depth_indices)
                     continue
                 
                 # Extract patterns and indices using helper function
                 pattern_files = _extract_indices_from_files(files, num_indices)
                 
-                # Extract scanpoint and depth indices from all patterns
+                # Extract scanpoint and depth indices from all patterns for this path
                 for pattern, indices_list in pattern_files.items():
                     for indices in indices_list:
                         if indices:  # Skip empty index lists (files without numeric patterns)
                             if len(indices) == 1:
                                 # Single index: scanPoint only
-                                all_scanpoint_indices.add(indices[0])
+                                path_scanpoint_indices.add(indices[0])
                             elif len(indices) >= 2:
                                 # Two or more indices: scanPoint and depth
-                                all_scanpoint_indices.add(indices[0])
-                                all_depth_indices.add(indices[1])
+                                path_scanpoint_indices.add(indices[0])
+                                path_depth_indices.add(indices[1])
+                
+                # Store this path's indices
+                scanpoint_indices_per_path.append(path_scanpoint_indices)
+                depth_indices_per_path.append(path_depth_indices)
             
-            if all_scanpoint_indices:
-                # Create srange strings (srange handles sorting internally)
-                scanpoints_range = str(srange(all_scanpoint_indices))
+            # Check if we found any indices
+            if any(scanpoint_indices_per_path):
+                # Create separate srange strings for each path
+                scanpoints_ranges = []
+                for path_indices in scanpoint_indices_per_path:
+                    if path_indices:
+                        scanpoints_ranges.append(str(srange(path_indices)))
+                    else:
+                        scanpoints_ranges.append("")
+                
+                # Use _merge_field_values to condense identical ranges
+                scanpoints_range_str = _merge_field_values(scanpoints_ranges)
                 
                 # Update the scanPoints field
-                set_props(scan_points_id, {'value': scanpoints_range})
+                set_props(scan_points_id, {'value': scanpoints_range_str})
                 
                 # Update depthRange field if we have depth indices
-                if num_indices == 2 and all_depth_indices and depth_range_id:
-                    depth_range = str(srange(all_depth_indices))
-                    set_props(depth_range_id, {'value': depth_range})
+                if num_indices == 2 and any(depth_indices_per_path) and depth_range_id:
+                    depth_ranges = []
+                    for path_indices in depth_indices_per_path:
+                        if path_indices:
+                            depth_ranges.append(str(srange(path_indices)))
+                        else:
+                            depth_ranges.append("")
+                    
+                    # Use _merge_field_values to condense identical ranges
+                    depth_range_str = _merge_field_values(depth_ranges)
+                    set_props(depth_range_id, {'value': depth_range_str})
+                    
+                    # Count total unique indices across all paths for message
+                    total_scanpoints = sum(len(s) for s in scanpoint_indices_per_path)
+                    total_depths = sum(len(s) for s in depth_indices_per_path)
                     
                     set_props(alert_id, {
                         'is_open': True,
-                        'children': f'Successfully loaded {len(all_scanpoint_indices)} scan points ({scanpoints_range}) and {len(all_depth_indices)} depth indices ({depth_range})',
+                        'children': f'Successfully loaded {total_scanpoints} scan points and {total_depths} depth indices across {len(data_path_list)} path(s)',
                         'color': 'success'
                     })
                 else:
+                    # Count total unique indices across all paths for message
+                    total_scanpoints = sum(len(s) for s in scanpoint_indices_per_path)
+                    
                     set_props(alert_id, {
                         'is_open': True,
-                        'children': f'Successfully loaded {len(all_scanpoint_indices)} file indices: {scanpoints_range}',
+                        'children': f'Successfully loaded {total_scanpoints} file indices across {len(data_path_list)} path(s): {scanpoints_range_str}',
                         'color': 'success'
                     })
             else:
