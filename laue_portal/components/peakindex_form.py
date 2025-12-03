@@ -510,7 +510,13 @@ def set_peakindex_form_props(peakindex, read_only=False):
     # set_props("scanNumber", {'value':peakindex.scanNumber, 'readonly':read_only})
     set_props("root_path", {'value':peakindex.root_path, 'readonly':read_only})
     set_props("data_path", {'value':peakindex.data_path, 'readonly':read_only})
-    set_props("filenamePrefix", {'value':peakindex.filenamePrefix, 'readonly':read_only})
+    
+    # Convert list to comma-separated string for form display
+    filename_value = peakindex.filenamePrefix
+    if isinstance(filename_value, list):
+        filename_value = ', '.join(filename_value)
+    set_props("filenamePrefix", {'value':filename_value, 'readonly':read_only})
+    # set_props("filenamePrefix", {'value':peakindex.filenamePrefix, 'readonly':read_only})
     # set_props("recon_id", {'value':peakindex.recon_id, 'readonly':read_only})
     # set_props("wirerecon_id", {'value':peakindex.wirerecon_id, 'readonly':read_only})
     

@@ -352,10 +352,15 @@ def validate_peakindexing_inputs(ctx):
         'detectorCropY2',
     ]
     
+    # Optional parameters list - these fields are not required
     optional_params = [
+        'scanPoints',
         'depthRange',
         'threshold',
         'thresholdRatio',
+        'scanNumber',
+        'wirerecon_id',
+        'recon_id',
         ]
 
     # Create database session for catalog validation
@@ -493,18 +498,37 @@ def validate_peakindexing_inputs(ctx):
         # Store the parsed list in the dictionary
         parsed_fields[field_name] = parsed_list
     
+    # Create outer wrapper with common parameters before the loop
+    def make_field_validator(validation_result, parsed_fields, optional_params):
+        """Create a field validator with pre-filled common parameters"""
+        def validate_for_input(field_name, index, input_prefix, **kwargs):
+            return validate_field_value(
+                validation_result,
+                parsed_fields,
+                field_name,
+                index,
+                input_prefix,
+                optional_params=optional_params,
+                **kwargs
+            )
+        return validate_for_input
+    
+    # Create the validator once before the loop
+    validate_for_input = make_field_validator(validation_result, parsed_fields, optional_params)
+    
     # Validate each input, skipping fields that failed global validation
     for i in range(num_inputs):
         input_prefix = f"Input {i+1}: " if num_inputs > 1 else ""
+        
+        # Inner wrapper for this specific input
+        def validate_field(field_name, **kwargs):
+            return validate_for_input(field_name, i, input_prefix, **kwargs)
         
         # 1. Validate ID integers (scanNumber, wirerecon_id, recon_id)
         # Convert scanNumber to integer if present
         scan_num_int = None
         if 'scanNumber' in parsed_fields:
-            current_scanNumber = validate_field_value(
-                validation_result, parsed_fields, 'scanNumber', i, input_prefix,
-                required=False, display_name="Scan Number"
-            )
+            current_scanNumber = validate_field('scanNumber', required=False, display_name="Scan Number")
             if current_scanNumber:
                 try:
                     scan_num_int = int(current_scanNumber)
@@ -517,10 +541,7 @@ def validate_peakindexing_inputs(ctx):
         # Convert wirerecon_id to integer if present
         wirerecon_id_int = None
         if 'wirerecon_id' in parsed_fields:
-            wirerecon_val = validate_field_value(
-                validation_result, parsed_fields, 'wirerecon_id', i, input_prefix,
-                required=False, display_name="Wire Recon ID"
-            )
+            wirerecon_val = validate_field('wirerecon_id', required=False, display_name="Wire Recon ID")
             if wirerecon_val:
                 try:
                     wirerecon_id_int = int(wirerecon_val)
@@ -533,10 +554,7 @@ def validate_peakindexing_inputs(ctx):
         # Convert recon_id to integer if present
         recon_id_int = None
         if 'recon_id' in parsed_fields:
-            recon_val = validate_field_value(
-                validation_result, parsed_fields, 'recon_id', i, input_prefix,
-                required=False, display_name="Recon ID"
-            )
+            recon_val = validate_field('recon_id', required=False, display_name="Recon ID")
             if recon_val:
                 try:
                     recon_id_int = int(recon_val)
@@ -548,9 +566,7 @@ def validate_peakindexing_inputs(ctx):
         
         # 2. Check if data files exist for this input (skip if root_path or data_path invalid)
         if 'root_path' not in validation_result['errors'] and 'data_path' not in validation_result['errors']:
-            current_data_path = validate_field_value(
-                validation_result, parsed_fields, 'data_path', i, input_prefix
-            )
+            current_data_path = validate_field('data_path')
             if current_data_path is not None:
                 current_full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
                 
@@ -568,7 +584,7 @@ def validate_peakindexing_inputs(ctx):
                         }
                         
                         # Get data from appropriate table based on ID priority
-                        id_data = get_data_from_id(session, id_dict, root_path, CATALOG_DEFAULTS)
+                        id_data = get_data_from_id(session, id_dict, root_path, 'peakindex', CATALOG_DEFAULTS)
                         
                         if id_data and id_data.get('data_path'):
                             id_full_data_path = os.path.join(root_path, id_data['data_path'].lstrip('/'))
@@ -591,10 +607,7 @@ def validate_peakindexing_inputs(ctx):
                                              custom_message="Data Path directory contains no files")
                     else:
                         # Get filename prefix
-                        current_filename_prefix_str = validate_field_value(
-                            validation_result, parsed_fields, 'filenamePrefix', i, input_prefix,
-                            display_name="Filename Prefix"
-                        )
+                        current_filename_prefix_str = validate_field('filenamePrefix', display_name="Filename Prefix")
                         if current_filename_prefix_str is not None:
                             current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
                             
@@ -620,14 +633,8 @@ def validate_peakindexing_inputs(ctx):
                                     
                                     if num_placeholders == 1:
                                         # Get both fields to check which one is provided
-                                        current_scanPoints = validate_field_value(
-                                            validation_result, parsed_fields, 'scanPoints', i, input_prefix,
-                                            required=False, display_name="Scan Points"
-                                        )
-                                        current_depthRange = validate_field_value(
-                                            validation_result, parsed_fields, 'depthRange', i, input_prefix,
-                                            required=False, display_name="Depth Range"
-                                        )
+                                        current_scanPoints = validate_field('scanPoints', required=False, display_name="Scan Points")
+                                        current_depthRange = validate_field('depthRange', required=False, display_name="Depth Range")
                                         
                                         # Check that exactly one is provided
                                         has_scanPoints = current_scanPoints is not None
@@ -676,14 +683,8 @@ def validate_peakindexing_inputs(ctx):
                                     
                                     elif num_placeholders == 2:
                                         # Both scanPoints and depthRange are required
-                                        current_scanPoints = validate_field_value(
-                                            validation_result, parsed_fields, 'scanPoints', i, input_prefix,
-                                            display_name="Scan Points"
-                                        )
-                                        current_depthRange = validate_field_value(
-                                            validation_result, parsed_fields, 'depthRange', i, input_prefix,
-                                            display_name="Depth Range"
-                                        )
+                                        current_scanPoints = validate_field('scanPoints', display_name="Scan Points")
+                                        current_depthRange = validate_field('depthRange', display_name="Depth Range")
                                         
                                         if current_scanPoints is None or current_depthRange is None:
                                             # Required field missing, error already added by validate_field_value
@@ -761,10 +762,7 @@ def validate_peakindexing_inputs(ctx):
         # Note: We cannot validate this properly if outputFolder contains %d placeholders
         # because we don't know the scan number or peakindex_id at validation time.
         # This check is skipped if %d is present in the path.
-        current_outputFolder = validate_field_value(
-            validation_result, parsed_fields, 'outputFolder', i, input_prefix,
-            display_name="Output Folder"
-        )
+        current_outputFolder = validate_field('outputFolder', display_name="Output Folder")
         if current_outputFolder is not None:
             if 'root_path' not in validation_result['errors']:
                 if '%d' not in current_outputFolder:
@@ -774,10 +772,7 @@ def validate_peakindexing_inputs(ctx):
                                              custom_message="Output Folder already exists")
         
         # 4. Check if geometry file exists for this input (skip if root_path invalid)
-        current_geoFile = validate_field_value(
-            validation_result, parsed_fields, 'geoFile', i, input_prefix,
-            display_name="Geometry File"
-        )
+        current_geoFile = validate_field('geoFile', display_name="Geometry File")
         if current_geoFile is not None:
             if 'root_path' not in validation_result['errors']:
                 full_geo_path = os.path.join(root_path, current_geoFile.lstrip('/'))
@@ -786,10 +781,7 @@ def validate_peakindexing_inputs(ctx):
                                          custom_message="Geometry File not found")
         
         # 5. Check if crystal file exists for this input (skip if root_path invalid)
-        current_crystFile = validate_field_value(
-            validation_result, parsed_fields, 'crystFile', i, input_prefix,
-            display_name="Crystal File"
-        )
+        current_crystFile = validate_field('crystFile', display_name="Crystal File")
         if current_crystFile is not None:
             if 'root_path' not in validation_result['errors']:
                 full_cryst_path = os.path.join(root_path, current_crystFile.lstrip('/'))
@@ -798,25 +790,13 @@ def validate_peakindexing_inputs(ctx):
                                          custom_message="Crystal File not found")
         
         # 6. Validate detector crop parameters for this input
-        x1_val = validate_field_value(
-            validation_result, parsed_fields, 'detectorCropX1', i, input_prefix,
-            converter=safe_int
-        )
+        x1_val = validate_field('detectorCropX1', converter=safe_int)
         
-        x2_val = validate_field_value(
-            validation_result, parsed_fields, 'detectorCropX2', i, input_prefix,
-            converter=safe_int
-        )
+        x2_val = validate_field('detectorCropX2', converter=safe_int)
         
-        y1_val = validate_field_value(
-            validation_result, parsed_fields, 'detectorCropY1', i, input_prefix,
-            converter=safe_int
-        )
+        y1_val = validate_field('detectorCropY1', converter=safe_int)
         
-        y2_val = validate_field_value(
-            validation_result, parsed_fields, 'detectorCropY2', i, input_prefix,
-            converter=safe_int
-        )
+        y2_val = validate_field('detectorCropY2', converter=safe_int)
         
         # Check X1 < X2 (only if both values are valid)
         if x1_val is not None and x2_val is not None and x1_val >= x2_val:
@@ -833,109 +813,73 @@ def validate_peakindexing_inputs(ctx):
                                  custom_message="Detector Crop Y1 must be less than Y2")
         
         # 7. Validate numeric parameters for this input
-        threshold_val = validate_field_value(
-            validation_result, parsed_fields, 'threshold', i, input_prefix,
-            converter=safe_int
-        )
+        threshold_val = validate_field('threshold', converter=safe_int)
         if threshold_val is not None:
             if threshold_val < 0:
                 add_validation_message(validation_result, 'errors', 'threshold', input_prefix, 
                                      custom_message="Threshold must be non-negative")
         
-        thresholdRatio_val = validate_field_value(
-            validation_result, parsed_fields, 'thresholdRatio', i, input_prefix,
-            converter=safe_int
-        )
+        thresholdRatio_val = validate_field('thresholdRatio', converter=safe_int)
         if thresholdRatio_val is not None:
             if thresholdRatio_val < 0:
                 add_validation_message(validation_result, 'errors', 'thresholdRatio', input_prefix, 
                                      custom_message="Threshold Ratio must be non-negative")
         
-        maxRfactor_val = validate_field_value(
-            validation_result, parsed_fields, 'maxRfactor', i, input_prefix,
-            converter=safe_float
-        )
+        maxRfactor_val = validate_field('maxRfactor', converter=safe_float)
         if maxRfactor_val is not None:
             if maxRfactor_val < 0 or maxRfactor_val > 1:
                 add_validation_message(validation_result, 'errors', 'maxRfactor', input_prefix, 
                                      custom_message="Max Rfactor must be between 0 and 1")
         
-        boxsize_val = validate_field_value(
-            validation_result, parsed_fields, 'boxsize', i, input_prefix,
-            converter=safe_int
-        )
+        boxsize_val = validate_field('boxsize', converter=safe_int)
         if boxsize_val is not None:
             if boxsize_val <= 0:
                 add_validation_message(validation_result, 'errors', 'boxsize', input_prefix, 
                                      custom_message="Boxsize must be positive")
         
-        max_number_val = validate_field_value(
-            validation_result, parsed_fields, 'max_number', i, input_prefix,
-            converter=safe_int
-        )
+        max_number_val = validate_field('max_number', converter=safe_int)
         if max_number_val is not None:
             if max_number_val <= 0:
                 add_validation_message(validation_result, 'errors', 'max_number', input_prefix, 
                                      custom_message="Max Number must be positive")
         
-        min_separation_val = validate_field_value(
-            validation_result, parsed_fields, 'min_separation', i, input_prefix,
-            converter=safe_float
-        )
+        min_separation_val = validate_field('min_separation', converter=safe_float)
         if min_separation_val is not None:
             if min_separation_val < 0:
                 add_validation_message(validation_result, 'errors', 'min_separation', input_prefix, 
                                      custom_message="Min Separation must be non-negative")
         
-        min_size_val = validate_field_value(
-            validation_result, parsed_fields, 'min_size', i, input_prefix,
-            converter=safe_float
-        )
+        min_size_val = validate_field('min_size', converter=safe_float)
         if min_size_val is not None:
             if min_size_val < 0:
                 add_validation_message(validation_result, 'errors', 'min_size', input_prefix, 
                                      custom_message="Min Size must be non-negative")
         
-        max_peaks_val = validate_field_value(
-            validation_result, parsed_fields, 'max_peaks', i, input_prefix,
-            converter=safe_int
-        )
+        max_peaks_val = validate_field('max_peaks', converter=safe_int)
         if max_peaks_val is not None:
             if max_peaks_val <= 0:
                 add_validation_message(validation_result, 'errors', 'max_peaks', input_prefix, 
                                      custom_message="Max Peaks must be positive")
         
-        indexKeVmaxCalc_val = validate_field_value(
-            validation_result, parsed_fields, 'indexKeVmaxCalc', i, input_prefix,
-            converter=safe_float
-        )
+        indexKeVmaxCalc_val = validate_field('indexKeVmaxCalc', converter=safe_float)
         if indexKeVmaxCalc_val is not None:
             if indexKeVmaxCalc_val <= 0:
                 add_validation_message(validation_result, 'errors', 'indexKeVmaxCalc', input_prefix, 
                                      custom_message="Index Ke Vmax Calc must be positive")
         
-        indexKeVmaxTest_val = validate_field_value(
-            validation_result, parsed_fields, 'indexKeVmaxTest', i, input_prefix,
-            converter=safe_float
-        )
+        indexKeVmaxTest_val = validate_field('indexKeVmaxTest', converter=safe_float)
         if indexKeVmaxTest_val is not None:
             if indexKeVmaxTest_val <= 0:
                 add_validation_message(validation_result, 'errors', 'indexKeVmaxTest', input_prefix, 
                                      custom_message="Index Ke Vmax Test must be positive")
         
-        indexAngleTolerance_val = validate_field_value(
-            validation_result, parsed_fields, 'indexAngleTolerance', i, input_prefix,
-            converter=safe_float
-        )
+        indexAngleTolerance_val = validate_field('indexAngleTolerance', converter=safe_float)
         if indexAngleTolerance_val is not None:
             if indexAngleTolerance_val < 0:
                 add_validation_message(validation_result, 'errors', 'indexAngleTolerance', input_prefix, 
                                      custom_message="Index Angle Tolerance must be non-negative")
         
-        indexCone_val = validate_field_value(
-            validation_result, parsed_fields, 'indexCone', i, input_prefix,
-            converter=safe_float
-        )
+        indexCone_val = validate_field('indexCone', converter=safe_float)
         if indexCone_val is not None:
             if indexCone_val < 0 or indexCone_val > 180:
                 add_validation_message(validation_result, 'errors', 'indexCone', input_prefix, 

@@ -237,7 +237,13 @@ def set_wire_recon_form_props(wirerecon, read_only=False):
     # File paths
     set_props("root_path", {'value':wirerecon.root_path, 'readonly':read_only})
     set_props("data_path", {'value':wirerecon.data_path, 'readonly':read_only})
-    set_props("filenamePrefix", {'value':wirerecon.filenamePrefix, 'readonly':read_only})
+    
+    # Convert list to comma-separated string for form display
+    filename_value = wirerecon.filenamePrefix
+    if isinstance(filename_value, list):
+        filename_value = ', '.join(filename_value)
+    set_props("filenamePrefix", {'value':filename_value, 'readonly':read_only})
+    # set_props("filenamePrefix", {'value':wirerecon.filenamePrefix, 'readonly':read_only})
     
     # User text
     # set_props("author", {'value':wirerecon.author, 'readonly':read_only})

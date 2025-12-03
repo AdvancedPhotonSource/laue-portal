@@ -1314,8 +1314,8 @@ def selected_recon_href(recon_rows, peakindex_rows, href):
             base_href = "/create-wire-reconstruction"
 
         query_params = [f"scan_id={','.join(list(set(scan_ids)))}"]
-        if any_wirerecon_scans: query_params.append(f"wirerecon_id={','.join(filter(None, wirerecon_ids))}")
-        if any_recon_scans: query_params.append(f"recon_id={','.join(filter(None, recon_ids))}")
+        if any_wirerecon_scans: query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
+        if any_recon_scans: query_params.append(f"recon_id={','.join(recon_ids)}")
         
         return f"{base_href}?{'&'.join(query_params)}"
 
@@ -1359,9 +1359,9 @@ def selected_peakindex_href(recon_rows, peakindex_rows, href):
             return base_href
 
         query_params = [f"scan_id={','.join(list(set(scan_ids)))}"]
-        if any(wirerecon_ids): query_params.append(f"wirerecon_id={','.join(filter(None, wirerecon_ids))}")
-        if any(recon_ids): query_params.append(f"recon_id={','.join(filter(None, recon_ids))}")
-        if any(peakindex_ids): query_params.append(f"peakindex_id={','.join(filter(None, peakindex_ids))}")
+        if any(wirerecon_ids): query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
+        if any(recon_ids): query_params.append(f"recon_id={','.join(recon_ids)}")
+        if any(peakindex_ids): query_params.append(f"peakindex_id={','.join(peakindex_ids)}")
 
         return f"{base_href}?{'&'.join(query_params)}"
 

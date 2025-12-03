@@ -110,7 +110,7 @@ def add_validation_message(validation_result, result_key, field_name, input_pref
 
 
 def validate_field_value(validation_result, parsed_fields, field_name, index, input_prefix='',
-                         converter=None, required=True, display_name=None):
+                         converter=None, required=True, display_name=None, optional_params=None):
     """
     Extract, validate, and convert a field value from parsed_fields.
     
@@ -128,8 +128,9 @@ def validate_field_value(validation_result, parsed_fields, field_name, index, in
     - index: index in the field value list
     - input_prefix: optional prefix for the message (e.g., "Input 1: ")
     - converter: optional function to convert the value (e.g., safe_int, safe_float)
-    - required: whether the value is required (default True)
+    - required: whether the value is required (default True). Takes precedence over optional_params.
     - display_name: optional custom display name (if not provided, auto-generated from field_name)
+    - optional_params: optional list of field names that are optional. Only used if required is not explicitly set to True.
     
     Returns:
     - The extracted (and optionally converted) value, or None if validation failed
@@ -147,7 +148,19 @@ def validate_field_value(validation_result, parsed_fields, field_name, index, in
             validation_result, parsed_fields, 'geoFile', i, input_prefix,
             display_name='Geometry File'
         )
+        
+        # Using optional_params list
+        threshold_val = validate_field_value(
+            validation_result, parsed_fields, 'threshold', i, input_prefix,
+            converter=safe_int,
+            optional_params=['threshold', 'thresholdRatio', 'depthRange']
+        )
     """
+    # Only set field as optional if it's in optional_params AND required is not explicitly True
+    # This ensures that required=True takes precedence over optional_params
+    if optional_params is not None and field_name in optional_params and not required:
+        required = False
+    
     # Skip if field failed global validation
     if field_name not in parsed_fields:
         return None

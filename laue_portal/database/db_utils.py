@@ -888,17 +888,18 @@ def get_next_id(session, table_class):
     return 1 if max_id is None else max_id + 1
 
 
-def parse_parameter(parameter_value, num_inputs=None):
+def parse_parameter(parameter_value, num_inputs=None, delimiter=";"):
     """
-    Parse a single parameter, splitting semicolon-separated values into a list.
+    Parse a single parameter, splitting delimiter-separated values into a list.
     Optionally expand single values to match the number of inputs.
     
     This function is used to handle pooled scan submissions where multiple
-    inputs are submitted together with their parameters separated by semicolons.
+    inputs are submitted together with their parameters separated by delimiters.
     
     Args:
-        parameter_value: The parameter value (can be None, single value, or semicolon-separated string)
+        parameter_value: The parameter value (can be None, single value, or delimiter-separated string)
         num_inputs: Optional number of inputs to expand single values to match
+        delimiter: Delimiter character used for splitting (default ";")
         
     Returns:
         list: A list of values for this parameter
@@ -909,12 +910,13 @@ def parse_parameter(parameter_value, num_inputs=None):
     if parameter_value is None:
         values = [None]
     else:
-        # Convert to string and check for semicolons
+        # Convert to string and check for delimiters
         str_value = str(parameter_value)
-        if '; ' in str_value:
-            # Split and handle 'None' strings
+        if delimiter in str_value:
+            # Split and strip whitespace from each value
             values = []
-            for v in str_value.split('; '):
+            for v in str_value.split(delimiter):
+                v = v.strip()
                 if v.lower() in ['none', '']:
                     values.append(None)
                 else:
@@ -942,18 +944,18 @@ def parse_parameter(parameter_value, num_inputs=None):
     return values
 
 
-def get_num_inputs_from_fields(fields_dict, delimiter="; "):
+def get_num_inputs_from_fields(fields_dict, delimiter=";"):
     """
     Determine the number of inputs by finding the maximum number of 
-    semicolon-separated entries across all form fields.
+    delimiter-separated entries across all form fields.
     
     This handles the case where pooled data may have identical values
     that get collapsed to a single value during pooling, while other
-    fields retain their semicolon-separated format.
+    fields retain their delimiter-separated format.
     
     Parameters:
     - fields_dict: Dictionary of field names to values
-    - delimiter: The delimiter used to separate multiple values (default "; ")
+    - delimiter: Delimiter character used for splitting (default ";")
     
     Returns:
     - int: The maximum number of inputs found across all fields (minimum 1)
@@ -968,10 +970,10 @@ def get_num_inputs_from_fields(fields_dict, delimiter="; "):
     """
     num_inputs = 1  # Default to 1
     
-    # Scan all fields to find the maximum number of semicolon-separated entries
+    # Scan all fields to find the maximum number of delimiter-separated entries
     for field_name, field_value in fields_dict.items():
         if field_value is not None and field_value != '':
-            # Count semicolon-separated entries
+            # Count delimiter-separated entries
             value_str = str(field_value)
             entries = [s.strip() for s in value_str.split(delimiter)]
             num_inputs = max(num_inputs, len(entries))
@@ -979,20 +981,20 @@ def get_num_inputs_from_fields(fields_dict, delimiter="; "):
     return num_inputs
 
 
-def make_IDnumber(SN=None, WR=None, MR=None, PI=None, delimiter="; "):
+def make_IDnumber(SN=None, WR=None, MR=None, PI=None, delimiter=";"):
     """
     Create ID number string from scan, wire recon, recon, and peakindex IDs.
     Handles None values, "None" strings, and pooled values.
     
     Parameters:
-    - SN: Scan number(s) - can be single value or semicolon-delimited string
-    - WR: Wire recon ID(s) - can be single value or semicolon-delimited string
-    - MR: Recon ID(s) - can be single value or semicolon-delimited string
-    - PI: Peak index ID(s) - can be single value or semicolon-delimited string
-    - delimiter: Delimiter used to separate multiple values (default "; ")
+    - SN: Scan number(s) - can be single value or delimiter-separated string
+    - WR: Wire recon ID(s) - can be single value or delimiter-separated string
+    - MR: Recon ID(s) - can be single value or delimiter-separated string
+    - PI: Peak index ID(s) - can be single value or delimiter-separated string
+    - delimiter: Delimiter character used for splitting and joining (default ";")
     
     Returns:
-    - String with ID number(s) in priority order (PI > MR > WR > SN)
+    - String with ID number(s) in priority order (PI > MR > WR > SN), joined with delimiter + space
     - Returns None if all inputs are None or no valid entries found
     - Deduplicates if all entries are identical
     
@@ -1018,8 +1020,8 @@ def make_IDnumber(SN=None, WR=None, MR=None, PI=None, delimiter="; "):
     ID_lists = {}
     for key, value in params_dict.items():
         if not is_none_value(value):
-            # Split into entries
-            entries = str(value).split(delimiter)
+            # Split into entries and strip whitespace
+            entries = [s.strip() for s in str(value).split(delimiter)]
             
             # Validate and pad to max_len
             if len(entries) == 1 and max_len > 1:
@@ -1059,10 +1061,11 @@ def make_IDnumber(SN=None, WR=None, MR=None, PI=None, delimiter="; "):
     if all(id_num == IDnumbers[0] for id_num in IDnumbers):
         return IDnumbers[0]
     
-    return delimiter.join(IDnumbers)
+    # Join with delimiter + space for consistent output format
+    return f"{delimiter} ".join(IDnumbers)
 
 
-def parse_IDnumber(IDnumber, session, delimiter="; "):
+def parse_IDnumber(IDnumber, session, delimiter=";"):
     """
     Parse IDnumber string and query database for parent IDs.
     Reverses the operation of make_IDnumber and fills in parent relationships.
@@ -1071,15 +1074,15 @@ def parse_IDnumber(IDnumber, session, delimiter="; "):
     - IDnumber: String like "PI5", "MR3; MR4", "WR1", "SN276994", etc.
                 Can also be None or empty string.
     - session: SQLAlchemy session for database queries
-    - delimiter: Delimiter used in the IDnumber string (default "; ")
+    - delimiter: Delimiter used in the IDnumber string (default ";")
     
     Returns:
     - dict: {'scanNumber': value, 'wirerecon_id': value, 'recon_id': value, 'peakindex_id': value}
       where value can be:
       - None (if that ID type wasn't present in any entry)
       - Single value string (if all entries were identical, e.g., "5")
-      - Semicolon-delimited string (if multiple different values, e.g., "3; 4; 5")
-      - Semicolon-delimited string with None (e.g., "3; None; 5" for pooled data where some entries lack that parent ID)
+      - Delimiter-separated string (if multiple different values, e.g., "3; 4; 5")
+      - Delimiter-separated string with None (e.g., "3; None; 5" for pooled data where some entries lack that parent ID)
     
     Database Lookup Rules:
     - If peakindex_id is provided: Queries PeakIndex table for scanNumber, recon_id, wirerecon_id
@@ -1125,8 +1128,8 @@ def parse_IDnumber(IDnumber, session, delimiter="; "):
     if not IDnumber or str(IDnumber).strip().lower() in ['none', '']:
         return {k: None for k in result.keys()}
     
-    # Split by delimiter to get individual ID entries
-    entries = str(IDnumber).split(delimiter)
+    # Split by delimiter to get individual ID entries and strip whitespace
+    entries = [s.strip() for s in str(IDnumber).split(delimiter)]
     
     # Define prefix to field name mapping
     prefix_map = {
@@ -1214,7 +1217,7 @@ def parse_IDnumber(IDnumber, session, delimiter="; "):
             # All values are identical, return single value
             final_result[field_name] = id_list[0]
         else:
-            # Return semicolon-delimited string, converting None to empty string for joining
-            final_result[field_name] = delimiter.join(str(v) if v is not None else '' for v in id_list)
+            # Return delimiter-separated string with space, converting None to empty string for joining
+            final_result[field_name] = f"{delimiter} ".join(str(v) if v is not None else '' for v in id_list)
     
     return final_result

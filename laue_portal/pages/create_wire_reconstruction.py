@@ -236,6 +236,12 @@ def validate_wire_reconstruction_inputs(ctx):
         'author',
     ]
     
+    # Optional parameters list - these fields are not required
+    optional_params = [
+        'scanPoints',
+        'scanNumber',
+    ]
+    
     # Create database session for catalog validation
     session = Session(session_utils.get_engine())
     
@@ -349,18 +355,37 @@ def validate_wire_reconstruction_inputs(ctx):
         # Store the parsed list in the dictionary
         parsed_fields[field_name] = parsed_list
     
+    # Create outer wrapper with common parameters before the loop
+    def make_field_validator(validation_result, parsed_fields, optional_params):
+        """Create a field validator with pre-filled common parameters"""
+        def validate_for_input(field_name, index, input_prefix, **kwargs):
+            return validate_field_value(
+                validation_result,
+                parsed_fields,
+                field_name,
+                index,
+                input_prefix,
+                optional_params=optional_params,
+                **kwargs
+            )
+        return validate_for_input
+    
+    # Create the validator once before the loop
+    validate_for_input = make_field_validator(validation_result, parsed_fields, optional_params)
+    
     # Validate each input, skipping fields that failed global validation
     for i in range(num_inputs):
         input_prefix = f"Input {i+1}: " if num_inputs > 1 else ""
+        
+        # Inner wrapper for this specific input
+        def validate_field(field_name, **kwargs):
+            return validate_for_input(field_name, i, input_prefix, **kwargs)
         
         # 1. Validate ID integers (scanNumber)
         # Convert scanNumber to integer if present
         scan_num_int = None
         if 'scanNumber' in parsed_fields:
-            current_scanNumber = validate_field_value(
-                validation_result, parsed_fields, 'scanNumber', i, input_prefix,
-                required=False, display_name="Scan Number"
-            )
+            current_scanNumber = validate_field('scanNumber', required=False, display_name="Scan Number")
             if current_scanNumber is not None:
                 try:
                     scan_num_int = int(current_scanNumber)
@@ -372,9 +397,7 @@ def validate_wire_reconstruction_inputs(ctx):
         
         # 2. Check if data files exist for this input (skip if root_path or data_path invalid)
         if 'root_path' not in validation_result['errors'] and 'data_path' not in validation_result['errors']:
-            current_data_path = validate_field_value(
-                validation_result, parsed_fields, 'data_path', i, input_prefix
-            )
+            current_data_path = validate_field('data_path')
             if current_data_path is not None:
                 current_full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
                 
@@ -409,10 +432,7 @@ def validate_wire_reconstruction_inputs(ctx):
                                              custom_message="Data Path directory contains no files")
                     else:
                         # Get filename prefix
-                        current_filename_prefix_str = validate_field_value(
-                            validation_result, parsed_fields, 'filenamePrefix', i, input_prefix,
-                            display_name="Filename Prefix"
-                        )
+                        current_filename_prefix_str = validate_field('filenamePrefix', display_name="Filename Prefix")
                         if current_filename_prefix_str is not None:
                             current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
                             
@@ -426,11 +446,8 @@ def validate_wire_reconstruction_inputs(ctx):
                                     add_validation_message(validation_result, 'errors', 'filenamePrefix', input_prefix, 
                                                          custom_message=f"No files match Filename prefix pattern '{current_filename_prefix_i}'")
                                 else:
-                                    # Get scan points
-                                    current_scanPoints = validate_field_value(
-                                        validation_result, parsed_fields, 'scanPoints', i, input_prefix,
-                                        display_name="Scan Points"
-                                    )
+                                    # Get scan points (optional field)
+                                    current_scanPoints = validate_field('scanPoints', display_name="Scan Points", required=False)
                                     if current_scanPoints is not None:
                                         try:
                                             scanPoints_srange = srange(current_scanPoints)
@@ -467,10 +484,7 @@ def validate_wire_reconstruction_inputs(ctx):
         # Note: We cannot validate this properly if outputFolder contains %d placeholders
         # because we don't know the scan number or wirerecon_id at validation time.
         # This check is skipped if %d is present in the path.
-        current_outputFolder = validate_field_value(
-            validation_result, parsed_fields, 'outputFolder', i, input_prefix,
-            display_name="Output Folder"
-        )
+        current_outputFolder = validate_field('outputFolder', display_name="Output Folder")
         if current_outputFolder is not None:
             if 'root_path' not in validation_result['errors']:
                 if '%d' not in current_outputFolder:
@@ -480,10 +494,7 @@ def validate_wire_reconstruction_inputs(ctx):
                                              custom_message="Output Folder already exists")
         
         # 4. Check if geometry file exists for this input (skip if root_path invalid)
-        current_geoFile = validate_field_value(
-            validation_result, parsed_fields, 'geoFile', i, input_prefix,
-            display_name="Geometry File"
-        )
+        current_geoFile = validate_field('geoFile', display_name="Geometry File")
         if current_geoFile is not None:
             if 'root_path' not in validation_result['errors']:
                 full_geo_path = os.path.join(root_path, current_geoFile.lstrip('/'))
@@ -492,20 +503,11 @@ def validate_wire_reconstruction_inputs(ctx):
                                          custom_message="Geometry File not found")
         
         # 5. Validate depth parameters for this input using the universal helper
-        depth_start_val = validate_field_value(
-            validation_result, parsed_fields, 'depth_start', i, input_prefix,
-            converter=safe_float
-        )
+        depth_start_val = validate_field('depth_start', converter=safe_float)
         
-        depth_end_val = validate_field_value(
-            validation_result, parsed_fields, 'depth_end', i, input_prefix,
-            converter=safe_float
-        )
+        depth_end_val = validate_field('depth_end', converter=safe_float)
         
-        depth_resolution_val = validate_field_value(
-            validation_result, parsed_fields, 'depth_resolution', i, input_prefix,
-            converter=safe_float
-        )
+        depth_resolution_val = validate_field('depth_resolution', converter=safe_float)
         
         # Initialize depth_span as None (will be calculated if both start and end are valid)
         depth_span = None
@@ -552,10 +554,7 @@ def validate_wire_reconstruction_inputs(ctx):
                                              custom_message=f"Depth Resolution ({depth_resolution_val} µm) must be ≤ depth range ({abs(depth_span)} µm)")
         
         # 6. Validate percent_brightest for this input
-        percent_val = validate_field_value(
-            validation_result, parsed_fields, 'percent_brightest', i, input_prefix,
-            converter=safe_float, display_name="Intensity Percentile"
-        )
+        percent_val = validate_field('percent_brightest', converter=safe_float, display_name="Intensity Percentile")
         if percent_val is not None:
             if percent_val <= 0 or percent_val > 100:
                 add_validation_message(validation_result, 'errors', 'percent_brightest', input_prefix, 

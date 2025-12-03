@@ -117,7 +117,7 @@ def _extract_indices_from_files(files, num_indices):
     return pattern_files
 
 
-def _merge_field_values(field_values, delimiter="; "):
+def _merge_field_values(field_values, delimiter=";"):
     """
     Merge multiple field values, handling list types properly.
     
@@ -127,7 +127,7 @@ def _merge_field_values(field_values, delimiter="; "):
     
     Parameters:
     - field_values: List of field values (can be lists, strings, or other types)
-    - delimiter: Delimiter used to separate multiple values (default "; ")
+    - delimiter: Delimiter used to separate multiple values (default ";")
     
     Returns:
     - Merged value: single value if all same, or delimiter-separated string
@@ -146,13 +146,13 @@ def _merge_field_values(field_values, delimiter="; "):
         return field_values[0]
     
     # Otherwise, merge with proper list handling
-    return delimiter.join([
+    return f"{delimiter} ".join([
         ','.join(v) if isinstance(v, list) else str(v) 
         for v in field_values
     ])
 
 
-def _generate_dropdown_for_position(base_parts, position, pattern_tuples, delimiter="; "):
+def _generate_dropdown_for_position(base_parts, position, pattern_tuples, delimiter=";"):
     """
     Generate dropdown options by varying the pattern at a given position.
     
@@ -164,7 +164,7 @@ def _generate_dropdown_for_position(base_parts, position, pattern_tuples, delimi
     - base_parts: List of base pattern strings for all positions
     - position: Index of the position to vary
     - pattern_tuples: List of (pattern, indices_list) tuples for this position
-    - delimiter: Delimiter to join parts (default "; ")
+    - delimiter: Delimiter to join parts (default ";")
     
     Returns:
     - List of html.Option elements with value and informative label
@@ -175,7 +175,7 @@ def _generate_dropdown_for_position(base_parts, position, pattern_tuples, delimi
         # Build full delimiter-separated string with this pattern at position i
         new_parts = base_parts.copy()
         new_parts[position] = pattern
-        full_value = delimiter.join(new_parts)
+        full_value = f"{delimiter} ".join(new_parts)
         
         # Build informative label for this pattern
         if indices_list and indices_list[0]:
@@ -208,7 +208,7 @@ def _generate_dropdown_for_position(base_parts, position, pattern_tuples, delimi
         # Build full label with informative label only at the varying position
         label_parts = base_parts.copy()
         label_parts[position] = pattern_label
-        full_label = delimiter.join(label_parts)
+        full_label = f"{delimiter} ".join(label_parts)
         
         dropdown_options.append(html.Option(value=full_value, label=full_label))
     
@@ -597,8 +597,8 @@ def register_check_filenames_callback(
         State(cached_patterns_store_id, 'data'),
         prevent_initial_call=True,
     )
-    # def check_filenames(n_check, n_update, data_loaded_signal_id, data_path, current_filename, cached_patterns, delimiter="; "):
-    def check_filenames(n_check, data_path, current_filename, cached_patterns, delimiter="; "):
+    # def check_filenames(n_check, n_update, data_loaded_signal_id, data_path, current_filename, cached_patterns, delimiter=";"):
+    def check_filenames(n_check, data_path, current_filename, cached_patterns, delimiter=";"):
         """Scan directory and suggest common filename patterns with smart context-aware dropdown."""
         
         if not data_path:
