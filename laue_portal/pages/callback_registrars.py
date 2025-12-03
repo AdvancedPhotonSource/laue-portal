@@ -152,67 +152,47 @@ def _merge_field_values(field_values, delimiter=";"):
     ])
 
 
-def _generate_dropdown_for_position(base_parts, position, pattern_tuples, delimiter=";"):
+def _generate_pattern_label(pattern, indices_list):
     """
-    Generate dropdown options by varying the pattern at a given position.
+    Generate an informative label for a pattern with its indices.
     
-    This helper function creates dropdown options where one position varies through
-    different patterns while other positions remain fixed. It generates informative
-    labels showing file counts/ranges for the varying pattern.
+    Helper function that creates labels showing file counts/ranges for patterns.
     
     Parameters:
-    - base_parts: List of base pattern strings for all positions
-    - position: Index of the position to vary
-    - pattern_tuples: List of (pattern, indices_list) tuples for this position
-    - delimiter: Delimiter to join parts (default ";")
+    - pattern: The filename pattern (e.g., 'file_%d.h5')
+    - indices_list: List of index tuples for this pattern
     
     Returns:
-    - List of html.Option elements with value and informative label
+    - String with pattern and range information (e.g., 'file_%d.h5 (files 1-10)')
     """
-    dropdown_options = []
-    
-    for pattern, indices_list in pattern_tuples:
-        # Build full delimiter-separated string with this pattern at position i
-        new_parts = base_parts.copy()
-        new_parts[position] = pattern
-        full_value = f"{delimiter} ".join(new_parts)
+    if indices_list and indices_list[0]:
+        actual_num_indices = len(indices_list[0])
         
-        # Build informative label for this pattern
-        if indices_list and indices_list[0]:
-            actual_num_indices = len(indices_list[0])
+        if actual_num_indices == 1:
+            # Single index: show simple range
+            return f"{pattern} (files {str(srange(set(idx[0] for idx in indices_list)))})"
+        elif actual_num_indices > 1:
+            # Multiple indices: show ranges for each dimension
+            range_labels = []
+            dim_names = ['scanPoints', 'depths'] if actual_num_indices == 2 else [f"dim{i+1}" for i in range(actual_num_indices)]
             
-            if actual_num_indices == 1:
-                # Single index: show simple range
-                pattern_label = f"{pattern} (files {str(srange(set(idx[0] for idx in indices_list)))})"
-            elif actual_num_indices > 1:
-                # Multiple indices: show ranges for each dimension
-                range_labels = []
-                dim_names = ['scanPoints', 'depths'] if actual_num_indices == 2 else [f"dim{i+1}" for i in range(actual_num_indices)]
-                
-                for dim in range(actual_num_indices):
-                    dim_values = sorted(set(idx[dim] for idx in indices_list if len(idx) > dim))
-                    if dim_values:
-                        range_labels.append(f"{dim_names[dim]}: {str(srange(dim_values))}")
-                
-                if range_labels:
-                    pattern_label = f"{pattern} ({', '.join(range_labels)})"
-                else:
-                    pattern_label = f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
+            for dim in range(actual_num_indices):
+                dim_values = sorted(set(idx[dim] for idx in indices_list if len(idx) > dim))
+                if dim_values:
+                    range_labels.append(f"{dim_names[dim]}: {str(srange(dim_values))}")
+            
+            if range_labels:
+                return f"{pattern} ({', '.join(range_labels)})"
             else:
-                # No indices (shouldn't happen with our logic, but handle it)
-                pattern_label = f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
+                return f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
         else:
-            # No indices available
-            pattern_label = pattern
-        
-        # Build full label with informative label only at the varying position
-        label_parts = base_parts.copy()
-        label_parts[position] = pattern_label
-        full_label = f"{delimiter} ".join(label_parts)
-        
-        dropdown_options.append(html.Option(value=full_value, label=full_label))
-    
-    return dropdown_options
+            # No indices (shouldn't happen with our logic, but handle it)
+            return f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
+    else:
+        # No indices available
+        return pattern
+
+
 
 
 def register_update_path_fields_callback(
@@ -729,31 +709,67 @@ def register_check_filenames_callback(
                 break
         
         if not has_any_match or mismatch_index is None:
-            # MODE 1: No matches or only matches found
-            # Auto-select the first pattern in each path's sorted list
-            auto_selected = []
-            for i in range(num_paths):
-                path_pattern_tuples = patterns_by_path.get(i, [])
-                # Select the first pattern (from tuple) in the sorted list
-                auto_selected.append(path_pattern_tuples[0][0] if path_pattern_tuples else "")
+            # MODE 1: No matches or only matches found - generate multiple dropdown options
+            # Find max patterns across all paths to determine iteration bounds
+            max_patterns = max((len(patterns_by_path.get(i, [])) for i in range(num_paths)), default=0)
             
-            # Preserve any extra segments beyond num_paths
-            if len(current_parts) > num_paths:
-                auto_selected.extend(current_parts[num_paths:])
+            if max_patterns == 0:
+                # No patterns found in any path
+                return [html.Option(value="", label="No files found in specified path(s)")], dash.no_update, {}
             
-            # Generate dropdown with top patterns per path using helper function
             dropdown_options = []
-            for i in range(num_paths):
-                path_pattern_tuples = patterns_by_path.get(i, [])
-                dropdown_options.extend(
-                    _generate_dropdown_for_position(auto_selected, i, path_pattern_tuples, delimiter)
-                )
+            first_option_value = None  # Track first option for auto-population
+            
+            # Iterate through pattern indices to create dropdown options
+            for pattern_idx in range(max_patterns):
+                parts = []
+                labels = []
+                
+                # Build parts and labels for each path at this pattern index
+                for i in range(num_paths):
+                    patterns = patterns_by_path.get(i, [])
+                    
+                    if pattern_idx < len(patterns):
+                        # This path has a pattern at this index
+                        pattern, indices_list = patterns[pattern_idx]
+                        parts.append(pattern)
+                        labels.append(_generate_pattern_label(pattern, indices_list))
+                    else:
+                        # This path has fewer patterns - use empty string for value
+                        # and informative label
+                        parts.append("")
+                        labels.append("(no more patterns)")
+                
+                # Skip if all parts are empty (shouldn't happen with our max_patterns logic, but defensive)
+                if not any(parts):
+                    continue
+                
+                # Create the option
+                value = _merge_field_values(parts, delimiter)
+                label = _merge_field_values(labels, delimiter)
+                dropdown_options.append(html.Option(value=value, label=label))
+                
+                # Track first option value for auto-population
+                if first_option_value is None:
+                    first_option_value = value
+            
+            # Preserve any extra segments beyond num_paths in the first option
+            if len(current_parts) > num_paths and first_option_value:
+                extra_parts = current_parts[num_paths:]
+                first_option_parts = first_option_value.split(delimiter)
+                first_option_parts.extend(extra_parts)
+                first_option_value = _merge_field_values(first_option_parts, delimiter)
+                # Update the first dropdown option with the extended value
+                if dropdown_options:
+                    dropdown_options[0] = html.Option(
+                        value=first_option_value,
+                        label=dropdown_options[0]['props']['label']
+                    )
             
             if not has_any_match:
-                # MODE 1A: No matches found -> auto-populate field with the top dropdown value
-                # Use _merge_field_values to condense if all patterns are the same
-                auto_populated_value = _merge_field_values(auto_selected, delimiter)
+                # MODE 1A: No matches found -> auto-populate field with the first dropdown value
                 # Return: dropdown options, auto-populated value, patterns for caching (only if fresh scan)
+                auto_populated_value = first_option_value if first_option_value else ""
                 return dropdown_options, auto_populated_value, dash.no_update if cached_patterns_found else patterns_by_path
             else:
                 # MODE 1B: All matches found (mismatch_index is None) -> keep current value, show dropdown
@@ -762,10 +778,47 @@ def register_check_filenames_callback(
         else:
             # MODE 2: At least one match found -> show suggestions for mismatched position, keep other positions unchanged
             suggested_tuples = patterns_by_path.get(mismatch_index, [])
-            # Generate dropdown options for the mismatched position using helper
-            dropdown_options = _generate_dropdown_for_position(
-                current_parts, mismatch_index, suggested_tuples, delimiter
-            )
+            
+            # MODE 2: Generate dropdown for mismatched position only
+            dropdown_options = []
+            for pattern, indices_list in suggested_tuples:
+                # Build value
+                parts = current_parts.copy()
+                parts[mismatch_index] = pattern
+                value = _merge_field_values(parts, delimiter)
+                
+                # Build label - generate labels inline for all positions with visual indicators
+                label_parts = []
+                for i in range(num_paths):
+                    if i == mismatch_index:
+                        # This is the varying position - add arrow prefix
+                        label_parts.append(f"→ {_generate_pattern_label(pattern, indices_list)}")
+                    else:
+                        # Find the current pattern in this position's patterns and generate label
+                        label_generated = False
+                        for p, idx_list in patterns_by_path.get(i, []):
+                            if p == current_parts[i]:
+                                label_parts.append(_generate_pattern_label(p, idx_list))
+                                label_generated = True
+                                break
+                        if not label_generated:
+                            # Pattern not found, use plain text
+                            label_parts.append(current_parts[i])
+                
+                # Custom merge for Mode 2: use | around varying position, ; elsewhere
+                label_segments = []
+                for i, part in enumerate(label_parts):
+                    if i == 0:
+                        label_segments.append(part)
+                    elif i == mismatch_index or i == mismatch_index + 1:
+                        # Use | before and after the varying position
+                        label_segments.append(f" | {part}")
+                    else:
+                        # Use ; for other separators
+                        label_segments.append(f" {delimiter} {part}")
+                label = ''.join(label_segments)
+                
+                dropdown_options.append(html.Option(value=value, label=label))
             
             # Return: dropdown options, keep current field value, patterns for caching (only if fresh scan)
             return dropdown_options, dash.no_update, dash.no_update if cached_patterns_found else patterns_by_path
