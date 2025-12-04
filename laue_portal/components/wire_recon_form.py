@@ -1,6 +1,7 @@
 import dash_bootstrap_components as dbc
-from dash import html, set_props
+from dash import html, dcc, set_props
 from laue_portal.components.form_base import _stack, _field, _select, _notes
+from laue_portal.database.db_utils import make_IDnumber, parse_IDnumber
 
 
 wire_recon_form = dbc.Row(
@@ -12,9 +13,10 @@ wire_recon_form = dbc.Row(
                                 dbc.Row(
                                     [
                                         dbc.Col(
-                                            _field("Scan Number", "scanNumber",
+                                            _field("ID Number: SN# | WR#", "IDnumber",
                                                     kwargs={
-                                                        "placeholder": "e.g. 123 or 123, 126, 234 or 234-240",
+                                                        "type": "text",
+                                                        "placeholder": "e.g. SN123456 or WR1",
                                                     }),
                                             className="flex-grow-1",          # THIS makes it expand
                                             style={"minWidth": 0},            # avoid overflow when very narrow
@@ -28,9 +30,10 @@ wire_recon_form = dbc.Row(
                                                 style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size
                                             ),
                                             width="auto",                      # column sizes to content
-                                            className="d-flex justify-content-end mb-3",  # optional: keep at right edge
+                                            className="d-flex justify-content-end",  # optional: keep at right edge
                                         ),
                                     ],
+                                    className="mb-3",
                                     align="center",
                                 ),
                                 _stack(
@@ -62,6 +65,8 @@ wire_recon_form = dbc.Row(
                                                                 html.Option(value="Si1_*_%d.h5",        label="Si1_*_%d.h5        (files 1–245)"),
                                                             ]
                                                     ),
+                                                    # Hidden store for cached patterns per path
+                                                    dcc.Store(id='wirerecon-cached-patterns', data={}),
                                                 ]
                                             ),
                                             className="flex-grow-1",
@@ -225,12 +230,20 @@ wire_recon_form = dbc.Row(
         )
 
 def set_wire_recon_form_props(wirerecon, read_only=False):
-    set_props("scanNumber", {'value':wirerecon.scanNumber, 'readonly':read_only})
+    IDnumber = make_IDnumber(wirerecon.scanNumber, wirerecon.wirerecon_id)
+    set_props("IDnumber", {'value':IDnumber, 'readonly':read_only})
+    # set_props("scanNumber", {'value':wirerecon.scanNumber, 'readonly':read_only})
     
     # File paths
     set_props("root_path", {'value':wirerecon.root_path, 'readonly':read_only})
     set_props("data_path", {'value':wirerecon.data_path, 'readonly':read_only})
-    set_props("filenamePrefix", {'value':','.join(wirerecon.filenamePrefix), 'readonly':read_only})
+    
+    # Convert list to comma-separated string for form display
+    filename_value = wirerecon.filenamePrefix
+    if isinstance(filename_value, list):
+        filename_value = ', '.join(filename_value)
+    set_props("filenamePrefix", {'value':filename_value, 'readonly':read_only})
+    # set_props("filenamePrefix", {'value':wirerecon.filenamePrefix, 'readonly':read_only})
     
     # User text
     # set_props("author", {'value':wirerecon.author, 'readonly':read_only})

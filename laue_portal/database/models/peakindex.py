@@ -27,8 +27,8 @@ class PeakIndex(Base):
 
     # Peak Index Parameters
     # peakProgram: Mapped[str] = mapped_column(String)
-    threshold: Mapped[int] = mapped_column(Integer)
-    thresholdRatio: Mapped[int] = mapped_column(Integer)
+    threshold: Mapped[int] = mapped_column(Integer, nullable=True)
+    thresholdRatio: Mapped[int] = mapped_column(Integer, nullable=True)
     maxRfactor: Mapped[float] = mapped_column(Float)
     boxsize: Mapped[int] = mapped_column(Integer)
     max_number: Mapped[int] = mapped_column(Integer)

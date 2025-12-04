@@ -1,6 +1,8 @@
 import dash_bootstrap_components as dbc
-from dash import html, set_props
+from dash import html, dcc, set_props
 from laue_portal.components.form_base import _stack, _field, _select, _ckbx
+from laue_portal.database.db_utils import make_IDnumber, parse_IDnumber
+import laue_portal.database.db_schema as db_schema
 
 
 peakindex_form = dbc.Row(
@@ -72,6 +74,8 @@ peakindex_form = dbc.Row(
                                                                 html.Option(value="Si_*_%d.h5",        label="Si_*_%d.h5        (files 1–245)"),
                                                             ]
                                                     ),
+                                                    # Hidden store for cached patterns per path
+                                                    dcc.Store(id='peakindex-cached-patterns', data={}),
                                                 ]
                                             ),
                                             className="flex-grow-1",
@@ -501,13 +505,20 @@ peakindex_form = dbc.Row(
 
 
 def set_peakindex_form_props(peakindex, read_only=False):
-    #set_props("dataset", {'value':peakindex.dataset_id, 'readonly':read_only})
-    set_props("scanNumber", {'value':peakindex.scanNumber, 'readonly':read_only})
+    IDnumber = make_IDnumber(peakindex.scanNumber,peakindex.wirerecon_id,peakindex.recon_id,peakindex.peakindex_id)
+    set_props("IDnumber", {'value':IDnumber, 'readonly':read_only})
+    # set_props("scanNumber", {'value':peakindex.scanNumber, 'readonly':read_only})
     set_props("root_path", {'value':peakindex.root_path, 'readonly':read_only})
     set_props("data_path", {'value':peakindex.data_path, 'readonly':read_only})
-    set_props("filenamePrefix", {'value':','.join(peakindex.filenamePrefix), 'readonly':read_only})
-    set_props("recon_id", {'value':peakindex.recon_id, 'readonly':read_only})
-    set_props("wirerecon_id", {'value':peakindex.wirerecon_id, 'readonly':read_only})
+    
+    # Convert list to comma-separated string for form display
+    filename_value = peakindex.filenamePrefix
+    if isinstance(filename_value, list):
+        filename_value = ', '.join(filename_value)
+    set_props("filenamePrefix", {'value':filename_value, 'readonly':read_only})
+    # set_props("filenamePrefix", {'value':peakindex.filenamePrefix, 'readonly':read_only})
+    # set_props("recon_id", {'value':peakindex.recon_id, 'readonly':read_only})
+    # set_props("wirerecon_id", {'value':peakindex.wirerecon_id, 'readonly':read_only})
     
     # set_props("peakProgram", {'value':peakindex.peakProgram, 'readonly':read_only})
     set_props("threshold", {'value':peakindex.threshold, 'readonly':read_only})
@@ -519,10 +530,10 @@ def set_peakindex_form_props(peakindex, read_only=False):
     set_props("peakShape", {'value':peakindex.peakShape, 'disabled':read_only})
     set_props("scanPoints", {'value':peakindex.scanPoints, 'readonly':read_only})
     set_props("depthRange", {'value':peakindex.depthRange, 'readonly':read_only})
-    set_props("detectorCropX1", {'value':peakindex.detectorCropX1, 'readonly':read_only})
-    set_props("detectorCropX2", {'value':peakindex.detectorCropX2, 'readonly':read_only})
-    set_props("detectorCropY1", {'value':peakindex.detectorCropY1, 'readonly':read_only})
-    set_props("detectorCropY2", {'value':peakindex.detectorCropY2, 'readonly':read_only})
+    # set_props("detectorCropX1", {'value':peakindex.detectorCropX1, 'readonly':read_only})
+    # set_props("detectorCropX2", {'value':peakindex.detectorCropX2, 'readonly':read_only})
+    # set_props("detectorCropY1", {'value':peakindex.detectorCropY1, 'readonly':read_only})
+    # set_props("detectorCropY2", {'value':peakindex.detectorCropY2, 'readonly':read_only})
     set_props("min_size", {'value':peakindex.min_size, 'readonly':read_only})
     set_props("max_peaks", {'value':peakindex.max_peaks, 'readonly':read_only})
     set_props("smooth", {'value':peakindex.smooth, 'disabled':read_only})
@@ -556,6 +567,7 @@ def set_peakindex_form_props(peakindex, read_only=False):
     # User text
     set_props("author", {'value':peakindex.author, 'readonly':read_only})
     set_props("notes", {'value':peakindex.notes, 'readonly':read_only})
+
 
 # @callback(
 #     Output("collapse1", "is_open"),

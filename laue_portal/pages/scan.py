@@ -1314,8 +1314,8 @@ def selected_recon_href(recon_rows, peakindex_rows, href):
             base_href = "/create-wire-reconstruction"
 
         query_params = [f"scan_id={','.join(list(set(scan_ids)))}"]
-        if any_wirerecon_scans: query_params.append(f"wirerecon_id={','.join(filter(None, wirerecon_ids))}")
-        if any_recon_scans: query_params.append(f"recon_id={','.join(filter(None, recon_ids))}")
+        if any_wirerecon_scans: query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
+        if any_recon_scans: query_params.append(f"recon_id={','.join(recon_ids)}")
         
         return f"{base_href}?{'&'.join(query_params)}"
 
@@ -1359,9 +1359,9 @@ def selected_peakindex_href(recon_rows, peakindex_rows, href):
             return base_href
 
         query_params = [f"scan_id={','.join(list(set(scan_ids)))}"]
-        if any(wirerecon_ids): query_params.append(f"wirerecon_id={','.join(filter(None, wirerecon_ids))}")
-        if any(recon_ids): query_params.append(f"recon_id={','.join(filter(None, recon_ids))}")
-        if any(peakindex_ids): query_params.append(f"peakindex_id={','.join(filter(None, peakindex_ids))}")
+        if any(wirerecon_ids): query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
+        if any(recon_ids): query_params.append(f"recon_id={','.join(recon_ids)}")
+        if any(peakindex_ids): query_params.append(f"peakindex_id={','.join(peakindex_ids)}")
 
         return f"{base_href}?{'&'.join(query_params)}"
 
@@ -1420,10 +1420,7 @@ def save_note(n_clicks, scanNumber, note):
     State("aperture", "value"),
     State("sample_name", "value"),
     State("filefolder", "value"),
-    State("filenamePrefix1", "value"),
-    State("filenamePrefix2", "value"),
-    State("filenamePrefix3", "value"),
-    State("filenamePrefix4", "value"),
+    State("filenamePrefix", "value"),
     State("notes", "value"),
     prevent_initial_call=True,
 )
@@ -1432,10 +1429,7 @@ def update_catalog(n,
     aperture,
     sample_name,
     filefolder,
-    filenamePrefix1,
-    filenamePrefix2,
-    filenamePrefix3,
-    filenamePrefix4,
+    filenamePrefix,
     notes,
 ):
     # TODO: Input validation and response
@@ -1452,11 +1446,16 @@ def update_catalog(n,
                     db_schema.Catalog.scanNumber == scanNumber
                 ).first()
                 
-                filenamePrefix = [prefix for prefix in [filenamePrefix1, filenamePrefix2, filenamePrefix3, filenamePrefix4] if prefix]
+                # Parse comma-separated string into list for database
+                if filenamePrefix:
+                    filenamePrefix_list = [prefix.strip() for prefix in filenamePrefix.split(',') if prefix.strip()]
+                else:
+                    filenamePrefix_list = []
+                
                 if catalog_data:
                     # Update existing catalog entry
                     catalog_data.filefolder = filefolder
-                    catalog_data.filenamePrefix = filenamePrefix
+                    catalog_data.filenamePrefix = filenamePrefix_list
                     catalog_data.aperture = aperture
                     catalog_data.sample_name = sample_name
                     catalog_data.notes = notes
@@ -1466,7 +1465,7 @@ def update_catalog(n,
                     catalog = db_schema.Catalog(
                         scanNumber=scanNumber,
                         filefolder=filefolder,
-                        filenamePrefix=filenamePrefix,
+                        filenamePrefix=filenamePrefix_list,
                         aperture=aperture,
                         sample_name=sample_name,
                         notes=notes,

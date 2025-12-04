@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
 import laue_portal.components.navbar as navbar
-from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix, parse_parameter
+from laue_portal.database.db_utils import get_catalog_data, get_data_from_id, remove_root_path_prefix, parse_parameter, parse_IDnumber
 from laue_portal.components.wire_recon_form import wire_recon_form, set_wire_recon_form_props
 from laue_portal.components.form_base import _field
 from laue_portal.components.validation_alerts import validation_alerts
@@ -23,20 +23,54 @@ from laue_portal.pages.validation_helpers import (
     add_validation_message,
     safe_float,
     safe_int,
-    validate_param_value,
+    validate_field_value,
     validate_numeric_range,
     validate_file_exists,
-    validate_directory_exists
+    validate_directory_exists,
+    get_num_inputs_from_fields
 )
 from laue_portal.pages.callback_registrars import (
     register_update_path_fields_callback,
     register_load_file_indices_callback,
-    register_check_filenames_callback
+    register_check_filenames_callback,
+    _merge_field_values
 )
 from srange import srange
 import laue_portal.database.session_utils as session_utils
 
 logger = logging.getLogger(__name__)
+
+
+def build_output_folder_template(scan_num_int, data_path):
+    """
+    Build output folder template based on available IDs from database chain.
+    Only the final action ID remains as %d.
+    
+    Parameters:
+    - scan_num_int: scanNumber (int or None)
+    - data_path: data path to use if scanNumber unknown
+    - root_path: root path
+    
+    Returns:
+    - Output folder template path (relative, without root_path prefix)
+    """
+    path_parts = ["analysis"]
+    
+    # Add scan directory only if scanNumber is known
+    if scan_num_int is not None:
+        path_parts.append(f"scan_{scan_num_int}")
+    else:
+        # If scanNumber is unknown, use data_path for context
+        if data_path:
+            clean_data_path = data_path.strip('/')
+            path_parts.append(clean_data_path)
+    
+    # Add final action placeholder for wire recon
+    path_parts.append("rec_%d")
+    path_parts.append("data")
+    
+    return os.path.join(*path_parts)
+
 
 JOB_DEFAULTS = {
     "computer_name": 'example_computer',
@@ -108,7 +142,7 @@ layout = dbc.Container(
                     dbc.Col(
                         dbc.Button(
                             "Validate",
-                            id="validate-btn",
+                            id="wirerecon-validate-btn",
                             color="secondary",
                             style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
                         ),
@@ -154,7 +188,7 @@ layout = dbc.Container(
         # html.Hr(),
         wire_recon_form,
         # dcc.Store(id="next-wire-recon-id"),
-        dcc.Store(id="wirerecon-data-loaded-trigger"),
+        dcc.Store(id="wirerecon-data-loaded-signal"),
     ],
     )
     ],
@@ -171,9 +205,9 @@ def validate_wire_reconstruction_inputs(ctx):
     
     Returns:
         validation_result (dict): {
-            'errors': dict mapping param_name to list of error messages,
-            'warnings': dict mapping param_name to list of warning messages,
-            'successes': dict mapping param_name to empty string (for params that passed)
+            'errors': dict mapping field_name to list of error messages,
+            'warnings': dict mapping field_name to list of warning messages,
+            'successes': dict mapping field_name to empty string (for fields that passed)
         }
     """
     # Initialize validation result dict
@@ -182,8 +216,8 @@ def validate_wire_reconstruction_inputs(ctx):
         'warnings': {},
         'successes': {}
     }
-    # Dictionary to store parsed parameter lists
-    parsed_params = {}
+    # Dictionary to store parsed field value lists
+    parsed_fields = {}
     
     # Hard-coded list of field IDs to validate (excludes 'notes')
     all_field_ids = [
@@ -197,26 +231,42 @@ def validate_wire_reconstruction_inputs(ctx):
         'percent_brightest',
         'outputFolder',
         'root_path',
-        'scanNumber',
+        'IDnumber',  # Replaced scanNumber with IDnumber
+        # 'scanNumber',  # Now parsed from IDnumber
         'author',
+    ]
+    
+    # Optional parameters list - these fields are not required
+    optional_params = [
+        'scanPoints',
+        'scanNumber',
     ]
     
     # Create database session for catalog validation
     session = Session(session_utils.get_engine())
     
-    # Extract parameters from callback context using the hard-coded field list
+    # Extract field values from callback context using the hard-coded field list
     # ctx.states is a dict with format {'component_id.prop_name': value}
-    all_params = {}
+    all_fields = {}
     for key, value in ctx.states.items():
         # Extract component_id from 'component_id.prop_name'
         component_id = key.split('.')[0]
         # Only include fields in our validation list
         if component_id in all_field_ids:
-            all_params[component_id] = value
+            all_fields[component_id] = value
     
-    # Extract individual parameter values
-    root_path = all_params.get('root_path', '')
-    data_path = all_params.get('data_path')
+    # Determine num_inputs from longest semicolon-separated list across all fields
+    num_inputs = get_num_inputs_from_fields(all_fields)
+    
+    # Extract individual field values
+    root_path = all_fields.get('root_path', '')
+    IDnumber = all_fields.get('IDnumber', '')
+    # Old individual ID fields (now parsed from IDnumber):
+    # scanNumber = all_params.get('scanNumber')
+    # wirerecon_id = all_params.get('wirerecon_id')
+    
+    # Other parameters (kept as comments for reference):
+    # data_path = all_fields.get('data_path')
     # filenamePrefix = all_params.get('filenamePrefix')
     # scanPoints = all_params.get('scanPoints')
     # geoFile = all_params.get('geoFile')
@@ -233,90 +283,121 @@ def validate_wire_reconstruction_inputs(ctx):
     elif not os.path.exists(root_path):
         add_validation_message(validation_result, 'errors', 'root_path', 
                               custom_message="Root Path does not exist")
-    else: #Added to pass over in later loop over all_params
-        parsed_params['root_path'] = root_path
+    else: #Added to pass over in later loop over all_fields
+        parsed_fields['root_path'] = root_path
         add_validation_message(validation_result, 'successes', 'root_path')
     
-    # Parse data_path first to determine number of scans
-    try:
-        data_path_list = parse_parameter(data_path)
-        num_inputs = len(data_path_list)
-        parsed_params['data_path'] = data_path_list
-    except ValueError as e:
-        add_validation_message(validation_result, 'errors', 'data_path', 
-                              custom_message=f"Data Path parsing error: {str(e)}")
-        # Close session before early return
-        session.close()
-        # Return early since we can't validate other parameters without knowing num_inputs
-        return validation_result
-    
-    # Check data_path separately since we already parsed it
-    if not data_path:
-        add_validation_message(validation_result, 'errors', 'data_path')
+    # Parse IDnumber to get scanNumber, wirerecon_id
+    if IDnumber:
+        try:
+            id_dict = parse_IDnumber(IDnumber, session)
+            # Add parsed IDs to parsed_fields for use in validation
+            for key, value in id_dict.items():
+                if value is not None:
+                    parsed_fields[key] = parse_parameter(value, num_inputs)
+            add_validation_message(validation_result, 'successes', 'IDnumber')
+        except ValueError as e:
+            add_validation_message(validation_result, 'errors', 'IDnumber', 
+                                  custom_message=f"ID Number parsing error: {str(e)}")
     else:
-        add_validation_message(validation_result, 'successes', 'data_path')
+        # IDnumber is optional - if not provided, just skip
+        pass
     
-    # Validate all other parameters by iterating over all_params    
-    for param_name, param_value in all_params.items():
-        # Skip already handled parameters
-        if param_name in parsed_params: #{'root_path', 'data_path'}
+    # Validate all other fields by iterating over all_fields    
+    for field_name, field_value in all_fields.items():
+        # Skip already handled fields
+        if field_name in parsed_fields: #{'root_path', 'data_path'}
             continue
         # Check 1: Is it missing/empty?
         is_missing = False
-        if param_name in ['depth_start', 'depth_end', 'depth_resolution', 'percent_brightest']:
+        if field_name in ['depth_start', 'depth_end', 'depth_resolution', 'percent_brightest']:
             # Numeric fields: check for None or empty string (0 is valid)
-            if param_value is None or param_value == '':
+            if field_value is None or field_value == '':
                 is_missing = True
         else:
             # Other fields: check for falsy values
-            if not param_value:
+            if not field_value:
                 is_missing = True
         
         if is_missing:
             # Special case for scanNumber: only warning, not error
-            if param_name == 'scanNumber':
-                add_validation_message(validation_result, 'warnings', param_name, display_name="Scan Number")
+            if field_name == 'scanNumber':
+                add_validation_message(validation_result, 'warnings', field_name, display_name="Scan Number")
                 continue  # Skip parsing
             else:
-                add_validation_message(validation_result, 'errors', param_name)
+                add_validation_message(validation_result, 'errors', field_name)
                 continue  # Skip parsing if missing
         
-        # Check 2: Parse the parameter
+        # Check 2: Parse the field value
         try:
-            parsed_list = parse_parameter(param_value, num_inputs)
+            parsed_list = parse_parameter(field_value, num_inputs)
         except ValueError as e:
             # Special case for scanNumber: only warning, not error
-            if param_name == 'scanNumber':
-                add_validation_message(validation_result, 'warnings', param_name, 
+            if field_name == 'scanNumber':
+                add_validation_message(validation_result, 'warnings', field_name, 
                                      custom_message=f"Scan Number parsing error: {str(e)}")
                 continue  # Skip length check
             else:
-                add_validation_message(validation_result, 'errors', param_name, 
+                add_validation_message(validation_result, 'errors', field_name, 
                                      custom_message=f"%s parsing error: {str(e)}")
                 continue  # Skip length check if parsing failed
         
         # Check 3: Verify length matches num_inputs
         if len(parsed_list) != num_inputs:
             # Special case for scanNumber: only warning, not error
-            if param_name == 'scanNumber':
-                add_validation_message(validation_result, 'warnings', param_name, 
+            if field_name == 'scanNumber':
+                add_validation_message(validation_result, 'warnings', field_name, 
                                      custom_message=f"Scan Number count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
             else:
-                add_validation_message(validation_result, 'errors', param_name, 
+                add_validation_message(validation_result, 'errors', field_name, 
                                      custom_message=f"%s count ({len(parsed_list)}) does not match number of inputs ({num_inputs})")
         
         # Store the parsed list in the dictionary
-        parsed_params[param_name] = parsed_list
+        parsed_fields[field_name] = parsed_list
+    
+    # Create outer wrapper with common parameters before the loop
+    def make_field_validator(validation_result, parsed_fields, optional_params):
+        """Create a field validator with pre-filled common parameters"""
+        def validate_for_input(field_name, index, input_prefix, **kwargs):
+            return validate_field_value(
+                validation_result,
+                parsed_fields,
+                field_name,
+                index,
+                input_prefix,
+                optional_params=optional_params,
+                **kwargs
+            )
+        return validate_for_input
+    
+    # Create the validator once before the loop
+    validate_for_input = make_field_validator(validation_result, parsed_fields, optional_params)
     
     # Validate each input, skipping fields that failed global validation
     for i in range(num_inputs):
         input_prefix = f"Input {i+1}: " if num_inputs > 1 else ""
         
-        # 1. Check if data files exist for this input (skip if root_path or data_path invalid)
+        # Inner wrapper for this specific input
+        def validate_field(field_name, **kwargs):
+            return validate_for_input(field_name, i, input_prefix, **kwargs)
+        
+        # 1. Validate ID integers (scanNumber)
+        # Convert scanNumber to integer if present
+        scan_num_int = None
+        if 'scanNumber' in parsed_fields:
+            current_scanNumber = validate_field('scanNumber', required=False, display_name="Scan Number")
+            if current_scanNumber is not None:
+                try:
+                    scan_num_int = int(current_scanNumber)
+                except (ValueError, TypeError):
+                    add_validation_message(
+                        validation_result, 'warnings', 'scanNumber', input_prefix,
+                        custom_message="Scan Number is not a valid integer"
+                    )
+        
+        # 2. Check if data files exist for this input (skip if root_path or data_path invalid)
         if 'root_path' not in validation_result['errors'] and 'data_path' not in validation_result['errors']:
-            current_data_path = validate_param_value(
-                validation_result, parsed_params, 'data_path', i, input_prefix
-            )
+            current_data_path = validate_field('data_path')
             if current_data_path is not None:
                 current_full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
                 
@@ -325,35 +406,23 @@ def validate_wire_reconstruction_inputs(ctx):
                     add_validation_message(validation_result, 'errors', 'data_path', input_prefix, 
                                          custom_message="Data Path directory not found")
                 else:
-                    # Validate scanNumber against Catalog table (after confirming directory exists)
-                    current_scanNumber = validate_param_value(
-                        validation_result, parsed_params, 'scanNumber', i, input_prefix,
-                        required=False, display_name="Scan Number"
-                    )
-                    if current_scanNumber is not None:
-                        try:
-                            scan_num_int = int(current_scanNumber)
-                            
-                            # Get catalog data for this scan
-                            catalog_data = get_catalog_data(session, scan_num_int, root_path, CATALOG_DEFAULTS)
-                            
-                            if catalog_data and catalog_data.get('data_path'):
-                                catalog_full_data_path = os.path.join(root_path, catalog_data['data_path'].lstrip('/'))
-                                if catalog_full_data_path != current_full_data_path:
-                                    add_validation_message(
-                                        validation_result, 'warnings', 'data_path', input_prefix,
-                                        custom_message=f"Catalog entry for Scan Number {scan_num_int} has different path ({catalog_data['data_path']})"
-                                    )
-                            else:
-                                # No catalog entry found for this scan number
+                    # Validate against database if we have a valid scan number (uses ID validated above)
+                    if scan_num_int is not None:
+                        # Get catalog data for this scan
+                        catalog_data = get_catalog_data(session, scan_num_int, root_path, CATALOG_DEFAULTS)
+                        
+                        if catalog_data and catalog_data.get('data_path'):
+                            catalog_full_data_path = os.path.join(root_path, catalog_data['data_path'].lstrip('/'))
+                            if catalog_full_data_path != current_full_data_path:
                                 add_validation_message(
-                                    validation_result, 'warnings', 'scanNumber', input_prefix,
-                                    custom_message=f"Catalog entry not found for Scan Number {scan_num_int}"
+                                    validation_result, 'warnings', 'data_path', input_prefix,
+                                    custom_message=f"Catalog entry for Scan Number {scan_num_int} has different path ({catalog_data['data_path']})"
                                 )
-                        except (ValueError, TypeError):
+                        else:
+                            # No catalog entry found for this scan number
                             add_validation_message(
                                 validation_result, 'warnings', 'scanNumber', input_prefix,
-                                custom_message="Scan Number is not a valid integer"
+                                custom_message=f"Catalog entry not found for Scan Number {scan_num_int}"
                             )
                     
                     # Check if directory contains any files
@@ -363,10 +432,7 @@ def validate_wire_reconstruction_inputs(ctx):
                                              custom_message="Data Path directory contains no files")
                     else:
                         # Get filename prefix
-                        current_filename_prefix_str = validate_param_value(
-                            validation_result, parsed_params, 'filenamePrefix', i, input_prefix,
-                            display_name="Filename Prefix"
-                        )
+                        current_filename_prefix_str = validate_field('filenamePrefix', display_name="Filename Prefix")
                         if current_filename_prefix_str is not None:
                             current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
                             
@@ -380,11 +446,8 @@ def validate_wire_reconstruction_inputs(ctx):
                                     add_validation_message(validation_result, 'errors', 'filenamePrefix', input_prefix, 
                                                          custom_message=f"No files match Filename prefix pattern '{current_filename_prefix_i}'")
                                 else:
-                                    # Get scan points
-                                    current_scanPoints = validate_param_value(
-                                        validation_result, parsed_params, 'scanPoints', i, input_prefix,
-                                        display_name="Scan Points"
-                                    )
+                                    # Get scan points (optional field)
+                                    current_scanPoints = validate_field('scanPoints', display_name="Scan Points", required=False)
                                     if current_scanPoints is not None:
                                         try:
                                             scanPoints_srange = srange(current_scanPoints)
@@ -417,25 +480,11 @@ def validate_wire_reconstruction_inputs(ctx):
                                                 custom_message=f"Missing files for Filename prefix '{current_filename_prefix_i}' (Scan Points: {scanpoints_str})"
                                             )
         
-        # 2. Validate scanNumber: check that entry is a valid integer
-        if 'scanNumber' not in validation_result['errors'] and 'scanNumber' in parsed_params:
-            current_scanNumber = parsed_params['scanNumber'][i]
-            try:
-                current_scanNumber.isdigit()
-            except (ValueError, TypeError):
-                add_validation_message(
-                    validation_result, 'warnings', 'scanNumber', input_prefix,
-                    custom_message="Scan Number is not a valid integer"
-                    )
-        
         # 3. Check if output folder already exists for this input (skip if root_path invalid)
         # Note: We cannot validate this properly if outputFolder contains %d placeholders
         # because we don't know the scan number or wirerecon_id at validation time.
         # This check is skipped if %d is present in the path.
-        current_outputFolder = validate_param_value(
-            validation_result, parsed_params, 'outputFolder', i, input_prefix,
-            display_name="Output Folder"
-        )
+        current_outputFolder = validate_field('outputFolder', display_name="Output Folder")
         if current_outputFolder is not None:
             if 'root_path' not in validation_result['errors']:
                 if '%d' not in current_outputFolder:
@@ -445,10 +494,7 @@ def validate_wire_reconstruction_inputs(ctx):
                                              custom_message="Output Folder already exists")
         
         # 4. Check if geometry file exists for this input (skip if root_path invalid)
-        current_geoFile = validate_param_value(
-            validation_result, parsed_params, 'geoFile', i, input_prefix,
-            display_name="Geometry File"
-        )
+        current_geoFile = validate_field('geoFile', display_name="Geometry File")
         if current_geoFile is not None:
             if 'root_path' not in validation_result['errors']:
                 full_geo_path = os.path.join(root_path, current_geoFile.lstrip('/'))
@@ -457,20 +503,11 @@ def validate_wire_reconstruction_inputs(ctx):
                                          custom_message="Geometry File not found")
         
         # 5. Validate depth parameters for this input using the universal helper
-        depth_start_val = validate_param_value(
-            validation_result, parsed_params, 'depth_start', i, input_prefix,
-            converter=safe_float
-        )
+        depth_start_val = validate_field('depth_start', converter=safe_float)
         
-        depth_end_val = validate_param_value(
-            validation_result, parsed_params, 'depth_end', i, input_prefix,
-            converter=safe_float
-        )
+        depth_end_val = validate_field('depth_end', converter=safe_float)
         
-        depth_resolution_val = validate_param_value(
-            validation_result, parsed_params, 'depth_resolution', i, input_prefix,
-            converter=safe_float
-        )
+        depth_resolution_val = validate_field('depth_resolution', converter=safe_float)
         
         # Initialize depth_span as None (will be calculated if both start and end are valid)
         depth_span = None
@@ -517,21 +554,18 @@ def validate_wire_reconstruction_inputs(ctx):
                                              custom_message=f"Depth Resolution ({depth_resolution_val} µm) must be ≤ depth range ({abs(depth_span)} µm)")
         
         # 6. Validate percent_brightest for this input
-        percent_val = validate_param_value(
-            validation_result, parsed_params, 'percent_brightest', i, input_prefix,
-            converter=safe_float, display_name="Intensity Percentile"
-        )
+        percent_val = validate_field('percent_brightest', converter=safe_float, display_name="Intensity Percentile")
         if percent_val is not None:
             if percent_val <= 0 or percent_val > 100:
                 add_validation_message(validation_result, 'errors', 'percent_brightest', input_prefix, 
                                      custom_message="Intensity Percentile must be between 0 and 100")
         
     
-    # Add successes for parameters that passed all validations
-    # Only add to successes if the parameter has neither errors nor warnings
-    for param_name in all_field_ids:
-        if param_name not in validation_result['errors'] and param_name not in validation_result['warnings']:
-            add_validation_message(validation_result, 'successes', param_name)
+    # Add successes for fields that passed all validations
+    # Only add to successes if the field has neither errors nor warnings
+    for field_name in all_field_ids:
+        if field_name not in validation_result['errors'] and field_name not in validation_result['warnings']:
+            add_validation_message(validation_result, 'successes', field_name)
     
     # Close database session
     session.close()
@@ -545,7 +579,7 @@ Callbacks
 =======================
 """
 @dash.callback(
-    Input('validate-btn', 'n_clicks'),
+    Input('wirerecon-validate-btn', 'n_clicks'),
     State('data_path', 'value'),
     State('filenamePrefix', 'value'),
     State('scanPoints', 'value'),
@@ -556,7 +590,8 @@ Callbacks
     State('percent_brightest', 'value'),
     State('outputFolder', 'value'),
     State('root_path', 'value'),
-    State('scanNumber', 'value'),
+    State('IDnumber', 'value'),  # Replaced scanNumber with IDnumber
+    # State('scanNumber', 'value'),  # Old - now parsed from IDnumber
     State('author', 'value'),
     prevent_initial_call=True,
 )
@@ -572,7 +607,8 @@ def validate_inputs(
     percent_brightest,
     outputFolder,
     root_path,
-    scanNumber,
+    IDnumber,  # Replaced scanNumber with IDnumber
+    # scanNumber,  # Old - now parsed from IDnumber
     author,
 ):
     """Handle Validate button click"""
@@ -593,7 +629,9 @@ def validate_inputs(
 @dash.callback(
     Input('submit_wire', 'n_clicks'),
     
-    State('scanNumber', 'value'),
+    State('root_path', 'value'),
+    State('IDnumber', 'value'),  # Replaced scanNumber with IDnumber
+    # State('scanNumber', 'value'),  # Old - now parsed from IDnumber
     
     # User text
     State('author', 'value'),
@@ -620,7 +658,9 @@ def validate_inputs(
     prevent_initial_call=True,
 )
 def submit_parameters(n,
-    scanNumber,
+    root_path,
+    IDnumber,  # Replaced scanNumber with IDnumber
+    # scanNumber,  # Old - now parsed from IDnumber
     
     # User text
     author,
@@ -673,9 +713,31 @@ def submit_parameters(n,
         })
         return
     
-    # Parse data_path first to get the number of inputs
-    data_path_list = parse_parameter(data_path)
-    num_inputs = len(data_path_list)
+    # Parse IDnumber to get individual IDs
+    with Session(session_utils.get_engine()) as temp_session:
+        try:
+            id_dict = parse_IDnumber(IDnumber, temp_session)
+            scanNumber = id_dict.get('scanNumber')
+            # wirerecon_id = id_dict.get('wirerecon_id')
+        except ValueError as e:
+            set_props("alert-submit", {
+                'is_open': True,
+                'children': f'Invalid ID Number: {str(e)}',
+                'color': 'danger'
+            })
+            return
+    
+    # Build all_submit_params from ctx.states (consistent with validation approach)
+    all_submit_params = {}
+    for key, value in ctx.states.items():
+        component_id = key.split('.')[0]
+        all_submit_params[component_id] = value
+    
+    # Add parsed ID to the params dict
+    all_submit_params['scanNumber'] = scanNumber
+    
+    # Determine num_inputs from longest semicolon-separated list across all fields
+    num_inputs = get_num_inputs_from_fields(all_submit_params)
     
     # Parse all other parameters with num_inputs
     try:
@@ -701,7 +763,6 @@ def submit_parameters(n,
         })
         return
     
-    root_path = DEFAULT_VARIABLES["root_path"]
     num_threads = DEFAULT_VARIABLES["num_threads"]
     memory_limit_mb = DEFAULT_VARIABLES["memory_limit_mb"]
     verbose = DEFAULT_VARIABLES["verbose"]
@@ -718,19 +779,29 @@ def submit_parameters(n,
                 current_geo_file = geoFile_list[i]
                 current_scanPoints = scanPoints_list[i]
 
+                # Convert scanNumber to integer if present
+                scan_num_int = None
+                if current_scanNumber:    
+                    try:
+                        scan_num_int = int(current_scanNumber)
+                    except (ValueError, TypeError) as e:
+                        logger.error(f"Failed to convert scanNumber '{current_scanNumber}' to integer: {e}")
+                        set_props("alert-submit", {
+                            'is_open': True,
+                            'children': f'Invalid scan number: {current_scanNumber}',
+                            'color': 'danger'
+                        })
+
                 # Convert relative paths to full paths
                 full_geometry_file = os.path.join(root_path, current_geo_file.lstrip('/'))
 
+                # Get next ID for this action
                 next_wirerecon_id = db_utils.get_next_id(session, db_schema.WireRecon)
-                # Now that we have the ID, format the output folder path
-                try:
-                    if '%d' in current_output_folder:
-                        formatted_output_folder = current_output_folder % (current_scanNumber, next_wirerecon_id)
-                    else:
-                        formatted_output_folder = current_output_folder
-                except TypeError:
-                    formatted_output_folder = current_output_folder # Fallback if formatting fails
                 
+                # Now that we have the ID, format the output folder path by replacement of the final %d in the template
+                formatted_output_folder = current_output_folder % next_wirerecon_id
+                
+                # Build full path
                 full_output_folder = os.path.join(root_path, formatted_output_folder.lstrip('/'))
                 
                 # Create output directory if it doesn't exist
@@ -782,7 +853,7 @@ def submit_parameters(n,
                 current_full_data_path=os.path.join(root_path, current_data_path.lstrip('/'))
 
                 wirerecon = db_schema.WireRecon(
-                    scanNumber=current_scanNumber,
+                    scanNumber=scan_num_int,
                     job_id=job_id,
                     filefolder=current_full_data_path,
                     filenamePrefix=current_filename_prefix,
@@ -831,7 +902,7 @@ def submit_parameters(n,
                     "memory_limit_mb": memory_limit_mb,
                     "num_threads": num_threads,
                     "verbose": verbose,
-                    "scanNumber": current_scanNumber,
+                    "scanNumber": scan_num_int,
                 })
 
             session.commit()
@@ -919,18 +990,22 @@ def submit_parameters(n,
 
 # Register shared callbacks
 register_update_path_fields_callback(
-    button_id='wirerecon-update-path-fields-btn',
-    scan_number_id='scanNumber',
+    update_paths_id='wirerecon-update-path-fields-btn',
+    # scan_number_id='scanNumber',
+    id_number_id='IDnumber',
     root_path_id='root_path',
     data_path_id='data_path',
     filename_prefix_id='filenamePrefix',
     alert_id='alert-scan-loaded',
-    catalog_defaults=CATALOG_DEFAULTS
+    catalog_defaults=CATALOG_DEFAULTS,
+    output_folder_id='outputFolder',
+    build_template_func=build_output_folder_template,
+    context='wire_recon'
 )
 
 register_load_file_indices_callback(
     button_id='wirerecon-load-file-indices-btn',
-    data_loaded_trigger_id='wirerecon-data-loaded-trigger',
+    data_loaded_signal_id='wirerecon-data-loaded-signal',
     data_path_id='data_path',
     filename_prefix_id='filenamePrefix',
     scan_points_id='scanPoints',
@@ -940,12 +1015,13 @@ register_load_file_indices_callback(
 )
 
 register_check_filenames_callback(
-    check_button_id='wirerecon-check-filenames-btn',
-    update_button_id='wirerecon-update-path-fields-btn',
-    data_loaded_trigger_id='wirerecon-data-loaded-trigger',
+    find_filenames_id='wirerecon-check-filenames-btn',
+    update_paths_id='wirerecon-update-path-fields-btn',
+    data_loaded_signal_id='wirerecon-data-loaded-signal',
     data_path_id='data_path',
     filename_prefix_id='filenamePrefix',
     filename_templates_id='wirerecon-filename-templates',
+    cached_patterns_store_id='wirerecon-cached-patterns',
     num_indices=1
 )
 
@@ -1006,7 +1082,7 @@ register_check_filenames_callback(
 
 
 @dash.callback(
-    Output('wirerecon-data-loaded-trigger', 'data'),
+    Output('wirerecon-data-loaded-signal', 'data'),
     Input('url-create-wirerecon', 'href'),
     prevent_initial_call=True,
 )
@@ -1016,6 +1092,7 @@ def load_scan_data_from_url(href):
     URL format: /create-wire-reconstruction?scan_id={scan_id}
     Pooled URL format: /create-wire-reconstruction?scan_id={scan_ids}
     With wirerecon_id: /create-wire-reconstruction?scan_id={scan_id}&wirerecon_id={wirerecon_id}
+    With peakindex_id: /create-wire-reconstruction?scan_id={scan_id}&peakindex_id={peakindex_id}
     Pooled with wirerecon_id: /create-wire-reconstruction?scan_id={scan_ids}&wirerecon_id={wirerecon_ids}
     """
     if not href:
@@ -1026,6 +1103,7 @@ def load_scan_data_from_url(href):
     
     scan_id_str = query_params.get('scan_id', [None])[0]
     wirerecon_id_str = query_params.get('wirerecon_id', [None])[0]
+    peakindex_id_str = query_params.get('peakindex_id', [None])[0]
 
     root_path = DEFAULT_VARIABLES.get("root_path", "")
 
@@ -1044,13 +1122,20 @@ def load_scan_data_from_url(href):
                 # Handle pooled wirerecon IDs
                 wirerecon_ids = [int(wid) if wid and wid.lower() != 'none' else None for wid in (wirerecon_id_str.split(',') if wirerecon_id_str else [])]
                 
+                # Handle pooled peakindex IDs
+                peakindex_ids = [int(pid) if pid and pid.lower() != 'none' else None for pid in (peakindex_id_str.split(',') if peakindex_id_str else [])]
+                
                 # Validate that lists have matching lengths
                 if wirerecon_ids and len(wirerecon_ids) != len(scan_ids):
                     raise ValueError(f"Mismatch: {len(scan_ids)} scan IDs but {len(wirerecon_ids)} wirerecon IDs")
+                if peakindex_ids and len(peakindex_ids) != len(scan_ids):
+                    raise ValueError(f"Mismatch: {len(scan_ids)} scan IDs but {len(peakindex_ids)} peakindex IDs")
                 
                 # If no wirerecon IDs provided, fill with None
                 if not wirerecon_ids:
                     wirerecon_ids = [None] * len(scan_ids)
+                if not peakindex_ids:
+                    peakindex_ids = [None] * len(scan_ids)
                 
                 # Collect data paths and filename prefixes for each scan
                 wirerecon_form_data_list = []
@@ -1058,18 +1143,21 @@ def load_scan_data_from_url(href):
                 not_found_items = []
                 for i, current_scan_id in enumerate(scan_ids):
                     current_wirerecon_id = wirerecon_ids[i]
+                    current_peakindex_id = peakindex_ids[i]
                     
-                    # Query metadata for current scan
+                    # Query metadata and scan data
                     metadata_data = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == current_scan_id).first()
-                    # scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_id).all()
+                    # scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == current_scan_id).all()
                     
                     if metadata_data:
-                        if current_wirerecon_id:
+                        if current_peakindex_id:
+                            found_items.append(f"peak index {current_peakindex_id}")
+                        elif current_wirerecon_id:
                             found_items.append(f"wire reconstruction {current_wirerecon_id}")
                         else:
                             found_items.append(f"scan {current_scan_id}")
                         
-                        output_folder = WIRERECON_DEFAULTS["outputFolder"]
+                        # output_folder = WIRERECON_DEFAULTS["outputFolder"]
                         
                         # # Format output folder with scan number and wirerecon_id
                         # try:
@@ -1079,10 +1167,32 @@ def load_scan_data_from_url(href):
                         #     pass
                         # next_wirerecon_id += 1
                         
+                        # Build output folder template based on available IDs
+                        output_folder = build_output_folder_template(
+                            scan_num_int=current_scan_id,
+                            data_path=None,  # Will be set later from id_data
+                        )
+                        
+                        # If peakindex_id is provided, query to get parent wirerecon_id
+                        if current_peakindex_id:
+                            try:
+                                peakindex_data = session.query(db_schema.PeakIndex).filter(
+                                    db_schema.PeakIndex.peakindex_id == current_peakindex_id
+                                ).first()
+                                if peakindex_data:
+                                    # Get parent IDs from peakindex
+                                    current_wirerecon_id = peakindex_data.wirerecon_id
+                                    current_scan_id = peakindex_data.scanNumber
+                            except (ValueError, Exception):
+                                # If peakindex_id is not valid or not found, clear it
+                                current_peakindex_id = None
+                        
                         # If wirerecon_id is provided, load existing wirerecon data
                         if current_wirerecon_id:
                             try:
-                                wirerecon_data = session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == current_wirerecon_id).first()
+                                wirerecon_data = session.query(db_schema.WireRecon).filter(
+                                    db_schema.WireRecon.wirerecon_id == current_wirerecon_id
+                                ).first()
                                 if wirerecon_data:
                                     # Use existing wirerecon data as the base
                                     wirerecon_form_data = wirerecon_data
@@ -1094,13 +1204,15 @@ def load_scan_data_from_url(href):
                                         wirerecon_form_data.data_path = remove_root_path_prefix(wirerecon_data.filefolder, root_path)
                                     if wirerecon_data.filenamePrefix:
                                         wirerecon_form_data.filenamePrefix = wirerecon_data.filenamePrefix
-                            
-                            except (ValueError, Exception):
-                                # If wirerecon_id is not valid or not found, create defaults
+                                else:
+                                    # WireRecon ID not found, create defaults
+                                    current_wirerecon_id = None
+                            except Exception as e:
+                                logger.warning(f"Error loading wirerecon {current_wirerecon_id}: {e}")
                                 current_wirerecon_id = None
                         
                         # Create defaults if no wirerecon_id or if loading failed
-                        else: #if not current_wirerecon_id:
+                        if not current_wirerecon_id:
                             # Create a WireRecon object with populated defaults from metadata/scan
                             wirerecon_form_data = db_schema.WireRecon(
                                 scanNumber=current_scan_id,
@@ -1111,18 +1223,32 @@ def load_scan_data_from_url(href):
                         # Add root_path from DEFAULT_VARIABLES
                         wirerecon_form_data.root_path = root_path
                         
-                        if not all([hasattr(wirerecon_form_data, 'data_path'), getattr(wirerecon_form_data, 'filenamePrefix')]):
-                            # Retrieve data_path and filenamePrefix from catalog data
-                            catalog_data = get_catalog_data(session, current_scan_id, root_path, CATALOG_DEFAULTS)
-                        if not hasattr(wirerecon_form_data, 'data_path'):
-                            wirerecon_form_data.data_path = catalog_data.get('data_path', '')
-                        if not getattr(wirerecon_form_data, 'filenamePrefix'):
-                            # wirerecon_form_data.filenamePrefix = catalog_data.get('filenamePrefix', '')
-                            wirerecon_form_data.filenamePrefix = catalog_data.get('filenamePrefix', [])
+                        # Only query database if data_path or filenamePrefix are not already populated
+                        if not all([hasattr(wirerecon_form_data, 'data_path') and wirerecon_form_data.data_path,
+                                    hasattr(wirerecon_form_data, 'filenamePrefix') and wirerecon_form_data.filenamePrefix]):
+                            # Build id_dict for this scan
+                            id_dict = {
+                                'scanNumber': current_scan_id,
+                                'wirerecon_id': current_wirerecon_id,
+                                'recon_id': None,
+                                'peakindex_id': current_peakindex_id
+                            }
+                            
+                            # Get data from appropriate table (WireRecon or Catalog)
+                            id_data = get_data_from_id(session, id_dict, root_path, 'wire_recon', CATALOG_DEFAULTS)
+                            
+                            # Set missing fields from the query result
+                            if id_data:
+                                if not (hasattr(wirerecon_form_data, 'data_path') and wirerecon_form_data.data_path):
+                                    wirerecon_form_data.data_path = id_data.get('data_path', '')
+                                if not (hasattr(wirerecon_form_data, 'filenamePrefix') and wirerecon_form_data.filenamePrefix):
+                                    wirerecon_form_data.filenamePrefix = id_data.get('filenamePrefix', [])
 
                         wirerecon_form_data_list.append(wirerecon_form_data)
                     else:
-                        if current_wirerecon_id:
+                        if current_peakindex_id:
+                            not_found_items.append(f"peak index {current_peakindex_id}")
+                        elif current_wirerecon_id:
                             not_found_items.append(f"wire reconstruction {current_wirerecon_id}")
                         else:
                             not_found_items.append(f"scan {current_scan_id}")
@@ -1135,24 +1261,19 @@ def load_scan_data_from_url(href):
                     all_attrs = list(db_schema.WireRecon.__table__.columns.keys()) + ['root_path', 'data_path', 'filenamePrefix']
                     
                     for attr in all_attrs:
-                        if attr == 'wirerecon_id': continue
-                        
                         values = []
                         for d in wirerecon_form_data_list:
                             if hasattr(d, attr):
                                 values.append(getattr(d, attr))
                         
                         if values:
-                            if all(v == values[0] for v in values):
-                                setattr(pooled_wirerecon_form_data, attr, values[0])
-                            else:
-                                setattr(pooled_wirerecon_form_data, attr, "; ".join(map(str, values)))
+                            pooled_value = _merge_field_values(values)
+                            setattr(pooled_wirerecon_form_data, attr, pooled_value)
                     
                     # User text
                     pooled_wirerecon_form_data.author = DEFAULT_VARIABLES['author']
                     pooled_wirerecon_form_data.notes = DEFAULT_VARIABLES['notes']
-                    # # Add root_path from DEFAULT_VARIABLES
-                    # pooled_wirerecon_form_data.root_path = root_path
+                    
                     # Populate the form with the defaults
                     set_wire_recon_form_props(pooled_wirerecon_form_data)
 
