@@ -24,14 +24,22 @@ import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
 
 
-# Global test XML path - shared between all test classes
+# Global test XML paths - shared between all test classes
 TEST_XML_PATH = os.path.join(os.path.dirname(__file__), 'scan_logs', 'test_log.xml')
+TEST_XML_PATH_2 = os.path.join(os.path.dirname(__file__), 'scan_logs', 'test_log_2.xml')
 
 
 @pytest.fixture
 def test_xml_data():
     """Load test XML data from test_log.xml file."""
     with open(TEST_XML_PATH, 'rb') as f:
+        return f.read()
+
+
+@pytest.fixture
+def test_xml_data_2():
+    """Load test XML data from test_log_2.xml file."""
+    with open(TEST_XML_PATH_2, 'rb') as f:
         return f.read()
 
 
@@ -160,6 +168,25 @@ class TestMetadataParsing:
             assert 'scan_dim' in scan_dim
             assert 'scan_npts' in scan_dim
             assert 'scan_cpt' in scan_dim
+    
+    def test_parse_metadata_test_log_2(self, test_xml_data_2):
+        """Test parsing scans from test_log_2.xml."""
+        # Test scanning through different scan indices in test_log_2.xml
+        for scan_no in range(2, 9):  # Test scans in test_log_2.xml
+            try:
+                log_dict, scan_dims_list = db_utils.parse_metadata(test_xml_data_2, scan_no=scan_no)
+                
+                # Verify each scan has a valid scanNumber
+                assert 'scanNumber' in log_dict
+                assert log_dict['scanNumber'] is not None
+                assert isinstance(scan_dims_list, list)
+                
+                logging.info(f"Successfully parsed scan {scan_no}: {log_dict['scanNumber']}")
+                
+            except IndexError:
+                # This is expected when we run out of scans
+                logging.info(f"No more scans available at index {scan_no}")
+                break
 
 
 class TestDatabaseIntegration:
@@ -331,6 +358,52 @@ class TestDatabaseIntegration:
                 # Verify multiple scans were inserted
                 all_metadata = session.query(db_schema.Metadata).all()
                 assert len(all_metadata) >= 3
+                
+                all_scans = session.query(db_schema.Scan).all()
+                assert len(all_scans) > 0
+    
+    def test_multiple_scans_workflow_test_log_2(self, test_xml_data_2, temp_database):
+        """Test processing multiple different scans from test_log_2.xml."""
+        engine, temp_db_path = temp_database
+        
+        with patch('laue_portal.database.session_utils.get_engine', lambda: engine):
+            with Session(engine) as session:
+                scan_row_count = 0
+                
+                # Process scans from test_log_2.xml (starting from valid scan indices)
+                for scan_index in range(2, 9):  # Test all scans in test_log_2.xml
+                    try:
+                        # Parse metadata from XML
+                        log_dict, scan_dims_list = db_utils.parse_metadata(test_xml_data_2, scan_no=scan_index)
+                        
+                        # Create and insert metadata row
+                        metadata_row = db_utils.import_metadata_row(log_dict)
+                        metadata_row.date = datetime(2022, 4, 19)
+                        metadata_row.commit_id = f'test_commit_2_{scan_index}'
+                        metadata_row.calib_id = 1
+                        metadata_row.runtime = 'test_runtime'
+                        metadata_row.computer_name = 'test_computer'
+                        metadata_row.dataset_id = 1
+                        metadata_row.notes = f'test_notes_2_{scan_index}'
+                        
+                        session.add(metadata_row)
+                        
+                        # Create and insert scan rows
+                        for scan_dict in scan_dims_list:
+                            scan_row = db_utils.import_scan_row(scan_dict)
+                            scan_row.id = scan_row_count + 1
+                            scan_row_count += 1
+                            session.add(scan_row)
+                        
+                    except IndexError:
+                        # No more scans available
+                        break
+                
+                session.commit()
+                
+                # Verify scans were inserted
+                all_metadata = session.query(db_schema.Metadata).all()
+                assert len(all_metadata) > 0
                 
                 all_scans = session.query(db_schema.Scan).all()
                 assert len(all_scans) > 0
