@@ -108,7 +108,7 @@ PEAKINDEX_DEFAULTS = {
     "detectorCropY1": 0,
     "detectorCropY2": 2047,
     "min_size": 3, #1.13
-    "max_peaks": 50,
+    "max_peaks": 200,
     "smooth": False, #0
     "maskFile": "None", 
     "indexKeVmaxCalc": 17.2, #17.2
@@ -139,11 +139,6 @@ CATALOG_DEFAULTS = {
     "filefolder": "tests/data/gdata",
     "filenamePrefix": "HAs_long_laue1_",
 }
-
-# DEFAULT_VARIABLES = {
-#     "author": "",
-#     "notes": "",
-# }
 
 dash.register_page(__name__)
 
@@ -358,6 +353,7 @@ def validate_peakindexing_inputs(ctx):
         'depthRange',
         'threshold',
         'thresholdRatio',
+        'max_peaks',
         'scanNumber',
         'wirerecon_id',
         'recon_id',
@@ -1192,6 +1188,9 @@ def submit_parameters(n,
         detectorCropY1_list = parse_parameter(PEAKINDEX_DEFAULTS["detectorCropY1"], num_inputs)
         detectorCropY2_list = parse_parameter(PEAKINDEX_DEFAULTS["detectorCropY2"], num_inputs)
         min_size_list = parse_parameter(min_size, num_inputs)
+        # Auto-fill max_peaks with default value of 200 if empty
+        if not max_peaks or max_peaks == '':
+            max_peaks = str(PEAKINDEX_DEFAULTS["max_peaks"])
         max_peaks_list = parse_parameter(max_peaks, num_inputs)
         smooth_list = parse_parameter(smooth, num_inputs)
         maskFile_list = parse_parameter(maskFile, num_inputs)
