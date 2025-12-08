@@ -1,0 +1,294 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- scan log file from APS, 34ID-E -->
+<scanLog xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog">
+<lastScanPos>00009998344</lastScanPos>	<!-- points to start of last <fullScan>. This speeds reading the last scan -->
+<scanNumberRange>00000272077 00000276624</scanNumberRange>	<!-- range of scan numbers present -->
+<!-- epoch is seconds from  00:00:00 Jan 1, 1990 UTC -->
+
+<fullScan scanNumber="274036">
+	<time epoch="1019277242">2022-04-19T23:34:02</time>
+	<source>
+		<beamBad>False</beamBad>
+		<CCDshutter>Out</CCDshutter>
+		<monoTransStatus>white slitted</monoTransStatus>
+		<IDgap unit="mm">18.4519</IDgap>
+		<IDtaper unit="mm">5.00257</IDtaper>
+		<ringCurrent unit="mA">101.79</ringCurrent>
+	</source>
+	<sample>
+		<XYZ unit="micron" desc="sample positioner">-9263 -4030 2499.9</XYZ>
+	</sample>
+	<knife-edge>
+		<XYZ unit="micron" desc="knife-edge positioner">-0.005 176.814 -176.747</XYZ>
+		<knifeScan unit="micron">0</knifeScan>
+	</knife-edge>
+	<scan dim="3" npts="3" after="Prior">
+		<positionerSettle unit="sec">1</positionerSettle>
+		<detectorSettle unit="sec">2</detectorSettle>
+		<afterPV VAL="1" wait="Wait">34ida:9440:c0:Out5</afterPV>
+		<positioner PV="34ide:focusTHK:H.VAL" ar="relative" mode="linear">-1 1 1</positioner>
+		<detectorTrig PV="34ide:scan2.EXSC" VAL="1"/>
+		<scan dim="2" npts="21" after="Prior">
+			<positionerSettle unit="sec">0.2</positionerSettle>
+			<detectorSettle unit="sec">0.2</detectorSettle>
+			<positioner PV="34ide:mxv:c0:m1.VAL" ar="relative" mode="linear">-10 10 1</positioner>
+			<detectorTrig PV="34ide:scan1.EXSC" VAL="1"/>
+			<scan dim="1" npts="539" after="Stay">
+				<positionerSettle unit="sec">0.1</positionerSettle>
+				<detectorSettle unit="sec">0.05</detectorSettle>
+				<beforePV VAL="1" wait="Wait">34ideTMG:flyScan:preScan</beforePV>
+				<positioner PV="34ide:mxv:c0:m4.VAL" ar="absolute" mode="fly">60 598 1</positioner>
+				<detectorTrig PV="34ideTMG:flyScan:startScan" VAL="1"/>
+				<detectors>34idePE2:Stats1:Total_RBV S:SRcurrentAI.VAL 34ide:vsc:c0.S2 34ide:vsc:c0.S3 34ide:vsc:c0.S4 34ide:vsc:c0.S5 34ide:mirror:mca1:R0.VAL 34ide:mirror:mca1:R1.VAL 34ide:mirror:mca1:R2.VAL 34ide:mirror:mca1:R3.VAL 34ide:mirror:mca1:R4.VAL 34ide:mirror:mca1:R5.VAL 34ide:mirror:mca1:R6.VAL 34ide:mirror:mca1:R7.VAL 34ide:mirror:mca1:R8.VAL 34ide:mirror:mca1:R9.VAL 34ide:mirror:mca1:R10.VAL 34ide:mirror:mca1:R11.VAL 34ide:mirror:mca1:R12.VAL 34ide:mirror:mca1:R13.VAL 34ide:mirror:mca1:R14.VAL 34ide:mirror:mca1:R15.VAL 34ide:mirror:mca1:R16.VAL 34ide:mirror:mca1:R17.VAL 34ide:mirror:mca1:R18.VAL 34ide:mirror:mca1:R19.VAL 34ide:mirror:mca1:R20.VAL 34ide:mirror:mca1:R21.VAL 34ide:mirror:mca1:R22.VAL 34ide:mirror:mca1:R23.VAL 34ide:mirror:mca1:R24.VAL</detectors>
+			</scan>
+		</scan>
+	</scan>
+	<mda_file>/export/34id-e/mda/current/34ide_274036.mda</mda_file>
+	<scanEnd abort="False">
+		<time epoch="1019312594">2022-04-20T09:23:14</time>
+		<scanDuration unit="sec">35352.6</scanDuration>
+		<cpt>539 21 3</cpt> <!-- number of each dimension completed: cpt1, cpt2, ... -->
+		<source>
+			<beamBad>False</beamBad>
+			<ringCurrent unit="mA">102.03</ringCurrent>
+		</source>
+	</scanEnd>
+</fullScan>
+
+<fullScan scanNumber="274037">
+	<time epoch="1019317727">2022-04-20T10:48:47</time>
+	<source>
+		<beamBad>False</beamBad>
+		<CCDshutter>Out</CCDshutter>
+		<monoTransStatus>white slitted</monoTransStatus>
+		<IDgap unit="mm">18.452</IDgap>
+		<IDtaper unit="mm">5.00187</IDtaper>
+		<ringCurrent unit="mA">102.432</ringCurrent>
+	</source>
+	<sample>
+		<XYZ unit="micron" desc="sample positioner">-9263 -4030 2499.9</XYZ>
+	</sample>
+	<knife-edge>
+		<XYZ unit="micron" desc="knife-edge positioner">-0.005 176.814 -176.747</XYZ>
+		<knifeScan unit="micron">0</knifeScan>
+	</knife-edge>
+	<scan dim="2" npts="41" after="Prior">
+		<positionerSettle unit="sec">0.2</positionerSettle>
+		<detectorSettle unit="sec">0.2</detectorSettle>
+		<afterPV VAL="1" wait="NoWait">34ida:9440:c0:Out5</afterPV>
+		<positioner PV="34ide:mxv:c0:m1.VAL" ar="relative" mode="linear">-10 10 0.5</positioner>
+		<detectorTrig PV="34ide:scan1.EXSC" VAL="1"/>
+		<scan dim="1" npts="1077" after="Stay">
+			<positionerSettle unit="sec">0.1</positionerSettle>
+			<detectorSettle unit="sec">0.05</detectorSettle>
+			<beforePV VAL="1" wait="Wait">34ideTMG:flyScan:preScan</beforePV>
+			<positioner PV="34ide:mxv:c0:m4.VAL" ar="absolute" mode="fly">60 598 0.5</positioner>
+			<detectorTrig PV="34ideTMG:flyScan:startScan" VAL="1"/>
+			<detectors>34idePE2:Stats1:Total_RBV S:SRcurrentAI.VAL 34ide:vsc:c0.S2 34ide:vsc:c0.S3 34ide:vsc:c0.S4 34ide:vsc:c0.S5 34ide:mirror:mca1:R0.VAL 34ide:mirror:mca1:R1.VAL 34ide:mirror:mca1:R2.VAL 34ide:mirror:mca1:R3.VAL 34ide:mirror:mca1:R4.VAL 34ide:mirror:mca1:R5.VAL 34ide:mirror:mca1:R6.VAL 34ide:mirror:mca1:R7.VAL 34ide:mirror:mca1:R8.VAL 34ide:mirror:mca1:R9.VAL 34ide:mirror:mca1:R10.VAL 34ide:mirror:mca1:R11.VAL 34ide:mirror:mca1:R12.VAL 34ide:mirror:mca1:R13.VAL 34ide:mirror:mca1:R14.VAL 34ide:mirror:mca1:R15.VAL 34ide:mirror:mca1:R16.VAL 34ide:mirror:mca1:R17.VAL 34ide:mirror:mca1:R18.VAL 34ide:mirror:mca1:R19.VAL 34ide:mirror:mca1:R20.VAL 34ide:mirror:mca1:R21.VAL 34ide:mirror:mca1:R22.VAL 34ide:mirror:mca1:R23.VAL 34ide:mirror:mca1:R24.VAL</detectors>
+		</scan>
+	</scan>
+	<mda_file>/export/34id-e/mda/current/34ide_274037.mda</mda_file>
+	<scanEnd abort="True">
+		<time epoch="1019332638">2022-04-20T14:57:18</time>
+		<scanDuration unit="sec">14911.5</scanDuration>
+		<cpt>1077 12</cpt> <!-- scan aborted, number of each dimension completed: cpt1, cpt2, ... -->
+		<source>
+			<beamBad>True</beamBad>
+			<ringCurrent unit="mA">0.01</ringCurrent>
+		</source>
+	</scanEnd>
+</fullScan>
+
+<fullScan scanNumber="274038">
+	<time epoch="1019334789">2022-04-20T15:33:09</time>
+	<source>
+		<beamBad>False</beamBad>
+		<CCDshutter>Out</CCDshutter>
+		<monoTransStatus>white slitted</monoTransStatus>
+		<IDgap unit="mm">20.7395</IDgap>
+		<IDtaper unit="mm">4.7508</IDtaper>
+		<ringCurrent unit="mA">102.14</ringCurrent>
+	</source>
+	<sample>
+		<XYZ unit="micron" desc="sample positioner">-9263 -4030 2500</XYZ>
+	</sample>
+	<knife-edge>
+		<XYZ unit="micron" desc="knife-edge positioner">-70000.1 1923.51 13211.1</XYZ>
+		<knifeScan unit="micron">0</knifeScan>
+	</knife-edge>
+	<scan dim="2" npts="3" after="Prior">
+		<positionerSettle unit="sec">0.2</positionerSettle>
+		<detectorSettle unit="sec">0.2</detectorSettle>
+		<afterPV VAL="1" wait="NoWait">34ida:9440:c0:Out5</afterPV>
+		<positioner PV="34ide:focusTHK:H.VAL" ar="relative" mode="linear">-1 1 1</positioner>
+		<detectorTrig PV="34ide:scan1.EXSC" VAL="1"/>
+		<scan dim="1" npts="21" after="Prior">
+			<positionerSettle unit="sec">0.1</positionerSettle>
+			<detectorSettle unit="sec">0.05</detectorSettle>
+			<positioner PV="34ide:mxv:c0:m1.VAL" ar="relative" mode="linear">-10 10 1</positioner>
+			<detectorTrig PV="34ide:vsc:c0.CNT" VAL="1"/>
+			<detectorTrig PV="34idePE2:cam1:Acquire" VAL="1"/>
+			<detectors>34idePE2:Stats1:Total_RBV S:SRcurrentAI.VAL 34ide:vsc:c0.S2 34ide:vsc:c0.S3 34ide:vsc:c0.S4 34ide:vsc:c0.S5 34ide:mirror:mca1:R0.VAL 34ide:mirror:mca1:R1.VAL 34ide:mirror:mca1:R2.VAL 34ide:mirror:mca1:R3.VAL 34ide:mirror:mca1:R4.VAL 34ide:mirror:mca1:R5.VAL 34ide:mirror:mca1:R6.VAL 34ide:mirror:mca1:R7.VAL 34ide:mirror:mca1:R8.VAL 34ide:mirror:mca1:R9.VAL 34ide:mirror:mca1:R10.VAL 34ide:mirror:mca1:R11.VAL 34ide:mirror:mca1:R12.VAL 34ide:mirror:mca1:R13.VAL 34ide:mirror:mca1:R14.VAL 34ide:mirror:mca1:R15.VAL 34ide:mirror:mca1:R16.VAL 34ide:mirror:mca1:R17.VAL 34ide:mirror:mca1:R18.VAL 34ide:mirror:mca1:R19.VAL 34ide:mirror:mca1:R20.VAL 34ide:mirror:mca1:R21.VAL 34ide:mirror:mca1:R22.VAL 34ide:mirror:mca1:R23.VAL 34ide:mirror:mca1:R24.VAL</detectors>
+		</scan>
+	</scan>
+	<mda_file>/export/34id-e/mda/current/34ide_274038.mda</mda_file>
+	<scanEnd abort="False">
+		<time epoch="1019334929">2022-04-20T15:35:29</time>
+		<scanDuration unit="sec">144.278</scanDuration>
+		<cpt>21 3</cpt> <!-- number of each dimension completed: cpt1, cpt2, ... -->
+		<source>
+			<beamBad>False</beamBad>
+			<ringCurrent unit="mA">102.18</ringCurrent>
+		</source>
+	</scanEnd>
+</fullScan>
+
+<fullScan scanNumber="274039">
+	<time epoch="1019335101">2022-04-20T15:38:21</time>
+	<source>
+		<beamBad>False</beamBad>
+		<CCDshutter>Out</CCDshutter>
+		<monoTransStatus>white slitted</monoTransStatus>
+		<IDgap unit="mm">20.7395</IDgap>
+		<IDtaper unit="mm">4.7508</IDtaper>
+		<ringCurrent unit="mA">102.111</ringCurrent>
+	</source>
+	<sample>
+		<XYZ unit="micron" desc="sample positioner">-9263 -4030 2499.9</XYZ>
+	</sample>
+	<knife-edge>
+		<XYZ unit="micron" desc="knife-edge positioner">-70000.1 1923.51 13211.1</XYZ>
+		<knifeScan unit="micron">0</knifeScan>
+	</knife-edge>
+	<scan dim="2" npts="9" after="Prior">
+		<positionerSettle unit="sec">0.2</positionerSettle>
+		<detectorSettle unit="sec">0.2</detectorSettle>
+		<afterPV VAL="1" wait="NoWait">34ida:9440:c0:Out5</afterPV>
+		<positioner PV="34ide:focusTHK:H.VAL" ar="relative" mode="linear">-1 1 0.25</positioner>
+		<detectorTrig PV="34ide:scan1.EXSC" VAL="1"/>
+		<scan dim="1" npts="81" after="Prior">
+			<positionerSettle unit="sec">0.1</positionerSettle>
+			<detectorSettle unit="sec">0.05</detectorSettle>
+			<positioner PV="34ide:mxv:c0:m1.VAL" ar="relative" mode="linear">-10 10 0.25</positioner>
+			<detectorTrig PV="34ide:vsc:c0.CNT" VAL="1"/>
+			<detectorTrig PV="34idePE2:cam1:Acquire" VAL="1"/>
+			<detectors>34idePE2:Stats1:Total_RBV S:SRcurrentAI.VAL 34ide:vsc:c0.S2 34ide:vsc:c0.S3 34ide:vsc:c0.S4 34ide:vsc:c0.S5 34ide:mirror:mca1:R0.VAL 34ide:mirror:mca1:R1.VAL 34ide:mirror:mca1:R2.VAL 34ide:mirror:mca1:R3.VAL 34ide:mirror:mca1:R4.VAL 34ide:mirror:mca1:R5.VAL 34ide:mirror:mca1:R6.VAL 34ide:mirror:mca1:R7.VAL 34ide:mirror:mca1:R8.VAL 34ide:mirror:mca1:R9.VAL 34ide:mirror:mca1:R10.VAL 34ide:mirror:mca1:R11.VAL 34ide:mirror:mca1:R12.VAL 34ide:mirror:mca1:R13.VAL 34ide:mirror:mca1:R14.VAL 34ide:mirror:mca1:R15.VAL 34ide:mirror:mca1:R16.VAL 34ide:mirror:mca1:R17.VAL 34ide:mirror:mca1:R18.VAL 34ide:mirror:mca1:R19.VAL 34ide:mirror:mca1:R20.VAL 34ide:mirror:mca1:R21.VAL 34ide:mirror:mca1:R22.VAL 34ide:mirror:mca1:R23.VAL 34ide:mirror:mca1:R24.VAL</detectors>
+		</scan>
+	</scan>
+	<mda_file>/export/34id-e/mda/current/34ide_274039.mda</mda_file>
+	<scanEnd abort="False">
+		<time epoch="1019336587">2022-04-20T16:03:07</time>
+		<scanDuration unit="sec">1489.88</scanDuration>
+		<cpt>81 9</cpt> <!-- number of each dimension completed: cpt1, cpt2, ... -->
+		<source>
+			<beamBad>False</beamBad>
+			<ringCurrent unit="mA">101.73</ringCurrent>
+		</source>
+	</scanEnd>
+</fullScan>
+
+<fullScan scanNumber="276007">
+	<time epoch="1037658882">2022-11-18T16:34:42</time>
+	<user>
+		<name>User2</name>
+	</user>
+	<source>
+		<beamBad>False</beamBad>
+		<CCDshutter>Out</CCDshutter>
+		<monoTransStatus>white slitted</monoTransStatus>
+		<IDgap unit="mm">18.3994</IDgap>
+		<IDtaper unit="mm">5.00229</IDtaper>
+		<ringCurrent unit="mA">102.114</ringCurrent>
+	</source>
+	<sample>
+		<XYZ unit="micron" desc="sample positioner">422.4 -1900.8 680.5</XYZ>
+	</sample>
+	<knife-edge>
+		<XYZ unit="micron" desc="knife-edge positioner">-80000 2121.12 -2121.32</XYZ>
+		<knifeScan unit="micron">0</knifeScan>
+	</knife-edge>
+	<scan dim="2" npts="61" after="Prior">
+		<positionerSettle unit="sec">0.2</positionerSettle>
+		<detectorSettle unit="sec">0.2</detectorSettle>
+		<afterPV VAL="1" wait="Wait">34ida:9440:c0:Out5</afterPV>
+		<positioner PV="34ide:focusTHK:H.VAL" ar="relative" mode="linear">-30 30 1</positioner>
+		<detectorTrig PV="34ide:scan1.EXSC" VAL="1"/>
+		<scan dim="1" npts="61" after="Prior">
+			<positionerSettle unit="sec">0.1</positionerSettle>
+			<detectorSettle unit="sec">0.0166667</detectorSettle>
+			<positioner PV="34ide:mxv:c0:m1.VAL" ar="relative" mode="linear">-30 30 1</positioner>
+			<detectorTrig PV="34ide:vsc:c0.CNT" VAL="1"/>
+			<detectorTrig PV="34idePE2:cam1:Acquire" VAL="1"/>
+			<detectorTrig PV="XEOLANDOR:cam1:Acquire" VAL="1"/>
+			<detectors>34idePE2:Stats1:Total_RBV S:SRcurrentAI.VAL 34ide:vsc:c0.S2 34ide:vsc:c0.S3 34ide:vsc:c0.S4 34ide:vsc:c0.S5 34ide:mirror:mca1:R0.VAL 34ide:mirror:mca1:R1.VAL 34ide:mirror:mca1:R2.VAL 34ide:mirror:mca1:R3.VAL 34ide:mirror:mca1:R4.VAL 34ide:mirror:mca1:R5.VAL 34ide:mirror:mca1:R6.VAL 34ide:mirror:mca1:R7.VAL 34ide:mirror:mca1:R8.VAL 34ide:mirror:mca1:R9.VAL 34ide:mirror:mca1:R10.VAL 34ide:mirror:mca1:R11.VAL 34ide:mirror:mca1:R12.VAL 34ide:mirror:mca1:R13.VAL 34ide:mirror:mca1:R14.VAL 34ide:mirror:mca1:R15.VAL 34ide:mirror:mca1:R16.VAL 34ide:mirror:mca1:R17.VAL 34ide:mirror:mca1:R18.VAL 34ide:mirror:mca1:R19.VAL 34ide:mirror:mca1:R20.VAL 34ide:mirror:mca1:R21.VAL 34ide:mirror:mca1:R22.VAL 34ide:mirror:mca1:R23.VAL 34ide:mirror:mca1:R24.VAL</detectors>
+		</scan>
+	</scan>
+	<mda_file>/export/34id-e/mda/current/34ide_276007.mda</mda_file>
+	<scanEnd abort="False">
+		<time epoch="1037663114">2022-11-18T17:45:14</time>
+		<scanDuration unit="sec">4232.83</scanDuration>
+		<cpt>61 61</cpt> <!-- number of each dimension completed: cpt1, cpt2, ... -->
+		<source>
+			<beamBad>False</beamBad>
+			<ringCurrent unit="mA">101.99</ringCurrent>
+		</source>
+	</scanEnd>
+</fullScan>
+
+<fullScan scanNumber="276802">
+	<time epoch="1045556236">2023-02-18T02:17:16</time>
+	<user>
+		<name>User2</name>
+	</user>
+	<source>
+		<beamBad>False</beamBad>
+		<CCDshutter>Out</CCDshutter>
+		<monoTransStatus>white slitted</monoTransStatus>
+		<IDgap unit="mm">18.4</IDgap>
+		<IDtaper unit="mm">5.00159</IDtaper>
+		<ringCurrent unit="mA">101.935</ringCurrent>
+	</source>
+	<sample>
+		<XYZ unit="micron" desc="sample positioner">-4214.4 -2945.5 -1786.4</XYZ>
+	</sample>
+	<knife-edge>
+		<XYZ unit="micron" desc="knife-edge positioner">-60000 1131.22 -1131.47</XYZ>
+		<knifeScan unit="micron">0</knifeScan>
+	</knife-edge>
+	<scan dim="3" npts="1" after="Stay">
+		<positionerSettle unit="sec">0.2</positionerSettle>
+		<detectorSettle unit="sec">2</detectorSettle>
+		<afterPV VAL="1" wait="Wait">34ida:9440:c0:Out5</afterPV>
+		<positioner PV="34ide:mxv:c0:m1.VAL" ar="absolute" mode="linear">5690.5 -1909.5 -7600</positioner>
+		<positioner PV="34ide:mxv:c0:m3.VAL" ar="absolute" mode="linear">-2063.78 -2947.67 -883.89</positioner>
+		<positioner PV="34ide:mxv:c0:m2.VAL" ar="absolute" mode="linear">-2974.93 -4212.36 -1237.43</positioner>
+		<detectorTrig PV="34ide:scan2.EXSC" VAL="1"/>
+		<scan dim="2" npts="81" after="Prior">
+			<positionerSettle unit="sec">0.2</positionerSettle>
+			<detectorSettle unit="sec">0.2</detectorSettle>
+			<positioner PV="34ide:focusTHK:H.VAL" ar="relative" mode="linear">-12 12 0.3</positioner>
+			<detectorTrig PV="34ide:scan1.EXSC" VAL="1"/>
+			<scan dim="1" npts="81" after="Prior">
+				<positionerSettle unit="sec">0.1</positionerSettle>
+				<detectorSettle unit="sec">0.05</detectorSettle>
+				<positioner PV="34ide:mxv:c0:m1.VAL" ar="relative" mode="linear">-12 12 0.3</positioner>
+				<detectorTrig PV="34ide:vsc:c0.CNT" VAL="1"/>
+				<detectorTrig PV="34idePE2:cam1:Acquire" VAL="1"/>
+				<detectorTrig PV="XEOLANDOR:cam1:Acquire" VAL="1"/>
+				<detectors>34idePE2:Stats1:Total_RBV S:SRcurrentAI.VAL 34ide:vsc:c0.S2 34ide:vsc:c0.S3 34ide:vsc:c0.S4 34ide:vsc:c0.S5 34ide:mirror:mca1:R0.VAL 34ide:mirror:mca1:R1.VAL 34ide:mirror:mca1:R2.VAL 34ide:mirror:mca1:R3.VAL 34ide:mirror:mca1:R4.VAL 34ide:mirror:mca1:R5.VAL 34ide:mirror:mca1:R6.VAL 34ide:mirror:mca1:R7.VAL 34ide:mirror:mca1:R8.VAL 34ide:mirror:mca1:R9.VAL 34ide:mirror:mca1:R10.VAL 34ide:mirror:mca1:R11.VAL 34ide:mirror:mca1:R12.VAL 34ide:mirror:mca1:R13.VAL 34ide:mirror:mca1:R14.VAL 34ide:mirror:mca1:R15.VAL 34ide:mirror:mca1:R16.VAL 34ide:mirror:mca1:R17.VAL 34ide:mirror:mca1:R18.VAL 34ide:mirror:mca1:R19.VAL 34ide:mirror:mca1:R20.VAL 34ide:mirror:mca1:R21.VAL 34ide:mirror:mca1:R22.VAL 34ide:mirror:mca1:R23.VAL 34ide:mirror:mca1:R24.VAL</detectors>
+			</scan>
+		</scan>
+	</scan>
+	<mda_file>/export/34id-e/mda/current/34ide_276802.mda</mda_file>
+	<scanEnd abort="True">
+		<time epoch="1045556602">2023-02-18T02:23:22</time>
+		<scanDuration unit="sec">366.08</scanDuration>
+		<cpt>22 3 0</cpt> <!-- scan aborted, number of each dimension completed: cpt1, cpt2, ... -->
+		<source>
+			<beamBad>False</beamBad>
+			<ringCurrent unit="mA">102.06</ringCurrent>
+		</source>
+	</scanEnd>
+</fullScan>
+
+</scanLog>

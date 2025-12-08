@@ -10,7 +10,7 @@
 <fullScan scanNumber="276990">
 	<time epoch="1046160598">2023-02-25T02:09:58</time>
 	<user>
-		<name>Sheyfer</name>
+		<name>User1</name>
 	</user>
 	<source>
 		<beamBad>False</beamBad>
@@ -51,7 +51,7 @@
 <fullScan scanNumber="276991">
 	<time epoch="1046162047">2023-02-25T02:34:07</time>
 	<user>
-		<name>Sheyfer</name>
+		<name>User1</name>
 	</user>
 	<source>
 		<beamBad>False</beamBad>
@@ -92,7 +92,7 @@
 <fullScan scanNumber="276992">
 	<time epoch="1046163089">2023-02-25T02:51:29</time>
 	<user>
-		<name>Sheyfer</name>
+		<name>User1</name>
 	</user>
 	<source>
 		<beamBad>False</beamBad>
@@ -133,7 +133,7 @@
 <fullScan scanNumber="276993">
 	<time epoch="1046164709">2023-02-25T03:18:29</time>
 	<user>
-		<name>Sheyfer</name>
+		<name>User1</name>
 	</user>
 	<source>
 		<beamBad>False</beamBad>
@@ -186,7 +186,7 @@
 <fullScan scanNumber="276994">
 	<time epoch="1046167238">2023-02-25T04:00:38</time>
 	<user>
-		<name>Sheyfer</name>
+		<name>User1</name>
 	</user>
 	<source>
 		<beamBad>False</beamBad>

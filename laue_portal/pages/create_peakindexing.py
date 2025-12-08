@@ -35,13 +35,38 @@ from laue_portal.pages.callback_registrars import (
     register_check_filenames_callback,
     _merge_field_values
 )
-from srange import srange
+from laue_portal.utilities.srange import srange
 import laue_portal.database.session_utils as session_utils
+from laue_portal.utilities.hkl_parse import str2hkl
 
 logger = logging.getLogger(__name__)
 
 
-def build_output_folder_template(scan_num_int, data_path, 
+def resolve_path_with_root(path, root_path):
+    """
+    Resolve a path, using root_path only if the path is relative.
+    If path is absolute, return it as-is (overriding root_path).
+    
+    Args:
+        path: The path to resolve (can be relative or absolute)
+        root_path: The root path to prepend if path is relative
+        
+    Returns:
+        str: The resolved full path
+    """
+    if not path:
+        return ""
+    
+    # Check if path is absolute
+    if os.path.isabs(path):
+        # Path is absolute - use it directly, ignore root_path
+        return path
+    else:
+        # Path is relative - combine with root_path
+        return os.path.join(root_path, path.lstrip('/'))
+
+
+def build_output_folder_template(scan_num_int, data_path,
                                  wirerecon_id_int=None, recon_id_int=None):
     """
     Build output folder template based on available IDs from database chain.
@@ -108,7 +133,7 @@ PEAKINDEX_DEFAULTS = {
     "detectorCropY1": 0,
     "detectorCropY2": 2047,
     "min_size": 3, #1.13
-    "max_peaks": 50,
+    "max_peaks": 200,
     "smooth": False, #0
     "maskFile": "None", 
     "indexKeVmaxCalc": 17.2, #17.2
@@ -139,11 +164,6 @@ CATALOG_DEFAULTS = {
     "filefolder": "tests/data/gdata",
     "filenamePrefix": "HAs_long_laue1_",
 }
-
-# DEFAULT_VARIABLES = {
-#     "author": "",
-#     "notes": "",
-# }
 
 dash.register_page(__name__)
 
@@ -358,6 +378,7 @@ def validate_peakindexing_inputs(ctx):
         'depthRange',
         'threshold',
         'thresholdRatio',
+        'max_peaks',
         'scanNumber',
         'wirerecon_id',
         'recon_id',
@@ -564,11 +585,18 @@ def validate_peakindexing_inputs(ctx):
                         custom_message="Recon ID is not a valid integer"
                     )
         
-        # 2. Check if data files exist for this input (skip if root_path or data_path invalid)
-        if 'root_path' not in validation_result['errors'] and 'data_path' not in validation_result['errors']:
+        # 2. Check if data files exist for this input (skip if root_path invalid)
+        if 'root_path' not in validation_result['errors']:
             current_data_path = validate_field('data_path')
             if current_data_path is not None:
-                current_full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
+                # Warn if absolute path is being used (root_path will be ignored)
+                if os.path.isabs(current_data_path):
+                    add_validation_message(
+                        validation_result, 'warnings', 'data_path', input_prefix,
+                        custom_message="Data Path is absolute - Root Path will be ignored"
+                    )
+                
+                current_full_data_path = resolve_path_with_root(current_data_path, root_path)
                 
                 # Check if directory exists
                 if not os.path.exists(current_full_data_path):
@@ -765,8 +793,15 @@ def validate_peakindexing_inputs(ctx):
         current_outputFolder = validate_field('outputFolder', display_name="Output Folder")
         if current_outputFolder is not None:
             if 'root_path' not in validation_result['errors']:
+                # Warn if absolute path is being used (root_path will be ignored)
+                if os.path.isabs(current_outputFolder):
+                    add_validation_message(
+                        validation_result, 'warnings', 'outputFolder', input_prefix,
+                        custom_message="Output Folder is absolute - Root Path will be ignored"
+                    )
+                
                 if '%d' not in current_outputFolder:
-                    full_output_path = os.path.join(root_path, current_outputFolder.lstrip('/'))
+                    full_output_path = resolve_path_with_root(current_outputFolder, root_path)
                     if os.path.exists(full_output_path):
                         add_validation_message(validation_result, 'warnings', 'outputFolder', input_prefix, 
                                              custom_message="Output Folder already exists")
@@ -775,7 +810,14 @@ def validate_peakindexing_inputs(ctx):
         current_geoFile = validate_field('geoFile', display_name="Geometry File")
         if current_geoFile is not None:
             if 'root_path' not in validation_result['errors']:
-                full_geo_path = os.path.join(root_path, current_geoFile.lstrip('/'))
+                # Warn if absolute path is being used (root_path will be ignored)
+                if os.path.isabs(current_geoFile):
+                    add_validation_message(
+                        validation_result, 'warnings', 'geoFile', input_prefix,
+                        custom_message="Geometry File is absolute - Root Path will be ignored"
+                    )
+                
+                full_geo_path = resolve_path_with_root(current_geoFile, root_path)
                 if not os.path.exists(full_geo_path):
                     add_validation_message(validation_result, 'errors', 'geoFile', input_prefix, 
                                          custom_message="Geometry File not found")
@@ -784,7 +826,14 @@ def validate_peakindexing_inputs(ctx):
         current_crystFile = validate_field('crystFile', display_name="Crystal File")
         if current_crystFile is not None:
             if 'root_path' not in validation_result['errors']:
-                full_cryst_path = os.path.join(root_path, current_crystFile.lstrip('/'))
+                # Warn if absolute path is being used (root_path will be ignored)
+                if os.path.isabs(current_crystFile):
+                    add_validation_message(
+                        validation_result, 'warnings', 'crystFile', input_prefix,
+                        custom_message="Crystal File is absolute - Root Path will be ignored"
+                    )
+                
+                full_cryst_path = resolve_path_with_root(current_crystFile, root_path)
                 if not os.path.exists(full_cryst_path):
                     add_validation_message(validation_result, 'errors', 'crystFile', input_prefix, 
                                          custom_message="Crystal File not found")
@@ -885,20 +934,15 @@ def validate_peakindexing_inputs(ctx):
                 add_validation_message(validation_result, 'errors', 'indexCone', input_prefix, 
                                      custom_message="Index Cone must be between 0 and 180 degrees")
         
-        # 8. Validate indexHKL for this input
+        # 8. Validate indexHKL for this input using str2hkl
         if 'indexHKL' not in validation_result['errors']:
-            current_indexHKL = str(parsed_fields['indexHKL'][i])
-            if len(current_indexHKL) != 3:
+            current_indexHKL_str = str(parsed_fields['indexHKL'][i])
+            try:
+                hkl_values = str2hkl(current_indexHKL_str, Nmin=3, Nmax=3)
+                # Validation successful - hkl_values is a list of 3 integers or floats
+            except (TypeError, ValueError) as e:
                 add_validation_message(validation_result, 'errors', 'indexHKL', input_prefix, 
-                                     custom_message="Index HKL must be 3 digits (e.g., '001')")
-            else:
-                try:
-                    int(current_indexHKL[0])
-                    int(current_indexHKL[1])
-                    int(current_indexHKL[2])
-                except ValueError:
-                    add_validation_message(validation_result, 'errors', 'indexHKL', input_prefix, 
-                                         custom_message="Index HKL must contain only digits")
+                                     custom_message=f"Index HKL parsing error: {str(e)}")
         
     
     # Add successes for fields that passed all validations
@@ -1192,6 +1236,9 @@ def submit_parameters(n,
         detectorCropY1_list = parse_parameter(PEAKINDEX_DEFAULTS["detectorCropY1"], num_inputs)
         detectorCropY2_list = parse_parameter(PEAKINDEX_DEFAULTS["detectorCropY2"], num_inputs)
         min_size_list = parse_parameter(min_size, num_inputs)
+        # Auto-fill max_peaks with default value of 200 if empty
+        if not max_peaks or max_peaks == '':
+            max_peaks = str(PEAKINDEX_DEFAULTS["max_peaks"])
         max_peaks_list = parse_parameter(max_peaks, num_inputs)
         smooth_list = parse_parameter(smooth, num_inputs)
         maskFile_list = parse_parameter(maskFile, num_inputs)
@@ -1352,8 +1399,19 @@ def submit_parameters(n,
                         session.add(subjob)
                         subjob_count += 1
         
-                # Extract HKL values from indexHKL parameter
-                current_indexHKL = str(indexHKL_list[i])
+                # Extract HKL values from indexHKL parameter using str2hkl
+                current_indexHKL_str = str(indexHKL_list[i])
+                try:
+                    hkl_values = str2hkl(current_indexHKL_str, Nmin=3, Nmax=3)
+                    # hkl_values is a list of 3 integers or floats [h, k, l]
+                except (TypeError, ValueError) as e:
+                    logger.error(f"Failed to parse HKL '{current_indexHKL_str}': {e}")
+                    set_props("alert-submit", {
+                        'is_open': True,
+                        'children': f'Invalid HKL value: {current_indexHKL_str}',
+                        'color': 'danger'
+                    })
+                    continue
                 
                 # Get filefolder and filenamePrefix
                 current_data_path = data_path_list[i]
@@ -1399,9 +1457,9 @@ def submit_parameters(n,
                     indexKeVmaxCalc=indexKeVmaxCalc_list[i],
                     indexKeVmaxTest=indexKeVmaxTest_list[i],
                     indexAngleTolerance=indexAngleTolerance_list[i],
-                    indexH=int(current_indexHKL[0]),
-                    indexK=int(current_indexHKL[1]),
-                    indexL=int(current_indexHKL[2]),
+                    indexH=int(hkl_values[0]),
+                    indexK=int(hkl_values[1]),
+                    indexL=int(hkl_values[2]),
                     indexCone=indexCone_list[i],
                     energyUnit=energyUnit_list[i],
                     exposureUnit=exposureUnit_list[i],
@@ -1440,9 +1498,9 @@ def submit_parameters(n,
                     "indexKeVmaxTest": indexKeVmaxTest_list[i],
                     "indexAngleTolerance": indexAngleTolerance_list[i],
                     "indexCone": indexCone_list[i],
-                    "indexH": int(current_indexHKL[0]),
-                    "indexK": int(current_indexHKL[1]),
-                    "indexL": int(current_indexHKL[2]),
+                    "indexH": int(hkl_values[0]),
+                    "indexK": int(hkl_values[1]),
+                    "indexL": int(hkl_values[2]),
                 })
 
             session.commit()

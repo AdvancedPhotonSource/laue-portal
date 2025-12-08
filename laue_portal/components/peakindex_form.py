@@ -146,13 +146,13 @@ peakindex_form = dbc.Row(
                                 dbc.Row(
                                     [
                                         dbc.Col(
-                                            _field("Geometry File", "geoFile", size='md',
+                                            _field("Geometry File", "geoFile", 
                                                     kwargs={
                                                         "type": "text",
                                                         "placeholder": "",
                                                     }),
                                             className="flex-grow-1",
-                                            style={"minWidth": 150},
+                                            style={"minWidth": 0},
                                         ),
                                         dbc.Col(
                                             dbc.Row(
@@ -191,6 +191,7 @@ peakindex_form = dbc.Row(
                                                 className="g-2 justify-content-end",  # g-2 adds a nice gap
                                             ),
                                             xs=12, md="auto",  # whole block drops under input on small screens
+                                            className="mb-3", # fixes y alignment 
                                         ),
                                     ],
                                     className="mb-3 g-2",
@@ -410,7 +411,7 @@ peakindex_form = dbc.Row(
                                         # _field("Index K", "indexK", size='md'),
                                         # _field("Index L", "indexL", size='md'),
                                         _field("Cone Angle [deg]", "indexCone", size='md'),
-                                        _field("Max no. of Spots (empty for all)", "max_peaks", size='md'),
+                                        _field("Max no. of Spots (empty: 200)", "max_peaks", size='md'),
                                     ]
                                 ),
                                     _stack(
@@ -419,20 +420,6 @@ peakindex_form = dbc.Row(
                                         
                                     ]
                                 ),
-                                # dbc.Button(
-                                #     "Show Path to Program",
-                                #     id="collapse2-button",
-                                #     className="mb-3",
-                                #     color="primary",
-                                #     n_clicks=0,
-                                # ),
-                                # dbc.Collapse(
-                                #     [
-                                #         _field("Indexing Path", "indexingPath"),
-                                #     ],
-                                # id="collapse2",
-                                # is_open=False,
-                                # ),
                             ],
                             title="Indexing Parameters",
                             item_id = "item-3",

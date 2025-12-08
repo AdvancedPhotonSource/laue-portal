@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 import laue_portal.database.session_utils as session_utils
 from laue_portal.database.db_utils import get_data_from_id, parse_parameter, parse_IDnumber
 from laue_portal.config import DEFAULT_VARIABLES, VALID_HDF_EXTENSIONS
-from srange import srange
+from laue_portal.utilities.srange import srange
 
 logger = logging.getLogger(__name__)
 
