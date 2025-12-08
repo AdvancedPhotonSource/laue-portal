@@ -37,6 +37,7 @@ from laue_portal.pages.callback_registrars import (
 )
 from srange import srange
 import laue_portal.database.session_utils as session_utils
+from laue_portal.utilities.hkl_parse import str2hkl
 
 logger = logging.getLogger(__name__)
 
@@ -881,20 +882,15 @@ def validate_peakindexing_inputs(ctx):
                 add_validation_message(validation_result, 'errors', 'indexCone', input_prefix, 
                                      custom_message="Index Cone must be between 0 and 180 degrees")
         
-        # 8. Validate indexHKL for this input
+        # 8. Validate indexHKL for this input using str2hkl
         if 'indexHKL' not in validation_result['errors']:
-            current_indexHKL = str(parsed_fields['indexHKL'][i])
-            if len(current_indexHKL) != 3:
+            current_indexHKL_str = str(parsed_fields['indexHKL'][i])
+            try:
+                hkl_values = str2hkl(current_indexHKL_str, Nmin=3, Nmax=3)
+                # Validation successful - hkl_values is a list of 3 integers or floats
+            except (TypeError, ValueError) as e:
                 add_validation_message(validation_result, 'errors', 'indexHKL', input_prefix, 
-                                     custom_message="Index HKL must be 3 digits (e.g., '001')")
-            else:
-                try:
-                    int(current_indexHKL[0])
-                    int(current_indexHKL[1])
-                    int(current_indexHKL[2])
-                except ValueError:
-                    add_validation_message(validation_result, 'errors', 'indexHKL', input_prefix, 
-                                         custom_message="Index HKL must contain only digits")
+                                     custom_message=f"Index HKL parsing error: {str(e)}")
         
     
     # Add successes for fields that passed all validations
@@ -1351,8 +1347,19 @@ def submit_parameters(n,
                         session.add(subjob)
                         subjob_count += 1
         
-                # Extract HKL values from indexHKL parameter
-                current_indexHKL = str(indexHKL_list[i])
+                # Extract HKL values from indexHKL parameter using str2hkl
+                current_indexHKL_str = str(indexHKL_list[i])
+                try:
+                    hkl_values = str2hkl(current_indexHKL_str, Nmin=3, Nmax=3)
+                    # hkl_values is a list of 3 integers or floats [h, k, l]
+                except (TypeError, ValueError) as e:
+                    logger.error(f"Failed to parse HKL '{current_indexHKL_str}': {e}")
+                    set_props("alert-submit", {
+                        'is_open': True,
+                        'children': f'Invalid HKL value: {current_indexHKL_str}',
+                        'color': 'danger'
+                    })
+                    continue
                 
                 # Get filefolder and filenamePrefix
                 current_data_path = data_path_list[i]
@@ -1398,9 +1405,9 @@ def submit_parameters(n,
                     indexKeVmaxCalc=indexKeVmaxCalc_list[i],
                     indexKeVmaxTest=indexKeVmaxTest_list[i],
                     indexAngleTolerance=indexAngleTolerance_list[i],
-                    indexH=int(current_indexHKL[0]),
-                    indexK=int(current_indexHKL[1]),
-                    indexL=int(current_indexHKL[2]),
+                    indexH=int(hkl_values[0]),
+                    indexK=int(hkl_values[1]),
+                    indexL=int(hkl_values[2]),
                     indexCone=indexCone_list[i],
                     energyUnit=energyUnit_list[i],
                     exposureUnit=exposureUnit_list[i],
@@ -1439,9 +1446,9 @@ def submit_parameters(n,
                     "indexKeVmaxTest": indexKeVmaxTest_list[i],
                     "indexAngleTolerance": indexAngleTolerance_list[i],
                     "indexCone": indexCone_list[i],
-                    "indexH": int(current_indexHKL[0]),
-                    "indexK": int(current_indexHKL[1]),
-                    "indexL": int(current_indexHKL[2]),
+                    "indexH": int(hkl_values[0]),
+                    "indexK": int(hkl_values[1]),
+                    "indexL": int(hkl_values[2]),
                 })
 
             session.commit()
