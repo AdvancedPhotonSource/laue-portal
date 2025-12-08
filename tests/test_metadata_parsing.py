@@ -222,7 +222,7 @@ class TestDatabaseIntegration:
         # Verify the metadata row is a valid ORM object
         assert isinstance(metadata_row, db_schema.Metadata)
         assert metadata_row.scanNumber == '276990'
-        assert metadata_row.user_name == 'Sheyfer'
+        assert metadata_row.user_name == 'User1'
         
         # Test database insertion
         with Session(engine) as session:
@@ -241,7 +241,7 @@ class TestDatabaseIntegration:
             # Verify the record was inserted
             retrieved = session.query(db_schema.Metadata).filter_by(scanNumber='276990').first()
             assert retrieved is not None
-            assert retrieved.user_name == 'Sheyfer'
+            assert retrieved.user_name == 'User1'
     
     def test_import_scan_row(self, test_xml_data, temp_database):
         """Test creating Scan ORM objects from parsed data."""
@@ -311,7 +311,7 @@ class TestDatabaseIntegration:
                 # Verify everything was inserted correctly
                 metadata_check = session.query(db_schema.Metadata).filter_by(scanNumber='276990').first()
                 assert metadata_check is not None
-                assert metadata_check.user_name == 'Sheyfer'
+                assert metadata_check.user_name == 'User1'
                 
                 scan_check = session.query(db_schema.Scan).filter_by(scanNumber='276990').all()
                 assert len(scan_check) == len(scan_rows)
