@@ -35,7 +35,7 @@ from laue_portal.pages.callback_registrars import (
     register_check_filenames_callback,
     _merge_field_values
 )
-from srange import srange
+from laue_portal.utilities.srange import srange
 import laue_portal.database.session_utils as session_utils
 from laue_portal.utilities.hkl_parse import str2hkl
 
