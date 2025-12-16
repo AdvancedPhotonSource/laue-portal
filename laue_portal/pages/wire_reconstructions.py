@@ -106,13 +106,14 @@ CUSTOM_HEADER_NAMES = {
 def _get_recons():
     with Session(session_utils.get_engine()) as session:
         # Query with JOINs to get scan count and catalog info for each wire reconstruction
+        # Use LEFT OUTER JOIN for Catalog and Scan to include unlinked wire reconstructions
         query = session.query(
             *VISIBLE_COLS,
             func.concat(func.count(db_schema.Scan.id), 'D').label('scan_dim') # Count dimensions and label it as 'scan_dim'
         ).join(
-            db_schema.Catalog, db_schema.WireRecon.scanNumber == db_schema.Catalog.scanNumber
-        ).join(
             db_schema.Job, db_schema.WireRecon.job_id == db_schema.Job.job_id
+        ).outerjoin(
+            db_schema.Catalog, db_schema.WireRecon.scanNumber == db_schema.Catalog.scanNumber
         ).outerjoin(
             db_schema.Scan, db_schema.WireRecon.scanNumber == db_schema.Scan.scanNumber
         ).group_by(*VISIBLE_COLS)
@@ -123,17 +124,26 @@ def _get_recons():
         techniques = []
         for _, row in wirerecons.iterrows():
             scan_number = row['scanNumber']
-            # Get all scan records for this scan number
-            scans_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_number).all()
-            
-            if scans_data:
-                # Get the filtered technique string (first element of tuple)
-                filtered_str, _ = build_technique_strings(scans_data)
-                techniques.append(filtered_str)
+            # Handle unlinked wire reconstructions (NULL scanNumber)
+            if pd.isna(scan_number) or scan_number is None:
+                techniques.append("unlinked")
             else:
-                techniques.append("none")
+                # Get all scan records for this scan number
+                scans_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == scan_number).all()
+                
+                if scans_data:
+                    # Get the filtered technique string (first element of tuple)
+                    filtered_str, _ = build_technique_strings(scans_data)
+                    techniques.append(filtered_str)
+                else:
+                    techniques.append("none")
         
         wirerecons['technique'] = techniques
+        
+        # Fill NaN values for display purposes
+        wirerecons['sample_name'] = wirerecons['sample_name'].fillna('N/A')
+        wirerecons['aperture'] = wirerecons['aperture'].fillna('N/A')
+        wirerecons['scan_dim'] = wirerecons['scan_dim'].fillna('0D')
 
     # Format columns for ag-grid
     cols = []
@@ -180,10 +190,12 @@ def _get_recons():
             # Custom multi-line display for Scan ID column
             col_def['cellRenderer'] = 'WireReconScanLinkRenderer'  # Use the wire recon specific renderer
             col_def['valueGetter'] = {"function": """
+                params.data.scanNumber == null ? 
+                'Unlinked' :
                 'Scan ID: ' + params.data.scanNumber + '|' +
-                'Sample: ' + params.data.sample_name + '|' +
-                params.data.scan_dim + ': ' + params.data.technique + ' (' + 
-                (params.data.aperture.toLowerCase().includes('coded') ? 'CA' : params.data.aperture) + ')'
+                'Sample: ' + (params.data.sample_name || 'N/A') + '|' +
+                (params.data.scan_dim || '0D') + ': ' + (params.data.technique || 'none') + ' (' + 
+                (params.data.aperture && params.data.aperture.toLowerCase().includes('coded') ? 'CA' : (params.data.aperture || 'N/A')) + ')'
             """}
         elif field_key in ['submit_time', 'start_time', 'finish_time']:
             col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields

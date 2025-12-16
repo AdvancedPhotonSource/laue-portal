@@ -11,7 +11,7 @@ class WireRecon(Base):
 
     # Wire Recon Metadata
     wirerecon_id: Mapped[int] = mapped_column(primary_key=True)
-    scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
+    scanNumber: Mapped[int | None] = mapped_column(ForeignKey("metadata.scanNumber"), nullable=True)
     # calib_id: Mapped[int] = mapped_column(ForeignKey("calib.calib_id"))
     job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"), unique=True)
 

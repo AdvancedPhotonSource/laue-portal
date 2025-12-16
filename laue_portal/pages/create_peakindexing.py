@@ -446,6 +446,9 @@ def validate_peakindexing_inputs(ctx):
         add_validation_message(validation_result, 'successes', 'root_path')
     
     # Parse IDnumber to get scanNumber, wirerecon_id, recon_id, peakindex_id
+    # Mark IDnumber as handled so the general loop skips it
+    parsed_fields['IDnumber'] = IDnumber
+    
     if IDnumber:
         try:
             id_dict = parse_IDnumber(IDnumber, session)
@@ -455,11 +458,19 @@ def validate_peakindexing_inputs(ctx):
                     parsed_fields[key] = parse_parameter(value, num_inputs)
             add_validation_message(validation_result, 'successes', 'IDnumber')
         except ValueError as e:
-            add_validation_message(validation_result, 'errors', 'IDnumber', 
-                                  custom_message=f"ID Number parsing error: {str(e)}")
+            error_message = str(e)
+            # Check if this is a "not found" error - treat as warning instead of error
+            if "not found in database" in error_message:
+                add_validation_message(validation_result, 'warnings', 'IDnumber', 
+                                      custom_message=f"ID Number warning: {error_message}. This will create an unlinked peak indexing.")
+            else:
+                # Other parsing errors (invalid format, etc.) remain as errors
+                add_validation_message(validation_result, 'errors', 'IDnumber', 
+                                      custom_message=f"ID Number parsing error: {error_message}")
     else:
-        # IDnumber is optional - if not provided, just skip
-        pass
+        # IDnumber is optional - if not provided, show warning about unlinked indexing
+        add_validation_message(validation_result, 'warnings', 'IDnumber', 
+                              custom_message="No ID Number provided. This will create an unlinked peak indexing.")
     
     # Validate all other fields by iterating over all_fields    
     for field_name, field_value in all_fields.items():
@@ -1738,6 +1749,7 @@ def load_scan_data_from_url(href):
     With recon_id: /create-peakindexing?scan_id={scan_id}&recon_id={recon_id}
     With wirerecon_id: /create-peakindexing?scan_id={scan_id}&wirerecon_id={wirerecon_id}
     With peakindex_id: /create-peakindexing?scan_id={scan_id}&peakindex_id={peakindex_id}
+    With peakindex_id only (unlinked): /create-peakindexing?peakindex_id={peakindex_id}
     With both recon_id and peakindex_id: /create-peakindexing?scan_id={scan_id}&recon_id={recon_id}&peakindex_id={peakindex_id}
     """
     if not href:
@@ -1754,6 +1766,131 @@ def load_scan_data_from_url(href):
 
     root_path = DEFAULT_VARIABLES.get("root_path", "")
     
+    # Handle case where only peakindex_id is provided (unlinked peakindex)
+    if not scan_id_str and peakindex_id_str:
+        with Session(session_utils.get_engine()) as session:
+            try:
+                peakindex_ids = [int(pid) if pid and pid.lower() != 'none' else None for pid in (peakindex_id_str.split(',') if peakindex_id_str else [])]
+                
+                peakindex_form_data_list = []
+                found_items = []
+                not_found_items = []
+                
+                for current_peakindex_id in peakindex_ids:
+                    if not current_peakindex_id:
+                        continue
+                    
+                    # Query peakindex data directly
+                    peakindex_data = session.query(db_schema.PeakIndex).filter(
+                        db_schema.PeakIndex.peakindex_id == current_peakindex_id
+                    ).first()
+                    
+                    if peakindex_data:
+                        found_items.append(f"peak index {current_peakindex_id}")
+                        
+                        # Use existing peakindex data as the base
+                        peakindex_form_data = peakindex_data
+                        
+                        # Get the scan/recon IDs from the peakindex if they exist
+                        current_scan_id = peakindex_data.scanNumber
+                        current_wirerecon_id = peakindex_data.wirerecon_id
+                        current_recon_id = peakindex_data.recon_id
+                        
+                        # Build output folder template
+                        outputFolder = build_output_folder_template(
+                            scan_num_int=current_scan_id,
+                            data_path=None,
+                            wirerecon_id_int=current_wirerecon_id,
+                            recon_id_int=current_recon_id
+                        )
+                        
+                        # Clear peakindex_id since we're creating a NEW peakindex
+                        peakindex_form_data.peakindex_id = None
+                        peakindex_form_data.outputFolder = outputFolder
+                        
+                        # Convert file paths to relative paths
+                        peakindex_form_data.geoFile = remove_root_path_prefix(peakindex_data.geoFile, root_path)
+                        peakindex_form_data.crystFile = remove_root_path_prefix(peakindex_data.crystFile, root_path)
+                        if peakindex_data.filefolder:
+                            peakindex_form_data.data_path = remove_root_path_prefix(peakindex_data.filefolder, root_path)
+                        if peakindex_data.filenamePrefix:
+                            peakindex_form_data.filenamePrefix = peakindex_data.filenamePrefix
+                        
+                        # Add root_path
+                        peakindex_form_data.root_path = root_path
+                        
+                        peakindex_form_data_list.append(peakindex_form_data)
+                    else:
+                        not_found_items.append(f"peak index {current_peakindex_id}")
+                
+                # Create pooled peakindex_form_data by combining values from all peakindexes
+                if peakindex_form_data_list:
+                    pooled_peakindex_form_data = db_schema.PeakIndex()
+                    
+                    # Pool all attributes
+                    all_attrs = list(db_schema.PeakIndex.__table__.columns.keys()) + ['root_path', 'data_path', 'filenamePrefix']
+                    
+                    for attr in all_attrs:
+                        values = []
+                        for d in peakindex_form_data_list:
+                            if hasattr(d, attr):
+                                values.append(getattr(d, attr))
+                        
+                        if values:
+                            pooled_value = _merge_field_values(values)
+                            setattr(pooled_peakindex_form_data, attr, pooled_value)
+                    
+                    # User text
+                    pooled_peakindex_form_data.author = DEFAULT_VARIABLES['author']
+                    pooled_peakindex_form_data.notes = DEFAULT_VARIABLES['notes']
+                    
+                    # Populate the form
+                    set_peakindex_form_props(pooled_peakindex_form_data)
+                    
+                    # Set alert based on what was found
+                    if not_found_items:
+                        set_props("alert-scan-loaded", {
+                            'is_open': True,
+                            'children': f"Loaded data for {len(found_items)} items. Could not find: {', '.join(not_found_items)}.",
+                            'color': 'warning'
+                        })
+                    else:
+                        set_props("alert-scan-loaded", {
+                            'is_open': True,
+                            'children': f"Successfully loaded and merged data from {len(found_items)} items into the form.",
+                            'color': 'success'
+                        })
+                else:
+                    # No valid peakindexes found
+                    set_props("alert-scan-loaded", {
+                        'is_open': True,
+                        'children': f"Could not find any of the requested items: {', '.join(not_found_items)}. Displaying default values.",
+                        'color': 'danger'
+                    })
+                    
+                    # Show defaults
+                    peakindex_form_data = db_schema.PeakIndex(
+                        # User text
+                        author=DEFAULT_VARIABLES['author'],
+                        notes=DEFAULT_VARIABLES['notes'],
+                        # Processing parameters
+                        **{k: v for k, v in PEAKINDEX_DEFAULTS.items()}
+                    )
+                    peakindex_form_data.root_path = root_path
+                    peakindex_form_data.data_path = ""
+                    peakindex_form_data.filenamePrefix = ""
+                    set_peakindex_form_props(peakindex_form_data)
+                    
+            except Exception as e:
+                set_props("alert-scan-loaded", {
+                    'is_open': True,
+                    'children': f'Error loading peakindex data: {str(e)}',
+                    'color': 'danger'
+                })
+        
+        return datetime.datetime.now().isoformat()
+    
+    # Original behavior: scan_id is provided
     if scan_id_str:
         with Session(session_utils.get_engine()) as session:
             # # Get next peakindex_id
@@ -1836,9 +1973,13 @@ def load_scan_data_from_url(href):
                                     # Use existing peakindex data as the base
                                     peakindex_form_data = peakindex_data
                                     # Update only the necessary fields
-                                    # peakindex_form_data.scanNumber = current_scan_id
-                                    # peakindex_form_data.recon_id = current_recon_id
-                                    # peakindex_form_data.wirerecon_id = current_wirerecon_id
+                                    # Override the scan/recon IDs with what was passed in the URL
+                                    # This ensures the ID Number field shows the underlying scan, not the peakindex
+                                    peakindex_form_data.scanNumber = current_scan_id
+                                    peakindex_form_data.recon_id = current_recon_id
+                                    peakindex_form_data.wirerecon_id = current_wirerecon_id
+                                    # Clear peakindex_id since we're creating a NEW peakindex, not editing the existing one
+                                    peakindex_form_data.peakindex_id = None
                                     peakindex_form_data.outputFolder = outputFolder
                                     # Convert file paths to relative paths
                                     peakindex_form_data.geoFile = remove_root_path_prefix(peakindex_data.geoFile, root_path)

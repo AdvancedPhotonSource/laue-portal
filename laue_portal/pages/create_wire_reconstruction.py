@@ -285,21 +285,7 @@ def validate_wire_reconstruction_inputs(ctx):
     # Extract individual field values
     root_path = all_fields.get('root_path', '')
     IDnumber = all_fields.get('IDnumber', '')
-    # Old individual ID fields (now parsed from IDnumber):
-    # scanNumber = all_params.get('scanNumber')
-    # wirerecon_id = all_params.get('wirerecon_id')
-    
-    # Other parameters (kept as comments for reference):
-    # data_path = all_fields.get('data_path')
-    # filenamePrefix = all_params.get('filenamePrefix')
-    # scanPoints = all_params.get('scanPoints')
-    # geoFile = all_params.get('geoFile')
-    # depth_start = all_params.get('depth_start')
-    # depth_end = all_params.get('depth_end')
-    # depth_resolution = all_params.get('depth_resolution')
-    # percent_brightest = all_params.get('percent_brightest')
-    # outputFolder = all_params.get('outputFolder')
-    # scanNumber = all_params.get('scanNumber')
+
     
     # Validate root_path directory exists
     if not root_path:
@@ -312,6 +298,9 @@ def validate_wire_reconstruction_inputs(ctx):
         add_validation_message(validation_result, 'successes', 'root_path')
     
     # Parse IDnumber to get scanNumber, wirerecon_id
+    # Mark IDnumber as handled so the general loop skips it
+    parsed_fields['IDnumber'] = IDnumber
+    
     if IDnumber:
         try:
             id_dict = parse_IDnumber(IDnumber, session)
@@ -321,11 +310,19 @@ def validate_wire_reconstruction_inputs(ctx):
                     parsed_fields[key] = parse_parameter(value, num_inputs)
             add_validation_message(validation_result, 'successes', 'IDnumber')
         except ValueError as e:
-            add_validation_message(validation_result, 'errors', 'IDnumber', 
-                                  custom_message=f"ID Number parsing error: {str(e)}")
+            error_message = str(e)
+            # Check if this is a "not found" error - treat as warning instead of error
+            if "not found in database" in error_message:
+                add_validation_message(validation_result, 'warnings', 'IDnumber', 
+                                      custom_message=f"ID Number warning: {error_message}. This will create an unlinked wire reconstruction.")
+            else:
+                # Other parsing errors (invalid format, etc.) remain as errors
+                add_validation_message(validation_result, 'errors', 'IDnumber', 
+                                      custom_message=f"ID Number parsing error: {error_message}")
     else:
-        # IDnumber is optional - if not provided, just skip
-        pass
+        # IDnumber is optional - if not provided, show warning about unlinked reconstruction
+        add_validation_message(validation_result, 'warnings', 'IDnumber', 
+                              custom_message="No ID Number provided. This will create an unlinked wire reconstruction.")
     
     # Validate all other fields by iterating over all_fields    
     for field_name, field_value in all_fields.items():
