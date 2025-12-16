@@ -256,18 +256,28 @@ def selected_peakindex_href(rows,href):
     scan_ids, wirerecon_ids, recon_ids, peakindex_ids = [], [], [], []
 
     for row in rows:
+        # scanNumber can be None for unlinked peakindexes - that's okay
         if row.get('scanNumber'):
             scan_ids.append(str(row['scanNumber']))
-        else:
-            return base_href
+        # Note: We don't return base_href here anymore - unlinked peakindexes are valid
         
         wirerecon_ids.append(str(row['wirerecon_id']) if row.get('wirerecon_id') else '')
         recon_ids.append(str(row['recon_id']) if row.get('recon_id') else '')
         peakindex_ids.append(str(row['peakindex_id']) if row.get('peakindex_id') else '')
 
-    query_params = [f"scan_id={','.join(scan_ids)}"]
-    if any(wirerecon_ids): query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
-    if any(recon_ids): query_params.append(f"recon_id={','.join(recon_ids)}")
-    if any(peakindex_ids): query_params.append(f"peakindex_id={','.join(peakindex_ids)}")
+    # Build query params - only include non-empty lists
+    query_params = []
+    if any(scan_ids): 
+        query_params.append(f"scan_id={','.join(scan_ids)}")
+    if any(wirerecon_ids): 
+        query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
+    if any(recon_ids): 
+        query_params.append(f"recon_id={','.join(recon_ids)}")
+    if any(peakindex_ids): 
+        query_params.append(f"peakindex_id={','.join(peakindex_ids)}")
+
+    # If no query params at all, return base href
+    if not query_params:
+        return base_href
 
     return f"{base_href}?{'&'.join(query_params)}"
