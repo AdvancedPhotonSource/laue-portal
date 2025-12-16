@@ -1847,9 +1847,13 @@ def load_scan_data_from_url(href):
                                     # Use existing peakindex data as the base
                                     peakindex_form_data = peakindex_data
                                     # Update only the necessary fields
-                                    # peakindex_form_data.scanNumber = current_scan_id
-                                    # peakindex_form_data.recon_id = current_recon_id
-                                    # peakindex_form_data.wirerecon_id = current_wirerecon_id
+                                    # Override the scan/recon IDs with what was passed in the URL
+                                    # This ensures the ID Number field shows the underlying scan, not the peakindex
+                                    peakindex_form_data.scanNumber = current_scan_id
+                                    peakindex_form_data.recon_id = current_recon_id
+                                    peakindex_form_data.wirerecon_id = current_wirerecon_id
+                                    # Clear peakindex_id since we're creating a NEW peakindex, not editing the existing one
+                                    peakindex_form_data.peakindex_id = None
                                     peakindex_form_data.outputFolder = outputFolder
                                     # Convert file paths to relative paths
                                     peakindex_form_data.geoFile = remove_root_path_prefix(peakindex_data.geoFile, root_path)
