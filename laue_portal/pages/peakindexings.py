@@ -163,6 +163,8 @@ def _get_peakindexings():
             col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
         elif field_key == 'scanNumber':
             col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+            # Handle NULL scanNumber for unlinked indexes
+            col_def['valueGetter'] = {"function": "params.data.scanNumber == null ? 'Unlinked' : params.data.scanNumber"}
         elif field_key in ['submit_time', 'start_time', 'finish_time']:
             col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
         elif field_key == 'status':

@@ -12,7 +12,7 @@ class PeakIndex(Base):
 
     # Peak Index Metadata
     peakindex_id: Mapped[int] = mapped_column(primary_key=True)
-    scanNumber: Mapped[int] = mapped_column(ForeignKey("metadata.scanNumber"))
+    scanNumber: Mapped[int | None] = mapped_column(ForeignKey("metadata.scanNumber"), nullable=True)
     job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"), unique=True)
 
     filefolder: Mapped[str] = mapped_column(String)  # infile

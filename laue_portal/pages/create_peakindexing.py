@@ -446,6 +446,9 @@ def validate_peakindexing_inputs(ctx):
         add_validation_message(validation_result, 'successes', 'root_path')
     
     # Parse IDnumber to get scanNumber, wirerecon_id, recon_id, peakindex_id
+    # Mark IDnumber as handled so the general loop skips it
+    parsed_fields['IDnumber'] = IDnumber
+    
     if IDnumber:
         try:
             id_dict = parse_IDnumber(IDnumber, session)
@@ -455,11 +458,19 @@ def validate_peakindexing_inputs(ctx):
                     parsed_fields[key] = parse_parameter(value, num_inputs)
             add_validation_message(validation_result, 'successes', 'IDnumber')
         except ValueError as e:
-            add_validation_message(validation_result, 'errors', 'IDnumber', 
-                                  custom_message=f"ID Number parsing error: {str(e)}")
+            error_message = str(e)
+            # Check if this is a "not found" error - treat as warning instead of error
+            if "not found in database" in error_message:
+                add_validation_message(validation_result, 'warnings', 'IDnumber', 
+                                      custom_message=f"ID Number warning: {error_message}. This will create an unlinked peak indexing.")
+            else:
+                # Other parsing errors (invalid format, etc.) remain as errors
+                add_validation_message(validation_result, 'errors', 'IDnumber', 
+                                      custom_message=f"ID Number parsing error: {error_message}")
     else:
-        # IDnumber is optional - if not provided, just skip
-        pass
+        # IDnumber is optional - if not provided, show warning about unlinked indexing
+        add_validation_message(validation_result, 'warnings', 'IDnumber', 
+                              custom_message="No ID Number provided. This will create an unlinked peak indexing.")
     
     # Validate all other fields by iterating over all_fields    
     for field_name, field_value in all_fields.items():
