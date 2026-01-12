@@ -2,7 +2,7 @@
 Table for sub-jobs within a computation jobs.
 """
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import Integer, String, DateTime, ForeignKey
+from sqlalchemy import Integer, String, DateTime, Text, ForeignKey
 from laue_portal.database.base import Base
 
 
@@ -20,3 +20,4 @@ class SubJob(Base):
     finish_time: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
 
     messages: Mapped[str] = mapped_column(String, nullable=True)
+    command: Mapped[str] = mapped_column(Text, nullable=True)  # CLI command(s) used to execute the job

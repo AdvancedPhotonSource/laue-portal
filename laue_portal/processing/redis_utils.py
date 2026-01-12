@@ -636,6 +636,16 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
                 job_data.status = STATUS_REVERSE_MAPPING["Finished"]
                 job_data.finish_time = datetime.now()
                 
+                # Store the CLI command(s) used
+                if hasattr(job_data, 'command') and result is not None:
+                    # Extract command based on result type
+                    if hasattr(result, 'command') and result.command:
+                        # Wire reconstruction - single command string
+                        job_data.command = result.command
+                    elif hasattr(result, 'command_history') and result.command_history:
+                        # Peak indexing - list of commands
+                        job_data.command = '\n'.join(result.command_history)
+                
                 # Store the job result directly
                 if hasattr(job_data, 'messages'):
                     # Format the result for display

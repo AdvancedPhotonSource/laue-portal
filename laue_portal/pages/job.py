@@ -248,17 +248,38 @@ def load_job_data(href):
                             
                             subjob_badge = dbc.Badge(subjob_status_text, color=subjob_status_color, className="me-2")
                             
-                            # Create subjob output card
-                            subjob_card = dbc.Card([
-                                dbc.CardHeader([
-                                    html.Span([
-                                        html.Strong(f"SubJob {subjob.subjob_id}"),
-                                        " - ",
-                                        subjob_badge,
-                                        html.Small(f"Computer: {subjob.computer_name}", className="text-muted ms-2")
+                            # Build card body content
+                            card_body_content = []
+                            
+                            # Add command section if available
+                            if subjob.command:
+                                card_body_content.append(
+                                    html.Div([
+                                        html.Strong("Command:", className="text-primary"),
+                                        html.Pre(
+                                            subjob.command,
+                                            style={
+                                                "whiteSpace": "pre-wrap",
+                                                "wordBreak": "break-all",
+                                                "backgroundColor": "#1e1e1e",
+                                                "color": "#d4d4d4",
+                                                "padding": "10px",
+                                                "borderRadius": "4px",
+                                                "fontSize": "0.8rem",
+                                                "fontFamily": "monospace",
+                                                "marginTop": "5px",
+                                                "marginBottom": "10px",
+                                                "maxHeight": "150px",
+                                                "overflowY": "auto"
+                                            }
+                                        )
                                     ])
-                                ], className="py-2"),
-                                dbc.CardBody([
+                                )
+                            
+                            # Add output section
+                            card_body_content.append(
+                                html.Div([
+                                    html.Strong("Output:") if subjob.command else None,
                                     html.Pre(
                                         subjob.messages or "No output available",
                                         style={
@@ -269,10 +290,24 @@ def load_job_data(href):
                                             "borderRadius": "4px",
                                             "fontSize": "0.875rem",
                                             "maxHeight": "300px",
-                                            "overflowY": "auto"
+                                            "overflowY": "auto",
+                                            "marginTop": "5px" if subjob.command else "0"
                                         }
                                     )
-                                ], className="py-2")
+                                ])
+                            )
+                            
+                            # Create subjob output card
+                            subjob_card = dbc.Card([
+                                dbc.CardHeader([
+                                    html.Span([
+                                        html.Strong(f"SubJob {subjob.subjob_id}"),
+                                        " - ",
+                                        subjob_badge,
+                                        html.Small(f"Computer: {subjob.computer_name}", className="text-muted ms-2")
+                                    ])
+                                ], className="py-2"),
+                                dbc.CardBody(card_body_content, className="py-2")
                             ], className="mb-2")
                             
                             subjob_output.append(subjob_card)
