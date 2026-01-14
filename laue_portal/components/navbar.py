@@ -49,7 +49,7 @@ navbar = dbc.Navbar(
         ],
         fluid=True,
     ),
-    className="py-3",
+    className="py-3 fixed-top",
     color="primary",
     dark=True,
 )
