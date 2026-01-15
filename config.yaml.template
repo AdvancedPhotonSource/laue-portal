@@ -31,6 +31,56 @@ DASH_CONFIG:
   port: 2082
   debug: true
 
+# Peak indexing default parameters
+PEAKINDEX_DEFAULTS:
+  # File/scan parameters (typically overridden per job)
+  scanPoints: ""            # Empty string - user must provide
+  depthRange: ""            # Empty string - optional
+  
+  # Processing parameters
+  threshold: null           # Auto-detect if empty
+  thresholdRatio: null      # Auto-detect if empty
+  maxRfactor: 0.5
+  boxsize: 18
+  max_number: 300
+  min_separation: 20
+  peakShape: "Lorentzian"
+  min_size: 3
+  max_peaks: 200
+  smooth: false
+  cosmicFilter: true
+  
+  # Indexing parameters
+  indexKeVmaxCalc: 17.2
+  indexKeVmaxTest: 35.0
+  indexAngleTolerance: 0.1
+  indexH: 0
+  indexK: 0
+  indexL: 1
+  indexCone: 72.0
+  
+  # Detector crop (full detector)
+  detectorCropX1: 0
+  detectorCropX2: 2047
+  detectorCropY1: 0
+  detectorCropY2: 2047
+  
+  # Units
+  energyUnit: "keV"
+  exposureUnit: "sec"
+  recipLatticeUnit: "1/nm"
+  latticeParametersUnit: "nm"
+  
+  # File paths (relative to root_path)
+  outputFolder: "analysis/scan_%d/index_%d"
+  geoFile: "tests/data/geo/geoN_2022-03-29_14-15-05.xml"
+  crystFile: "tests/data/crystal/Al.xtal"
+  maskFile: "None"
+  
+  # Other
+  beamline: "34ID-E"
+  depth: .nan              # YAML nan value
+
 # Motor groups configuration
 MOTOR_GROUPS:
   sample:

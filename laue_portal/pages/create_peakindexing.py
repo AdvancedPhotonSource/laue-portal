@@ -16,7 +16,7 @@ from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_
 from laue_portal.components.form_base import _field
 from laue_portal.components.validation_alerts import validation_alerts
 from laue_portal.processing.redis_utils import enqueue_peakindexing, STATUS_REVERSE_MAPPING
-from laue_portal.config import DEFAULT_VARIABLES
+from laue_portal.config import DEFAULT_VARIABLES, PEAKINDEX_DEFAULTS
 from laue_portal.pages.validation_helpers import (
     apply_validation_highlights,
     update_validation_alerts,
@@ -114,51 +114,101 @@ JOB_DEFAULTS = {
     "finish_time": datetime.datetime.now(),
 }
 
-PEAKINDEX_DEFAULTS = {
-    "scanNumber": 276994,
-    # "peakProgram": "peaksearch",
-    "threshold": "", #250
-    "thresholdRatio": "",
-    "maxRfactor": 0.5, #0.5
-    "boxsize": 18, #18
-    "max_number": 300,
-    "min_separation": 20, #40
-    "peakShape": "L", #"Lorentzian"
-    # "scanPointStart": 1,
-    # "scanPointEnd": 2,
-    "scanPoints": "",#"1-2",  # String field for srange parsing
-    "depthRange": "",  # Empty string for no depth range
-    "detectorCropX1": 0,
-    "detectorCropX2": 2047,
-    "detectorCropY1": 0,
-    "detectorCropY2": 2047,
-    "min_size": 3, #1.13
-    "max_peaks": 200,
-    "smooth": False, #0
-    "maskFile": "None", 
-    "indexKeVmaxCalc": 17.2, #17.2
-    "indexKeVmaxTest": 35.0, #30.0
-    "indexAngleTolerance": 0.1, #0.1
-    "indexH": 0, #1
-    "indexK": 0, #1
-    "indexL": 1,
-    "indexCone": 72.0,
-    "energyUnit": "keV",
-    "exposureUnit": "sec",
-    "cosmicFilter": True,  # Assuming the last occurrence in YAML is the one to use
-    "recipLatticeUnit": "1/nm",
-    "latticeParametersUnit": "nm",
-    # "peaksearchPath": None,
-    # "p2qPath": None,
-    # "indexingPath": None,
-    "outputFolder": "analysis/scan_%d/index_%d",# "analysis/scan_%d/rec_%d/index_%d",
-    # "filefolder": "tests/data/gdata",
-    # "filenamePrefix": "HAs_long_laue1_",
-    "geoFile": "tests/data/geo/geoN_2022-03-29_14-15-05.xml",
-    "crystFile": "tests/data/crystal/Al.xtal",
-    "depth": float('nan'), # Representing YAML nan
-    "beamline": "34ID-E"
-}
+# PEAKINDEX_DEFAULTS is now imported from laue_portal.config
+
+
+def create_default_peakindex(overrides=None):
+    """
+    Create a PeakIndex object populated with defaults from config.
+    
+    This is the single source of truth for default PeakIndex creation.
+    All defaults come from PEAKINDEX_DEFAULTS (config.yaml) and DEFAULT_VARIABLES.
+    
+    Args:
+        overrides: Dict of values to override defaults (e.g., from metadata or URL params).
+                   Keys should match PeakIndex model field names.
+    
+    Returns:
+        db_schema.PeakIndex with all defaults set, plus extra attributes:
+        - root_path: from DEFAULT_VARIABLES
+        - data_path: empty string (to be populated later)
+        - filenamePrefix: empty string (to be populated later)
+    """
+    # Start with config defaults
+    defaults = {
+        # User text from DEFAULT_VARIABLES
+        'author': DEFAULT_VARIABLES.get('author', ''),
+        'notes': DEFAULT_VARIABLES.get('notes', ''),
+        
+        # All processing parameters from PEAKINDEX_DEFAULTS
+        'threshold': PEAKINDEX_DEFAULTS.get('threshold'),
+        'thresholdRatio': PEAKINDEX_DEFAULTS.get('thresholdRatio'),
+        'maxRfactor': PEAKINDEX_DEFAULTS.get('maxRfactor'),
+        'boxsize': PEAKINDEX_DEFAULTS.get('boxsize'),
+        'max_number': PEAKINDEX_DEFAULTS.get('max_number'),
+        'min_separation': PEAKINDEX_DEFAULTS.get('min_separation'),
+        'peakShape': PEAKINDEX_DEFAULTS.get('peakShape'),
+        'min_size': PEAKINDEX_DEFAULTS.get('min_size'),
+        'max_peaks': PEAKINDEX_DEFAULTS.get('max_peaks'),
+        'smooth': PEAKINDEX_DEFAULTS.get('smooth'),
+        'cosmicFilter': PEAKINDEX_DEFAULTS.get('cosmicFilter'),
+        'maskFile': PEAKINDEX_DEFAULTS.get('maskFile'),
+        
+        # Indexing parameters
+        'indexKeVmaxCalc': PEAKINDEX_DEFAULTS.get('indexKeVmaxCalc'),
+        'indexKeVmaxTest': PEAKINDEX_DEFAULTS.get('indexKeVmaxTest'),
+        'indexAngleTolerance': PEAKINDEX_DEFAULTS.get('indexAngleTolerance'),
+        'indexH': PEAKINDEX_DEFAULTS.get('indexH'),
+        'indexK': PEAKINDEX_DEFAULTS.get('indexK'),
+        'indexL': PEAKINDEX_DEFAULTS.get('indexL'),
+        'indexCone': PEAKINDEX_DEFAULTS.get('indexCone'),
+        
+        # Detector crop
+        'detectorCropX1': PEAKINDEX_DEFAULTS.get('detectorCropX1'),
+        'detectorCropX2': PEAKINDEX_DEFAULTS.get('detectorCropX2'),
+        'detectorCropY1': PEAKINDEX_DEFAULTS.get('detectorCropY1'),
+        'detectorCropY2': PEAKINDEX_DEFAULTS.get('detectorCropY2'),
+        
+        # Units
+        'energyUnit': PEAKINDEX_DEFAULTS.get('energyUnit'),
+        'exposureUnit': PEAKINDEX_DEFAULTS.get('exposureUnit'),
+        'recipLatticeUnit': PEAKINDEX_DEFAULTS.get('recipLatticeUnit'),
+        'latticeParametersUnit': PEAKINDEX_DEFAULTS.get('latticeParametersUnit'),
+        
+        # File paths
+        'outputFolder': PEAKINDEX_DEFAULTS.get('outputFolder'),
+        'geoFile': PEAKINDEX_DEFAULTS.get('geoFile'),
+        'crystFile': PEAKINDEX_DEFAULTS.get('crystFile'),
+        
+        # Other
+        'beamline': PEAKINDEX_DEFAULTS.get('beamline'),
+        'depth': PEAKINDEX_DEFAULTS.get('depth'),
+        
+        # Scan/depth ranges (typically empty, user provides)
+        'scanPoints': PEAKINDEX_DEFAULTS.get('scanPoints', ''),
+        'depthRange': PEAKINDEX_DEFAULTS.get('depthRange', ''),
+    }
+    
+    # Apply overrides
+    if overrides:
+        defaults.update(overrides)
+    
+    # Calculate srange lengths
+    scanPoints_str = defaults.get('scanPoints', '') or ''
+    depthRange_str = defaults.get('depthRange', '') or ''
+    defaults['scanPointslen'] = srange(scanPoints_str).len() if scanPoints_str else 0
+    defaults['depthRangelen'] = srange(depthRange_str).len() if depthRange_str else 0
+    
+    # Create PeakIndex object
+    peakindex = db_schema.PeakIndex(**defaults)
+    
+    # Add extra attributes for form display (not in database model)
+    peakindex.root_path = DEFAULT_VARIABLES.get('root_path', '')
+    peakindex.data_path = ''
+    peakindex.filenamePrefix = ''
+    
+    return peakindex
+
 
 CATALOG_DEFAULTS = {
     "filefolder": "tests/data/gdata",
@@ -1251,6 +1301,9 @@ def submit_parameters(n,
         if not max_peaks or max_peaks == '':
             max_peaks = str(PEAKINDEX_DEFAULTS["max_peaks"])
         max_peaks_list = parse_parameter(max_peaks, num_inputs)
+        # Default checkbox values to False if None (never interacted with)
+        if smooth is None:
+            smooth = False
         smooth_list = parse_parameter(smooth, num_inputs)
         maskFile_list = parse_parameter(maskFile, num_inputs)
         indexKeVmaxCalc_list = parse_parameter(indexKeVmaxCalc, num_inputs)
@@ -1261,6 +1314,9 @@ def submit_parameters(n,
         # Beam units are not in the form, so use defaults from PEAKINDEX_DEFAULTS
         energyUnit_list = parse_parameter(PEAKINDEX_DEFAULTS["energyUnit"], num_inputs)
         exposureUnit_list = parse_parameter(PEAKINDEX_DEFAULTS["exposureUnit"], num_inputs)
+        # Default checkbox values to False if None (never interacted with)
+        if cosmicFilter is None:
+            cosmicFilter = False
         cosmicFilter_list = parse_parameter(cosmicFilter, num_inputs)
         # Lattice units are not in the form, so use defaults from PEAKINDEX_DEFAULTS
         recipLatticeUnit_list = parse_parameter(PEAKINDEX_DEFAULTS["recipLatticeUnit"], num_inputs)
@@ -1766,6 +1822,13 @@ def load_scan_data_from_url(href):
 
     root_path = DEFAULT_VARIABLES.get("root_path", "")
     
+    # Handle case where no query parameters are provided - load defaults
+    if not scan_id_str and not peakindex_id_str:
+        # Use factory function to create default PeakIndex
+        peakindex_form_data = create_default_peakindex()
+        set_peakindex_form_props(peakindex_form_data)
+        return datetime.datetime.now().isoformat()
+    
     # Handle case where only peakindex_id is provided (unlinked peakindex)
     if not scan_id_str and peakindex_id_str:
         with Session(session_utils.get_engine()) as session:
@@ -1868,17 +1931,8 @@ def load_scan_data_from_url(href):
                         'color': 'danger'
                     })
                     
-                    # Show defaults
-                    peakindex_form_data = db_schema.PeakIndex(
-                        # User text
-                        author=DEFAULT_VARIABLES['author'],
-                        notes=DEFAULT_VARIABLES['notes'],
-                        # Processing parameters
-                        **{k: v for k, v in PEAKINDEX_DEFAULTS.items()}
-                    )
-                    peakindex_form_data.root_path = root_path
-                    peakindex_form_data.data_path = ""
-                    peakindex_form_data.filenamePrefix = ""
+                    # Show defaults using factory function
+                    peakindex_form_data = create_default_peakindex()
                     set_peakindex_form_props(peakindex_form_data)
                     
             except Exception as e:
@@ -2095,58 +2149,10 @@ def load_scan_data_from_url(href):
                             'color': 'danger'
                         })
                     
-                    peakindex_form_data = db_schema.PeakIndex(
-                        scanNumber=str(scan_id_str).replace(',','; '),
-                        
-                        # User text
-                        author=DEFAULT_VARIABLES['author'],
-                        notes=DEFAULT_VARIABLES['notes'],
-                        
-                        # Processing parameters
-                        threshold=PEAKINDEX_DEFAULTS["threshold"],
-                        thresholdRatio=PEAKINDEX_DEFAULTS["thresholdRatio"],
-                        maxRfactor=PEAKINDEX_DEFAULTS["maxRfactor"],
-                        boxsize=PEAKINDEX_DEFAULTS["boxsize"],
-                        max_number=PEAKINDEX_DEFAULTS["max_number"],
-                        min_separation=PEAKINDEX_DEFAULTS["min_separation"],
-                        peakShape=PEAKINDEX_DEFAULTS["peakShape"],
-                        scanPoints=PEAKINDEX_DEFAULTS["scanPoints"],
-                        scanPointslen=srange(PEAKINDEX_DEFAULTS["scanPoints"]).len(),
-                        depthRange=PEAKINDEX_DEFAULTS["depthRange"],
-                        depthRangelen=srange(PEAKINDEX_DEFAULTS["depthRange"]).len(),
-                        detectorCropX1=PEAKINDEX_DEFAULTS["detectorCropX1"],
-                        detectorCropX2=PEAKINDEX_DEFAULTS["detectorCropX2"],
-                        detectorCropY1=PEAKINDEX_DEFAULTS["detectorCropY1"],
-                        detectorCropY2=PEAKINDEX_DEFAULTS["detectorCropY2"],
-                        min_size=PEAKINDEX_DEFAULTS["min_size"],
-                        max_peaks=PEAKINDEX_DEFAULTS["max_peaks"],
-                        smooth=PEAKINDEX_DEFAULTS["smooth"],
-                        maskFile=PEAKINDEX_DEFAULTS["maskFile"],
-                        indexKeVmaxCalc=PEAKINDEX_DEFAULTS["indexKeVmaxCalc"],
-                        indexKeVmaxTest=PEAKINDEX_DEFAULTS["indexKeVmaxTest"],
-                        indexAngleTolerance=PEAKINDEX_DEFAULTS["indexAngleTolerance"],
-                        indexH=PEAKINDEX_DEFAULTS["indexH"],
-                        indexK=PEAKINDEX_DEFAULTS["indexK"],
-                        indexL=PEAKINDEX_DEFAULTS["indexL"],
-                        indexCone=PEAKINDEX_DEFAULTS["indexCone"],
-                        energyUnit=PEAKINDEX_DEFAULTS["energyUnit"],
-                        exposureUnit=PEAKINDEX_DEFAULTS["exposureUnit"],
-                        cosmicFilter=PEAKINDEX_DEFAULTS["cosmicFilter"],
-                        recipLatticeUnit=PEAKINDEX_DEFAULTS["recipLatticeUnit"],
-                        latticeParametersUnit=PEAKINDEX_DEFAULTS["latticeParametersUnit"],
-                        outputFolder=PEAKINDEX_DEFAULTS["outputFolder"],
-                        geoFile=PEAKINDEX_DEFAULTS["geoFile"],
-                        crystFile=PEAKINDEX_DEFAULTS["crystFile"],
-                        depth=PEAKINDEX_DEFAULTS["depth"],
-                        beamline=PEAKINDEX_DEFAULTS["beamline"]
+                    # Use factory function for fallback defaults
+                    peakindex_form_data = create_default_peakindex(
+                        overrides={'scanNumber': str(scan_id_str).replace(',', '; ')}
                     )
-                    
-                    # Set root_path
-                    peakindex_form_data.root_path = root_path
-                    peakindex_form_data.data_path = ""
-                    peakindex_form_data.filenamePrefix = ""
-                    
-                    # Populate the form with the defaults
                     set_peakindex_form_props(peakindex_form_data)
 
             except Exception as e:
