@@ -206,6 +206,9 @@ def create_default_peakindex(overrides=None):
     peakindex.root_path = DEFAULT_VARIABLES.get('root_path', '')
     peakindex.data_path = ''
     peakindex.filenamePrefix = ''
+    # Output XML: If absolute path, saves to that path directly.
+    # If relative path or just filename, saves to the peakindexing output folder.
+    peakindex.outputXML = PEAKINDEX_DEFAULTS.get('outputXML', 'output.xml')
     
     return peakindex
 

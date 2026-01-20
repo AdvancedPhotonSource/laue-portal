@@ -73,6 +73,7 @@ PEAKINDEX_DEFAULTS:
   
   # File paths (relative to root_path)
   outputFolder: "analysis/scan_%d/index_%d"
+  outputXML: "output.xml"   
   geoFile: "tests/data/geo/geoN_2022-03-29_14-15-05.xml"
   crystFile: "tests/data/crystal/Al.xtal"
   maskFile: "None"
