@@ -66,6 +66,7 @@ class PeakIndex(Base):
     # p2qPath: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     # indexingPath: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     outputFolder: Mapped[str] = mapped_column(String)
+    outputXML: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # Output XML filename/path for merged results
     # filefolder: Mapped[str] = mapped_column(String)
     # filenamePrefix: Mapped[str] = mapped_column(String)
     geoFile: Mapped[str] = mapped_column(String)

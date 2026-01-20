@@ -1159,6 +1159,7 @@ def validate_inputs(
     State('geoFile', 'value'),
     State('crystFile', 'value'),
     State('depth', 'value'),
+    State('outputXML', 'value'),  # Output XML filename for merged results
     # State('beamline', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
     
     prevent_initial_call=True,
@@ -1216,6 +1217,7 @@ def submit_parameters(n,
     geometry_file,
     crystal_file,
     depth,
+    outputXML,  # Output XML filename for merged results
     # beamline,  # Not in form - using PEAKINDEX_DEFAULTS
     
 ):
@@ -1396,9 +1398,9 @@ def submit_parameters(n,
                             'color': 'danger'
                         })
 
-                # Convert relative paths to full paths
-                full_geometry_file = os.path.join(root_path, current_geo_file.lstrip('/'))
-                full_crystal_file = os.path.join(root_path, current_crystal_file.lstrip('/'))
+                # Convert relative paths to full paths, but respect absolute paths
+                full_geometry_file = resolve_path_with_root(current_geo_file, root_path)
+                full_crystal_file = resolve_path_with_root(current_crystal_file, root_path)
 
                 # Get next ID for this action
                 next_peakindex_id = db_utils.get_next_id(session, db_schema.PeakIndex)
@@ -1490,6 +1492,9 @@ def submit_parameters(n,
                 # Build full path
                 current_full_data_path=os.path.join(root_path, current_data_path.lstrip('/'))
                 
+                # Determine outputXML value, using default if not provided
+                current_outputXML = outputXML or PEAKINDEX_DEFAULTS.get('outputXML', 'output.xml')
+                
                 peakindex = db_schema.PeakIndex(
                     scanNumber = scan_num_int,
                     job_id = job_id,
@@ -1540,6 +1545,7 @@ def submit_parameters(n,
                     # p2qPath=p2qPath,
                     # indexingPath=indexingPath,
                     outputFolder=full_output_folder,  # Store full path in database
+                    outputXML=current_outputXML,  # Store output XML filename/path in database
                     geoFile=full_geometry_file,  # Store full path in database
                     crystFile=full_crystal_file,  # Store full path in database
                     depth=depth_list[i],
@@ -1571,6 +1577,7 @@ def submit_parameters(n,
                     "indexH": int(hkl_values[0]),
                     "indexK": int(hkl_values[1]),
                     "indexL": int(hkl_values[2]),
+                    "outputXML": outputXML or PEAKINDEX_DEFAULTS.get('outputXML', 'output.xml'),
                 })
 
             session.commit()
@@ -1648,7 +1655,8 @@ def submit_parameters(n,
                 index_cone=spec["indexCone"],
                 index_h=spec["indexH"],
                 index_k=spec["indexK"],
-                index_l=spec["indexL"]
+                index_l=spec["indexL"],
+                output_xml=spec["outputXML"]
             )
             
             logger.info(f"Peakindexing batch job {spec['job_id']} enqueued with RQ ID: {rq_job_id} for {len(input_files)} files")

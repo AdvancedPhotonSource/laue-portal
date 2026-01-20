@@ -552,7 +552,7 @@ def set_peakindex_form_props(peakindex, read_only=False):
     set_props("outputFolder", {'value':peakindex.outputFolder, 'readonly':read_only})
     # Output XML: If absolute path, saves to that path directly.
     # If relative path or just filename, saves to the peakindexing output folder.
-    set_props("outputXML", {'value':getattr(peakindex, 'outputXML', ''), 'readonly':read_only})
+    set_props("outputXML", {'value':peakindex.outputXML or '', 'readonly':read_only})
     set_props("geoFile", {'value':peakindex.geoFile, 'readonly':read_only})
     set_props("crystFile", {'value':peakindex.crystFile, 'readonly':read_only})
     set_props("depth", {'value':peakindex.depth, 'readonly':read_only})

@@ -13,6 +13,9 @@ from datetime import datetime
 from typing import Optional, Dict, List, Any
 import json
 import time
+import os
+import glob
+import xml.etree.ElementTree as ET
 from laue_portal.database import db_utils, db_schema
 from sqlalchemy.orm import Session
 from sqlalchemy.inspection import inspect
@@ -122,6 +125,193 @@ def enqueue_job(job_id: int, job_type: str, execute_func, at_front: bool = False
     logger.info(f"Enqueued {job_type} job {job_id} with RQ ID: {rq_job.id} (timeout: {timeout}s)")
     
     return rq_job.id
+
+
+def merge_xml_files(xml_dir: str, output_xml_path: str) -> Dict[str, Any]:
+    """
+    Merge multiple XML files from a directory into a single XML file.
+    
+    Each individual XML file has an <AllSteps> root with one or more <step> elements.
+    The merged file will have a single <AllSteps> root containing all <step> elements
+    from all input files.
+    
+    Args:
+        xml_dir: Directory containing the individual XML files
+        output_xml_path: Path for the merged output XML file
+        
+    Returns:
+        Dict with merge status information:
+        - success: bool
+        - files_merged: int
+        - output_path: str
+        - error: str (if failed)
+    """
+    result = {
+        'success': False,
+        'files_merged': 0,
+        'output_path': output_xml_path,
+        'error': None
+    }
+    
+    try:
+        # Find all XML files in the directory
+        xml_pattern = os.path.join(xml_dir, '*.xml')
+        xml_files = sorted(glob.glob(xml_pattern))
+        
+        if not xml_files:
+            result['error'] = f"No XML files found in {xml_dir}"
+            logger.warning(result['error'])
+            return result
+        
+        # Create the merged root element
+        merged_root = ET.Element('AllSteps')
+        
+        # Process each XML file
+        for xml_file in xml_files:
+            try:
+                tree = ET.parse(xml_file)
+                root = tree.getroot()
+                
+                # Find all <step> elements and add them to the merged root
+                for step in root.findall('.//step'):
+                    # Deep copy the step element to avoid issues with element ownership
+                    merged_root.append(step)
+                    
+            except ET.ParseError as e:
+                logger.warning(f"Failed to parse XML file {xml_file}: {e}")
+                continue
+            except Exception as e:
+                logger.warning(f"Error processing XML file {xml_file}: {e}")
+                continue
+        
+        # Check if we have any steps
+        steps = merged_root.findall('step')
+        if not steps:
+            result['error'] = f"No valid <step> elements found in XML files from {xml_dir}"
+            logger.warning(result['error'])
+            return result
+        
+        # Create the output directory if it doesn't exist
+        output_dir = os.path.dirname(output_xml_path)
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+        
+        # Format and write the merged XML file
+        ET.indent(merged_root, space="    ")
+        tree = ET.ElementTree(merged_root)
+        
+        with open(output_xml_path, 'w', encoding='utf-8') as f:
+            f.write('<?xml version="1.0" ?>\n')
+            tree.write(f, encoding='unicode', xml_declaration=False)
+        
+        result['success'] = True
+        result['files_merged'] = len(xml_files)
+        logger.info(f"Successfully merged {len(xml_files)} XML files into {output_xml_path}")
+        
+        return result
+        
+    except Exception as e:
+        result['error'] = str(e)
+        logger.error(f"Error merging XML files: {e}")
+        return result
+
+
+def execute_peakindexing_batch_coordinator(job_id: int, output_dir: str, output_xml: str):
+    """
+    Execute peakindexing batch coordinator logic.
+    Updates the main job status based on subjob statuses and merges XML output files.
+    
+    Args:
+        job_id: Database job ID
+        output_dir: Output directory for the peakindexing job
+        output_xml: Output XML filename or path
+            - If absolute path: saves directly to that path
+            - If relative path or filename: saves to output_dir
+    """
+    try:
+        with Session(session_utils.get_engine()) as session:
+            # Query for all subjobs of this job
+            subjob_data = session.query(db_schema.SubJob).filter(
+                db_schema.SubJob.job_id == job_id
+            ).all()
+            
+            if not subjob_data:
+                logger.error(f"No subjobs found for job {job_id} in peakindexing batch coordinator")
+                return
+            
+            # Count subjob statuses
+            finished_count = sum(1 for s in subjob_data if s.status == STATUS_REVERSE_MAPPING["Finished"])
+            failed_count = sum(1 for s in subjob_data if s.status == STATUS_REVERSE_MAPPING["Failed"])
+            running_count = sum(1 for s in subjob_data if s.status == STATUS_REVERSE_MAPPING["Running"])
+            queued_count = sum(1 for s in subjob_data if s.status == STATUS_REVERSE_MAPPING["Queued"])
+            cancelled_count = sum(1 for s in subjob_data if s.status == STATUS_REVERSE_MAPPING["Cancelled"])
+            
+            all_finished = finished_count == len(subjob_data)
+            any_failed = failed_count > 0
+            all_complete = (finished_count + failed_count + cancelled_count) == len(subjob_data)
+            
+            # Merge XML files if we have any successful subjobs
+            merge_message = ""
+            if finished_count > 0:
+                # Determine the output XML path
+                # Individual XML files are written to output_dir/xml/
+                xml_source_dir = os.path.join(output_dir, 'xml')
+                
+                # Determine where to save the merged XML
+                if os.path.isabs(output_xml):
+                    # Absolute path - use directly
+                    merged_xml_path = output_xml
+                else:
+                    # Relative path or filename - save to output_dir
+                    merged_xml_path = os.path.join(output_dir, output_xml)
+                
+                # Perform the merge
+                if os.path.exists(xml_source_dir):
+                    merge_result = merge_xml_files(xml_source_dir, merged_xml_path)
+                    
+                    if merge_result['success']:
+                        merge_message = f"\nMerged {merge_result['files_merged']} XML files into {merged_xml_path}"
+                    else:
+                        merge_message = f"\nXML merge failed: {merge_result['error']}"
+                else:
+                    merge_message = f"\nXML source directory not found: {xml_source_dir}"
+                    logger.warning(merge_message)
+            
+            # Update job status
+            job_data = session.query(db_schema.Job).filter(
+                db_schema.Job.job_id == job_id
+            ).first()
+            
+            if job_data:
+                if all_finished:
+                    job_data.status = STATUS_REVERSE_MAPPING["Finished"]
+                    message = f"All {len(subjob_data)} subjobs completed successfully{merge_message}"
+                elif any_failed and all_complete:
+                    job_data.status = STATUS_REVERSE_MAPPING["Failed"]
+                    message = f"Batch failed: {failed_count} failed, {finished_count} succeeded out of {len(subjob_data)} subjobs{merge_message}"
+                elif cancelled_count > 0 and all_complete:
+                    job_data.status = STATUS_REVERSE_MAPPING["Cancelled"]
+                    message = f"Batch cancelled: {cancelled_count} cancelled, {finished_count} succeeded, {failed_count} failed{merge_message}"
+                else:
+                    # This shouldn't happen with allow_failure=True, but handle it gracefully
+                    job_data.status = STATUS_REVERSE_MAPPING["Failed"]
+                    message = f"Batch coordinator error: {finished_count} finished, {failed_count} failed, {running_count} running, {queued_count} queued{merge_message}"
+                    logger.warning(f"Unexpected state in peakindexing batch coordinator for job {job_id}: {message}")
+                
+                job_data.finish_time = datetime.now()
+                if job_data.messages:
+                    job_data.messages += f"\n{message}"
+                else:
+                    job_data.messages = message
+                
+                session.commit()
+                
+                publish_job_update(job_id, 'batch_completed', message)
+                logger.info(f"Peakindexing batch job {job_id} completed: {message}")
+                
+    except Exception as e:
+        logger.error(f"Error in peakindexing batch coordinator for job {job_id}: {e}")
+        raise
 
 
 def execute_batch_coordinator(job_id: int):
@@ -345,10 +535,12 @@ def enqueue_peakindexing(job_id: int, input_files: List[str], output_files: List
                         min_size: int, min_separation: int, threshold: int, peak_shape: str,
                         max_peaks: int, smooth: bool, index_kev_max_calc: float, 
                         index_kev_max_test: float, index_angle_tolerance: float, index_cone: float,
-                        index_h: int, index_k: int, index_l: int, at_front: bool = False, **kwargs) -> str:
+                        index_h: int, index_k: int, index_l: int, at_front: bool = False,
+                        output_xml: str = 'output.xml', **kwargs) -> str:
     """
     Enqueue a peakindexing batch job.
     Always expects subjobs to exist for the given job_id.
+    Uses a specialized batch coordinator that merges XML output files on completion.
     
     Args:
         job_id: Database job ID
@@ -372,37 +564,91 @@ def enqueue_peakindexing(job_id: int, input_files: List[str], output_files: List
         index_k: K index
         index_l: L index
         at_front: Whether to add job at front of queue (default: False)
+        output_xml: Output XML filename or path (default: 'output.xml')
+            - If absolute path: saves directly to that path
+            - If relative path or filename: saves to output_files directory
         **kwargs: Additional optional arguments
     
     Returns:
         RQ job ID of the batch coordinator
     """
-    return _enqueue_batch(
-        job_id,
-        'peakindexing',
-        execute_peakindexing_job,
-        at_front,
-        input_files,
-        output_files,
-        geometry_file,
-        crystal_file,
-        boxsize,
-        max_rfactor,
-        min_size,
-        min_separation,
-        threshold,
-        peak_shape,
-        max_peaks,
-        smooth,
-        index_kev_max_calc,
-        index_kev_max_test,
-        index_angle_tolerance,
-        index_cone,
-        index_h,
-        index_k,
-        index_l,
-        **kwargs
+    # Query for subjobs
+    with Session(session_utils.get_engine()) as session:
+        subjob_data = session.query(db_schema.SubJob).filter(
+            db_schema.SubJob.job_id == job_id
+        ).order_by(db_schema.SubJob.subjob_id).all()
+        
+        if not subjob_data:
+            raise ValueError(f"No subjobs found for job_id {job_id}. "
+                           f"peakindexing requires subjobs to be created first.")
+    
+    # Validate file lists
+    if len(input_files) != len(subjob_data):
+        raise ValueError(f"Number of input files ({len(input_files)}) "
+                       f"does not match number of subjobs ({len(subjob_data)})")
+    if len(output_files) != len(subjob_data):
+        raise ValueError(f"Number of output files ({len(output_files)}) "
+                       f"does not match number of subjobs ({len(subjob_data)})")
+    
+    # All output directories should be the same for peakindexing
+    # (individual XML files go to output_dir/xml/, merged goes to output_dir)
+    output_dir = output_files[0] if output_files else ''
+    
+    rq_job_ids = []
+    
+    # Enqueue each subjob in parallel (no dependencies between them)
+    for i, subjob in enumerate(subjob_data):
+        rq_job_id = enqueue_job(
+            subjob.subjob_id,
+            'peakindexing',
+            execute_peakindexing_job,
+            at_front,
+            None,  # No dependencies - run in parallel
+            db_schema.SubJob,  # Specify SubJob table
+            input_files[i],
+            output_files[i],
+            geometry_file,
+            crystal_file,
+            boxsize,
+            max_rfactor,
+            min_size,
+            min_separation,
+            threshold,
+            peak_shape,
+            max_peaks,
+            smooth,
+            index_kev_max_calc,
+            index_kev_max_test,
+            index_angle_tolerance,
+            index_cone,
+            index_h,
+            index_k,
+            index_l,
+            **kwargs
+        )
+        rq_job_ids.append(rq_job_id)
+    
+    # Create a Dependency object that allows failure
+    dependency = Dependency(
+        jobs=rq_job_ids,  # List of all subjob RQ IDs
+        allow_failure=True,  # This ensures coordinator runs even if subjobs fail
+        enqueue_at_front=True  # Put coordinator at front of queue
     )
+    
+    # Enqueue peakindexing-specific coordinator that merges XML files
+    coordinator_id = enqueue_job(
+        job_id,
+        'batch_coordinator',
+        execute_peakindexing_batch_coordinator,
+        True,  # Put coordinator at front since it depends on subjobs
+        dependency,  # Pass the Dependency object instead of job list
+        db_schema.Job,  # Coordinator updates the main Job
+        output_dir,  # Pass output directory for XML merging
+        output_xml   # Pass output XML filename/path
+    )
+    
+    logger.info(f"Enqueued peakindexing batch job {job_id} with {len(subjob_data)} parallel subjobs, output_xml={output_xml}")
+    return coordinator_id
 
 
 def get_job_status(rq_job_id: str) -> Dict[str, Any]:
