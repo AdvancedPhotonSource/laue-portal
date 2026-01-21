@@ -15,37 +15,30 @@ dash.register_page(__name__, path="/peakindexings")
 
 layout = html.Div([
         navbar.navbar,
-        dcc.Location(id='url', refresh=False),
+        dcc.Location(id='peakindexings-url', refresh=True),
         
         # Secondary action bar aligned to right
         dbc.Row([
             dbc.Col([
                 dbc.Nav([
-                    dbc.NavItem(
-                        dbc.NavLink(
-                            "New Recon",
-                            href="/create-wire-reconstruction",
-                            active=False,
-                            id="peakindexing-page-wire-recon"
-                        )
+                    dbc.Button(
+                        "New Recon",
+                        id="peakindexings-page-wire-recon-btn",
+                        style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
+                        className="me-2"
                     ),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(
-                        dbc.NavLink(
-                            "New Index",
-                            href="/create-peakindexing",
-                            active=False,
-                            id="peakindexing-page-peakindex"
-                        )
+                    dbc.Button(
+                        "New Index",
+                        id="peakindexings-page-peakindex-btn",
+                        style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
+                        className="me-2"
                     ),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("New Recon with selected (only 1 sel)", href="#", active=False)),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("Stop ALL", href="#", active=False)),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("Stop Selected", href="#", active=False)),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("Set high Priority for selected (only 1 sel)", href="#", active=False)),
+                    dbc.Button(
+                        "New Recon + Index",
+                        id="peakindexings-page-recon-index-btn-placeholder",
+                        style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
+                        className="me-2"
+                    ),
                 ],
                 className="bg-light px-2 py-2 d-flex justify-content-end w-100")
             ], width=12)
@@ -174,27 +167,61 @@ def _get_peakindexings():
     return cols, peakindexings.to_dict('records')
 
 @dash.callback(
-    Output('peakindexing-table', 'columnDefs'),
-    Output('peakindexing-table', 'rowData'),
-    Input('url','pathname'),
-    prevent_initial_call=True,
+    Output('peakindexing-table', 'columnDefs', allow_duplicate=True),
+    Output('peakindexing-table', 'rowData', allow_duplicate=True),
+    Input('peakindexings-url','pathname'),
+    prevent_initial_call='initial_duplicate',
 )
 def get_peakindexings(path):
-       if path == '/peakindexings':
-            cols, peakindexings_records = _get_peakindexings()
-            return cols, peakindexings_records
-       else:
-            raise PreventUpdate
+    if path == '/peakindexings':
+        cols, peakindexings_records = _get_peakindexings()
+        return cols, peakindexings_records
+    else:
+        raise PreventUpdate
 
 
 @dash.callback(
-    Output('peakindexing-page-wire-recon', 'href'),
-    Input('peakindexing-table','selectedRows'),
-    State('peakindexing-page-wire-recon', 'href'),
+    Output('peakindexings-page-wire-recon-btn', 'disabled'),
+    Output('peakindexings-page-wire-recon-btn', 'style'),
+    Output('peakindexings-page-peakindex-btn', 'disabled'),
+    Output('peakindexings-page-peakindex-btn', 'style'),
+    Output('peakindexings-page-recon-index-btn-placeholder', 'disabled'),
+    Output('peakindexings-page-recon-index-btn-placeholder', 'style'),
+    Input('peakindexing-table', 'selectedRows'),
+    prevent_initial_call=False,
+)
+def update_button_states(selected_rows):
+    enabled_style = {"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"}
+    disabled_style = {"backgroundColor": "#6c757d", "borderColor": "#6c757d"}
+
+    has_selection = selected_rows and len(selected_rows) > 0
+
+    if has_selection:
+        return (
+            False, enabled_style,  # New Recon
+            False, enabled_style,  # New Index
+            True, disabled_style,  # New Recon + Index (placeholder)
+        )
+    else:
+        return (
+            True, disabled_style,  # New Recon
+            True, disabled_style,  # New Index
+            True, disabled_style,  # New Recon + Index (placeholder)
+        )
+
+
+@dash.callback(
+    Output('peakindexings-url', 'href'),
+    Input('peakindexings-page-wire-recon-btn', 'n_clicks'),
+    State('peakindexing-table', 'selectedRows'),
     prevent_initial_call=True,
 )
-def selected_recon_href(rows,href):
-    base_href = href.split("?")[0]
+def handle_recon_button(n_clicks, rows):
+    if not n_clicks:
+        return dash.no_update
+
+    base_href = "/create-wire-reconstruction"
+
     if not rows:
         return base_href
 
@@ -205,7 +232,7 @@ def selected_recon_href(rows,href):
         if row.get('scanNumber'):
             scan_ids.append(str(row['scanNumber']))
         else:
-            return base_href
+            return dash.no_update
         
         wirerecon_ids.append(str(row['wirerecon_id']) if row.get('wirerecon_id') else '')
         any_wirerecon_scans = any(wirerecon_ids)
@@ -214,13 +241,13 @@ def selected_recon_href(rows,href):
 
         # Conflict condition: mixture of wirerecon and recon
         if any_wirerecon_scans and any_recon_scans:
-            return base_href
+            return dash.no_update
 
         # Missing Recon ID condition
         if not any_wirerecon_scans and not any_recon_scans and row.get('aperture'):
             aperture = str(row['aperture']).lower()
             if aperture == 'none':
-                return base_href # Conflict condition: cannot be reconstructed
+                return dash.no_update  # Conflict condition: cannot be reconstructed
             elif 'wire' in aperture:
                 any_wirerecon_scans = True
             else:
@@ -228,7 +255,7 @@ def selected_recon_href(rows,href):
     
             # Conflict condition: mixture of wirerecon and recon (copied from above)
             if any_wirerecon_scans and any_recon_scans:
-                return base_href
+                return dash.no_update
     
     if any_recon_scans:
         base_href = "/create-reconstruction"
@@ -236,23 +263,29 @@ def selected_recon_href(rows,href):
         base_href = "/create-wire-reconstruction"
 
     query_params = [f"scan_id={','.join(scan_ids)}"]
-    if any_wirerecon_scans: query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
-    if any_recon_scans: query_params.append(f"recon_id={','.join(recon_ids)}")
+    if any_wirerecon_scans: 
+        query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
+    if any_recon_scans: 
+        query_params.append(f"recon_id={','.join(recon_ids)}")
     
     return f"{base_href}?{'&'.join(query_params)}"
 
 
 @dash.callback(
-    Output('peakindexing-page-peakindex', 'href'),
-    Input('peakindexing-table','selectedRows'),
-    State('peakindexing-page-peakindex', 'href'),
+    Output('peakindexings-url', 'href', allow_duplicate=True),
+    Input('peakindexings-page-peakindex-btn', 'n_clicks'),
+    State('peakindexing-table', 'selectedRows'),
     prevent_initial_call=True,
 )
-def selected_peakindex_href(rows,href):
-    base_href = href.split("?")[0]
+def handle_peakindex_button(n_clicks, rows):
+    if not n_clicks:
+        return dash.no_update
+    
+    base_href = "/create-peakindexing"
+    
     if not rows:
         return base_href
-
+    
     scan_ids, wirerecon_ids, recon_ids, peakindex_ids = [], [], [], []
 
     for row in rows:

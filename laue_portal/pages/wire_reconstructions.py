@@ -16,37 +16,30 @@ dash.register_page(__name__)
 
 layout = html.Div([
         navbar.navbar,
-        dcc.Location(id='url', refresh=False),
+        dcc.Location(id='wire-recons-url', refresh=True),
         
         # Secondary action bar aligned to right
         dbc.Row([
             dbc.Col([
                 dbc.Nav([
-                    dbc.NavItem(
-                        dbc.NavLink(
-                            "New Recon",
-                            href="/create-wire-reconstruction",
-                            active=False,
-                            id="wire-recons-page-wire-recon"
-                        )
+                    dbc.Button(
+                        "New Recon",
+                        id="wire-recons-page-wire-recon-btn",
+                        style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
+                        className="me-2"
                     ),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(
-                        dbc.NavLink(
-                            "New Index",
-                            href="/create-peakindexing",
-                            active=False,
-                            id="wire-recons-page-peakindex"
-                        )
+                    dbc.Button(
+                        "New Index",
+                        id="wire-recons-page-peakindex-btn",
+                        style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
+                        className="me-2"
                     ),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("New Recon with selected (only 1 sel)", href="#", active=False)),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("Stop ALL", href="#", active=False)),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("Stop Selected", href="#", active=False)),
-                    html.Span("|", className="mx-2 text-muted"),
-                    dbc.NavItem(dbc.NavLink("Set high Priority for selected (only 1 sel)", href="#", active=False)),
+                    dbc.Button(
+                        "New Recon + Index",
+                        id="wire-recons-page-recon-index-btn-placeholder",
+                        style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
+                        className="me-2"
+                    ),
                 ],
                 className="bg-light px-2 py-2 d-flex justify-content-end w-100")
             ], width=12)
@@ -220,10 +213,10 @@ def _get_recons():
     return cols, wirerecons.to_dict('records')
 
 @dash.callback(
-    Output('wire-recon-table', 'columnDefs'),
-    Output('wire-recon-table', 'rowData'),
-    Input('url','pathname'),
-    prevent_initial_call=True,
+    Output('wire-recon-table', 'columnDefs', allow_duplicate=True),
+    Output('wire-recon-table', 'rowData', allow_duplicate=True),
+    Input('wire-recons-url','pathname'),
+    prevent_initial_call='initial_duplicate',
 )
 def get_recons(path):
     if path == '/wire-reconstructions':
@@ -234,18 +227,49 @@ def get_recons(path):
 
 
 @dash.callback(
-    Output('wire-recons-page-wire-recon', 'href'),
-    Output('wire-recons-page-peakindex', 'href'),
-    Input('wire-recon-table','selectedRows'),
-    State('wire-recons-page-wire-recon', 'href'),
-    State('wire-recons-page-peakindex', 'href'),
+    Output('wire-recons-page-wire-recon-btn', 'disabled'),
+    Output('wire-recons-page-wire-recon-btn', 'style'),
+    Output('wire-recons-page-peakindex-btn', 'disabled'),
+    Output('wire-recons-page-peakindex-btn', 'style'),
+    Output('wire-recons-page-recon-index-btn-placeholder', 'disabled'),
+    Output('wire-recons-page-recon-index-btn-placeholder', 'style'),
+    Input('wire-recon-table', 'selectedRows'),
+    prevent_initial_call=False,
+)
+def update_button_states(selected_rows):
+    enabled_style = {"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"}
+    disabled_style = {"backgroundColor": "#6c757d", "borderColor": "#6c757d"}
+
+    has_selection = selected_rows and len(selected_rows) > 0
+
+    if has_selection:
+        return (
+            False, enabled_style,  # New Recon
+            False, enabled_style,  # New Index
+            True, disabled_style,  # New Recon + Index (placeholder)
+        )
+    else:
+        return (
+            True, disabled_style,  # New Recon
+            True, disabled_style,  # New Index
+            True, disabled_style,  # New Recon + Index (placeholder)
+        )
+
+
+@dash.callback(
+    Output('wire-recons-url', 'href'),
+    Input('wire-recons-page-wire-recon-btn', 'n_clicks'),
+    State('wire-recon-table', 'selectedRows'),
     prevent_initial_call=True,
 )
-def selected_hrefs(rows, wirerecon_href, peakindex_href):
-    base_wirerecon_href = wirerecon_href.split("?")[0]
-    base_peakindex_href = peakindex_href.split("?")[0]
+def handle_recon_button(n_clicks, rows):
+    if not n_clicks:
+        return dash.no_update
+
+    base_href = "/create-wire-reconstruction"
+
     if not rows:
-        return base_wirerecon_href, base_peakindex_href
+        return base_href
 
     scan_ids, wirerecon_ids = [], []
 
@@ -253,13 +277,44 @@ def selected_hrefs(rows, wirerecon_href, peakindex_href):
         if row.get('scanNumber'):
             scan_ids.append(str(row['scanNumber']))
         else:
-            return base_wirerecon_href, base_peakindex_href
+            return dash.no_update
         
         wirerecon_ids.append(str(row['wirerecon_id']) if row.get('wirerecon_id') else '')
 
     query_params = [f"scan_id={','.join(scan_ids)}"]
-    if any(wirerecon_ids): query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
+    if any(wirerecon_ids): 
+        query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
     
-    query_string = "&".join(query_params)
+    return f"{base_href}?{'&'.join(query_params)}"
+
+
+@dash.callback(
+    Output('wire-recons-url', 'href', allow_duplicate=True),
+    Input('wire-recons-page-peakindex-btn', 'n_clicks'),
+    State('wire-recon-table', 'selectedRows'),
+    prevent_initial_call=True,
+)
+def handle_peakindex_button(n_clicks, rows):
+    if not n_clicks:
+        return dash.no_update
     
-    return f"{base_wirerecon_href}?{query_string}", f"{base_peakindex_href}?{query_string}"
+    base_href = "/create-peakindexing"
+    
+    if not rows:
+        return base_href
+    
+    scan_ids, wirerecon_ids = [], []
+    
+    for row in rows:
+        if row.get('scanNumber'):
+            scan_ids.append(str(row['scanNumber']))
+        else:
+            return base_href
+        
+        wirerecon_ids.append(str(row['wirerecon_id']) if row.get('wirerecon_id') else '')
+    
+    query_params = [f"scan_id={','.join(scan_ids)}"]
+    if any(wirerecon_ids): 
+        query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
+    
+    return f"{base_href}?{'&'.join(query_params)}"
