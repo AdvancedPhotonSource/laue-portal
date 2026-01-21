@@ -1414,7 +1414,8 @@ def submit_parameters(n,
                     logger.error(f"Failed to format output folder '{current_output_folder}': {e}")
                     formatted_output_folder = current_output_folder  # Fallback if formatting fails
                 
-                full_output_folder = os.path.join(root_path, formatted_output_folder.lstrip('/'))
+                # Use resolve_path_with_root to allow absolute paths to override root_path
+                full_output_folder = resolve_path_with_root(formatted_output_folder, root_path)
                 
                 # Create output directory if it doesn't exist
                 try:

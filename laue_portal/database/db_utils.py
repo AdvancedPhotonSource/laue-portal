@@ -222,29 +222,34 @@ def convert_epoch_string_to_int(epoch_string):
 
 def remove_root_path_prefix(file_path, root_path):
     """
-    Remove root_path prefix from a file path and any leading slash.
+    Remove root_path prefix from a file path.
+    
+    If the file_path starts with root_path, returns the relative path.
+    If the file_path is an absolute path that doesn't start with root_path,
+    returns it as-is (preserving the leading '/').
     
     Args:
         file_path: The full file path
         root_path: The root path prefix to remove
         
     Returns:
-        str: The file path with root_path prefix removed
+        str: The file path with root_path prefix removed (if present),
+             or the original path if it doesn't start with root_path
     """
     if not file_path:
         return ""
     
-    result_path = file_path
-    
     # Remove root_path from file_path if it starts with it
     if root_path and file_path.startswith(root_path):
         result_path = file_path[len(root_path):]
-        
-    # Remove leading slash if present
-    if result_path.startswith('/'):
-        result_path = result_path[1:]
-        
-    return result_path
+        # Only remove leading slash if we actually stripped the root_path
+        # This ensures we return a proper relative path
+        if result_path.startswith('/'):
+            result_path = result_path[1:]
+        return result_path
+    
+    # Path doesn't start with root_path - return as-is (could be absolute or already relative)
+    return file_path
 
 def import_metadata_row(metadata_object):
     """
