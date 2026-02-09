@@ -75,18 +75,12 @@ layout = html.Div([
     ],
 )
 
-"""
-=======================
-Callbacks
-=======================
-"""
 VISIBLE_COLS = [
     db_schema.Recon.recon_id,
     db_schema.Recon.scanNumber,
     db_schema.Recon.calib_id,
     db_schema.Recon.author,
     db_schema.Recon.notes,
-    #db_schema.Recon.pxl_recon,
     db_schema.Catalog.sample_name,
     db_schema.Catalog.aperture,
     db_schema.Job.submit_time,
@@ -96,10 +90,9 @@ VISIBLE_COLS = [
 ]
 
 CUSTOM_HEADER_NAMES = {
-    'recon_id': 'Recon ID', #'ReconID',
+    'recon_id': 'Recon ID',
     'scanNumber': 'Scan ID',
     'calib_id': 'Calibration ID',
-    #'pxl_recon': 'Pixels'
     'submit_time': 'Date',
 }
 
@@ -152,11 +145,11 @@ def _get_recons():
         elif field_key == 'dataset_id':
             col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
         elif field_key == 'scanNumber':
-            col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+            col_def['cellRenderer'] = 'ScanLinkRenderer'
         elif field_key in ['submit_time', 'start_time', 'finish_time']:
-            col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+            col_def['cellRenderer'] = 'DateFormatter'
         elif field_key == 'status':
-            col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
+            col_def['cellRenderer'] = 'StatusRenderer'
     
         cols.append(col_def)
 
@@ -171,8 +164,6 @@ def _get_recons():
         'suppressMenu': True, # Or False
         'width': 200 # Adjusted width for DBC buttons
     })
-    # recons['id'] = recons['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
-    
     return cols, recons.to_dict('records')
 
 @dash.callback(

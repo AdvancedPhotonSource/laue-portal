@@ -10,14 +10,12 @@ import logging
 import cold
 import laue_portal.recon.calib_indices as calib_indices
 
-resolve_data = True #True #False
+resolve_data = True
 
 def make_pixels_df(idx_file,grain_file=None,grain_idx=0):
-    #idx_file = 'laue_portal/recon/peaklist.txt'
     with open(idx_file,'rb') as f:
         lines = f.readlines()
     for i,l in enumerate(lines):
-        #print(i)
         if 'peakList' in l.decode('ascii'):
             names_i = i
     names = (lines[names_i]).decode('ascii').replace('\n','').split('//')[-1].split()
@@ -43,11 +41,10 @@ def make_indexed_df(Midx_file,grain_file=None,grain_idx=0):
     ls = []
     names_i = len(lines)
     for i,l in enumerate(lines):
-        #print(i)
         l = l.decode('ascii').replace('\n','')
         if 'array0' in l:
             names_i = i
-        #adds space for delimeter
+        # Add space for delimiter
         if sel in l:
             sel_i = l.index(sel)
             l = l[:sel_i+1] + ' ' + l[sel_i+1:]
@@ -62,10 +59,8 @@ def make_indexed_df(Midx_file,grain_file=None,grain_idx=0):
 def choose_indices(indices_selection):
     if isinstance(indices_selection, str):
         if '.' not in indices_selection:
-            #exec(f'indices = calib_indices.{indices_selection}') problem here
-            indices = calib_indices.CALIB_3_X1800 #CALIB_3_X1800_NO_TOPRIGHT
+            indices = calib_indices.CALIB_3_X1800
         else:
-            #exec(f'indices = read_indices(indices_selection)') problem here
             indices = read_indices(indices_selection)
     elif isinstance(indices_selection, (list, tuple)):
         indices = np.array(indices_selection)
@@ -75,9 +70,8 @@ def choose_indices(indices_selection):
 
 def saveh5img(path, name, vals, inds, shape, frame=None, swap=False):
     _vals = cold.expand(vals, inds, shape)
-    data = _vals #save(path, _vals, frame, swap)
+    data = _vals
 
-#def save(path, data, frame=None, swap=False):
     """Saves Laue diffraction data to file."""
 
     if frame is not None:
@@ -90,13 +84,12 @@ def saveh5img(path, name, vals, inds, shape, frame=None, swap=False):
         if name not in f.keys():
             f.create_dataset(name, data=data)
 
-    logging.info(f"Saved: {name} in + {path}.h5") #logging.info("Saved: " + str(path) + ".tiff")
+    logging.info(f"Saved: {name} in + {path}.h5")
 
 def savenpyimg(path, vals, inds, shape, frame=None, swap=False):
     _vals = cold.expand(vals, inds, shape)
-    data = _vals #save(path, _vals, frame, swap)
+    data = _vals
 
-#def save(path, data, frame=None, swap=False):
     """Saves Laue diffraction data to file."""
 
     if frame is not None:
@@ -112,7 +105,7 @@ def savenpyimg(path, vals, inds, shape, frame=None, swap=False):
             saved_data = data.copy()
         np.save(f, saved_data)
 
-    logging.info(f"Saved: {path}.npy") #logging.info("Saved: " + str(path) + ".tiff")
+    logging.info(f"Saved: {path}.npy")
 
 def saveh5basic(path, name, vals):
 
@@ -124,12 +117,10 @@ def saveh5basic(path, name, vals):
 
 def define_vars(config_dict, indices_selection='CALIB_3_X1800'):
     # Load metadata
-    file, comp, geo, algo = config_dict['file'], config_dict['comp'], config_dict['geo'], config_dict['algo'] #cold.config(path)
-
-    #geo['mask']['shift'] += file['range'][0]*geo['scanner']['step']*0.001
+    file, comp, geo, algo = config_dict['file'], config_dict['comp'], config_dict['geo'], config_dict['algo']
 
     ind = choose_indices(indices_selection)
-    n_ind = len(ind) #lau.shape[0]
+    n_ind = len(ind)
 
     output_dir_str = file['output']
     output_dir = Path(output_dir_str); output_dir.mkdir(parents=True,exist_ok=True)
@@ -139,12 +130,10 @@ def define_vars(config_dict, indices_selection='CALIB_3_X1800'):
 
     ind_file = str(output_dir / ('ind' + name_append))+'.npy'
     dat_file = str(output_dir / ('dat' + name_append))+'.npy'
-    #
     pos_file = str(output_dir / ('pos' + name_append))+'.npy'
     sig_file = str(output_dir / ('sig' + name_append))+'.npy'
     scl_file = str(output_dir / ('scl' + name_append))+'.npy'
     ene_file = str(output_dir / ('ene' + name_append))+'.npy'
-    #
     dep_file = output_dir / ('dep' + name_append)
     dep_file = str(dep_file)+'.npy'
     lau_file = str(output_dir / ('lau' + name_append))+'.npy'
@@ -174,7 +163,6 @@ def run_recon(config_dict, indices_selection='CALIB_3_X1800', debug=False):
         ind = np.load(ind_file)
         dat = np.load(dat_file)
     else:
-        #dat, ind = cold.load(file, collapsed=True, index=indices)
         t0_load = time.time()
         dat, ind = cold.load(file, collapsed=True, index=ind)
         t1_load = time.time()
@@ -190,7 +178,6 @@ def run_recon(config_dict, indices_selection='CALIB_3_X1800', debug=False):
         sig = np.load(sig_file)
         scl = np.load(scl_file)
         ene = np.load(ene_file)
-        #
         dep = np.load(dep_file)
         lau = np.load(lau_file)
 
@@ -209,40 +196,23 @@ def run_recon(config_dict, indices_selection='CALIB_3_X1800', debug=False):
         np.save(sig_file, sig)
         np.save(scl_file, scl)
         np.save(ene_file, ene)
-        #
         np.save(dep_file, dep)
         np.save(lau_file, lau)
     
     shape_, frame_ = (file['frame'][1], file['frame'][3]), file['frame']
 
-    # # CoLD save
-    # cold.saveplt(output_dir / ('dep' + name_append), dep, geo['source']['grid'])
-    # cold.saveimg(str(output_dir / ('ene' + name_append)), ene, ind, shape_, frame_)
-    # cold.saveimg(str(output_dir / ('pos' + name_append)), pos, ind, shape_, frame_)
-    # cold.saveimg(str(output_dir / ('lau' + name_append)), lau, ind, shape_, frame_)
-    # # cold.saveimg(file['output'] + '/lau' + str(len(ind)), lau, ind, (file['frame'][1], file['frame'][3]), file['frame'], swap=True)
-
-    # # HDF5 save
-    h5path_ = str(output_dir / ('img' + 'results'))# + name_append))
-    # saveh5img(h5path_, 'ene', ene, ind, shape_, frame_)
-    # saveh5img(h5path_, 'pos', pos, ind, shape_, frame_)
-    # saveh5img(h5path_, 'lau', lau, ind, shape_, frame_)
+    h5path_ = str(output_dir / ('img' + 'results'))
     
     savenpyimg(h5path_, lau, ind, shape_, frame_)
 
-    h5path = str(output_dir / 'results') #('basic' + 'results' + name_append))
+    h5path = str(output_dir / 'results')
     saveh5basic(h5path, 'ind', np.flip(ind,axis=1))
     saveh5basic(h5path, 'ene', ene)
     saveh5basic(h5path, 'pos', pos)
     saveh5basic(h5path, 'sig', sig)
     saveh5basic(h5path, 'lau', lau)
 
-    # # Save a copy of the config file in the output directory
-    # config_path = Path(path)
-    # local_config_path = output_dir/(config_path.name)
-    # local_config_path.write_text(config_path.read_text())
-
-    # Save a list if all indices used
+    # Save a list of all indices used
     with open(output_dir/('indices' + name_append +'.txt'), 'w') as f:
         f.writelines('\n'.join([str(i) for i in ind]))
 
@@ -256,22 +226,15 @@ def run_analysis(config_dict):
     config_dict['comp']['workers'] = 8
     config_dict['algo']['sig']['init']['avgsize'] = 10
     ###
-    process = processes[0] #for process in processes:
+    process = processes[0]
     if process == 1:
         time_vals = run_recon(config_dict,indices_selection='CALIB_3_X1800')
     
     elif process == 2:
         idx_file = 'laue_portal/recon/Si1_XY.txt'
-        #Midx_file = 'laue_portal/recon/Si1_Index.txt'
-
-        # grain_file = 'laue_portal/recon//index_summed_img.txt'
-        # grain_idx = 1 # 0 1
         time_vals = run_recon(config_dict,indices_selection=idx_file)
 
-processes = [
-             1,
-             #2,
-            ]
+processes = [1]
 
 if __name__ == '__main__':
     fire.Fire(run_analysis)

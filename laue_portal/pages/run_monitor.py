@@ -79,11 +79,6 @@ layout = html.Div([
     ],
 )
 
-"""
-=======================
-Callbacks
-=======================
-"""
 REFERENCE_COLS = [
     db_schema.Calib.calib_id,
     db_schema.Recon.recon_id,
@@ -93,10 +88,9 @@ REFERENCE_COLS = [
 
 CUSTOM_HEADER_NAMES = {
     'job_id': 'Job ID',
-    'wirerecon_id': 'Recon ID (Wire)', #'Wire Recon ID', #'ReconID',
+    'wirerecon_id': 'Recon ID (Wire)',
     'scanNumber': 'Scan ID',
     'calib_id': 'Calibration ID',
-    #'pxl_recon': 'Pixels'
     'submit_time': 'Date',
     'subjob_id': 'SubJob ID',
     'duration_display': 'Duration',
@@ -362,7 +356,7 @@ def _get_jobs():
     cols.append({
         'headerName': 'Actions',
         'field': 'actions',  # This field doesn't need to exist in the data
-        # 'cellRenderer': 'ActionButtonsRenderer',
+
         'sortable': False,
         'filter': False,
         'resizable': True,

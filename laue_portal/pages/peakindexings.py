@@ -67,11 +67,6 @@ layout = html.Div([
     ],
 )
 
-"""
-=======================
-Callbacks
-=======================
-"""
 VISIBLE_COLS = [
     db_schema.PeakIndex.peakindex_id,
     db_schema.PeakIndex.scanNumber,
@@ -81,7 +76,6 @@ VISIBLE_COLS = [
     db_schema.PeakIndex.wirerecon_id,
     db_schema.PeakIndex.boxsize,
     db_schema.PeakIndex.threshold,
-    # db_schema.PeakIndexResults.structure,
     db_schema.Job.submit_time,
     db_schema.Job.start_time,
     db_schema.Job.finish_time,
@@ -91,9 +85,8 @@ VISIBLE_COLS = [
 CUSTOM_HEADER_NAMES = {
     'peakindex_id': 'Peak Indexing ID',
     'scanNumber': 'Scan ID',
-    'recon_id': 'Recon ID', #'ReconID',
-    'wirerecon_id': 'Wire Recon ID', #'ReconID',
-    #'': 'Points',
+    'recon_id': 'Recon ID',
+    'wirerecon_id': 'Wire Recon ID',
     'boxsize': 'Box',
     'submit_time,': 'Date',
 }

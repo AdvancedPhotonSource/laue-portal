@@ -7,7 +7,7 @@ from laue_portal.database import db_utils, db_schema
 from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 from dash.exceptions import PreventUpdate
-from sqlalchemy import func # Import func for aggregation
+from sqlalchemy import func
 from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, set_scan_accordions
 from laue_portal.components.catalog_form import catalog_form, set_catalog_form_props
 from laue_portal.components.form_base import _stack, _field
@@ -16,7 +16,7 @@ import pandas as pd
 from datetime import datetime
 import laue_portal.database.session_utils as session_utils
 
-dash.register_page(__name__, path="/scan") # Simplified path
+dash.register_page(__name__, path="/scan")
 
 layout = html.Div([
         navbar.navbar,
@@ -34,11 +34,6 @@ layout = html.Div([
                                className="mb-4"),
                         html.Div(
                             [
-                    # html.H1(
-                    #     html.Div(id="ScanID_print"),
-                    #     className="mb-4"
-                    # ),
-
                     dbc.Card([
                         dbc.CardHeader(
                             dbc.Row([
@@ -80,8 +75,6 @@ layout = html.Div([
                                 dbc.Col(
                                     dbc.Textarea(
                                         id="Note_print",
-                                        #id='scan-note',
-                                        #value=scan["note"] or "—",
                                         style={"width": "100%", "minHeight": "100px"},
                                     )
                                 )
@@ -128,7 +121,6 @@ layout = html.Div([
                                     "animateRows": False, 
                                     "rowHeight": 32
                                 },
-                                #style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                                 className="ag-theme-alpine"
                             )
                         ])
@@ -165,7 +157,6 @@ layout = html.Div([
                                     "animateRows": False, 
                                     "rowHeight": 32
                                 },
-                                #style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                                 className="ag-theme-alpine"
                             )
                         ])
@@ -196,94 +187,12 @@ layout = html.Div([
                         is_open=False,
                     ),
                     catalog_form,
-                    #####
-                    # dbc.Accordion(
-                    #     [
-                    #     dbc.AccordionItem(
-                    #     # dbc.Container(id='metadata-content-container', fluid=True, className="mt-4",
-                    #     #               children=[
-                    #     #                     metadata_form
-                    #     #         ]),
-                    #         [
-                    #             metadata_form
-                    #         ],
-                    #         title="Scan",
-                    #     ),
-                    #     dbc.Button("New Reconstruction", id="new-recon_button", className="me-2", n_clicks=0),
-                    #     dbc.AccordionItem(
-                    #         [
-                    #             dash_table.DataTable(
-                    #                 id='scan-recon-table',
-                    #                 filter_action="native",
-                    #                 sort_action="native",
-                    #                 sort_mode="multi",
-                    #                 page_action="native",
-                    #                 page_current= 0,
-                    #                 page_size= 20,
-                    #             )
-                    #         ],
-                    #         title="Reconstructions",
-                    #     ),
-                    #     dbc.Button("New Peak Indexing", id="new-peakindexing_button", className="me-2", n_clicks=0),
-                    #     dbc.AccordionItem(
-                    #         [
-                    #             dash_table.DataTable(
-                    #                 id='scan-peakindex-table',
-                    #                 filter_action="native",
-                    #                 sort_action="native",
-                    #                 sort_mode="multi",
-                    #                 page_action="native",
-                    #                 page_current= 0,
-                    #                 page_size= 20,
-                    #             )
-                    #         ],
-                    #         title="Peak Indexings",
-                    #     ),
-                    #     ],
-                    #     always_open=True
-                    # ),
                             ],
                             style={'width': '100%', 'overflow-x': 'auto'}
                         ),
                   ]),
-#         dbc.Modal(
-#             [
-#                 dbc.ModalHeader(dbc.ModalTitle("Header"), id="modal-details-header"),
-#                 dbc.ModalBody(metadata_form),
-#             ],
-#             id="modal-details",
-#             size="xl",
-#             is_open=False,
-#         ),
-#         dbc.Modal(
-#             [
-#                 dbc.ModalHeader(dbc.ModalTitle("Header"), id="modal-scan-header"),
-#                 dbc.ModalBody(html.H1("TODO: Scan Display")),
-#                 # html.Div(children=[
-                    
-#                 # ])
-#                 dash_table.DataTable(
-#                     id='scan-table',
-#                     # columns=[{"name": i, "id": i}
-#                     #         for i in df.columns],
-#                     # data=df.to_dict('records'),
-#                     style_cell=dict(textAlign='left'),
-#                     #style_header=dict(backgroundColor="paleturquoise"),
-#                     #style_data=dict(backgroundColor="lavender")
-#             )
-#             ],
-#             id="modal-scan",
-#             size="xl",
-#             is_open=False,
-#         ),
     ],
 )
-
-"""
-=======================
-Scan Info
-=======================
-"""
 
 def build_technique_strings(scans, none="none"):
     """
@@ -323,7 +232,7 @@ def build_technique_strings(scans, none="none"):
     
     # Build final list with deduplication using a set
     # Initialize with none so it gets skipped automatically
-    seen_groups = {none} #"none"
+    seen_groups = {none}
     final_groups = []
     
     for group in motor_groups_lower:
@@ -359,9 +268,9 @@ def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
     # Combine filtered string and all_motors_str
     technique_str = f"{filtered_str} ({all_motors_str})"
     
-    set_props('Technique_print', {'children':[technique_str]}) #depth
+    set_props('Technique_print', {'children':[technique_str]})
     set_props('Aperture_print', {'children':[catalog.aperture.title()]})
-    set_props('Sample_print', {'children':[catalog.sample_name]}) #"Si"
+    set_props('Sample_print', {'children':[catalog.sample_name]})
     set_props('Note_print', {'value':"submit indexing"})
 
     npts_label = "Points"
@@ -410,13 +319,13 @@ def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
         
         if db_points is not None:
             total_points_fields.append(
-                _stack([#dbc.Col
+                _stack([
                     html.P(children=[html.Strong(f"{motor_group.capitalize()} {npts_label}: "), html.Div(db_points)],
                            style={"display":"flex", "gap":"5px", "align-items":"flex-end"}),
                     html.Span("|", className="mb-3"),
                     html.P(children=[html.Strong(f"{motor_group.capitalize()} {cpt_label}: "), html.Div(db_completed)],
                              style={"display":"flex", "gap":"5px", "align-items":"flex-end"})
-                ])#, width=6)
+                ])
             )
             
             # Check for mismatch
@@ -464,12 +373,6 @@ def load_scan_metadata(href):
             print(f"Error loading scan data: {e}")
 
 
-"""
-=======================
-Recon Table
-=======================
-"""
-
 VISIBLE_COLS_Recon = [
     db_schema.Recon.recon_id,
     db_schema.Recon.author,
@@ -482,24 +385,19 @@ VISIBLE_COLS_Recon = [
 ]
 
 CUSTOM_HEADER_NAMES_Recon = {
-    'recon_id': 'Recon ID', #'ReconID',
+    'recon_id': 'Recon ID',
     'percent_brightest': 'Pixels',
     'submit_time': 'Date',
 }
 
 CUSTOM_COLS_Recon_dict = {
     1:[
-        db_schema.Catalog.aperture, #db_schema.Recon.depth_technique, #presently does not exist
-        db_schema.Recon.calib_id, #Calib.calib_id,
+        db_schema.Catalog.aperture,
+        db_schema.Recon.calib_id,
     ],
     4:[
         db_schema.Recon.scanPointslen,
-        #db_schema.Metadata.motorGroup_sample_npts_total,
         db_schema.Metadata.motorGroup_sample_cpt_total,
-        # db_schema.Metadata.motorGroup_energy_npts_total,
-        # db_schema.Metadata.motorGroup_energy_cpt_total,
-        # db_schema.Metadata.motorGroup_depth_npts_total,
-        # db_schema.Metadata.motorGroup_depth_cpt_total,
     ],
     5:[
         db_schema.Recon.geo_source_offset,
@@ -521,31 +419,22 @@ VISIBLE_COLS_WireRecon = [
 ]
 
 CUSTOM_HEADER_NAMES_WireRecon = {
-    'wirerecon_id': 'Recon ID (Wire)', #'Wire Recon ID',
+    'wirerecon_id': 'Recon ID (Wire)',
     'percent_brightest': 'Pixels',
     'submit_time': 'Date',
 }
 
 CUSTOM_COLS_WireRecon_dict = {
     1:[
-        db_schema.Catalog.aperture, #db_schema.Recon.depth_technique, #presently does not exist
-        # db_schema.WireRecon.calib_id, #Calib.calib_id,
+        db_schema.Catalog.aperture,
     ],
     4:[
         db_schema.WireRecon.scanPointslen,
-        #db_schema.Metadata.motorGroup_sample_npts_total,
         db_schema.Metadata.motorGroup_sample_cpt_total,
-        # db_schema.Metadata.motorGroup_energy_npts_total,
-        # db_schema.Metadata.motorGroup_energy_cpt_total,
-        # db_schema.Metadata.motorGroup_depth_npts_total,
-        # db_schema.Metadata.motorGroup_depth_cpt_total,
     ],
     5:[
-        # db_schema.Recon.geo_source_offset,
-        # db_schema.Recon.geo_source_grid,
         db_schema.WireRecon.depth_start,
         db_schema.WireRecon.depth_end,
-        #db_schema.WireRecon.depth_resolution,
     ],
 }
 
@@ -559,15 +448,11 @@ def _get_scan_recons(scan_id):
             aperture = str(aperture).lower()
             
             if 'wire' in aperture:
-                # Query with subjob count
                 scan_recons = pd.read_sql(session.query(
                                 *ALL_COLS_WireRecon,
-                                # func.count(db_schema.SubJob.subjob_id).label('subjob_count')
                                 )
                                 .join(db_schema.Metadata.catalog_)
                                 .join(db_schema.Metadata.wirerecon_)
-                                # .join(db_schema.Catalog, db_schema.Metadata.scanNumber == db_schema.Catalog.scanNumber)
-                                # .join(db_schema.WireRecon, db_schema.Metadata.scanNumber == db_schema.WireRecon.scanNumber)
                                 .join(db_schema.Job, db_schema.WireRecon.job_id == db_schema.Job.job_id)
                                 .outerjoin(db_schema.SubJob, db_schema.Job.job_id == db_schema.SubJob.job_id)
                                 .filter(db_schema.Metadata.scanNumber == scan_id)
@@ -612,27 +497,14 @@ def _get_scan_recons(scan_id):
                     elif field_key in ['scanNumber','dataset_id']:
                         col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
                     elif field_key == 'scanNumber':
-                        col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+                        col_def['cellRenderer'] = 'ScanLinkRenderer'
                     elif field_key in ['submit_time', 'start_time', 'finish_time']:
-                        col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+                        col_def['cellRenderer'] = 'DateFormatter'
                     elif field_key == 'status':
-                        col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
+                        col_def['cellRenderer'] = 'StatusRenderer'
                     
                     cols.append(col_def)
 
-                # # Add the custom actions column
-                # cols.append({
-                #     'headerName': 'Actions',
-                #     'field': 'actions',  # This field doesn't need to exist in the data
-                #     'cellRenderer': 'ActionButtonsRenderer',
-                #     'sortable': False,
-                #     'filter': False,
-                #     'resizable': True, # Or False, depending on preference
-                #     'suppressMenu': True, # Or False
-                #     'width': 200 # Adjusted width for DBC buttons
-                # })
-
-                # Add combined fields columns
                 for col_num in CUSTOM_COLS_WireRecon_dict.keys():
                     if col_num == 1:
                         col_def = {
@@ -645,13 +517,12 @@ def _get_scan_recons(scan_id):
                         col_def = {
                             'headerName': 'Points',
                             'valueGetter': {"function":
-                                # "params.data.subjob_count + ' / ' + params.data.total_sample_points"
                                 "params.data.scanPointslen + ' / ' + params.data.motorGroup_sample_cpt_total"
                             },
                         }
                     elif col_num == 5:
                         col_def = {
-                            'headerName': 'Depth [µm]', # 'Depth [${\mu}m$]',
+                            'headerName': 'Depth [µm]',
                             'valueGetter': {"function":
                                 "params.data.depth_start \
                                 + ' to ' + \
@@ -666,21 +537,15 @@ def _get_scan_recons(scan_id):
                     })
                     cols.insert(col_num,col_def)
 
-                # recons['id'] = recons['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
-                
                 return cols, scan_recons.to_dict('records')
             
             else:
-                # Query with subjob count
                 scan_recons = pd.read_sql(session.query(
                                 *ALL_COLS_Recon,
-                                # func.count(db_schema.SubJob.subjob_id).label('subjob_count')
                                 )
                                 .join(db_schema.Metadata.catalog_)
                                 .join(db_schema.Metadata.recon_)
                                 .join(db_schema.Metadata.scan_)
-                                # .join(db_schema.Catalog, db_schema.Metadata.scanNumber == db_schema.Catalog.scanNumber)
-                                # .join(db_schema.Recon, db_schema.Metadata.scanNumber == db_schema.Recon.scanNumber)
                                 .join(db_schema.Job, db_schema.Recon.job_id == db_schema.Job.job_id)
                                 .outerjoin(db_schema.SubJob, db_schema.Job.job_id == db_schema.SubJob.job_id)
                                 .filter(db_schema.Metadata.scanNumber == scan_id)
@@ -725,46 +590,32 @@ def _get_scan_recons(scan_id):
                     elif field_key in ['scanNumber','dataset_id']:
                         col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
                     elif field_key == 'scanNumber':
-                        col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+                        col_def['cellRenderer'] = 'ScanLinkRenderer'
                     elif field_key in ['submit_time', 'start_time', 'finish_time']:
-                        col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+                        col_def['cellRenderer'] = 'DateFormatter'
                     elif field_key == 'status':
-                        col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
+                        col_def['cellRenderer'] = 'StatusRenderer'
                     
                     cols.append(col_def)
 
-                # # Add the custom actions column
-                # cols.append({
-                #     'headerName': 'Actions',
-                #     'field': 'actions',  # This field doesn't need to exist in the data
-                #     'cellRenderer': 'ActionButtonsRenderer',
-                #     'sortable': False,
-                #     'filter': False,
-                #     'resizable': True, # Or False, depending on preference
-                #     'suppressMenu': True, # Or False
-                #     'width': 200 # Adjusted width for DBC buttons
-                # })
-
-                # Add a combined fields columns
                 for col_num in CUSTOM_COLS_Recon_dict.keys():
                     if col_num == 1:
                         col_def = {
                             'headerName': 'Method',
                             'valueGetter': {"function":
-                                "params.data.aperture + ', calib: ' + params.data.calib_id" # "'CA, calib: ' + params.data.calib_id"
+                                "params.data.aperture + ', calib: ' + params.data.calib_id"
                             },
                         }
                     elif col_num == 4:
                         col_def = {
                             'headerName': 'Points',
                             'valueGetter': {"function":
-                                # "params.data.subjob_count + ' / ' + params.data.total_sample_points"
                                 "params.data.scanPointslen + ' / ' + params.data.motorGroup_sample_cpt_total"
                             },
                         }
                     elif col_num == 5:
                         col_def = {
-                            'headerName': 'Depth [µm]', # 'Depth [${\mu}m$]',
+                            'headerName': 'Depth [µm]',
                             'valueGetter': {"function":
                                 "1000*(params.data.geo_source_grid[0] + params.data.geo_source_offset) \
                                 + ' to ' + \
@@ -779,8 +630,6 @@ def _get_scan_recons(scan_id):
                     })
                     cols.insert(col_num,col_def)
 
-                # recons['id'] = recons['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
-                
                 return cols, scan_recons.to_dict('records')
     
     except Exception as e:
@@ -810,12 +659,6 @@ def get_scan_recons(href):
     else:
         raise PreventUpdate
 
-"""
-=======================
-Peak Indexing Table
-=======================
-"""
-
 VISIBLE_COLS_PeakIndex = [
     db_schema.PeakIndex.peakindex_id,
     db_schema.PeakIndex.author,
@@ -829,8 +672,7 @@ VISIBLE_COLS_PeakIndex = [
 ]
 
 CUSTOM_HEADER_NAMES_PeakIndex = {
-    'peakindex_id': 'Index ID', #'Peak Index ID',
-    #'': 'Points',
+    'peakindex_id': 'Index ID',
     'boxsize': 'Box',
     'submit_time': 'Date',
 }
@@ -842,11 +684,7 @@ CUSTOM_COLS_PeakIndex_dict = {
     4:[
         db_schema.PeakIndex.scanPointslen.label('PeakIndex_scanPointslen'),
         db_schema.PeakIndex.depthRangelen,
-        #db_schema.Metadata.motorGroup_sample_npts_total,
         db_schema.Metadata.motorGroup_sample_cpt_total,
-        # db_schema.Metadata.motorGroup_energy_npts_total,
-        # db_schema.Metadata.motorGroup_energy_cpt_total,
-        #db_schema.Metadata.motorGroup_depth_npts_total,
         db_schema.Metadata.motorGroup_depth_cpt_total,
     ],
 }
@@ -867,9 +705,8 @@ VISIBLE_COLS_Recon_PeakIndex = [
 ]
 
 CUSTOM_HEADER_NAMES_Recon_PeakIndex = {
-    'peakindex_id': 'Index ID', #'Peak Index ID',
-    'recon_id': 'Recon ID', #'ReconID',
-    #'': 'Points',
+    'peakindex_id': 'Index ID',
+    'recon_id': 'Recon ID',
     'boxsize': 'Box',
     'submit_time': 'Date',
 }
@@ -881,7 +718,6 @@ CUSTOM_COLS_Recon_PeakIndex_dict = {
     4:[
         db_schema.PeakIndex.scanPointslen.label('PeakIndex_scanPointslen'),
         db_schema.PeakIndex.depthRangelen,
-        #db_schema.Metadata.motorGroup_depth_npts_total,
         db_schema.Metadata.motorGroup_depth_cpt_total,
         db_schema.Recon.scanPointslen.label('Recon_scanPointslen'),
     ],
@@ -903,8 +739,8 @@ VISIBLE_COLS_WireRecon_PeakIndex = [
 ]
 
 CUSTOM_HEADER_NAMES_WireRecon_PeakIndex = {
-    'peakindex_id': 'Index ID', #'Peak Index ID',
-    'wirerecon_id': 'Recon ID (Wire)', #'Wire Recon ID',
+    'peakindex_id': 'Index ID',
+    'wirerecon_id': 'Recon ID (Wire)',
     'boxsize': 'Box',
     'submit_time': 'Date',
 }
@@ -916,7 +752,6 @@ CUSTOM_COLS_WireRecon_PeakIndex_dict = {
     4:[
         db_schema.PeakIndex.scanPointslen.label('PeakIndex_scanPointslen'),
         db_schema.PeakIndex.depthRangelen,
-        #db_schema.Metadata.motorGroup_depth_npts_total,
         db_schema.Metadata.motorGroup_depth_cpt_total,
         db_schema.WireRecon.scanPointslen.label('WireRecon_scanPointslen'),
     ],
@@ -932,10 +767,8 @@ def _get_scan_peakindexings(scan_id):
             aperture = str(aperture).lower()
             
             if aperture == 'none':
-                # Query with subjob count
                 scan_peakindexings = pd.read_sql(session.query(
                                 *ALL_COLS_PeakIndex,
-                                # func.count(db_schema.SubJob.subjob_id).label('subjob_count')
                                 )
                                 .join(db_schema.Metadata, db_schema.PeakIndex.scanNumber == db_schema.Metadata.scanNumber)
                                 .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
@@ -981,39 +814,24 @@ def _get_scan_peakindexings(scan_id):
                     elif field_key in ['scanNumber','dataset_id']:
                         col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
                     elif field_key == 'scanNumber':
-                        col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+                        col_def['cellRenderer'] = 'ScanLinkRenderer'
                     elif field_key in ['submit_time', 'start_time', 'finish_time']:
-                        col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+                        col_def['cellRenderer'] = 'DateFormatter'
                     elif field_key == 'status':
-                        col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
+                        col_def['cellRenderer'] = 'StatusRenderer'
                     
                     cols.append(col_def)
 
-                # # Add the custom actions column
-                # cols.append({
-                #     'headerName': 'Actions',
-                #     'field': 'actions',  # This field doesn't need to exist in the data
-                #     'cellRenderer': 'ActionButtonsRenderer',
-                #     'sortable': False,
-                #     'filter': False,
-                #     'resizable': True, # Or False, depending on preference
-                #     'suppressMenu': True, # Or False
-                #     'width': 200 # Adjusted width for DBC buttons
-                # })
-
-                # Add a combined fields columns
                 for col_num in CUSTOM_COLS_PeakIndex_dict.keys():
                     if col_num == 3:
                         col_def = {
                             'headerName': 'Structure',
                             'valueGetter': {"function": "params.data.crystFile.slice(params.data.crystFile.lastIndexOf('/') + 1, params.data.crystFile.lastIndexOf('.'))"},
-                            # "params.data.subjob_count + ' / ' + params.data.total_frames
                         }
                     if col_num == 4:
                         col_def = {
-                            'headerName': 'Frames', # frames from all points
+                            'headerName': 'Frames',
                             'valueGetter': {"function": "params.data.PeakIndex_scanPointslen * params.data.depthRangelen + ' / ' + params.data.motorGroup_sample_cpt_total * params.data.motorGroup_depth_cpt_total"},
-                            # "params.data.subjob_count + ' / ' + params.data.total_frames
                         }
                     col_def.update({
                         'filter': True, 
@@ -1023,15 +841,11 @@ def _get_scan_peakindexings(scan_id):
                     })
                     cols.insert(col_num,col_def)
 
-                # peakindexings['id'] = peakindexings['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
-                
                 return cols, scan_peakindexings.to_dict('records')
             
             elif 'wire' in aperture:
-                # Query with subjob count
                 scan_peakindexings = pd.read_sql(session.query(
                                 *ALL_COLS_WireRecon_PeakIndex,
-                                # func.count(db_schema.SubJob.subjob_id).label('subjob_count')
                                 )
                                 .join(db_schema.Metadata, db_schema.PeakIndex.scanNumber == db_schema.Metadata.scanNumber)
                                 .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
@@ -1080,39 +894,24 @@ def _get_scan_peakindexings(scan_id):
                     elif field_key in ['scanNumber','dataset_id']:
                         col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
                     elif field_key == 'scanNumber':
-                        col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+                        col_def['cellRenderer'] = 'ScanLinkRenderer'
                     elif field_key in ['submit_time', 'start_time', 'finish_time']:
-                        col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+                        col_def['cellRenderer'] = 'DateFormatter'
                     elif field_key == 'status':
-                        col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
+                        col_def['cellRenderer'] = 'StatusRenderer'
                     
                     cols.append(col_def)
 
-                # # Add the custom actions column
-                # cols.append({
-                #     'headerName': 'Actions',
-                #     'field': 'actions',  # This field doesn't need to exist in the data
-                #     'cellRenderer': 'ActionButtonsRenderer',
-                #     'sortable': False,
-                #     'filter': False,
-                #     'resizable': True, # Or False, depending on preference
-                #     'suppressMenu': True, # Or False
-                #     'width': 200 # Adjusted width for DBC buttons
-                # })
-
-                # Add a combined fields columns
                 for col_num in CUSTOM_COLS_WireRecon_PeakIndex_dict.keys():
                     if col_num == 3:
                         col_def = {
                             'headerName': 'Structure',
                             'valueGetter': {"function": "params.data.crystFile.slice(params.data.crystFile.lastIndexOf('/') + 1, params.data.crystFile.lastIndexOf('.'))"},
-                            # "params.data.subjob_count + ' / ' + params.data.total_frames
                         }
                     if col_num == 4:
                         col_def = {
-                            'headerName': 'Frames', # frames from all points
+                            'headerName': 'Frames',
                             'valueGetter': {"function": "params.data.PeakIndex_scanPointslen * params.data.depthRangelen + ' / ' + params.data.WireRecon_scanPointslen * params.data.motorGroup_depth_cpt_total"},
-                            # "params.data.subjob_count + ' / ' + params.data.total_frames
                         }
                     col_def.update({
                         'filter': True, 
@@ -1122,15 +921,11 @@ def _get_scan_peakindexings(scan_id):
                     })
                     cols.insert(col_num,col_def)
 
-                # peakindexings['id'] = peakindexings['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
-                
                 return cols, scan_peakindexings.to_dict('records')
             
             else:
-                # Query with subjob count
                 scan_peakindexings = pd.read_sql(session.query(
                                 *ALL_COLS_Recon_PeakIndex,
-                                # func.count(db_schema.SubJob.subjob_id).label('subjob_count')
                                 )
                                 .join(db_schema.Metadata, db_schema.PeakIndex.scanNumber == db_schema.Metadata.scanNumber)
                                 .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
@@ -1179,39 +974,24 @@ def _get_scan_peakindexings(scan_id):
                     elif field_key in ['scanNumber','dataset_id']:
                         col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
                     elif field_key == 'scanNumber':
-                        col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+                        col_def['cellRenderer'] = 'ScanLinkRenderer'
                     elif field_key in ['submit_time', 'start_time', 'finish_time']:
-                        col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+                        col_def['cellRenderer'] = 'DateFormatter'
                     elif field_key == 'status':
-                        col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
+                        col_def['cellRenderer'] = 'StatusRenderer'
                     
                     cols.append(col_def)
 
-                # # Add the custom actions column
-                # cols.append({
-                #     'headerName': 'Actions',
-                #     'field': 'actions',  # This field doesn't need to exist in the data
-                #     'cellRenderer': 'ActionButtonsRenderer',
-                #     'sortable': False,
-                #     'filter': False,
-                #     'resizable': True, # Or False, depending on preference
-                #     'suppressMenu': True, # Or False
-                #     'width': 200 # Adjusted width for DBC buttons
-                # })
-
-                # Add a combined fields columns
                 for col_num in CUSTOM_COLS_PeakIndex_dict.keys():
                     if col_num == 3:
                         col_def = {
                             'headerName': 'Structure',
                             'valueGetter': {"function": "params.data.crystFile.slice(params.data.crystFile.lastIndexOf('/') + 1, params.data.crystFile.lastIndexOf('.'))"},
-                            # "params.data.subjob_count + ' / ' + params.data.total_frames
                         }
                     if col_num == 4:
                         col_def = {
-                            'headerName': 'Frames', # frames from all points
+                            'headerName': 'Frames',
                             'valueGetter': {"function": "params.data.PeakIndex_scanPointslen * params.data.depthRangelen + ' / ' + params.data.Recon_scanPointslen * params.data.motorGroup_depth_cpt_total"},
-                            # "params.data.subjob_count + ' / ' + params.data.total_frames
                         }
                     col_def.update({
                         'filter': True, 
@@ -1221,8 +1001,6 @@ def _get_scan_peakindexings(scan_id):
                     })
                     cols.insert(col_num,col_def)
 
-                # peakindexings['id'] = peakindexings['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
-                
                 return cols, scan_peakindexings.to_dict('records')
     
     except Exception as e:
@@ -1432,8 +1210,6 @@ def update_catalog(n,
     filenamePrefix,
     notes,
 ):
-    # TODO: Input validation and response
- 
     try:
         # Convert scanNumber to int if it's a string
         if isinstance(scanNumber, str):

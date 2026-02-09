@@ -21,7 +21,7 @@ import laue_portal.database.session_utils as session_utils
 
 JOB_DEFAULTS = {
     "computer_name": 'example_computer',
-    "status": 0, #pending, running, finished, stopped
+    "status": 0,
     "priority": 0,
     "submit_time": datetime.datetime.now(),
     "start_time": datetime.datetime.now(),
@@ -31,11 +31,6 @@ JOB_DEFAULTS = {
 RECON_DEFAULTS = {
     'calib_id': 0,
 }
-
-# DEFAULT_VARIABLES = {
-#     "author": "",
-#     "notes": "",
-# }
 
 dash.register_page(__name__)
 
@@ -88,11 +83,7 @@ layout = dbc.Container(
     fluid=True
 )
 
-"""
-=======================
-Callbacks
-=======================
-"""
+
 @dash.callback(
     Input('upload-config', 'contents'),
     prevent_initial_call=True,
@@ -103,13 +94,6 @@ def upload_config(contents):
         decoded = base64.b64decode(content_string)
         config = yaml.safe_load(decoded)
         recon_row = db_utils.import_recon_row(config)
-        # recon_row.date = datetime.datetime.now()
-        # recon_row.commit_id = ''
-        # recon_row.calib_id = ''
-        # recon_row.runtime = ''
-        # recon_row.computer_name = ''
-        # recon_row.dataset_id = 0
-        # recon_row.notes = ''
 
         set_props("alert-upload", {'is_open': True, 
                                     'children': 'Config uploaded successfully',
@@ -141,7 +125,6 @@ def upload_config(contents):
     State('file_output', 'value'),
     State('data_stacked', 'value'),
     State('h5_key', 'value'),
-    #State('file_offset', 'value'),
 
     State('cenx', 'value'),
     State('ceny', 'value'),
@@ -198,14 +181,13 @@ def upload_config(contents):
     State('ene_max', 'value'),
     State('ene_step', 'value'),
     
-    # User text
     State('author', 'value'),
     State('notes', 'value'),
     
     prevent_initial_call=True,
 )
 def submit_config(n,
-    scanNumbers, #Pooled scanNumbers
+    scanNumbers,
 
     frame_start,
     frame_end,
@@ -222,7 +204,6 @@ def submit_config(n,
     file_output,
     data_stacked,
     h5_key,
-    #file_offset,
 
     cenx,
     ceny,
@@ -279,34 +260,27 @@ def submit_config(n,
     ene_max,
     ene_step,
     
-    # User text
     author,
     notes,
 ):
-    # TODO: Input validation and reponse
-     for scanNumber in str(scanNumbers).split(','):
-
-        JOB_DEFAULTS.update({'submit_time':datetime.datetime.now()})
-        JOB_DEFAULTS.update({'start_time':datetime.datetime.now()})
-        JOB_DEFAULTS.update({'finish_time':datetime.datetime.now()})
+    for scanNumber in str(scanNumbers).split(','):
+        now = datetime.datetime.now()
         
         job = db_schema.Job(
             computer_name=JOB_DEFAULTS['computer_name'],
             status=JOB_DEFAULTS['status'],
             priority=JOB_DEFAULTS['priority'],
-
-            submit_time=JOB_DEFAULTS['submit_time'],
-            start_time=JOB_DEFAULTS['start_time'],
-            finish_time=JOB_DEFAULTS['finish_time'],
+            submit_time=now,
+            start_time=now,
+            finish_time=now,
         )
 
         with Session(session_utils.get_engine()) as session:
             
             session.add(job)
-            session.flush()  # Get job_id without committing
+            session.flush()
             job_id = job.job_id
             
-            # Create 6 subjobs for parallel processing
             for i in range(6):
                 subjob = db_schema.SubJob(
                     job_id=job_id,
@@ -317,19 +291,10 @@ def submit_config(n,
                 session.add(subjob)
             
             recon = db_schema.Recon(
-                # date=datetime.datetime.now(),
-                # commit_id='TEST',
-                # calib_id='TEST',
-                # runtime='TEST',
-                # computer_name='TEST',
-                # dataset_id=0,
-                # notes='TODO', 
-
                 scanNumber=scanNumber,
-                calib_id = RECON_DEFAULTS['calib_id'],
-                job_id = job_id,
+                calib_id=RECON_DEFAULTS['calib_id'],
+                job_id=job_id,
                 
-                # User text
                 author=author,
                 notes=notes,
 
@@ -339,8 +304,7 @@ def submit_config(n,
                 file_range=[frame_start, frame_end],
                 file_threshold=0,
                 file_frame=[x_start, x_end, y_start, y_end],
-                #file_offset=file_offset,
-                file_ext='h5', #'TODO',
+                file_ext='h5',
                 file_h5_key=h5_key,
                 
                 comp_server='TODO',
@@ -398,7 +362,6 @@ def submit_config(n,
                 algo_ene_range=[ene_min, ene_max, ene_step],
             )
 
-        # with Session(session_utils.get_engine()) as session:
             session.add(recon)
             config_dict = db_utils.create_config_obj(recon)
 
@@ -408,7 +371,6 @@ def submit_config(n,
                                         'children': 'Config Added to Database',
                                         'color': 'success'})
 
-            # Enqueue the job to Redis
             try:
                 rq_job_id = enqueue_reconstruction(job_id, config_dict)
                 logger.info(f"Job {job_id} enqueued with RQ ID: {rq_job_id}")
@@ -428,13 +390,7 @@ def submit_config(n,
     prevent_initial_call=True,
 )
 def load_scan_data_from_url(href):
-    """
-    Load scan data and optionally existing recon data when provided in URL query parameters
-    URL format: /create-reconstruction?scan_id={scan_id}
-    Pooled URL format: /create-reconstruction?scan_id=${scan_ids}
-    With recon_id: /create-reconstruction?scan_id={scan_id}&recon_id={recon_id}
-    Pooled with recon_id: /create-reconstruction?scan_id=${scan_ids}&recon_id={recon_ids}
-    """
+    """Load scan data and optionally existing recon data from URL query parameters."""
     if not href:
         raise PreventUpdate
 
@@ -450,7 +406,6 @@ def load_scan_data_from_url(href):
             try:
                 scan_id = int(scan_id)
                 
-                # Check if recon_id is provided to load existing record
                 if recon_id:
                     try:
                         recon_id = int(recon_id)
@@ -459,16 +414,12 @@ def load_scan_data_from_url(href):
                         ).first()
                         
                         if recon_data:
-                            # Use existing recon values
-                            # Convert file paths from absolute to relative
                             recon_data.file_path = remove_root_path_prefix(recon_data.file_path, root_path) if recon_data.file_path else ""
                             recon_data.file_output = remove_root_path_prefix(recon_data.file_output, root_path) if recon_data.file_output else ""
                             recon_data.geo_mask_path = remove_root_path_prefix(recon_data.geo_mask_path, root_path) if recon_data.geo_mask_path else ""
                             
-                            # Set the form with existing values
                             set_recon_form_props(recon_data)
                             
-                            # Show success message
                             set_props("alert-scan-loaded", {
                                 'is_open': True, 
                                 'children': f'Loaded existing reconstruction {recon_id} data for scan {scan_id}',
@@ -477,10 +428,7 @@ def load_scan_data_from_url(href):
                             return
                     except Exception as e:
                         logger.warning(f"Failed to load recon {recon_id}: {e}")
-                        # Fall back to just loading scan data
                 
-                # If no recon_id or loading failed, just load scan data
-                # You might want to load default values or scan-specific data here
                 set_props("alert-scan-loaded", {
                     'is_open': True, 
                     'children': f'Loaded scan {scan_id} data',

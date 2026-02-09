@@ -35,12 +35,10 @@ layout = html.Div([
                         id="pixels",
                     ),
                     dcc.Graph(
-                        #style={'height': 300},
                         style={'display': 'inline-block'},
                         id="lineout-graph",
                     ),
                     dcc.Graph(
-                        #style={'height': 300},
                         style={'display': 'inline-block', 'height': 300},
                         id="detector-graph",
                     ),
@@ -69,12 +67,6 @@ layout = html.Div([
                 ]),
 ])
 
-"""
-=======================
-Callbacks
-=======================
-"""
-
 @dash.callback(
         Input('integrated-lau', 'value'),
         Input('results-path', 'value'),
@@ -88,7 +80,7 @@ def set_lineout_and_detector_graphs(integrated_lau, file_output, pixels_options,
 
     pixel_index = index_pointer
 
-    fig2 = px.imshow(integrated_lau)#, binary_string=True)
+    fig2 = px.imshow(integrated_lau)
                                                          
     if isinstance(pixels_value, str): 
         pixel_index = [int(i) for i in pixels_value.split(',')]
@@ -151,7 +143,6 @@ def set_lineout_and_detector_graphs(integrated_lau, file_output, pixels_options,
         print(f'Selected: {p_x}, {p_y}')
 
         # Lineout plot
-        #lau_slice = np.where(np.array(ind)==np.array(pixel_index))[0][0] # lau[*pixel_index,:]
         all_ind = loahdh5(file_output,'ind')
         lau_slice = np.where((all_ind[:,0]==pixel_index[0]) & (all_ind[:,1]==pixel_index[1]))[0][0]
         print('slice',lau_slice)
@@ -272,12 +263,6 @@ def load_recon_data(href):
     return "No Recon ID provided"
 
 
-"""
-=======================
-Helper Functions
-=======================
-"""
-
 def loahdh5(path, key, slice=None, results_filename = "results.h5"):
     results_file = Path(path)/results_filename
     f = h5py.File(results_file, 'r')
@@ -285,7 +270,6 @@ def loahdh5(path, key, slice=None, results_filename = "results.h5"):
         value = f[key][:]
     else:
         value = f[key][slice]
-    #logging.info("Loaded: " + str(file))
     return value
 
 def loadnpy(path, results_filename = 'img' + 'results' + '.npy'):

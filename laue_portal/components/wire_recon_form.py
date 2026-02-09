@@ -18,8 +18,8 @@ wire_recon_form = dbc.Row(
                                                         "type": "text",
                                                         "placeholder": "e.g. SN123456 or WR1",
                                                     }),
-                                            className="flex-grow-1",          # THIS makes it expand
-                                            style={"minWidth": 0},            # avoid overflow when very narrow
+                                            className="flex-grow-1",
+                                            style={"minWidth": 0},
                                         ),
                                         dbc.Col(
                                             dbc.Button(
@@ -27,10 +27,10 @@ wire_recon_form = dbc.Row(
                                                 id="wirerecon-update-path-fields-btn",
                                                 color="secondary",
                                                 size="md",
-                                                style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size
+                                                style={"minWidth": "220px", "whiteSpace": "nowrap"},
                                             ),
-                                            width="auto",                      # column sizes to content
-                                            className="d-flex justify-content-end",  # optional: keep at right edge
+                                            width="auto",
+                                            className="d-flex justify-content-end",
                                         ),
                                     ],
                                     className="mb-3",
@@ -56,8 +56,7 @@ wire_recon_form = dbc.Row(
                                                                 "placeholder": "e.g. Si_%d.h5 or Si_*%d.h5",
                                                                 "list": "wirerecon-filename-templates",  # link to datalist below
                                                             }),
-                                                    # just as example
-                                                    html.Datalist(
+                                    html.Datalist(
                                                         id="wirerecon-filename-templates",
                                                         children=[
                                                                 html.Option(value="Si1_PE2_%d.h5",    label="Si1_PE2_%d.h5   (files 1–245)"),
@@ -65,8 +64,7 @@ wire_recon_form = dbc.Row(
                                                                 html.Option(value="Si1_*_%d.h5",        label="Si1_*_%d.h5        (files 1–245)"),
                                                             ]
                                                     ),
-                                                    # Hidden store for cached patterns per path
-                                                    dcc.Store(id='wirerecon-cached-patterns', data={}),
+                                    dcc.Store(id='wirerecon-cached-patterns', data={}),
                                                 ]
                                             ),
                                             className="flex-grow-1",
@@ -93,19 +91,19 @@ wire_recon_form = dbc.Row(
                                                     kwargs={
                                                         "placeholder": "e.g. 1-10 or 1,5,8,9 or 1-4,10-21"
                                                     }),
-                                            className="flex-grow-1",          # THIS makes it expand
-                                            style={"minWidth": 0},            # avoid overflow when very narrow
+                                            className="flex-grow-1",
+                                            style={"minWidth": 0},
                                         ),
                                         dbc.Col(
                                             dbc.Button(
-                                                "Load indices from file",#"Load file indices as list",
+                                                "Load indices from file",
                                                 id="wirerecon-load-file-indices-btn",
                                                 color="secondary",
                                                 size="md",
-                                                style={"minWidth": "220px", "whiteSpace": "nowrap"},  # fixed/min size
+                                                style={"minWidth": "220px", "whiteSpace": "nowrap"},
                                             ),
-                                            width="auto",                      # column sizes to content
-                                            className="d-flex justify-content-end mb-3",  # optional: keep at right edge
+                                            width="auto",
+                                            className="d-flex justify-content-end mb-3",
                                         ),
                                     ],
                                     align="center",
@@ -156,7 +154,7 @@ wire_recon_form = dbc.Row(
                                     align="center",
                                 ),
                             ],
-                            title="Files",#"File Parameters"
+                            title="Files",
                             item_id="item-1",
                         ),
                         dbc.AccordionItem(
@@ -167,25 +165,22 @@ wire_recon_form = dbc.Row(
                                             [
                                                 dbc.Col(
                                                     _field("Depth Start [µm]", 'depth_start', size='md'),
-                                                    className="flex-grow-1",          # THIS makes it expand
-                                                    style={"minWidth": 100},            # avoid overflow when very narrow
-                                                    # width = "auto",
+                                                    className="flex-grow-1",
+                                                    style={"minWidth": 100},
                                                     xs=12, 
                                                     md=4,
                                                 ),
                                                 dbc.Col(
                                                 _field("Depth End [µm]", 'depth_end', size='md'),
-                                                    className="flex-grow-1",          # THIS makes it expand
-                                                    style={"minWidth": 100},            # avoid overflow when very narrow
-                                                    # width = "auto",
+                                                    className="flex-grow-1",
+                                                    style={"minWidth": 100},
                                                     xs=12, 
                                                     md=4,
                                                 ),
                                                 dbc.Col(
                                                     _field("Depth Resolution [µm]", 'depth_resolution', size='md'),
-                                                    className="flex-grow-1",          # THIS makes it expand
-                                                    style={"minWidth": 100},            # avoid overflow when very narrow
-                                                    # width = "auto",
+                                                    className="flex-grow-1",
+                                                    style={"minWidth": 100},
                                                     xs=12, 
                                                     md=4,
                                                 ),
@@ -203,10 +198,9 @@ wire_recon_form = dbc.Row(
                                                 {"label": "Both Edges", "value": "both"},
                                             ],
                                             size='md',
-                                            kwargs={'placeholder':"Select:"}
+                                            kwargs={'placeholder': "Select:"}
                                         ),
-                                        _field("Intensity percentile", 'percent_brightest', size='md'), # "Percentage of pixels to process"
-                                        # _field("Detector", 'detector', size='md'), # default to detector number 0, but never pass this argument. It will get this from geo file.
+                                        _field("Intensity percentile", 'percent_brightest', size='md'),
                                     ]
                                 ),
                             ],
@@ -232,9 +226,6 @@ wire_recon_form = dbc.Row(
 def set_wire_recon_form_props(wirerecon, read_only=False):
     IDnumber = make_IDnumber(wirerecon.scanNumber, wirerecon.wirerecon_id)
     set_props("IDnumber", {'value':IDnumber, 'readonly':read_only})
-    # set_props("scanNumber", {'value':wirerecon.scanNumber, 'readonly':read_only})
-    
-    # File paths
     set_props("root_path", {'value':wirerecon.root_path, 'readonly':read_only})
     set_props("data_path", {'value':wirerecon.data_path, 'readonly':read_only})
     
@@ -243,27 +234,17 @@ def set_wire_recon_form_props(wirerecon, read_only=False):
     if isinstance(filename_value, list):
         filename_value = ', '.join(filename_value)
     set_props("filenamePrefix", {'value':filename_value, 'readonly':read_only})
-    # set_props("filenamePrefix", {'value':wirerecon.filenamePrefix, 'readonly':read_only})
-    
-    # User text
-    # set_props("author", {'value':wirerecon.author, 'readonly':read_only})
+
     set_props("notes", {'value':wirerecon.notes, 'readonly':read_only})
-    
-    # Wire recon parameters
+
     set_props("geoFile", {'value':wirerecon.geoFile, 'readonly':read_only})
     set_props("percent_brightest", {'value':wirerecon.percent_brightest, 'readonly':read_only})
-    set_props("wire_edges", {'value':wirerecon.wire_edges, 'disabled':read_only})  # Wire edge field
+    set_props("wire_edges", {'value':wirerecon.wire_edges, 'disabled':read_only})
 
-    # Depth parameters
     set_props("depth_start", {'value':wirerecon.depth_start, 'readonly':read_only})
     set_props("depth_end", {'value':wirerecon.depth_end, 'readonly':read_only})
     set_props("depth_resolution", {'value':wirerecon.depth_resolution, 'readonly':read_only})
-    
-    # Files
-    set_props("scanPoints", {'value':wirerecon.scanPoints, 'readonly':read_only})  # Range of files field
 
-    # Output
+    set_props("scanPoints", {'value':wirerecon.scanPoints, 'readonly':read_only})
     set_props("outputFolder", {'value':wirerecon.outputFolder, 'readonly':read_only})
-    
-    # Additional form fields
-    set_props("detector", {'value': None, 'readonly':True})  # Default detector number '0 or auto'
+    set_props("detector", {'value': None, 'readonly':True})

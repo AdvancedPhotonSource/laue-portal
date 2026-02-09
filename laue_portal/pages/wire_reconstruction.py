@@ -26,12 +26,6 @@ layout = html.Div([
                   ]),
 ])
 
-"""
-=======================
-Callbacks
-=======================
-"""
-
 @callback(
     Output('wire-recon-id-header', 'children'),
     Input('url-wire-recon-page', 'href'),

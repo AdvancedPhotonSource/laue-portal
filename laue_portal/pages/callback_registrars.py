@@ -570,14 +570,11 @@ def register_check_filenames_callback(
         Output(filename_prefix_id, 'value', allow_duplicate=True),
         Output(cached_patterns_store_id, 'data'),
         Input(find_filenames_id, 'n_clicks'),
-        # Input(update_paths_id, 'n_clicks'),
-        # Input(data_loaded_signal_id, 'data'),
         State(data_path_id, 'value'),
         State(filename_prefix_id, 'value'),
         State(cached_patterns_store_id, 'data'),
         prevent_initial_call=True,
     )
-    # def check_filenames(n_check, n_update, data_loaded_signal_id, data_path, current_filename, cached_patterns, delimiter=";"):
     def check_filenames(n_check, data_path, current_filename, cached_patterns, delimiter=";"):
         """Scan directory and suggest common filename patterns with smart context-aware dropdown."""
         
@@ -640,7 +637,7 @@ def register_check_filenames_callback(
                                 wildcard_parts.append('*')
 
                             # Add the matching section
-                            if match_length > 0:  # Matches preserved #The %d is preserved because it's in the matching section.
+                            if match_length > 0:
                                 wildcard_parts.append(pattern1[match_start1:match_start1 + match_length])
                             last_pos = match_start1 + match_length
                         
@@ -679,10 +676,6 @@ def register_check_filenames_callback(
             return [html.Option(value="", label="No files found in specified path(s)")], dash.no_update, {}
         
         # MODE DETECTION AND DROPDOWN GENERATION
-        # # Get the trigger that caused this callback
-        # ctx = dash.callback_context
-        # trigger_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
-        
         # Convert list to string if needed, then split into delimiter-separated parts
         current_filename = _merge_field_values(current_filename) if isinstance(current_filename, list) else current_filename
         current_parts = [s.strip() for s in (current_filename or "").split(delimiter)]

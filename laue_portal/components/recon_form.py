@@ -11,7 +11,6 @@ recon_form = dbc.Row(
                             [
                                 _stack(
                                     [
-                                        # _field("Dataset", "dataset", size='lg'),
                                         _field("Scan Number", "scanNumber", size='sm'),
                                     ]
                                 ),
@@ -60,7 +59,6 @@ recon_form = dbc.Row(
                                     [
                                         _ckbx("Data Stacked", 'data_stacked', size='sm'),
                                         _field("H5_key", 'h5_key', size='sm'),
-                                        #_field("File Offset", 'file_offset', size='sm'),
                                     ]
                                 )
                             ],
@@ -267,7 +265,6 @@ recon_form = dbc.Row(
         )
 
 def set_recon_form_props(recon, read_only=False):
-    # set_props("dataset", {'value':recon.dataset_id, 'readonly':read_only})
     set_props("scanNumber", {'value':recon.scanNumber, 'readonly':read_only})
 
     set_props("frame_start", {'value':recon.file_range[0], 'readonly':read_only})
@@ -284,9 +281,7 @@ def set_recon_form_props(recon, read_only=False):
     set_props("file_output", {'value':recon.file_output, 'readonly':read_only})
     set_props("data_stacked", {'value':recon.file_stacked, 'disabled':read_only})
     set_props("h5_key", {'value':recon.file_h5_key, 'readonly':read_only})
-    #set_props("file_offset", {'value':recon.file_offset, 'readonly':read_only})
 
-    #TODO: Coloring based on connnection to config table
     set_props("cenx", {'value':recon.geo_mask_focus_cenx, 'readonly':read_only})
     set_props("ceny", {'value':recon.geo_mask_focus_cenz, 'readonly':read_only})
     set_props("cenz", {'value':recon.geo_mask_focus_cenz, 'readonly':read_only})

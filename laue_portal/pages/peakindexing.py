@@ -26,12 +26,6 @@ layout = html.Div([
                   ]),
 ])
 
-"""
-=======================
-Callbacks
-=======================
-"""
-
 @callback(
     Output('peakindex-id-header', 'children'),
     Input('url-peakindexing-page', 'href'),

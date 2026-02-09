@@ -102,12 +102,6 @@ layout = html.Div([
     ),
 ])
 
-"""
-=======================
-Callbacks
-=======================
-"""
-
 @callback(
     [Output('job-header', 'children'),
      Output('Status_print', 'children'),

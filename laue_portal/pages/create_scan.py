@@ -10,15 +10,12 @@ from laue_portal.components.metadata_form import metadata_form, set_metadata_for
 from laue_portal.components.catalog_form import catalog_form, set_catalog_form_props
 import laue_portal.database.session_utils as session_utils
 
-CATALOG_DEFAULTS = {#temporary
-    # 'scanNumber':log['scanNumber'],
-    'filefolder':'/net/s34data/export/s34data1/LauePortal/portal_workspace/Run1/data/scan_1', #'example/file/folder',
-    # 'filenamePrefix': 'Si-wire_%d', #'example_filename_prefix',
+CATALOG_DEFAULTS = {
+    'filefolder': '/net/s34data/export/s34data1/LauePortal/portal_workspace/Run1/data/scan_1',
     'filenamePrefix': ['Si-wire_%d'],
-
-    'aperture':{'options':'wire'},
-    'sample_name':'Si',
-    'notes':'',
+    'aperture': {'options': 'wire'},
+    'sample_name': 'Si',
+    'notes': '',
 }
 
 dash.register_page(__name__)
@@ -96,21 +93,8 @@ layout = dbc.Container(
     fluid=True
 )
 
-"""
-=======================
-Helper Functions
-=======================
-"""
 def get_scan_elements(xml_data):
-    """
-    Parse XML data and return available scan options for dropdown
-    
-    Args:
-        xml_data: Decoded XML data
-        
-    Returns:
-        List of dictionaries with 'label' and 'value' keys for dropdown options
-    """
+    """Parse XML data and return available scan options for dropdown."""
     import xml.etree.ElementTree as ET
     root = ET.fromstring(xml_data)
     
@@ -123,11 +107,6 @@ def get_scan_elements(xml_data):
     
     return scan_options
 
-"""
-=======================
-Callbacks
-=======================
-"""
 @dash.callback(
     [dash.Output('scan-selection-modal', 'is_open'),
      dash.Output('scan-selection-dropdown', 'options'),
@@ -210,18 +189,6 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
             # Set the form properties, including scan data
             set_metadata_form_props(metadata_row, scan_rows, read_only=True)
             
-            # # Add to database
-            # with Session(session_utils.get_engine()) as session:
-            #     session.add(metadata_row)
-            #     # session.add(catalog_row)
-            #     scan_row_count = session.query(Scan).count()
-            #     for id, scan_row in enumerate(scan_rows):
-            #         scan_row.id = scan_row_count + id
-            #         session.add(scan_row)
-            #
-            #     session.commit()
-            
-            # Close modal and show success
             return False, True, 'Scan data loaded successfully! Please review the forms and click "Submit to Database" to save.', 'success'
             
         except Exception as e:
@@ -383,8 +350,6 @@ def submit_catalog_and_metadata(n,
     scan_detectorTrig4_VALs,
     scan_cpts,
 ):
-    # TODO: Input validation and response
-    
     try:
         # Convert scanNumber to int if it's a string
         if isinstance(scanNumber, str):

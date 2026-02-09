@@ -68,18 +68,11 @@ layout = html.Div([
     ],
 )
 
-"""
-=======================
-Callbacks
-=======================
-"""
 VISIBLE_COLS = [
     db_schema.WireRecon.wirerecon_id,
     db_schema.WireRecon.scanNumber,
-    # db_schema.WireRecon.calib_id,
     db_schema.WireRecon.author,
     db_schema.WireRecon.notes,
-    #db_schema.WireRecon.pxl_recon,
     db_schema.Catalog.sample_name,
     db_schema.Catalog.aperture,
     db_schema.Job.submit_time,
@@ -89,10 +82,9 @@ VISIBLE_COLS = [
 ]
 
 CUSTOM_HEADER_NAMES = {
-    'wirerecon_id': 'Recon ID (Wire)', #'Wire Recon ID', #'ReconID',
+    'wirerecon_id': 'Recon ID (Wire)',
     'scanNumber': 'Scan Info', #'Scan ID',
     'calib_id': 'Calibration ID',
-    #'pxl_recon': 'Pixels'
     'submit_time': 'Date',
 }
 
@@ -208,8 +200,6 @@ def _get_recons():
         'suppressMenu': True, # Or False
         'width': 200 # Adjusted width for DBC buttons
     })
-    # recons['id'] = recons['scanNumber'] # This was for dash_table and is not directly used by ag-grid unless getRowId is configured
-    
     return cols, wirerecons.to_dict('records')
 
 @dash.callback(

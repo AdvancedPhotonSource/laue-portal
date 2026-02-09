@@ -73,11 +73,6 @@ layout = html.Div([
     ],
 )
 
-"""
-=======================
-Callbacks
-=======================
-"""
 VISIBLE_COLS = [
     db_schema.Metadata.scanNumber,
     db_schema.Catalog.sample_name,

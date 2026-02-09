@@ -22,8 +22,8 @@ from sqlalchemy.inspection import inspect
 
 # Import Laue Analysis functions
 from laue_portal.recon import analysis_recon
-from laueanalysis.reconstruct import reconstruct as wire_reconstruct  # This is actually for wire reconstruction
-from laueanalysis.indexing import index #pyLaueGo
+from laueanalysis.reconstruct import reconstruct as wire_reconstruct
+from laueanalysis.indexing import index
 from laue_portal.config import REDIS_CONFIG
 import laue_portal.database.session_utils as session_utils
 
@@ -115,9 +115,9 @@ def enqueue_job(job_id: int, job_type: str, execute_func, at_front: bool = False
         **kwargs,
         job_id=f"{job_type}_{job_id}",
         meta=job_meta,
-        at_front=at_front,  # Use at_front parameter
-        depends_on=depends_on,  # Add dependency support
-        job_timeout=timeout,  # Set the job timeout
+        at_front=at_front,
+        depends_on=depends_on,
+        job_timeout=timeout,
         result_ttl=86400,  # Keep result for 24 hours
         failure_ttl=86400  # Keep failed job info for 24 hours
     )
@@ -918,7 +918,7 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
                                     result.log
                                 ])
 
-                        else: #This might not work
+                        else:
                             result_str = str(result)
                         
                         if job_data.messages:
@@ -970,9 +970,6 @@ def execute_wire_reconstruction_job(job_id: int, input_file: str, output_file: s
     """Execute a wire reconstruction job (subjob)."""
     def _do_wire_reconstruction():
         return wire_reconstruct(input_file, output_file, geometry_file, depth_range, resolution, **kwargs)
-        # # Testing: sleep for 5 seconds instead
-        # time.sleep(5)
-        # return {"status": "test_completed", "message": "Slept for 5 seconds instead of running wire reconstruction"}
     
     return execute_with_status_updates(
         job_id,
@@ -991,7 +988,7 @@ def execute_peakindexing_job(job_id: int, input_file: str, output_dir: str,
                             index_h: int, index_k: int, index_l: int, **kwargs):
     """Execute a peakindexing job (subjob)."""
     def _do_peakindexing():
-        return index( #pyLaueGo(config_dict).run(0, 1)  # rank=0, size=1 for single process
+        return index(
             input_image=input_file,
             output_dir=output_dir,
             geo_file=geometry_file,
@@ -1013,9 +1010,6 @@ def execute_peakindexing_job(job_id: int, input_file: str, output_dir: str,
             index_l=index_l,
             **kwargs
         )
-        # # Testing: sleep for 5 seconds instead
-        # time.sleep(5)
-        # return {"status": "test_completed", "message": "Slept for 5 seconds instead of running peak indexing"}
     
     return execute_with_status_updates(
         job_id,

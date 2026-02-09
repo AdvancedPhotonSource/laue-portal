@@ -98,7 +98,7 @@ def build_output_folder_template(scan_num_int, data_path):
 
 JOB_DEFAULTS = {
     "computer_name": 'example_computer',
-    "status": 0, #pending, running, finished, stopped
+    "status": 0,
     "priority": 0,
     "submit_time": datetime.datetime.now(),
     "start_time": datetime.datetime.now(),
@@ -112,8 +112,8 @@ WIRERECON_DEFAULTS = {
     "depth_start": -50,
     "depth_end": 150,
     "depth_resolution": 1,
-    "outputFolder": "analysis/scan_%d/rec_%d/data",#"wire_recons",
-    "scanPoints": "7",#"1",  # String field for srange parsing
+    "outputFolder": "analysis/scan_%d/rec_%d/data",
+    "scanPoints": "7",
     "wire_edges": "leading",
 }
 
@@ -121,15 +121,6 @@ CATALOG_DEFAULTS = {
     "filefolder": "tests/data/gdata",
     "filenamePrefix": "HAs_long_laue1_",
 }
-
-# DEFAULT_VARIABLES = {
-#     "author": "",
-#     "notes": "",
-#     "root_path": "/net/s34data/export/s34data1/LauePortal/portal_workspace/",
-#     "num_threads": 35,
-#     "memory_limit_mb": 50000,
-#     "verbose": 1,
-# }
 
 dash.register_page(__name__)
 
@@ -209,9 +200,7 @@ layout = dbc.Container(
             justify="start",
             className="mb-0",
         ),
-        # html.Hr(),
         wire_recon_form,
-        # dcc.Store(id="next-wire-recon-id"),
         dcc.Store(id="wirerecon-data-loaded-signal"),
     ],
     )
@@ -256,7 +245,6 @@ def validate_wire_reconstruction_inputs(ctx):
         'outputFolder',
         'root_path',
         'IDnumber',  # Replaced scanNumber with IDnumber
-        # 'scanNumber',  # Now parsed from IDnumber
         'author',
     ]
     
@@ -293,7 +281,7 @@ def validate_wire_reconstruction_inputs(ctx):
     elif not os.path.exists(root_path):
         add_validation_message(validation_result, 'errors', 'root_path', 
                               custom_message="Root Path does not exist")
-    else: #Added to pass over in later loop over all_fields
+    else:
         parsed_fields['root_path'] = root_path
         add_validation_message(validation_result, 'successes', 'root_path')
     
@@ -327,7 +315,7 @@ def validate_wire_reconstruction_inputs(ctx):
     # Validate all other fields by iterating over all_fields    
     for field_name, field_value in all_fields.items():
         # Skip already handled fields
-        if field_name in parsed_fields: #{'root_path', 'data_path'}
+        if field_name in parsed_fields:
             continue
         # Check 1: Is it missing/empty?
         is_missing = False
@@ -615,11 +603,6 @@ def validate_wire_reconstruction_inputs(ctx):
     return validation_result
 
 
-"""
-=======================
-Callbacks
-=======================
-"""
 @dash.callback(
     Input('wirerecon-validate-btn', 'n_clicks'),
     State('data_path', 'value'),
@@ -632,8 +615,7 @@ Callbacks
     State('percent_brightest', 'value'),
     State('outputFolder', 'value'),
     State('root_path', 'value'),
-    State('IDnumber', 'value'),  # Replaced scanNumber with IDnumber
-    # State('scanNumber', 'value'),  # Old - now parsed from IDnumber
+    State('IDnumber', 'value'),
     State('author', 'value'),
     prevent_initial_call=True,
 )
@@ -649,8 +631,7 @@ def validate_inputs(
     percent_brightest,
     outputFolder,
     root_path,
-    IDnumber,  # Replaced scanNumber with IDnumber
-    # scanNumber,  # Old - now parsed from IDnumber
+    IDnumber,
     author,
 ):
     """Handle Validate button click"""
@@ -672,8 +653,7 @@ def validate_inputs(
     Input('submit_wire', 'n_clicks'),
     
     State('root_path', 'value'),
-    State('IDnumber', 'value'),  # Replaced scanNumber with IDnumber
-    # State('scanNumber', 'value'),  # Old - now parsed from IDnumber
+    State('IDnumber', 'value'),
     
     # User text
     State('author', 'value'),
@@ -701,8 +681,7 @@ def validate_inputs(
 )
 def submit_parameters(n,
     root_path,
-    IDnumber,  # Replaced scanNumber with IDnumber
-    # scanNumber,  # Old - now parsed from IDnumber
+    IDnumber,
     
     # User text
     author,
@@ -744,7 +723,7 @@ def submit_parameters(n,
     
     # Extract to local variables for cleaner code
     errors = validation_result['errors']
-    # warnings = validation_result['warnings']
+
     
     # Block submission if there are errors
     if errors:
@@ -760,7 +739,7 @@ def submit_parameters(n,
         try:
             id_dict = parse_IDnumber(IDnumber, temp_session)
             scanNumber = id_dict.get('scanNumber')
-            # wirerecon_id = id_dict.get('wirerecon_id')
+
         except ValueError as e:
             set_props("alert-submit", {
                 'is_open': True,
@@ -926,7 +905,7 @@ def submit_parameters(n,
                     outputFolder=full_output_folder,  # Store full path in database
                     verbose=verbose,
                 )
-                # config_dict = db_utils.create_config_obj(wirerecon)
+    
                 session.add(wirerecon)
                 
                 wirerecons_to_enqueue.append({
@@ -1001,7 +980,7 @@ def submit_parameters(n,
                 geometry_file=spec["geoFile"],  # Use full path
                 depth_range=depth_range,
                 resolution=spec["depth_resolution"],
-                percent_brightest=spec["percent_brightest"], #percent_to_process
+                percent_brightest=spec["percent_brightest"],
                 wire_edge=spec["wire_edges"],  # Note: form uses 'wire_edges', function expects 'wire_edge'
                 memory_limit_mb=spec["memory_limit_mb"],
                 num_threads=spec["num_threads"],
@@ -1067,62 +1046,6 @@ register_check_filenames_callback(
     num_indices=1
 )
 
-# @dash.callback(
-#     Input('url-create-wirerecon','pathname'),
-#     prevent_initial_call=True,
-# )
-# def get_wirerecons(path):
-#     root_path = DEFAULT_VARIABLES["root_path"]
-#     if path == '/create-wire-reconstruction':
-#         # Create a WireRecon object with form defaults (not for database insertion)
-#         wirerecon_form_data = db_schema.WireRecon(
-#             scanNumber=WIRERECON_DEFAULTS["scanNumber"],
-            
-#             # User text
-#             author=DEFAULT_VARIABLES["author"],
-#             notes=DEFAULT_VARIABLES["notes"],
-            
-#             # Recon constraints
-#             geoFile=WIRERECON_DEFAULTS["geoFile"],
-#             percent_brightest=WIRERECON_DEFAULTS["percent_brightest"],
-#             wire_edges=WIRERECON_DEFAULTS["wire_edges"],
-            
-#             # Depth parameters
-#             depth_start=WIRERECON_DEFAULTS["depth_start"],
-#             depth_end=WIRERECON_DEFAULTS["depth_end"],
-#             depth_resolution=WIRERECON_DEFAULTS["depth_resolution"],
-            
-#             # Compute parameters
-#             num_threads=DEFAULT_VARIABLES["num_threads"],
-#             memory_limit_mb=DEFAULT_VARIABLES["memory_limit_mb"],
-            
-#             # Files
-#             scanPoints=WIRERECON_DEFAULTS["scanPoints"],
-#             scanPointslen=srange(WIRERECON_DEFAULTS["scanPoints"]).len(),
-            
-#             # Output
-#             outputFolder=WIRERECON_DEFAULTS["outputFolder"],
-#             verbose=DEFAULT_VARIABLES["verbose"],
-#         )
-#         # Add root_path from DEFAULT_VARIABLES
-#         wirerecon_form_data.root_path = root_path
-#         with Session(session_utils.get_engine()) as session:
-#             # # Get next wirerecon_id
-#             # next_wirerecon_id = db_utils.get_next_id(session, db_schema.WireRecon)
-#             # # Store next_wirerecon_id and update title
-#             # set_props('next-wire-recon-id', {'value': next_wirerecon_id})
-#             # set_props('wirerecon-title', {'children': f"New wire recon {next_wirerecon_id}"})
-            
-#             # Retrieve data_path and filenamePrefix from catalog data
-#             catalog_data = get_catalog_data(session, WIRERECON_DEFAULTS["scanNumber"], root_path, CATALOG_DEFAULTS)
-#         wirerecon_form_data.data_path = catalog_data["data_path"]
-#         wirerecon_form_data.filenamePrefix = catalog_data["filenamePrefix"]
-            
-#         set_wire_recon_form_props(wirerecon_form_data)
-#     else:
-#         raise PreventUpdate
-
-
 @dash.callback(
     Output('wirerecon-data-loaded-signal', 'data'),
     Input('url-create-wirerecon', 'href'),
@@ -1151,12 +1074,6 @@ def load_scan_data_from_url(href):
 
     if scan_id_str:
         with Session(session_utils.get_engine()) as session:
-            # # Get next wirerecon_id
-            # next_wirerecon_id = db_utils.get_next_id(session, db_schema.WireRecon)
-            # # Store next_wirerecon_id and update title
-            # set_props('next-wire-recon-id', {'value': next_wirerecon_id})
-            # set_props('wirerecon-title', {'children': f"New wire recon {next_wirerecon_id}"})
-            
             try:
                 # This section handles both single and multiple/pooled scan numbers
                 scan_ids = [int(sid) if sid and sid.lower() != 'none' else None for sid in (scan_id_str.split(',') if scan_id_str else [])]
@@ -1189,7 +1106,6 @@ def load_scan_data_from_url(href):
                     
                     # Query metadata and scan data
                     metadata_data = session.query(db_schema.Metadata).filter(db_schema.Metadata.scanNumber == current_scan_id).first()
-                    # scan_data = session.query(db_schema.Scan).filter(db_schema.Scan.scanNumber == current_scan_id).all()
                     
                     if metadata_data:
                         if current_peakindex_id:
@@ -1198,16 +1114,6 @@ def load_scan_data_from_url(href):
                             found_items.append(f"wire reconstruction {current_wirerecon_id}")
                         else:
                             found_items.append(f"scan {current_scan_id}")
-                        
-                        # output_folder = WIRERECON_DEFAULTS["outputFolder"]
-                        
-                        # # Format output folder with scan number and wirerecon_id
-                        # try:
-                        #     output_folder = output_folder % (current_scan_id, next_wirerecon_id)
-                        # except:
-                        #     # If formatting fails, use the original string
-                        #     pass
-                        # next_wirerecon_id += 1
                         
                         # Build output folder template based on available IDs
                         output_folder = build_output_folder_template(

@@ -107,14 +107,13 @@ def build_output_folder_template(scan_num_int, data_path,
 
 JOB_DEFAULTS = {
     "computer_name": 'example_computer',
-    "status": 0, #pending, running, finished, stopped
+    "status": 0,
     "priority": 0,
     "submit_time": datetime.datetime.now(),
     "start_time": datetime.datetime.now(),
     "finish_time": datetime.datetime.now(),
 }
 
-# PEAKINDEX_DEFAULTS is now imported from laue_portal.config
 
 
 def create_default_peakindex(overrides=None):
@@ -403,8 +402,7 @@ def validate_peakindexing_inputs(ctx):
         'crystFile',
         'outputFolder',
         'root_path',
-        'IDnumber',  # Replaced scanNumber with IDnumber
-        # 'scanNumber',  # Now parsed from IDnumber
+        'IDnumber',
         'author',
         'threshold',
         'thresholdRatio',
@@ -456,37 +454,6 @@ def validate_peakindexing_inputs(ctx):
     # Extract individual field values
     root_path = all_fields.get('root_path', '')
     IDnumber = all_fields.get('IDnumber', '')
-    # Old individual ID fields (now parsed from IDnumber):
-    # scanNumber = all_params.get('scanNumber')
-    # recon_id = all_params.get('recon_id')
-    # wirerecon_id = all_params.get('wirerecon_id')
-    # peakindex_id = all_params.get('peakindex_id')
-    
-    # Other parameters (kept as comments for reference):
-    # data_path = all_params.get('data_path')
-    # filenamePrefix = all_params.get('filenamePrefix')
-    # scanPoints = all_params.get('scanPoints')
-    # depthRange = all_params.get('depthRange')
-    # geoFile = all_params.get('geoFile')
-    # crystFile = all_params.get('crystFile')
-    # outputFolder = all_params.get('outputFolder')
-    # threshold = all_params.get('threshold')
-    # thresholdRatio = all_params.get('thresholdRatio')
-    # maxRfactor = all_params.get('maxRfactor')
-    # boxsize = all_params.get('boxsize')
-    # max_number = all_params.get('max_number')
-    # min_separation = all_params.get('min_separation')
-    # min_size = all_params.get('min_size')
-    # max_peaks = all_params.get('max_peaks')
-    # indexKeVmaxCalc = all_params.get('indexKeVmaxCalc')
-    # indexKeVmaxTest = all_params.get('indexKeVmaxTest')
-    # indexAngleTolerance = all_params.get('indexAngleTolerance')
-    # indexCone = all_params.get('indexCone')
-    # indexHKL = all_params.get('indexHKL')
-    # detectorCropX1 = all_params.get('detectorCropX1')
-    # detectorCropX2 = all_params.get('detectorCropX2')
-    # detectorCropY1 = all_params.get('detectorCropY1')
-    # detectorCropY2 = all_params.get('detectorCropY2')
     
     # Validate root_path directory exists
     if not root_path:
@@ -494,7 +461,7 @@ def validate_peakindexing_inputs(ctx):
     elif not os.path.exists(root_path):
         add_validation_message(validation_result, 'errors', 'root_path', 
                               custom_message="Root Path does not exist")
-    else: #Added to pass over in later loop over all_fields
+    else:
         parsed_fields['root_path'] = root_path
         add_validation_message(validation_result, 'successes', 'root_path')
     
@@ -528,7 +495,7 @@ def validate_peakindexing_inputs(ctx):
     # Validate all other fields by iterating over all_fields    
     for field_name, field_value in all_fields.items():
         # Skip already handled fields
-        if field_name in parsed_fields: #{'root_path', 'data_path'}
+        if field_name in parsed_fields:
             continue
         # Check 1: Is it missing/empty?
         is_missing = False
@@ -550,7 +517,7 @@ def validate_peakindexing_inputs(ctx):
                 add_validation_message(validation_result, 'warnings', field_name, display_name="Scan Number")
                 continue  # Skip parsing
             # Special case for depthRange: optional parameter
-            elif field_name in optional_params:#field_name == 'depthRange':
+            elif field_name in optional_params:
                 continue  # Skip - this is optional
             else:
                 add_validation_message(validation_result, 'errors', field_name)
@@ -1021,11 +988,6 @@ def validate_peakindexing_inputs(ctx):
     return validation_result
 
 
-"""
-=======================
-Callbacks
-=======================
-"""
 @dash.callback(
     Input('peakindex-validate-btn', 'n_clicks'),
     State('data_path', 'value'),
@@ -1036,8 +998,7 @@ Callbacks
     State('crystFile', 'value'),
     State('outputFolder', 'value'),
     State('root_path', 'value'),
-    State('IDnumber', 'value'),  # Replaced scanNumber with IDnumber
-    # State('scanNumber', 'value'),  # Old - now parsed from IDnumber
+    State('IDnumber', 'value'),
     State('author', 'value'),
     State('threshold', 'value'),
     State('thresholdRatio', 'value'),
@@ -1052,10 +1013,6 @@ Callbacks
     State('indexAngleTolerance', 'value'),
     State('indexCone', 'value'),
     State('indexHKL', 'value'),
-    # State('detectorCropX1', 'value'),  # Not in layout - validated from ctx
-    # State('detectorCropX2', 'value'),  # Not in layout - validated from ctx
-    # State('detectorCropY1', 'value'),  # Not in layout - validated from ctx
-    # State('detectorCropY2', 'value'),  # Not in layout - validated from ctx
     prevent_initial_call=True,
 )
 def validate_inputs(
@@ -1068,8 +1025,7 @@ def validate_inputs(
     crystFile,
     outputFolder,
     root_path,
-    IDnumber,  # Replaced scanNumber with IDnumber
-    # scanNumber,  # Old - now parsed from IDnumber
+    IDnumber,
     author,
     threshold,
     thresholdRatio,
@@ -1084,10 +1040,6 @@ def validate_inputs(
     indexAngleTolerance,
     indexCone,
     indexHKL,
-    # detectorCropX1,  # Not in layout - validated from ctx
-    # detectorCropX2,  # Not in layout - validated from ctx
-    # detectorCropY1,  # Not in layout - validated from ctx
-    # detectorCropY2,  # Not in layout - validated from ctx
 ):
     """Handle Validate button click"""
     
@@ -1108,13 +1060,9 @@ def validate_inputs(
     Input('submit_peakindexing', 'n_clicks'),
     
     State('root_path', 'value'),
-    State('IDnumber', 'value'),  # Replaced individual ID fields with IDnumber
-    # State('scanNumber', 'value'),  # Old - now parsed from IDnumber
+    State('IDnumber', 'value'),
     State('author', 'value'),
     State('notes', 'value'),
-    # State('recon_id', 'value'),  # Old - now parsed from IDnumber
-    # State('wirerecon_id', 'value'),  # Old - now parsed from IDnumber
-    # State('peakProgram', 'value'),
     State('threshold', 'value'),
     State('thresholdRatio', 'value'),
     State('maxRfactor', 'value'),
@@ -1122,16 +1070,8 @@ def validate_inputs(
     State('max_number', 'value'),
     State('min_separation', 'value'),
     State('peakShape', 'value'),
-    # State('scanPointStart', 'value'),
-    # State('scanPointEnd', 'value'),
-    # State('depthRangeStart', 'value'),
-    # State('depthRangeEnd', 'value'),
     State('scanPoints', 'value'),
     State('depthRange', 'value'),
-    # State('detectorCropX1', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
-    # State('detectorCropX2', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
-    # State('detectorCropY1', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
-    # State('detectorCropY2', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
     State('min_size', 'value'),
     State('max_peaks', 'value'),
     State('smooth', 'value'),
@@ -1140,39 +1080,23 @@ def validate_inputs(
     State('indexKeVmaxTest', 'value'),
     State('indexAngleTolerance', 'value'),
     State('indexHKL', 'value'),
-    # State('indexH', 'value'),
-    # State('indexK', 'value'),
-    # State('indexL', 'value'),
     State('indexCone', 'value'),
-    # State('energyUnit', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
-    # State('exposureUnit', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
     State('cosmicFilter', 'value'),
-    # State('recipLatticeUnit', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
-    # State('latticeParametersUnit', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
-    # State('peaksearchPath', 'value'),
-    # State('p2qPath', 'value'),
-    # State('indexingPath', 'value'),
     State('data_path', 'value'),
-    # State('filefolder', 'value'),
     State('filenamePrefix', 'value'),
     State('outputFolder', 'value'),
     State('geoFile', 'value'),
     State('crystFile', 'value'),
     State('depth', 'value'),
-    State('outputXML', 'value'),  # Output XML filename for merged results
-    # State('beamline', 'value'),  # Not in form - using PEAKINDEX_DEFAULTS
+    State('outputXML', 'value'),
     
     prevent_initial_call=True,
 )
 def submit_parameters(n,
     root_path,
-    IDnumber,  # Replaced individual ID fields with IDnumber
-    # scanNumber,  # Old - now parsed from IDnumber
+    IDnumber,
     author,
     notes,
-    # recon_id,  # Old - now parsed from IDnumber
-    # wirerecon_id,  # Old - now parsed from IDnumber
-    # peakProgram,
     threshold,
     thresholdRatio,
     maxRfactor,
@@ -1180,16 +1104,8 @@ def submit_parameters(n,
     max_number,
     min_separation,
     peakShape,
-    # scanPointStart,
-    # scanPointEnd,
-    # depthRangeStart,
-    # depthRangeEnd,
     scanPoints,
     depthRange,
-    # detectorCropX1,  # Not in form - using PEAKINDEX_DEFAULTS
-    # detectorCropX2,  # Not in form - using PEAKINDEX_DEFAULTS
-    # detectorCropY1,  # Not in form - using PEAKINDEX_DEFAULTS
-    # detectorCropY2,  # Not in form - using PEAKINDEX_DEFAULTS
     min_size,
     max_peaks,
     smooth,
@@ -1198,27 +1114,15 @@ def submit_parameters(n,
     indexKeVmaxTest,
     indexAngleTolerance,
     indexHKL,
-    # indexH,
-    # indexK,
-    # indexL,
     indexCone,
-    # energyUnit,  # Not in form - using PEAKINDEX_DEFAULTS
-    # exposureUnit,  # Not in form - using PEAKINDEX_DEFAULTS
     cosmicFilter,
-    # recipLatticeUnit,  # Not in form - using PEAKINDEX_DEFAULTS
-    # latticeParametersUnit,  # Not in form - using PEAKINDEX_DEFAULTS
-    # peaksearchPath,
-    # p2qPath,
-    # indexingPath,
     data_path,
-    # filefolder,
     filenamePrefix,
     outputFolder,
     geometry_file,
     crystal_file,
     depth,
-    outputXML,  # Output XML filename for merged results
-    # beamline,  # Not in form - using PEAKINDEX_DEFAULTS
+    outputXML,
     
 ):
     """
@@ -1506,7 +1410,6 @@ def submit_parameters(n,
                     filefolder=current_full_data_path,
                     filenamePrefix=current_filename_prefix,
 
-                    # peakProgram=peakProgram,
                     threshold=threshold_list[i],
                     thresholdRatio=thresholdRatio_list[i],
                     maxRfactor=maxRfactor_list[i],
@@ -1514,10 +1417,6 @@ def submit_parameters(n,
                     max_number=max_number_list[i],
                     min_separation=min_separation_list[i],
                     peakShape=peakShape_list[i],
-                    # scanPointStart=scanPointStart,
-                    # scanPointEnd=scanPointEnd,
-                    # depthRangeStart=depthRangeStart,
-                    # depthRangeEnd=depthRangeEnd,
                     scanPoints=current_scanPoints,
                     scanPointslen=scanPoints_srange.len(),
                     depthRange=current_depthRange,
@@ -1542,13 +1441,10 @@ def submit_parameters(n,
                     cosmicFilter=cosmicFilter_list[i],
                     recipLatticeUnit=recipLatticeUnit_list[i],
                     latticeParametersUnit=latticeParametersUnit_list[i],
-                    # peaksearchPath=peaksearchPath,
-                    # p2qPath=p2qPath,
-                    # indexingPath=indexingPath,
-                    outputFolder=full_output_folder,  # Store full path in database
-                    outputXML=current_outputXML,  # Store output XML filename/path in database
-                    geoFile=full_geometry_file,  # Store full path in database
-                    crystFile=full_crystal_file,  # Store full path in database
+                    outputFolder=full_output_folder,
+                    outputXML=current_outputXML,
+                    geoFile=full_geometry_file,
+                    crystFile=full_crystal_file,
                     depth=depth_list[i],
                     beamline=beamline_list[i],
                 )
@@ -1718,92 +1614,6 @@ register_check_filenames_callback(
 )
 
 
-# @dash.callback(
-#     Input('url-create-peakindexing','pathname'),
-#     prevent_initial_call=True,
-# )
-# def get_peakindexings(path):
-#     root_path = DEFAULT_VARIABLES["root_path"]
-#     if path == '/create-peakindexing':
-#         # Create a PeakIndex object with form defaults (not for database insertion)
-#         peakindex_form_data = db_schema.PeakIndex(
-#             scanNumber=PEAKINDEX_DEFAULTS.get("scanNumber", 0),
-            
-#             # User text
-#             author=DEFAULT_VARIABLES["author"],
-#             notes=DEFAULT_VARIABLES["notes"],
-            
-#             # Processing parameters
-#             # peakProgram=PEAKINDEX_DEFAULTS["peakProgram"],
-#             threshold=PEAKINDEX_DEFAULTS["threshold"],
-#             thresholdRatio=PEAKINDEX_DEFAULTS["thresholdRatio"],
-#             maxRfactor=PEAKINDEX_DEFAULTS["maxRfactor"],
-#             boxsize=PEAKINDEX_DEFAULTS["boxsize"],
-#             max_number=PEAKINDEX_DEFAULTS["max_peaks"],
-#             min_separation=PEAKINDEX_DEFAULTS["min_separation"],
-#             peakShape=PEAKINDEX_DEFAULTS["peakShape"],
-#             # scanPointStart=PEAKINDEX_DEFAULTS["scanPointStart"],
-#             # scanPointEnd=PEAKINDEX_DEFAULTS["scanPointEnd"],
-#             # depthRangeStart=PEAKINDEX_DEFAULTS.get("depthRangeStart"),
-#             # depthRangeEnd=PEAKINDEX_DEFAULTS.get("depthRangeEnd"),
-#             scanPoints=PEAKINDEX_DEFAULTS["scanPoints"],
-#             scanPointslen=srange(PEAKINDEX_DEFAULTS["scanPoints"]).len(),
-#             depthRange=PEAKINDEX_DEFAULTS["depthRange"],
-#             depthRangelen=srange(PEAKINDEX_DEFAULTS["depthRange"]).len(),
-#             detectorCropX1=PEAKINDEX_DEFAULTS["detectorCropX1"],
-#             detectorCropX2=PEAKINDEX_DEFAULTS["detectorCropX2"],
-#             detectorCropY1=PEAKINDEX_DEFAULTS["detectorCropY1"],
-#             detectorCropY2=PEAKINDEX_DEFAULTS["detectorCropY2"],
-#             min_size=PEAKINDEX_DEFAULTS["min_size"],
-#             max_peaks=PEAKINDEX_DEFAULTS["max_peaks"],
-#             smooth=PEAKINDEX_DEFAULTS["smooth"],
-#             maskFile=PEAKINDEX_DEFAULTS["maskFile"],
-#             indexKeVmaxCalc=PEAKINDEX_DEFAULTS["indexKeVmaxCalc"],
-#             indexKeVmaxTest=PEAKINDEX_DEFAULTS["indexKeVmaxTest"],
-#             indexAngleTolerance=PEAKINDEX_DEFAULTS["indexAngleTolerance"],
-#             indexH=PEAKINDEX_DEFAULTS["indexH"],
-#             indexK=PEAKINDEX_DEFAULTS["indexK"],
-#             indexL=PEAKINDEX_DEFAULTS["indexL"],
-#             indexCone=PEAKINDEX_DEFAULTS["indexCone"],
-#             energyUnit=PEAKINDEX_DEFAULTS["energyUnit"],
-#             exposureUnit=PEAKINDEX_DEFAULTS["exposureUnit"],
-#             cosmicFilter=PEAKINDEX_DEFAULTS["cosmicFilter"],
-#             recipLatticeUnit=PEAKINDEX_DEFAULTS["recipLatticeUnit"],
-#             latticeParametersUnit=PEAKINDEX_DEFAULTS["latticeParametersUnit"],
-#             # peaksearchPath=PEAKINDEX_DEFAULTS["peaksearchPath"],
-#             # p2qPath=PEAKINDEX_DEFAULTS["p2qPath"],
-#             # indexingPath=PEAKINDEX_DEFAULTS["indexingPath"],
-            
-#             # File paths
-#             outputFolder=PEAKINDEX_DEFAULTS["outputFolder"],
-#             # filefolder=CATALOG_DEFAULTS["filefolder"],
-#             geoFile=PEAKINDEX_DEFAULTS["geoFile"],
-#             crystFile=PEAKINDEX_DEFAULTS["crystFile"],
-            
-#             # Other fields
-#             depth=PEAKINDEX_DEFAULTS["depth"],
-#             beamline=PEAKINDEX_DEFAULTS["beamline"],
-#         )
-        
-#         # Add root_path from DEFAULT_VARIABLES
-#         peakindex_form_data.root_path = root_path
-#         with Session(session_utils.get_engine()) as session:
-#             # Get next peakindex_id
-#             next_peakindex_id = db_utils.get_next_id(session, db_schema.PeakIndex)                                
-#             # Store next_peakindex_id and update title
-#             set_props('next-peakindex-id', {'value': next_peakindex_id})
-#             set_props('peakindex-title', {'children': f"New peak indexing {next_peakindex_id}"})
-            
-#             # Retrieve data_path and filenamePrefix from catalog data
-#             catalog_data = get_catalog_data(session, PEAKINDEX_DEFAULTS["scanNumber"], root_path, CATALOG_DEFAULTS)
-#         peakindex_form_data.data_path = catalog_data["data_path"]
-#         peakindex_form_data.filenamePrefix = catalog_data["filenamePrefix"]
-            
-#         # Populate the form with the defaults
-#         set_peakindex_form_props(peakindex_form_data)
-#     else:
-#         raise PreventUpdate
-
 @dash.callback(
     Output('peakindex-data-loaded-signal', 'data'),
     Input('url-create-peakindexing', 'href'),
@@ -1959,12 +1769,6 @@ def load_scan_data_from_url(href):
     # Original behavior: scan_id is provided
     if scan_id_str:
         with Session(session_utils.get_engine()) as session:
-            # # Get next peakindex_id
-            # next_peakindex_id = db_utils.get_next_id(session, db_schema.PeakIndex)
-            # # Store next_peakindex_id and update title
-            # set_props('next-peakindex-id', {'value': next_peakindex_id})
-            # set_props('peakindex-title', {'children': f"New peak indexing {next_peakindex_id}"})
-
             try:
                 # This section handles both single and multiple/pooled scan numbers
                 scan_ids = [int(sid) if sid and sid.lower() != 'none' else None for sid in (scan_id_str.split(',') if scan_id_str else [])]
@@ -2005,24 +1809,6 @@ def load_scan_data_from_url(href):
                         else:
                             found_items.append(f"scan {current_scan_id}")
 
-                        # Determine output folder format based on if reconstruction ID
-                        # outputFolder = PEAKINDEX_DEFAULTS["outputFolder"]
-                        # if current_recon_id or current_wirerecon_id:
-                        #     outputFolder = outputFolder.replace("index_%d", "rec_%d/index_%d") #"analysis/scan_%d/rec_%d/index_%d"
-                        
-                        # # Format output folder with scan number and IDs
-                        # try:
-                        #     if current_wirerecon_id:
-                        #         outputFolder = outputFolder % (current_scan_id, current_wirerecon_id, next_peakindex_id)
-                        #     elif current_recon_id:
-                        #         outputFolder = outputFolder % (current_scan_id, current_recon_id, next_peakindex_id)
-                        #     else:
-                        #         outputFolder = outputFolder % (current_scan_id, next_peakindex_id)
-                        # except:
-                        #     # If formatting fails, use the original string
-                        #     pass
-                        # next_peakindex_id += 1
-                        
                         # Build output folder template based on available IDs
                         outputFolder = build_output_folder_template(
                             scan_num_int=current_scan_id,

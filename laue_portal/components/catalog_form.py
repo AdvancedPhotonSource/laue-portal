@@ -10,13 +10,6 @@ catalog_form = dbc.Row(
                             [
                                 _stack(
                                     [
-                                        # _field("Dataset", "dataset", size='lg'),
-                                        # _field("Scan Number", "scanNumber", size='md'),
-                                    ]
-                                ),
-                                _stack(
-                                    [
-                                        #_field("Aperture", 'aperture', size='lg'),
                                         _select("Aperture", 'aperture',
                                             [
                                                 {"label": "None", "value": None},
@@ -24,7 +17,7 @@ catalog_form = dbc.Row(
                                                 {"label": "Coded Aperture", "value": "mask"},
                                             ],
                                             size='sm',
-                                            kwargs={'placeholder':'Select:'}, 
+                                            kwargs={'placeholder': 'Select:'},
                                         ),
                                     ]
                                 ),
@@ -41,7 +34,7 @@ catalog_form = dbc.Row(
                             [
                                 _stack(
                                     [
-                                        _field("Files Path", "filefolder"), #'file_path'
+                                        _field("Files Path", "filefolder"),
                                     ]
                                 ),
                                 _stack(
@@ -49,12 +42,6 @@ catalog_form = dbc.Row(
                                         _field("Filename Prefix", "filenamePrefix", size='lg'),
                                     ]
                                 ),
-                                # _stack(
-                                #     [
-                                #         _field("Scan Point (Inner Index) Range Start", "scanPointStart", size='md'),
-                                #         _field("Scan Point (Inner Index) Range End", "scanPointEnd", size='md'),
-                                #     ]
-                                # ),
                             ],
                             title="File Parameters",
                             item_id="item-2",
@@ -63,7 +50,6 @@ catalog_form = dbc.Row(
                             [
                                 _stack(
                                     [
-                                        # _field("Notes", "notes")
                                         dbc.Textarea(
                                             id="notes",
                                             style={"width": "100%", "minHeight": "100px"},
@@ -77,18 +63,16 @@ catalog_form = dbc.Row(
                         ],
                         always_open=True,
                         start_collapsed=False,
-                        active_item=["item-1","item-2","item-3"]
+                        active_item=["item-1", "item-2", "item-3"]
                     ),
                 ],
                 style={'width': '100%', 'overflow-x': 'auto'}
         )
 
+
 def set_catalog_form_props(catalog, read_only=False):
-    # set_props("scanNumber", {'value':catalog.scanNumber, 'readonly':read_only})
-
-    set_props("filefolder", {'value':catalog.filefolder, 'readonly':read_only})
-    set_props("filenamePrefix", {'value':','.join(catalog.filenamePrefix), 'readonly':read_only})
-
-    set_props("aperture", {'value':catalog.aperture, 'disabled':read_only})
-    set_props("sample_name", {'value':catalog.sample_name, 'readonly':read_only})
-    set_props("notes", {'value':catalog.notes, 'readonly':read_only})
+    set_props("filefolder", {'value': catalog.filefolder, 'readonly': read_only})
+    set_props("filenamePrefix", {'value': ','.join(catalog.filenamePrefix), 'readonly': read_only})
+    set_props("aperture", {'value': catalog.aperture, 'disabled': read_only})
+    set_props("sample_name", {'value': catalog.sample_name, 'readonly': read_only})
+    set_props("notes", {'value': catalog.notes, 'readonly': read_only})

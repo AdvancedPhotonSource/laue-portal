@@ -276,46 +276,17 @@ def import_metadata_row(metadata_object):
         sample_XYZ_unit=metadata_object['sample_XYZ_unit'],
         sample_XYZ_desc=metadata_object['sample_XYZ_desc'],
         sample_XYZ=metadata_object['sample_XYZ'],
-        # sample_X=metadata_object['sample_X'],
-        # sample_Y=metadata_object['sample_Y'],
-        # sample_Z=metadata_object['sample_Z'],
         knifeEdge_XYZ_unit=metadata_object['knife-edge_XYZ_unit'],
         knifeEdge_XYZ_desc=metadata_object['knife-edge_XYZ_desc'],
         knifeEdge_XYZ=metadata_object['knife-edge_XYZ'],
-        # knifeEdge_X=metadata_object['knife-edge_X'],
-        # knifeEdge_Y=metadata_object['knife-edge_Y'],
-        # knifeEdge_Z=metadata_object['knife-edge_Z'],
         knifeEdge_knifeScan_unit=metadata_object['knife-edge_knifeScan_unit'],
         knifeEdge_knifeScan=metadata_object['knife-edge_knifeScan'],
-        # scan_dim=metadata_object['scan_dim'],
-        # scan_npts=metadata_object['scan_npts'],
-        # scan_after=metadata_object['scan_after'],
-        # scan_positionerSettle_unit=metadata_object['scan_positionerSettle_unit'],
-        # scan_positionerSettle=metadata_object['scan_positionerSettle'],
-        # scan_detectorSettle_unit=metadata_object['scan_detectorSettle_unit'],
-        # scan_detectorSettle=metadata_object['scan_detectorSettle'],
-        # scan_beforePV_VAL=metadata_object['scan_beforePV_VAL'],
-        # scan_beforePV_wait=metadata_object['scan_beforePV_wait'],
-        # scan_beforePV=metadata_object['scan_beforePV'],
-        # scan_afterPV_VAL=metadata_object['scan_afterPV_VAL'],
-        # scan_afterPV_wait=metadata_object['scan_afterPV_wait'],
-        # scan_afterPV=metadata_object['scan_afterPV'],
-        # scan_positioner_PV=metadata_object['scan_positioner_PV'],
-        # scan_positioner_ar=metadata_object['scan_positioner_ar'],
-        # scan_positioner_mode=metadata_object['scan_positioner_mode'],
-        # scan_positioner_1=metadata_object['scan_positioner_1'],
-        # scan_positioner_2=metadata_object['scan_positioner_2'],
-        # scan_positioner_3=metadata_object['scan_positioner_3'],
-        # scan_detectorTrig_PV=metadata_object['scan_detectorTrig_PV'],
-        # scan_detectorTrig_VAL=metadata_object['scan_detectorTrig_VAL'],
-        # scan_detectors=metadata_object['scan_detectors'],
         mda_file=metadata_object['mda_file'],
         scanEnd_abort=metadata_object['scanEnd_abort'],
         scanEnd_time_epoch=convert_epoch_string_to_int(metadata_object['scanEnd_time_epoch']),
         scanEnd_time=metadata_object['scanEnd_time'],
         scanEnd_scanDuration_unit=metadata_object['scanEnd_scanDuration_unit'],
         scanEnd_scanDuration=metadata_object['scanEnd_scanDuration'],
-        # scanEnd_cpt=metadata_object['scanEnd_cpt'],
         scanEnd_source_beamBad=metadata_object['scanEnd_source_beamBad'],
         scanEnd_source_ringCurrent_unit=metadata_object['scanEnd_source_ringCurrent_unit'],
         scanEnd_source_ringCurrent=metadata_object['scanEnd_source_ringCurrent'],
@@ -324,27 +295,12 @@ def import_metadata_row(metadata_object):
 
 
 def import_scan_row(scan_object):
-    """
-    Reads a yaml file and creates a new Scan ORM object with 
-    the base data of the file
-    """
-
+    """Create a Scan ORM object from a scan dictionary."""
     scan_row = db_schema.Scan(
-
         scanNumber=scan_object['scanNumber'],
         scan_dim=scan_object['scan_dim'],
         scan_npts=scan_object['scan_npts'],
         scan_after=scan_object['scan_after'],
-        # scan_positionerSettle_unit=scan_object['scan_positionerSettle_unit'],
-        # scan_positionerSettle=scan_object['scan_positionerSettle'],
-        # scan_detectorSettle_unit=scan_object['scan_detectorSettle_unit'],
-        # scan_detectorSettle=scan_object['scan_detectorSettle'],
-        # scan_beforePV_VAL=scan_object['scan_beforePV_VAL'],
-        # scan_beforePV_wait=scan_object['scan_beforePV_wait'],
-        # scan_beforePV=scan_object['scan_beforePV'],
-        # scan_afterPV_VAL=scan_object['scan_afterPV_VAL'],
-        # scan_afterPV_wait=scan_object['scan_afterPV_wait'],
-        # scan_afterPV=scan_object['scan_afterPV'],
         scan_positioner1_PV=scan_object['scan_positioner1_PV'],
         scan_positioner1_ar=scan_object['scan_positioner1_ar'],
         scan_positioner1_mode=scan_object['scan_positioner1_mode'],
@@ -369,7 +325,6 @@ def import_scan_row(scan_object):
         scan_detectorTrig3_VAL=scan_object['scan_detectorTrig3_VAL'],
         scan_detectorTrig4_PV=scan_object['scan_detectorTrig4_PV'],
         scan_detectorTrig4_VAL=scan_object['scan_detectorTrig4_VAL'],
-        # scan_detectors=metadata_object['scan_detectors'],
         scan_cpt=scan_object['scan_cpt'],
     )
     return scan_row
@@ -581,28 +536,17 @@ def create_config_obj(recon):
 
 
 def import_peakindex_row(peakindex_object):
-    """
-    Reads a yaml file and creates a new PeakIndex ORM object with 
-    the base data of the file
-    """
-
-    # Optional Params
-    #use_gpu = peakindex_object['comp']['use_gpu'] if 'use_gpu' in peakindex_object['comp'] else False
-    #batch_size = peakindex_object['comp']['batch_size'] if 'batch_size' in peakindex_object['comp'] else 1
-
-    peakindex_row = db_schema.PeakIndex(        
-        # peakProgram=peakindex_object['peakProgram'],
+    """Create a PeakIndex ORM object from a peakindex dictionary."""
+    peakindex_row = db_schema.PeakIndex(
         threshold=peakindex_object['threshold'],
         thresholdRatio=peakindex_object['thresholdRatio'],
         maxRfactor=peakindex_object['maxRfactor'],
         boxsize=peakindex_object['boxsize'],
-        max_number=peakindex_object['max_peaks'], # NOTE: Duplicate of max_peaks
+        max_number=peakindex_object['max_peaks'],
         min_separation=peakindex_object['min_separation'],
         peakShape=peakindex_object['peakShape'],
         scanPointStart=peakindex_object['scanPointStart'],
         scanPointEnd=peakindex_object['scanPointEnd'],
-        # depthRangeStart=peakindex_object['depthRangeStart'],
-        # depthRangeEnd=peakindex_object['depthRangeEnd'],
         detectorCropX1=peakindex_object['detectorCropX1'],
         detectorCropX2=peakindex_object['detectorCropX2'],
         detectorCropY1=peakindex_object['detectorCropY1'],
@@ -633,13 +577,11 @@ def import_peakindex_row(peakindex_object):
         crystFile=peakindex_object['crystFile'],
         depth=peakindex_object['depth'],
         beamline=peakindex_object['beamline'],
-        # cosmicFilter=peakindex_object['cosmicFilter'],
     )
     return peakindex_row
 
 def create_peakindex_config_obj(peakindex):
     config_dict = {
-            # 'peakProgram':peakindex.peakProgram,
             'threshold':peakindex.threshold,
             'thresholdRatio':peakindex.thresholdRatio,
             'maxRfactor':peakindex.maxRfactor,
@@ -649,8 +591,6 @@ def create_peakindex_config_obj(peakindex):
             'peakShape':peakindex.peakShape,
             'scanPointStart':peakindex.scanPointStart,
             'scanPointEnd':peakindex.scanPointEnd,
-            # 'depthRangeStart':peakindex.depthRangeStart,
-            # 'depthRangeEnd':peakindex.depthRangeEnd,
             'detectorCropX1':peakindex.detectorCropX1,
             'detectorCropX2':peakindex.detectorCropX2,
             'detectorCropY1':peakindex.detectorCropY1,
@@ -681,7 +621,6 @@ def create_peakindex_config_obj(peakindex):
             'crystFile':peakindex.crystFile,
             'depth':peakindex.depth,
             'beamline':peakindex.beamline,
-            # 'cosmicFilter':peakindex.cosmicFilter,
             }
     return config_dict
 
