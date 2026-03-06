@@ -196,6 +196,74 @@ class TestMergeXmlFiles:
         assert step.find('indexing').get('indexProgram') == 'euler'
         assert step.find('indexing/pattern').get('num') == '0'
     
+    def test_merge_namespaced_step_elements(self, tmp_path):
+        """Test merging XML files where <step> has an xmlns attribute."""
+        xml_dir = tmp_path / "xml"
+        xml_dir.mkdir()
+        
+        ns = "http://sector34.xray.aps.anl.gov/34ide:indexResult"
+        
+        # Create XML files with namespaced <step> elements (the new format)
+        for i in range(3):
+            root = ET.Element('AllSteps')
+            step = ET.SubElement(root, f'{{{ns}}}step')
+            ET.SubElement(step, f'{{{ns}}}scanNum').text = str(i + 1)
+            ET.SubElement(step, f'{{{ns}}}Xsample').text = str(100.0 + i)
+            
+            tree = ET.ElementTree(root)
+            ET.indent(root, space="    ")
+            
+            xml_path = xml_dir / f"test_{i+1}.xml"
+            with open(xml_path, 'w', encoding='utf-8') as f:
+                f.write('<?xml version="1.0" ?>\n')
+                tree.write(f, encoding='unicode', xml_declaration=False)
+        
+        output_path = tmp_path / "output.xml"
+        result = merge_xml_files(str(xml_dir), str(output_path))
+        
+        assert result['success'] is True
+        assert result['files_merged'] == 3
+        assert os.path.exists(output_path)
+        
+        # Verify content
+        tree = ET.parse(output_path)
+        root = tree.getroot()
+        assert root.tag == 'AllSteps'
+        steps = root.findall(f'{{{ns}}}step')
+        assert len(steps) == 3
+    
+    def test_merge_mixed_namespaced_and_plain_step_elements(self, tmp_path):
+        """Test merging when some files have namespaced steps and some don't."""
+        xml_dir = tmp_path / "xml"
+        xml_dir.mkdir()
+        
+        ns = "http://sector34.xray.aps.anl.gov/34ide:indexResult"
+        
+        # Create a namespaced XML
+        root = ET.Element('AllSteps')
+        step = ET.SubElement(root, f'{{{ns}}}step')
+        ET.SubElement(step, f'{{{ns}}}scanNum').text = '1'
+        tree = ET.ElementTree(root)
+        ET.indent(root, space="    ")
+        with open(xml_dir / "test_1.xml", 'w', encoding='utf-8') as f:
+            f.write('<?xml version="1.0" ?>\n')
+            tree.write(f, encoding='unicode', xml_declaration=False)
+        
+        # Create a plain (non-namespaced) XML
+        create_test_xml(xml_dir / "test_2.xml", {"scanNum": "2"})
+        
+        output_path = tmp_path / "output.xml"
+        result = merge_xml_files(str(xml_dir), str(output_path))
+        
+        assert result['success'] is True
+        assert result['files_merged'] == 2
+        
+        # Verify both steps are present
+        tree = ET.parse(output_path)
+        root = tree.getroot()
+        # Should have 2 children total (one namespaced, one plain)
+        assert len(list(root)) == 2
+    
     def test_output_path_returned_in_result(self, tmp_path):
         """Test that output_path is correctly returned in result."""
         xml_dir = tmp_path / "xml"

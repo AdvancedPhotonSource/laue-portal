@@ -172,8 +172,18 @@ def merge_xml_files(xml_dir: str, output_xml_path: str) -> Dict[str, Any]:
                 tree = ET.parse(xml_file)
                 root = tree.getroot()
                 
-                # Find all <step> elements and add them to the merged root
-                for step in root.findall('.//step'):
+                # Find all <step> elements and add them to the merged root.
+                # Use a match that handles both namespaced and non-namespaced
+                # step elements. ElementTree represents namespaced tags as
+                # {namespace_uri}localname, so a plain findall('.//step') will
+                # miss elements like <step xmlns="...">.
+                found_steps = root.findall('.//step')
+                if not found_steps:
+                    # Try wildcard namespace match: .//{*}step matches
+                    # <step> in any namespace (Python 3.8+)
+                    found_steps = root.findall('.//{*}step')
+                
+                for step in found_steps:
                     # Deep copy the step element to avoid issues with element ownership
                     merged_root.append(step)
                     
@@ -184,8 +194,8 @@ def merge_xml_files(xml_dir: str, output_xml_path: str) -> Dict[str, Any]:
                 logger.warning(f"Error processing XML file {xml_file}: {e}")
                 continue
         
-        # Check if we have any steps
-        steps = merged_root.findall('step')
+        # Check if we have any steps (handle both namespaced and non-namespaced)
+        steps = list(merged_root)
         if not steps:
             result['error'] = f"No valid <step> elements found in XML files from {xml_dir}"
             logger.warning(result['error'])
