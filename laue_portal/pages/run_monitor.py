@@ -92,6 +92,7 @@ CUSTOM_HEADER_NAMES = {
     'submit_time': 'Date',
     'subjob_id': 'SubJob ID',
     'duration_display': 'Duration',
+    'author': 'Author',
 }
 
 def calculate_duration_display(start_time, finish_time, current_time):
@@ -155,7 +156,8 @@ def _get_jobs():
                 db_schema.Job,
                 *REFERENCE_COLS,
                 func.coalesce(db_schema.Calib.scanNumber, db_schema.Recon.scanNumber, db_schema.WireRecon.scanNumber, db_schema.PeakIndex.scanNumber).label('scanNumber'),
-                func.coalesce(catalog_calib.aperture, catalog_recon.aperture, catalog_wirerecon.aperture, catalog_peakindex.aperture).label('aperture')
+                func.coalesce(catalog_calib.aperture, catalog_recon.aperture, catalog_wirerecon.aperture, catalog_peakindex.aperture).label('aperture'),
+                func.coalesce(db_schema.Calib.author, db_schema.Recon.author, db_schema.WireRecon.author, db_schema.PeakIndex.author).label('author')
             )
             .outerjoin(db_schema.Calib, db_schema.Job.job_id == db_schema.Calib.job_id)
             .outerjoin(db_schema.Recon, db_schema.Job.job_id == db_schema.Recon.job_id)
@@ -221,7 +223,7 @@ def _get_jobs():
     
     for field_key in all_columns:
         # Skip internal columns and special columns we'll add at specific positions
-        if field_key in ['row_type', 'completed_subjobs', 'failed_subjobs', 'running_subjobs', 'queued_subjobs', 'duration', 'total_subjobs', 'finish_time', 'submit_time', 'duration_display'] + [col.key for col in REFERENCE_COLS]:
+        if field_key in ['row_type', 'priority', 'computer_name', 'author', 'completed_subjobs', 'failed_subjobs', 'running_subjobs', 'queued_subjobs', 'duration', 'total_subjobs', 'finish_time', 'submit_time', 'duration_display'] + [col.key for col in REFERENCE_COLS]:
             continue
             
         header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
@@ -288,9 +290,21 @@ def _get_jobs():
     # Insert Job Reference at position 1 (after checkbox column)
     cols.insert(1, job_reference_col)
     
-    # Insert SubJobs Progress at position 4
+    # Insert Author at position 2
+    author_col = {
+        'headerName': 'Author',
+        'field': 'author',
+        'filter': True,
+        'sortable': True,
+        'resizable': True,
+        'floatingFilter': True,
+        'unSortIcon': True,
+    }
+    cols.insert(2, author_col)
+    
+    # Insert SubJobs Progress at position 5
     if subjobs_progress_col:
-        cols.insert(4, subjobs_progress_col)
+        cols.insert(5, subjobs_progress_col)
     
     # Create Duration column
     duration_col = {
@@ -303,20 +317,8 @@ def _get_jobs():
         'width': 200
     }
     
-    # Insert Duration at position 7
-    cols.insert(7, duration_col)
-
-    # Add the custom actions column at the end
-    cols.append({
-        'headerName': 'Actions',
-        'field': 'actions',  # This field doesn't need to exist in the data
-
-        'sortable': False,
-        'filter': False,
-        'resizable': True,
-        'suppressMenu': True,
-        'width': 200
-    })
+    # Insert Duration at position 8
+    cols.insert(8, duration_col)
     
     return cols, combined_df.to_dict('records')
 
