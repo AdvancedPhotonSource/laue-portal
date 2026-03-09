@@ -69,8 +69,6 @@ layout = html.Div([
                     "suppressRowClickSelection": True,
                     "animateRows": True,
                     "enableCellTextSelection": True,  # Enable text selection for copying
-                    # Custom row styling for subjobs
-                    "getRowClass": {"function": "params => params.data.row_type === 'subjob' ? 'subjob-row' : ''"}
                 },
                 style={'height': 'calc(100vh - 150px)', 'width': '100%'},
                 className="ag-theme-alpine"
@@ -179,43 +177,14 @@ def _get_jobs():
             # Add empty columns if no subjobs exist
             jobs[subjob_columns] = 0
         
-        # Pre-calculate durations for all subjobs to avoid time drift
+        # Pre-calculate durations for jobs
         current_time = datetime.now()
-        if not subjobs.empty:
-            # Calculate duration display for all subjobs
-            subjobs['duration_display'] = subjobs.apply(
-                lambda row: calculate_duration_display(row['start_time'], row['finish_time'], current_time),
-                axis=1
-            )
         
-        # Create a combined dataframe - initially only with jobs
+        # Create job rows
         all_rows = []
-        
-        # Store all subjobs in a global variable for JavaScript access
-        subjobs_dict = {}
-        if not subjobs.empty:
-            for job_id in jobs['job_id'].unique():
-                job_subjobs = subjobs[subjobs['job_id'] == job_id].iloc[::-1]
-                if not job_subjobs.empty:
-                    total_subjobs_for_job = len(job_subjobs)
-                    subjobs_list = []
-                    for i, (_, subjob) in enumerate(job_subjobs.iterrows()):
-                        subjob_row = subjob.to_dict()
-                        subjob_row['row_type'] = 'subjob'
-                        subjob_row['parent_job_id'] = job_id
-                        subjob_row['subjob_index'] = total_subjobs_for_job - i
-                        subjob_row['total_subjobs_for_job'] = total_subjobs_for_job
-                        subjobs_list.append(subjob_row)
-                    subjobs_dict[str(job_id)] = subjobs_list
-        
-        # Add job rows only (subjobs will be added dynamically)
         for _, job in jobs.iterrows():
             job_row = job.to_dict()
             job_row['row_type'] = 'job'
-            # Store subjobs data in the job row for JavaScript access
-            job_row['_subjobs'] = subjobs_dict.get(str(job_row['job_id']), [])
-            # Add flag for auto-expansion if job has running subjobs
-            job_row['_should_auto_expand'] = job_row.get('running_subjobs', 0) > 0
             # Calculate duration for job rows
             job_row['duration_display'] = calculate_duration_display(
                 job_row.get('start_time'), 
@@ -247,27 +216,12 @@ def _get_jobs():
         'headerClass': 'ag-checkbox-header',
     })
     
-    # Add expand/collapse column as the first column
-    cols.append({
-        'headerName': '',
-        'field': 'expand',
-        'width': 50,
-        'resizable': False,
-        'sortable': False,
-        'filter': False,
-        'suppressMenu': True,
-        'cellRenderer': 'ExpandCollapseRenderer',
-        'suppressSizeToFit': True,
-        'cellStyle': {'overflow': 'visible'},
-        'autoHeight': False
-    })
-    
     # Get all unique columns from combined dataframe
     all_columns = combined_df.columns.tolist()
     
     for field_key in all_columns:
         # Skip internal columns and special columns we'll add at specific positions
-        if field_key in ['row_type', 'parent_job_id', '_subjobs', '_should_auto_expand', 'subjob_index', 'total_subjobs_for_job', 'completed_subjobs', 'failed_subjobs', 'running_subjobs', 'queued_subjobs', 'duration', 'total_subjobs', 'finish_time', 'submit_time', 'duration_display'] + [col.key for col in REFERENCE_COLS]:
+        if field_key in ['row_type', 'completed_subjobs', 'failed_subjobs', 'running_subjobs', 'queued_subjobs', 'duration', 'total_subjobs', 'finish_time', 'submit_time', 'duration_display'] + [col.key for col in REFERENCE_COLS]:
             continue
             
         header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
@@ -331,12 +285,12 @@ def _get_jobs():
             'suppressMenuHide': True
         }
 
-    # Insert Job Reference at position 2 (after expand column)
-    cols.insert(2, job_reference_col)
+    # Insert Job Reference at position 1 (after checkbox column)
+    cols.insert(1, job_reference_col)
     
-    # Insert SubJobs Progress at position 5
+    # Insert SubJobs Progress at position 4
     if subjobs_progress_col:
-        cols.insert(5, subjobs_progress_col)
+        cols.insert(4, subjobs_progress_col)
     
     # Create Duration column
     duration_col = {
@@ -349,8 +303,8 @@ def _get_jobs():
         'width': 200
     }
     
-    # Insert Duration at position 8
-    cols.insert(8, duration_col)
+    # Insert Duration at position 7
+    cols.insert(7, duration_col)
 
     # Add the custom actions column at the end
     cols.append({

@@ -1,182 +1,5 @@
 var dagcomponentfuncs = (window.dashAgGridComponentFunctions = window.dashAgGridComponentFunctions || {});
 
-// Custom renderer for expand/collapse functionality
-dagcomponentfuncs.ExpandCollapseRenderer = function (params) {
-    // Check if we have the required data
-    if (!params || !params.data) {
-        return null;
-    }
-    
-    // Only show expand/collapse for job rows that have subjobs
-    if (params.data.row_type === 'job' && params.data.total_subjobs > 0) {
-        const jobId = params.data.job_id;
-        const jobNode = params.node;
-        
-        // Store expanded state and auto-expansion tracking in global objects
-        if (!window.expandedJobs) {
-            window.expandedJobs = {};
-        }
-        if (!window.autoExpandedJobs) {
-            window.autoExpandedJobs = {};
-        }
-        if (!window.manuallyCollapsedJobs) {
-            window.manuallyCollapsedJobs = {};
-        }
-        
-        // Handle auto-expansion on initial render
-        if (params.data._should_auto_expand && 
-            !window.expandedJobs.hasOwnProperty(jobId) && 
-            !window.manuallyCollapsedJobs[jobId]) {
-            // Auto-expand this job
-            window.expandedJobs[jobId] = true;
-            window.autoExpandedJobs[jobId] = true;
-            
-            // Trigger expansion after a short delay to ensure grid is ready
-            setTimeout(() => {
-                const subjobs = params.data._subjobs || [];
-                if (subjobs.length > 0) {
-                    // Find the index of this job row
-                    let jobIndex = -1;
-                    const allRows = [];
-                    params.api.forEachNode((node, index) => {
-                        allRows.push(node.data);
-                        if (node.data.job_id === jobId) {
-                            jobIndex = index;
-                        }
-                    });
-                    
-                    // Insert subjobs after the job row
-                    if (jobIndex !== -1) {
-                        const newRows = [
-                            ...allRows.slice(0, jobIndex + 1),
-                            ...subjobs,
-                            ...allRows.slice(jobIndex + 1)
-                        ];
-                        params.api.setRowData(newRows);
-                    }
-                }
-            }, 100);
-        }
-        
-        // Handle auto-collapse when no longer running
-        if (!params.data._should_auto_expand && 
-            window.expandedJobs[jobId] && 
-            window.autoExpandedJobs[jobId] &&
-            !window.manuallyCollapsedJobs[jobId]) {
-            // Auto-collapse this job
-            window.expandedJobs[jobId] = false;
-            delete window.autoExpandedJobs[jobId];
-            
-            // Trigger collapse
-            setTimeout(() => {
-                const filteredRows = [];
-                params.api.forEachNode(node => {
-                    if (node.data) {
-                        // Keep all job rows and subjobs that don't belong to this job
-                        if (node.data.row_type === 'job' || 
-                            (node.data.row_type === 'subjob' && node.data.parent_job_id !== jobId)) {
-                            filteredRows.push(node.data);
-                        }
-                    }
-                });
-                params.api.setRowData(filteredRows);
-            }, 100);
-        }
-        
-        const handleClick = (e) => {
-            e.stopPropagation();
-            
-            // Toggle expanded state
-            const isExpanded = window.expandedJobs[jobId] || false;
-            window.expandedJobs[jobId] = !isExpanded;
-            
-            // Track manual interactions
-            if (!isExpanded) {
-                // User is manually expanding
-                delete window.manuallyCollapsedJobs[jobId];
-                if (window.autoExpandedJobs[jobId]) {
-                    // User manually expanded an auto-expanded job, keep it as auto-expanded
-                    window.autoExpandedJobs[jobId] = true;
-                }
-            } else {
-                // User is manually collapsing
-                if (window.autoExpandedJobs[jobId]) {
-                    // User manually collapsed an auto-expanded job
-                    window.manuallyCollapsedJobs[jobId] = true;
-                    delete window.autoExpandedJobs[jobId];
-                }
-            }
-            
-            if (!isExpanded) {
-                // Expanding - add subjobs
-                const subjobs = params.data._subjobs || [];
-                if (subjobs.length > 0) {
-                    // Find the index of this job row
-                    let jobIndex = -1;
-                    const allRows = [];
-                    params.api.forEachNode((node, index) => {
-                        allRows.push(node.data);
-                        if (node.data.job_id === jobId) {
-                            jobIndex = index;
-                        }
-                    });
-                    
-                    // Insert subjobs after the job row
-                    if (jobIndex !== -1) {
-                        const newRows = [
-                            ...allRows.slice(0, jobIndex + 1),
-                            ...subjobs,
-                            ...allRows.slice(jobIndex + 1)
-                        ];
-                        params.api.setRowData(newRows);
-                    }
-                }
-            } else {
-                // Collapsing - remove subjobs
-                const filteredRows = [];
-                params.api.forEachNode(node => {
-                    if (node.data) {
-                        // Keep all job rows and subjobs that don't belong to this job
-                        if (node.data.row_type === 'job' || 
-                            (node.data.row_type === 'subjob' && node.data.parent_job_id !== jobId)) {
-                            filteredRows.push(node.data);
-                        }
-                    }
-                });
-                params.api.setRowData(filteredRows);
-            }
-            
-            // Force re-render of this cell
-            params.api.refreshCells({
-                force: true,
-                columns: ['expand']
-            });
-        };
-        
-        const isExpanded = window.expandedJobs[jobId] || false;
-        
-        return React.createElement(
-            'button',
-            {
-                onClick: handleClick,
-                style: {
-                    border: 'none',
-                    background: 'none',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    padding: '4px',
-                    width: '100%',
-                    outline: 'none'
-                }
-            },
-            isExpanded ? '▼' : '▶'
-        );
-    }
-    
-    // Return null for subjob rows or jobs without subjobs
-    return null;
-};
-
 // Date formatter for displaying datetime values in human-readable format
 dagcomponentfuncs.DateFormatter = function (params) {
     if (!params.value) return '';
@@ -278,34 +101,11 @@ dagcomponentfuncs.WireReconLinkRenderer = function (props) {
 };
 
 dagcomponentfuncs.JobIdLinkRenderer = function (props) {
-    // When used as innerRenderer in group cell, props.value contains the grouped value
-    // When used as regular cell renderer, props.value is the cell value
-    
-    // Check if this is a group row (has children)
-    if (props.node && props.node.group) {
-        // This is a group row (job row)
-        // Extract job_id from the grouped value
-        const jobId = props.value || props.node.key;
-        const url = `/job?job_id=${jobId}`;
-        return React.createElement(
-            'a',
-            { href: url },
-            jobId // This will be the text of the link (the job ID)
-        );
-    }
-    
-    // For leaf rows (subjob rows) or when data is available
-    if (props.data && props.data.row_type === 'subjob') {
-        // For subjob rows, just return the plain value
-        return props.value;
-    }
-    
-    // Default case - render as link
     const url = `/job?job_id=${props.value}`;
     return React.createElement(
         'a',
         { href: url },
-        props.value // This will be the text of the link (the job ID)
+        props.value
     );
 };
 
@@ -381,11 +181,6 @@ dagcomponentfuncs.StatusRenderer = function (props) {
 dagcomponentfuncs.SubJobProgressRenderer = function (props) {
     const data = props.data;
     const total = data.total_subjobs || 0;
-    
-    if (data.row_type === 'subjob') {
-        const text = `${data.subjob_index}/${data.total_subjobs_for_job}, ID: ${data.subjob_id}`;
-        return React.createElement('span', {}, text);
-    }
 
     if (total === 0) {
         return React.createElement('span', { className: 'text-muted' }, 'No subjobs');
@@ -456,34 +251,6 @@ dagcomponentfuncs.SubJobProgressRenderer = function (props) {
             style: { height: '20px' }
         }, progressSegments)
     ]);
-};
-
-// SubJob Detail Renderer - renders the detail grid for subjobs
-dagcomponentfuncs.SubJobDetailRenderer = function (props) {
-    const subjobs = props.data.subjobs || [];
-    
-    if (subjobs.length === 0) {
-        return React.createElement('div', { 
-            className: 'text-center text-muted p-3' 
-        }, 'No subjobs for this job');
-    }
-    
-    // Create a new grid for the subjobs
-    const detailGridOptions = props.detailGridOptions || {};
-    detailGridOptions.rowData = subjobs;
-    
-    // Create container for the detail grid
-    const eDetailGrid = document.createElement('div');
-    eDetailGrid.style.height = '100%';
-    eDetailGrid.style.width = '100%';
-    eDetailGrid.className = 'ag-theme-alpine';
-    
-    // Initialize the detail grid
-    setTimeout(() => {
-        new agGrid.Grid(eDetailGrid, detailGridOptions);
-    }, 0);
-    
-    return eDetailGrid;
 };
 
 // dagcomponentfuncs.ActionButtonsRenderer = function (props) {
