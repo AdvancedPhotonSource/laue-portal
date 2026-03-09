@@ -169,6 +169,7 @@ def _get_recons():
 
         if field_key == 'wirerecon_id':
             col_def['cellRenderer'] = 'WireReconLinkRenderer'
+            col_def['sort'] = 'desc'
         elif field_key == 'dataset_id':
             col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
         elif field_key == 'scanNumber':

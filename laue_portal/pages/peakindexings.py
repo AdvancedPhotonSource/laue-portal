@@ -70,25 +70,24 @@ layout = html.Div([
 VISIBLE_COLS = [
     db_schema.PeakIndex.peakindex_id,
     db_schema.PeakIndex.scanNumber,
+    db_schema.PeakIndex.scanPointslen,
     db_schema.PeakIndex.author,
     db_schema.PeakIndex.notes,
     db_schema.PeakIndex.recon_id,
     db_schema.PeakIndex.wirerecon_id,
     db_schema.PeakIndex.boxsize,
-    db_schema.PeakIndex.threshold,
     db_schema.Job.submit_time,
-    db_schema.Job.start_time,
-    db_schema.Job.finish_time,
     db_schema.Job.status,
 ]
 
 CUSTOM_HEADER_NAMES = {
     'peakindex_id': 'Peak Indexing ID',
     'scanNumber': 'Scan ID',
+    'scanPointslen': 'Points',
     'recon_id': 'Recon ID',
     'wirerecon_id': 'Wire Recon ID',
     'boxsize': 'Box',
-    'submit_time,': 'Date',
+    'submit_time': 'Date',
 }
 
 def _get_peakindexings():
@@ -141,6 +140,7 @@ def _get_peakindexings():
         }
         if field_key == 'peakindex_id':
             col_def['cellRenderer'] = 'PeakIndexLinkRenderer'
+            col_def['sort'] = 'desc'
         elif field_key == 'recon_id':
             col_def['cellRenderer'] = 'ReconLinkRenderer'
         elif field_key == 'wirerecon_id':

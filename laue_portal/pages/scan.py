@@ -661,27 +661,26 @@ def get_scan_recons(href):
 
 VISIBLE_COLS_PeakIndex = [
     db_schema.PeakIndex.peakindex_id,
+    db_schema.PeakIndex.scanPointslen,
     db_schema.PeakIndex.author,
     db_schema.PeakIndex.boxsize,
-    db_schema.PeakIndex.threshold,
     db_schema.Job.submit_time,
-    db_schema.Job.start_time,
-    db_schema.Job.finish_time,
     db_schema.Job.status,
     db_schema.PeakIndex.notes,
 ]
 
 CUSTOM_HEADER_NAMES_PeakIndex = {
     'peakindex_id': 'Index ID',
+    'scanPointslen': 'Points',
     'boxsize': 'Box',
     'submit_time': 'Date',
 }
 
 CUSTOM_COLS_PeakIndex_dict = {
-    3:[
+    5:[
         db_schema.PeakIndex.crystFile,
     ],
-    4:[
+    6:[
         db_schema.PeakIndex.scanPointslen.label('PeakIndex_scanPointslen'),
         db_schema.PeakIndex.depthRangelen,
         db_schema.Metadata.motorGroup_sample_cpt_total,
@@ -694,12 +693,10 @@ ALL_COLS_PeakIndex = VISIBLE_COLS_PeakIndex + [db_schema.PeakIndex.scanNumber] +
 VISIBLE_COLS_Recon_PeakIndex = [
     db_schema.PeakIndex.peakindex_id,
     db_schema.PeakIndex.recon_id,
+    db_schema.PeakIndex.scanPointslen,
     db_schema.PeakIndex.author,
     db_schema.PeakIndex.boxsize,
-    db_schema.PeakIndex.threshold,
     db_schema.Job.submit_time,
-    db_schema.Job.start_time,
-    db_schema.Job.finish_time,
     db_schema.Job.status,
     db_schema.PeakIndex.notes,
 ]
@@ -707,15 +704,16 @@ VISIBLE_COLS_Recon_PeakIndex = [
 CUSTOM_HEADER_NAMES_Recon_PeakIndex = {
     'peakindex_id': 'Index ID',
     'recon_id': 'Recon ID',
+    'scanPointslen': 'Points',
     'boxsize': 'Box',
     'submit_time': 'Date',
 }
 
 CUSTOM_COLS_Recon_PeakIndex_dict = {
-    3:[
+    6:[
         db_schema.PeakIndex.crystFile,
     ],
-    4:[
+    7:[
         db_schema.PeakIndex.scanPointslen.label('PeakIndex_scanPointslen'),
         db_schema.PeakIndex.depthRangelen,
         db_schema.Metadata.motorGroup_depth_cpt_total,
@@ -728,12 +726,10 @@ ALL_COLS_Recon_PeakIndex = VISIBLE_COLS_Recon_PeakIndex + [db_schema.PeakIndex.s
 VISIBLE_COLS_WireRecon_PeakIndex = [
     db_schema.PeakIndex.peakindex_id,
     db_schema.PeakIndex.wirerecon_id,
+    db_schema.PeakIndex.scanPointslen,
     db_schema.PeakIndex.author,
     db_schema.PeakIndex.boxsize,
-    db_schema.PeakIndex.threshold,
     db_schema.Job.submit_time,
-    db_schema.Job.start_time,
-    db_schema.Job.finish_time,
     db_schema.Job.status,
     db_schema.PeakIndex.notes,
 ]
@@ -741,15 +737,16 @@ VISIBLE_COLS_WireRecon_PeakIndex = [
 CUSTOM_HEADER_NAMES_WireRecon_PeakIndex = {
     'peakindex_id': 'Index ID',
     'wirerecon_id': 'Recon ID (Wire)',
+    'scanPointslen': 'Points',
     'boxsize': 'Box',
     'submit_time': 'Date',
 }
 
 CUSTOM_COLS_WireRecon_PeakIndex_dict = {
-    3:[
+    6:[
         db_schema.PeakIndex.crystFile,
     ],
-    4:[
+    7:[
         db_schema.PeakIndex.scanPointslen.label('PeakIndex_scanPointslen'),
         db_schema.PeakIndex.depthRangelen,
         db_schema.Metadata.motorGroup_depth_cpt_total,
@@ -823,12 +820,12 @@ def _get_scan_peakindexings(scan_id):
                     cols.append(col_def)
 
                 for col_num in CUSTOM_COLS_PeakIndex_dict.keys():
-                    if col_num == 3:
+                    if col_num == 5:
                         col_def = {
                             'headerName': 'Structure',
                             'valueGetter': {"function": "params.data.crystFile.slice(params.data.crystFile.lastIndexOf('/') + 1, params.data.crystFile.lastIndexOf('.'))"},
                         }
-                    if col_num == 4:
+                    if col_num == 6:
                         col_def = {
                             'headerName': 'Frames',
                             'valueGetter': {"function": "params.data.PeakIndex_scanPointslen * params.data.depthRangelen + ' / ' + params.data.motorGroup_sample_cpt_total * params.data.motorGroup_depth_cpt_total"},
@@ -903,12 +900,12 @@ def _get_scan_peakindexings(scan_id):
                     cols.append(col_def)
 
                 for col_num in CUSTOM_COLS_WireRecon_PeakIndex_dict.keys():
-                    if col_num == 3:
+                    if col_num == 6:
                         col_def = {
                             'headerName': 'Structure',
                             'valueGetter': {"function": "params.data.crystFile.slice(params.data.crystFile.lastIndexOf('/') + 1, params.data.crystFile.lastIndexOf('.'))"},
                         }
-                    if col_num == 4:
+                    if col_num == 7:
                         col_def = {
                             'headerName': 'Frames',
                             'valueGetter': {"function": "params.data.PeakIndex_scanPointslen * params.data.depthRangelen + ' / ' + params.data.WireRecon_scanPointslen * params.data.motorGroup_depth_cpt_total"},
@@ -982,13 +979,13 @@ def _get_scan_peakindexings(scan_id):
                     
                     cols.append(col_def)
 
-                for col_num in CUSTOM_COLS_PeakIndex_dict.keys():
-                    if col_num == 3:
+                for col_num in CUSTOM_COLS_Recon_PeakIndex_dict.keys():
+                    if col_num == 6:
                         col_def = {
                             'headerName': 'Structure',
                             'valueGetter': {"function": "params.data.crystFile.slice(params.data.crystFile.lastIndexOf('/') + 1, params.data.crystFile.lastIndexOf('.'))"},
                         }
-                    if col_num == 4:
+                    if col_num == 7:
                         col_def = {
                             'headerName': 'Frames',
                             'valueGetter': {"function": "params.data.PeakIndex_scanPointslen * params.data.depthRangelen + ' / ' + params.data.Recon_scanPointslen * params.data.motorGroup_depth_cpt_total"},

@@ -157,6 +157,7 @@ def _get_metadatas():
 
         if field_key == 'scanNumber':
             col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
+            col_def['sort'] = 'desc'
         elif field_key == 'time':
             col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
         
