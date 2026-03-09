@@ -16,7 +16,7 @@ from laue_portal.components.wire_recon_form import wire_recon_form, set_wire_rec
 from laue_portal.components.form_base import _field
 from laue_portal.components.validation_alerts import validation_alerts
 from laue_portal.processing.redis_utils import enqueue_wire_reconstruction, STATUS_REVERSE_MAPPING
-from laue_portal.config import DEFAULT_VARIABLES
+from laue_portal.config import DEFAULT_VARIABLES, WIRERECON_DEFAULTS
 from laue_portal.pages.validation_helpers import (
     apply_validation_highlights,
     update_validation_alerts,
@@ -105,17 +105,68 @@ JOB_DEFAULTS = {
     "finish_time": datetime.datetime.now(),
 }
 
-WIRERECON_DEFAULTS = {
-    "scanNumber": 276994,
-    "geoFile": "Run1/geofiles/geoN_2023-04-06_03-07-11_cor6.xml",
-    "percent_brightest": 100,
-    "depth_start": -50,
-    "depth_end": 150,
-    "depth_resolution": 1,
-    "outputFolder": "analysis/scan_%d/rec_%d/data",
-    "scanPoints": "7",
-    "wire_edges": "leading",
-}
+def create_default_wirerecon(overrides=None):
+    """
+    Create a WireRecon object populated with defaults from config.
+    
+    This is the single source of truth for default WireRecon creation.
+    All defaults come from WIRERECON_DEFAULTS (config.yaml) and DEFAULT_VARIABLES.
+    
+    Args:
+        overrides: Dict of values to override defaults (e.g., from metadata or URL params).
+                   Keys should match WireRecon model field names.
+    
+    Returns:
+        db_schema.WireRecon with all defaults set, plus extra attributes:
+        - root_path: from DEFAULT_VARIABLES
+        - data_path: empty string (to be populated later)
+        - filenamePrefix: empty string (to be populated later)
+    """
+    # Start with config defaults
+    defaults = {
+        # User text from DEFAULT_VARIABLES
+        'author': DEFAULT_VARIABLES.get('author', ''),
+        'notes': DEFAULT_VARIABLES.get('notes', ''),
+        
+        # Recon constraints from WIRERECON_DEFAULTS
+        'geoFile': WIRERECON_DEFAULTS.get('geoFile'),
+        'percent_brightest': WIRERECON_DEFAULTS.get('percent_brightest'),
+        'wire_edges': WIRERECON_DEFAULTS.get('wire_edges'),
+        
+        # Depth parameters
+        'depth_start': WIRERECON_DEFAULTS.get('depth_start'),
+        'depth_end': WIRERECON_DEFAULTS.get('depth_end'),
+        'depth_resolution': WIRERECON_DEFAULTS.get('depth_resolution'),
+        
+        # Compute parameters from DEFAULT_VARIABLES
+        'num_threads': DEFAULT_VARIABLES.get('num_threads'),
+        'memory_limit_mb': DEFAULT_VARIABLES.get('memory_limit_mb'),
+        
+        # Files
+        'scanPoints': WIRERECON_DEFAULTS.get('scanPoints', ''),
+        
+        # Output
+        'outputFolder': WIRERECON_DEFAULTS.get('outputFolder'),
+        'verbose': DEFAULT_VARIABLES.get('verbose'),
+    }
+    
+    # Apply overrides
+    if overrides:
+        defaults.update(overrides)
+    
+    # Calculate scanPoints length
+    scanPoints_str = defaults.get('scanPoints', '') or ''
+    defaults['scanPointslen'] = srange(scanPoints_str).len() if scanPoints_str else 0
+    
+    # Create WireRecon object
+    wirerecon = db_schema.WireRecon(**defaults)
+    
+    # Add extra attributes for form display (not in database model)
+    wirerecon.root_path = DEFAULT_VARIABLES.get('root_path', '')
+    wirerecon.data_path = ''
+    wirerecon.filenamePrefix = ''
+    
+    return wirerecon
 
 CATALOG_DEFAULTS = {
     "filefolder": "tests/data/gdata",
@@ -1072,6 +1123,12 @@ def load_scan_data_from_url(href):
 
     root_path = DEFAULT_VARIABLES.get("root_path", "")
 
+    # Handle case where no query parameters are provided - load defaults
+    if not scan_id_str and not wirerecon_id_str:
+        wirerecon_form_data = create_default_wirerecon()
+        set_wire_recon_form_props(wirerecon_form_data)
+        return datetime.datetime.now().isoformat()
+
     if scan_id_str:
         with Session(session_utils.get_engine()) as session:
             try:
@@ -1161,12 +1218,10 @@ def load_scan_data_from_url(href):
                         
                         # Create defaults if no wirerecon_id or if loading failed
                         if not current_wirerecon_id:
-                            # Create a WireRecon object with populated defaults from metadata/scan
-                            wirerecon_form_data = db_schema.WireRecon(
-                                scanNumber=current_scan_id,
-                                outputFolder=output_folder,
-                                **{k: v for k, v in WIRERECON_DEFAULTS.items() if k not in ['scanNumber', 'outputFolder']}
-                            )
+                            wirerecon_form_data = create_default_wirerecon(overrides={
+                                'scanNumber': current_scan_id,
+                                'outputFolder': output_folder,
+                            })
                         
                         # Add root_path from DEFAULT_VARIABLES
                         wirerecon_form_data.root_path = root_path
@@ -1249,40 +1304,9 @@ def load_scan_data_from_url(href):
                             'color': 'danger'
                         })
 
-                    wirerecon_form_data = db_schema.WireRecon(
-                        scanNumber=str(scan_id_str).replace(',','; '),
-                        
-                        # User text
-                        author=DEFAULT_VARIABLES["author"],
-                        notes=DEFAULT_VARIABLES["notes"],
-                        
-                        # Recon constraints
-                        geoFile=WIRERECON_DEFAULTS["geoFile"],
-                        percent_brightest=WIRERECON_DEFAULTS["percent_brightest"],
-                        wire_edges=WIRERECON_DEFAULTS["wire_edges"],
-                        
-                        # Depth parameters
-                        depth_start=WIRERECON_DEFAULTS["depth_start"],
-                        depth_end=WIRERECON_DEFAULTS["depth_end"],
-                        depth_resolution=WIRERECON_DEFAULTS["depth_resolution"],
-                        
-                        # Compute parameters
-                        num_threads=DEFAULT_VARIABLES["num_threads"],
-                        memory_limit_mb=DEFAULT_VARIABLES["memory_limit_mb"],
-                        
-                        # Files
-                        scanPoints=WIRERECON_DEFAULTS["scanPoints"],
-                        scanPointslen=srange(WIRERECON_DEFAULTS["scanPoints"]).len(),
-                        
-                        # Output
-                        outputFolder=WIRERECON_DEFAULTS["outputFolder"],
-                        verbose=DEFAULT_VARIABLES["verbose"],
-                    )
-                    
-                    # Set root_path
-                    wirerecon_form_data.root_path = root_path
-                    wirerecon_form_data.data_path = ""
-                    wirerecon_form_data.filenamePrefix = ""
+                    wirerecon_form_data = create_default_wirerecon(overrides={
+                        'scanNumber': str(scan_id_str).replace(',', '; '),
+                    })
                     
                     # Populate the form with the defaults
                     set_wire_recon_form_props(wirerecon_form_data)

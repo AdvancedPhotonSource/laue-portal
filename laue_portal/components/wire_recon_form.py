@@ -235,6 +235,7 @@ def set_wire_recon_form_props(wirerecon, read_only=False):
         filename_value = ', '.join(filename_value)
     set_props("filenamePrefix", {'value':filename_value, 'readonly':read_only})
 
+    set_props("author", {'value':wirerecon.author, 'readonly':read_only})
     set_props("notes", {'value':wirerecon.notes, 'readonly':read_only})
 
     set_props("geoFile", {'value':wirerecon.geoFile, 'readonly':read_only})

@@ -1854,9 +1854,9 @@ def load_scan_data_from_url(href):
                                 recon_id=current_recon_id,
                                 wirerecon_id=current_wirerecon_id,
                                 # Energy-related fields from source
-                                indexKeVmaxCalc=metadata_data.source_energy if metadata_data else PEAKINDEX_DEFAULTS["indexKeVmaxCalc"],
-                                indexKeVmaxTest=metadata_data.source_energy if metadata_data else PEAKINDEX_DEFAULTS["indexKeVmaxTest"],
-                                energyUnit=metadata_data.source_energy_unit if metadata_data else PEAKINDEX_DEFAULTS["energyUnit"],
+                                indexKeVmaxCalc=metadata_data.source_energy if (metadata_data and metadata_data.source_energy is not None) else PEAKINDEX_DEFAULTS["indexKeVmaxCalc"],
+                                indexKeVmaxTest=metadata_data.source_energy if (metadata_data and metadata_data.source_energy is not None) else PEAKINDEX_DEFAULTS["indexKeVmaxTest"],
+                                energyUnit=metadata_data.source_energy_unit if (metadata_data and metadata_data.source_energy_unit is not None) else PEAKINDEX_DEFAULTS["energyUnit"],
                                 outputFolder=outputFolder,
                                 **{k: v for k, v in PEAKINDEX_DEFAULTS.items() if k not in ['scanNumber', 'outputFolder', 'indexKeVmaxCalc', 'indexKeVmaxTest', 'energyUnit']}
                             )

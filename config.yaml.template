@@ -82,6 +82,21 @@ PEAKINDEX_DEFAULTS:
   beamline: "34ID-E"
   depth: .nan              # YAML nan value
 
+# Wire reconstruction default parameters
+WIRERECON_DEFAULTS:
+  # Recon constraints
+  geoFile: "Run1/geofiles/geoN_2023-04-06_03-07-11_cor6.xml"
+  percent_brightest: 100
+  wire_edges: "leading"
+
+  # Depth parameters
+  depth_start: -50
+  depth_end: 150
+  depth_resolution: 1
+
+  # Output
+  outputFolder: "analysis/scan_%d/rec_%d/data"
+
 # Motor groups configuration
 MOTOR_GROUPS:
   sample:
