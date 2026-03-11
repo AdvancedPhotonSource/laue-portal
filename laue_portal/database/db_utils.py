@@ -1,3 +1,5 @@
+import os
+
 import laue_portal.database.db_schema as db_schema
 from laue_portal import config
 import xml.etree.ElementTree as ET
@@ -219,6 +221,32 @@ def convert_epoch_string_to_int(epoch_string):
         return int(epoch_string)
     except ValueError:
         return None
+
+def resolve_path_with_root(path, root_path):
+    """
+    Resolve a path, using root_path only if the path is relative.
+    If path is absolute, return it as-is (overriding root_path).
+    
+    This is the inverse of remove_root_path_prefix().
+    
+    Args:
+        path: The path to resolve (can be relative or absolute)
+        root_path: The root path to prepend if path is relative
+        
+    Returns:
+        str: The resolved full path
+    """
+    if not path:
+        return ""
+    
+    # Check if path is absolute
+    if os.path.isabs(path):
+        # Path is absolute - use it directly, ignore root_path
+        return path
+    else:
+        # Path is relative - combine with root_path
+        return os.path.join(root_path, path.lstrip('/'))
+
 
 def remove_root_path_prefix(file_path, root_path):
     """

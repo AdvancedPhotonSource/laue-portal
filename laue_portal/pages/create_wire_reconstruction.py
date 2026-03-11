@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
 import laue_portal.components.navbar as navbar
-from laue_portal.database.db_utils import get_catalog_data, get_data_from_id, remove_root_path_prefix, parse_parameter, parse_IDnumber
+from laue_portal.database.db_utils import get_catalog_data, get_data_from_id, remove_root_path_prefix, resolve_path_with_root, parse_parameter, parse_IDnumber
 from laue_portal.components.wire_recon_form import wire_recon_form, set_wire_recon_form_props
 from laue_portal.components.form_base import _field
 from laue_portal.components.validation_alerts import validation_alerts
@@ -39,30 +39,6 @@ from laue_portal.utilities.srange import srange
 import laue_portal.database.session_utils as session_utils
 
 logger = logging.getLogger(__name__)
-
-
-def resolve_path_with_root(path, root_path):
-    """
-    Resolve a path, using root_path only if the path is relative.
-    If path is absolute, return it as-is (overriding root_path).
-    
-    Args:
-        path: The path to resolve (can be relative or absolute)
-        root_path: The root path to prepend if path is relative
-        
-    Returns:
-        str: The resolved full path
-    """
-    if not path:
-        return ""
-    
-    # Check if path is absolute
-    if os.path.isabs(path):
-        # Path is absolute - use it directly, ignore root_path
-        return path
-    else:
-        # Path is relative - combine with root_path
-        return os.path.join(root_path, path.lstrip('/'))
 
 
 def build_output_folder_template(scan_num_int, data_path):
@@ -479,7 +455,7 @@ def validate_wire_reconstruction_inputs(ctx):
                         catalog_data = get_catalog_data(session, scan_num_int, root_path, CATALOG_DEFAULTS)
                         
                         if catalog_data and catalog_data.get('data_path'):
-                            catalog_full_data_path = os.path.join(root_path, catalog_data['data_path'].lstrip('/'))
+                            catalog_full_data_path = resolve_path_with_root(catalog_data['data_path'], root_path)
                             if catalog_full_data_path != current_full_data_path:
                                 add_validation_message(
                                     validation_result, 'warnings', 'data_path', input_prefix,

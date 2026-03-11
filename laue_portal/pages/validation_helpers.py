@@ -7,7 +7,7 @@ both wire reconstruction and peak indexing validation functions.
 
 import os
 from dash import html, set_props
-from laue_portal.database.db_utils import get_num_inputs_from_fields
+from laue_portal.database.db_utils import get_num_inputs_from_fields, resolve_path_with_root
 
 
 def format_field_name(field_name):
@@ -335,7 +335,7 @@ def validate_file_exists(file_path, root_path, field_name="File"):
     if not file_path:
         return [f"{field_name} is required"]
     
-    full_path = os.path.join(root_path, file_path.lstrip('/'))
+    full_path = resolve_path_with_root(file_path, root_path)
     
     if not os.path.exists(full_path):
         return [f"{field_name} not found: {file_path}"]
@@ -358,7 +358,7 @@ def validate_directory_exists(dir_path, root_path, field_name="Directory"):
     if not dir_path:
         return [f"{field_name} is required"]
     
-    full_path = os.path.join(root_path, dir_path.lstrip('/'))
+    full_path = resolve_path_with_root(dir_path, root_path)
     
     if not os.path.exists(full_path):
         return [f"{field_name} not found: {dir_path}"]

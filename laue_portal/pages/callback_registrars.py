@@ -28,6 +28,7 @@ from itertools import combinations
 import dash
 from dash import html, Input, Output, State, set_props
 from dash.exceptions import PreventUpdate
+from laue_portal.database.db_utils import resolve_path_with_root
 from sqlalchemy.orm import Session
 
 import laue_portal.database.session_utils as session_utils
@@ -431,7 +432,7 @@ def register_load_file_indices_callback(
             depth_indices_per_path = []  # List of sets, one per data path
             
             for current_data_path in data_path_list:
-                current_full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
+                current_full_data_path = resolve_path_with_root(current_data_path, root_path)
                 
                 # Initialize sets for this path
                 path_scanpoint_indices = set()
@@ -599,7 +600,7 @@ def register_check_filenames_callback(
             patterns_by_path = {}  # {path_index: [(pattern, indices_list), ...]}
             
             for i, current_data_path in enumerate(data_path_list):
-                current_full_data_path = os.path.join(root_path, current_data_path.lstrip('/'))
+                current_full_data_path = resolve_path_with_root(current_data_path, root_path)
                 
                 # Check if directory exists
                 if not os.path.exists(current_full_data_path):

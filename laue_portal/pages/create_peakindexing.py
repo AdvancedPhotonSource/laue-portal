@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.db_schema as db_schema
 import laue_portal.components.navbar as navbar
-from laue_portal.database.db_utils import get_data_from_id, remove_root_path_prefix, parse_parameter, parse_IDnumber
+from laue_portal.database.db_utils import get_data_from_id, remove_root_path_prefix, resolve_path_with_root, parse_parameter, parse_IDnumber
 from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
 from laue_portal.components.form_base import _field
 from laue_portal.components.validation_alerts import validation_alerts
@@ -40,30 +40,6 @@ import laue_portal.database.session_utils as session_utils
 from laue_portal.utilities.hkl_parse import str2hkl
 
 logger = logging.getLogger(__name__)
-
-
-def resolve_path_with_root(path, root_path):
-    """
-    Resolve a path, using root_path only if the path is relative.
-    If path is absolute, return it as-is (overriding root_path).
-    
-    Args:
-        path: The path to resolve (can be relative or absolute)
-        root_path: The root path to prepend if path is relative
-        
-    Returns:
-        str: The resolved full path
-    """
-    if not path:
-        return ""
-    
-    # Check if path is absolute
-    if os.path.isabs(path):
-        # Path is absolute - use it directly, ignore root_path
-        return path
-    else:
-        # Path is relative - combine with root_path
-        return os.path.join(root_path, path.lstrip('/'))
 
 
 def build_output_folder_template(scan_num_int, data_path,
@@ -646,7 +622,7 @@ def validate_peakindexing_inputs(ctx):
                         id_data = get_data_from_id(session, id_dict, root_path, 'peakindex', CATALOG_DEFAULTS)
                         
                         if id_data and id_data.get('data_path'):
-                            id_full_data_path = os.path.join(root_path, id_data['data_path'].lstrip('/'))
+                            id_full_data_path = resolve_path_with_root(id_data['data_path'], root_path)
                             if id_full_data_path != current_full_data_path:
                                 add_validation_message(
                                     validation_result, 'warnings', 'data_path', input_prefix,
@@ -1395,7 +1371,7 @@ def submit_parameters(n,
                 current_filename_prefix_str = filenamePrefix_list[i]
                 current_filename_prefix = [s.strip() for s in current_filename_prefix_str.split(',')] if current_filename_prefix_str else []
                 # Build full path
-                current_full_data_path=os.path.join(root_path, current_data_path.lstrip('/'))
+                current_full_data_path = resolve_path_with_root(current_data_path, root_path)
                 
                 # Determine outputXML value, using default if not provided
                 current_outputXML = outputXML or PEAKINDEX_DEFAULTS.get('outputXML', 'output.xml')
