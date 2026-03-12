@@ -400,3 +400,34 @@ def safe_int(value):
         return int(value)
     except (ValueError, TypeError):
         return None
+
+
+def all_path_fields_are_absolute(all_fields, path_field_names):
+    """
+    Check if all path fields have absolute paths (i.e., root_path is not needed).
+    
+    For semicolon-separated multi-input fields, every individual value must be
+    absolute for the field to count as "fully overridden".
+    
+    Args:
+        all_fields: Dictionary of field_name -> raw string value from the form
+        path_field_names: List of field names that depend on root_path
+            (e.g., ['data_path', 'outputFolder', 'geoFile'] for wire recon)
+    
+    Returns:
+        bool: True if all path fields exist and contain only absolute paths
+    """
+    for field_name in path_field_names:
+        raw_value = all_fields.get(field_name, '')
+        if not raw_value:
+            # Field is empty/missing — it will fail its own validation later,
+            # but we can't confirm root_path is unnecessary
+            return False
+        # Split on semicolons for multi-input support
+        individual_values = [v.strip() for v in str(raw_value).split(';') if v.strip()]
+        if not individual_values:
+            return False
+        for val in individual_values:
+            if not os.path.isabs(val):
+                return False
+    return True

@@ -27,7 +27,8 @@ from laue_portal.pages.validation_helpers import (
     validate_numeric_range,
     validate_file_exists,
     validate_directory_exists,
-    get_num_inputs_from_fields
+    get_num_inputs_from_fields,
+    all_path_fields_are_absolute
 )
 from laue_portal.pages.callback_registrars import (
     register_update_path_fields_callback,
@@ -303,8 +304,37 @@ def validate_wire_reconstruction_inputs(ctx):
 
     
     # Validate root_path directory exists
+    # Root path can be blank if ALL path fields (data_path, outputFolder, geoFile)
+    # use absolute paths, since resolve_path_with_root ignores root_path for absolute paths.
+    root_path_dependent_fields = ['data_path', 'outputFolder', 'geoFile']
     if not root_path:
-        add_validation_message(validation_result, 'errors', 'root_path')
+        if all_path_fields_are_absolute(all_fields, root_path_dependent_fields):
+            # All path fields are absolute — root_path is not needed
+            parsed_fields['root_path'] = root_path
+            add_validation_message(validation_result, 'successes', 'root_path',
+                                  custom_message="Root Path is blank but all path fields are absolute")
+        else:
+            add_validation_message(validation_result, 'errors', 'root_path',
+                                  custom_message="Root Path is required when any path field is relative")
+            # Add per-field warnings to highlight which fields need absolute paths
+            field_display_names = {
+                'data_path': 'Data Path',
+                'outputFolder': 'Output Folder',
+                'geoFile': 'Geometry File',
+            }
+            for field_name in root_path_dependent_fields:
+                raw_value = all_fields.get(field_name, '')
+                if not raw_value:
+                    continue  # Empty fields will get their own "required" error later
+                values = [v.strip() for v in str(raw_value).split(';') if v.strip()]
+                for val in values:
+                    if not os.path.isabs(val):
+                        display = field_display_names.get(field_name, field_name)
+                        add_validation_message(
+                            validation_result, 'warnings', field_name,
+                            custom_message=f"{display} is relative but Root Path is blank — use an absolute path"
+                        )
+                        break  # One warning per field is enough
     elif not os.path.exists(root_path):
         add_validation_message(validation_result, 'errors', 'root_path', 
                               custom_message="Root Path does not exist")
