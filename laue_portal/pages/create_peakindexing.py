@@ -1020,6 +1020,12 @@ def validate_peakindexing_inputs(ctx):
     State('indexAngleTolerance', 'value'),
     State('indexCone', 'value'),
     State('indexHKL', 'value'),
+    running=[
+        (Output("peakindex-validate-btn", "disabled"), True, False),
+        (Output("peakindex-validate-btn", "children"),
+         [dbc.Spinner(size="sm", spinner_class_name="me-2"), "Validating..."], "Validate"),
+        (Output("submit_peakindexing", "disabled"), True, False),
+    ],
     prevent_initial_call=True,
 )
 def validate_inputs(
@@ -1097,6 +1103,12 @@ def validate_inputs(
     State('depth', 'value'),
     State('outputXML', 'value'),
     
+    running=[
+        (Output("submit_peakindexing", "disabled"), True, False),
+        (Output("submit_peakindexing", "children"),
+         [dbc.Spinner(size="sm", spinner_class_name="me-2"), "Submitting..."], "Submit"),
+        (Output("peakindex-validate-btn", "disabled"), True, False),
+    ],
     prevent_initial_call=True,
 )
 def submit_parameters(n,

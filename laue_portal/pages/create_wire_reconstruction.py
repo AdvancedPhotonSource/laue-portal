@@ -674,6 +674,12 @@ def validate_wire_reconstruction_inputs(ctx):
     State('root_path', 'value'),
     State('IDnumber', 'value'),
     State('author', 'value'),
+    running=[
+        (Output("wirerecon-validate-btn", "disabled"), True, False),
+        (Output("wirerecon-validate-btn", "children"),
+         [dbc.Spinner(size="sm", spinner_class_name="me-2"), "Validating..."], "Validate"),
+        (Output("submit_wire", "disabled"), True, False),
+    ],
     prevent_initial_call=True,
 )
 def validate_inputs(
@@ -734,6 +740,12 @@ def validate_inputs(
     # Output
     State('outputFolder', 'value'),
     
+    running=[
+        (Output("submit_wire", "disabled"), True, False),
+        (Output("submit_wire", "children"),
+         [dbc.Spinner(size="sm", spinner_class_name="me-2"), "Submitting..."], "Submit"),
+        (Output("wirerecon-validate-btn", "disabled"), True, False),
+    ],
     prevent_initial_call=True,
 )
 def submit_parameters(n,
