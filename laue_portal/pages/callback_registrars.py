@@ -21,11 +21,9 @@ Usage:
 
 import logging
 import os
-import re
-from difflib import SequenceMatcher
-from itertools import combinations
 
 import dash
+import dash_bootstrap_components as dbc
 from dash import html, Input, Output, State, set_props
 from dash.exceptions import PreventUpdate
 from laue_portal.database.db_utils import resolve_path_with_root
@@ -35,87 +33,14 @@ import laue_portal.database.session_utils as session_utils
 from laue_portal.database.db_utils import get_data_from_id, parse_parameter, parse_IDnumber
 from laue_portal.config import DEFAULT_VARIABLES, VALID_HDF_EXTENSIONS
 from laue_portal.utilities.srange import srange
+from laue_portal.utilities.filename_patterns import (
+    scan_directory_patterns,
+    build_pattern_label,
+    filter_files_by_extension,
+    extract_index_patterns,
+)
 
 logger = logging.getLogger(__name__)
-
-
-def _filter_files_by_extension(directory_path):
-    """
-    List and filter files in a directory by valid HDF extensions.
-    
-    This helper function reads all files from a directory and filters them
-    to only include files with valid HDF extensions as configured in
-    VALID_HDF_EXTENSIONS.
-    
-    Parameters:
-    - directory_path: Full path to the directory to scan
-    
-    Returns:
-    - List of filenames that match the valid HDF extensions
-    
-    Raises:
-    - Exception: If there's an error reading the directory
-    """
-    all_files = [f for f in os.listdir(directory_path) if os.path.isfile(os.path.join(directory_path, f))]
-    
-    # Filter by valid HDF extensions if configured
-    if VALID_HDF_EXTENSIONS:
-        filtered_files = [f for f in all_files if any(f.lower().endswith(ext.lower()) for ext in VALID_HDF_EXTENSIONS)]
-        return filtered_files
-    else:
-        return all_files
-
-
-def _extract_indices_from_files(files, num_indices):
-    """
-    Extract indices from filenames by adaptively trying to match num_indices down to 1.
-    
-    This helper function processes a list of filenames and extracts numeric indices
-    by trying to match patterns with decreasing numbers of indices (from num_indices
-    down to 1). This allows handling files with varying numbers of indices.
-    
-    Parameters:
-    - files: List of filenames to process
-    - num_indices: Maximum number of rightmost numeric indices to try matching
-    
-    Returns:
-    - Dictionary mapping patterns to lists of indices
-      e.g., {'Si-wire_%d.h5': [[7], [8], [9]], 'Si-wire_%d_%d.h5': [[7,5], [8,5]]}
-    """
-    pattern_files = {}
-    
-    for filename in files:
-        base_name, extension = os.path.splitext(filename)
-        
-        # Try matching with num_indices, then num_indices-1, down to 1
-        matched = False
-        for n in range(num_indices, 0, -1):
-            # Build regex pattern to capture N rightmost numbers
-            if n == 1:
-                regex_pattern = r'(\d+)(?!.*\d)'
-            else:
-                # Capture N groups of digits separated by underscores from the right
-                regex_pattern = r'_'.join([r'(\d+)'] * n) + r'(?!.*\d)'
-            
-            match = re.search(regex_pattern, base_name)
-            
-            if match:
-                # Extract all captured groups as integers
-                indices = [int(match.group(i)) for i in range(1, n + 1)]
-                
-                # Create pattern with appropriate number of %d placeholders
-                pattern_placeholder = '_'.join(['%d'] * n)
-                pattern = base_name[:match.start()] + pattern_placeholder + base_name[match.end():] + extension
-                
-                pattern_files.setdefault(pattern, []).append(indices)
-                matched = True
-                break  # Stop trying fewer indices once we found a match
-        
-        if not matched:
-            # No numeric pattern found
-            pattern_files.setdefault(filename, []).append([])
-    
-    return pattern_files
 
 
 def _merge_field_values(field_values, delimiter=";"):
@@ -151,49 +76,6 @@ def _merge_field_values(field_values, delimiter=";"):
         ','.join(v) if isinstance(v, list) else str(v) 
         for v in field_values
     ])
-
-
-def _generate_pattern_label(pattern, indices_list):
-    """
-    Generate an informative label for a pattern with its indices.
-    
-    Helper function that creates labels showing file counts/ranges for patterns.
-    
-    Parameters:
-    - pattern: The filename pattern (e.g., 'file_%d.h5')
-    - indices_list: List of index tuples for this pattern
-    
-    Returns:
-    - String with pattern and range information (e.g., 'file_%d.h5 (files 1-10)')
-    """
-    if indices_list and indices_list[0]:
-        actual_num_indices = len(indices_list[0])
-        
-        if actual_num_indices == 1:
-            # Single index: show simple range
-            return f"{pattern} (files {str(srange(set(idx[0] for idx in indices_list)))})"
-        elif actual_num_indices > 1:
-            # Multiple indices: show ranges for each dimension
-            range_labels = []
-            dim_names = ['scanPoints', 'depths'] if actual_num_indices == 2 else [f"dim{i+1}" for i in range(actual_num_indices)]
-            
-            for dim in range(actual_num_indices):
-                dim_values = sorted(set(idx[dim] for idx in indices_list if len(idx) > dim))
-                if dim_values:
-                    range_labels.append(f"{dim_names[dim]}: {str(srange(dim_values))}")
-            
-            if range_labels:
-                return f"{pattern} ({', '.join(range_labels)})"
-            else:
-                return f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
-        else:
-            # No indices (shouldn't happen with our logic, but handle it)
-            return f"{pattern} ({len(indices_list)} file{'s' if len(indices_list) != 1 else ''})"
-    else:
-        # No indices available
-        return pattern
-
-
 
 
 def register_update_path_fields_callback(
@@ -374,6 +256,7 @@ def register_load_file_indices_callback(
     filename_prefix_id: str,
     scan_points_id: str,
     alert_id: str,
+    root_path_id: str = 'root_path',
     num_indices: int = 1,
     depth_range_id: str = None
 ):
@@ -388,6 +271,7 @@ def register_load_file_indices_callback(
     - filename_prefix_id: ID of the filename prefix field
     - scan_points_id: ID of the scan points field to update
     - alert_id: ID of the alert component
+    - root_path_id: ID of the root path form field (default 'root_path')
     - num_indices: Number of indices to extract (1 for wire recon, 2 for peak indexing)
     - depth_range_id: ID of depth range field (only for peak indexing with num_indices=2)
     
@@ -400,9 +284,10 @@ def register_load_file_indices_callback(
         Input(data_loaded_signal_id, 'data'),
         State(data_path_id, 'value'),
         State(filename_prefix_id, 'value'),
+        State(root_path_id, 'value'),
         prevent_initial_call=True,
     )
-    def load_file_indices(n_clicks, data_loaded_signal, data_path, filenamePrefix):
+    def load_file_indices(n_clicks, data_loaded_signal, data_path, filenamePrefix, root_path_value):
         """Scan directory and populate scanPoints (and optionally depthRange) fields."""
         
         if not data_path:
@@ -421,7 +306,7 @@ def register_load_file_indices_callback(
             })
             raise PreventUpdate
         
-        root_path = DEFAULT_VARIABLES.get("root_path", "")
+        root_path = root_path_value or DEFAULT_VARIABLES.get("root_path", "")
         
         try:
             # Parse data_path
@@ -447,7 +332,7 @@ def register_load_file_indices_callback(
                 
                 # List all files in directory, filtering by valid extensions
                 try:
-                    files = _filter_files_by_extension(current_full_data_path)
+                    files = filter_files_by_extension(current_full_data_path, VALID_HDF_EXTENSIONS)
                 except Exception as e:
                     logger.error(f"Error reading directory {current_full_data_path}: {e}")
                     scanpoint_indices_per_path.append(path_scanpoint_indices)
@@ -455,7 +340,7 @@ def register_load_file_indices_callback(
                     continue
                 
                 # Extract patterns and indices using helper function
-                pattern_files = _extract_indices_from_files(files, num_indices)
+                pattern_files = extract_index_patterns(files, num_indices)
                 
                 # Extract scanpoint and depth indices from all patterns for this path
                 for pattern, indices_list in pattern_files.items():
@@ -539,28 +424,32 @@ def register_load_file_indices_callback(
 
 def register_check_filenames_callback(
     find_filenames_id: str,
-    update_paths_id: str,
-    data_loaded_signal_id: str,
     data_path_id: str,
     filename_prefix_id: str,
     filename_templates_id: str,
-    cached_patterns_store_id: str,
-    num_indices: int = 1
+    root_path_id: str = 'root_path',
+    num_indices: int = 1,
+    scan_points_id: str = None,
+    depth_range_id: str = None
 ):
     """
     Register a callback to scan directory and suggest common filename patterns.
     Replaces numeric sequences with %d to find templates and shows index ranges.
     Supports smart context-aware dropdown that adapts based on current field value.
     
+    In Mode 1A (no current match), the first suggested pattern is auto-populated
+    into the filename field.  If scan_points_id (and optionally depth_range_id)
+    are provided, the corresponding index range fields are also auto-populated.
+    
     Parameters:
     - find_filenames_id: ID of the find filenames button
-    - update_paths_id: ID of the update paths button
-    - data_loaded_signal_id: ID of the data loaded signal store
     - data_path_id: ID of the data path field
     - filename_prefix_id: ID of the filename prefix field to auto-set
     - filename_templates_id: ID of the filename templates dropdown to populate with patterns
-    - cached_patterns_store_id: ID of the Store component to cache scanned patterns per path
+    - root_path_id: ID of the root path form field (default 'root_path')
     - num_indices: Maximum number of rightmost numeric indices to capture (will try this and fewer)
+    - scan_points_id: ID of the scan points field to auto-populate in Mode 1A (optional)
+    - depth_range_id: ID of the depth range field to auto-populate in Mode 1A (optional)
     
     Returns:
     - The registered callback function
@@ -569,252 +458,272 @@ def register_check_filenames_callback(
     @dash.callback(
         Output(filename_templates_id, 'children'),
         Output(filename_prefix_id, 'value', allow_duplicate=True),
-        Output(cached_patterns_store_id, 'data'),
         Input(find_filenames_id, 'n_clicks'),
         State(data_path_id, 'value'),
         State(filename_prefix_id, 'value'),
-        State(cached_patterns_store_id, 'data'),
+        State(root_path_id, 'value'),
+        running=[
+            (Output(find_filenames_id, "disabled"), True, False),
+            (Output(find_filenames_id, "children"),
+             [dbc.Spinner(size="sm", spinner_class_name="me-2"), "Scanning..."],
+             "Find file names"),
+        ],
         prevent_initial_call=True,
     )
-    def check_filenames(n_check, data_path, current_filename, cached_patterns, delimiter=";"):
+    def check_filenames(n_check, data_path, current_filename, root_path_value, delimiter=";"):
         """Scan directory and suggest common filename patterns with smart context-aware dropdown."""
         
         if not data_path:
-            return [html.Option(value="", label="No data path provided")], dash.no_update, {}
+            return [html.Option(value="", label="No data path provided")], dash.no_update
         
-        # Parse data_path to get number of paths
         data_path_list = parse_parameter(data_path)
         num_paths = len(data_path_list)
-        root_path = DEFAULT_VARIABLES["root_path"]
+        root_path = root_path_value or DEFAULT_VARIABLES.get("root_path", "")
         
-        # EARLY CACHE CHECK - avoid expensive directory scanning if we have valid cached data
-        if cached_patterns and all(i in cached_patterns for i in range(num_paths)):
-            # Cache hit - use cached patterns and skip directory scanning entirely
-            cached_patterns_found = True
-            patterns_by_path = cached_patterns
-        else:
-            # PATTERN SCANNING PER PATH
-            # Cache miss or invalid - perform fresh directory scan
-            cached_patterns_found = False
-            # Scan each path independently and store patterns per path
-            patterns_by_path = {}  # {path_index: [(pattern, indices_list), ...]}
-            
-            for i, current_data_path in enumerate(data_path_list):
-                current_full_data_path = resolve_path_with_root(current_data_path, root_path)
-                
-                # Check if directory exists
-                if not os.path.exists(current_full_data_path):
-                    logger.warning(f"Directory does not exist: {current_full_data_path}")
-                    patterns_by_path[i] = []
-                    continue
-                
-                # List all files in directory, filtering by valid extensions
-                try:
-                    files = _filter_files_by_extension(current_full_data_path)
-                except Exception as e:
-                    logger.error(f"Error reading directory {current_full_data_path}: {e}")
-                    patterns_by_path[i] = []
-                    continue
-                
-                # Extract patterns and indices using helper function for this path
-                path_pattern_files = _extract_indices_from_files(files, num_indices)
-                
-                # Sort by file count and take top 10
-                sorted_path_patterns = sorted(path_pattern_files.items(), key=lambda x: len(x[1]), reverse=True)[:10]
-                
-                # Generate wildcards for this path's similar patterns
-                # Use smart wildcard detection: preserve %d when both patterns have it
-                path_wildcard_patterns = {}  # pattern -> (indices_list, num_asterisks)
-                if len(sorted_path_patterns) > 1:
-                    for (pattern1, indices1), (pattern2, indices2) in combinations(sorted_path_patterns, 2):
-                        # Find matching and differing sections
-                        matcher = SequenceMatcher(None, pattern1, pattern2)
-                        wildcard_parts = []
-                        last_pos = 0
-                        
-                        for match_start1, match_start2, match_length in matcher.get_matching_blocks():
-                            # Handle the gap before this match (differences)
-                            if match_start1 > last_pos:
-                                wildcard_parts.append('*')
-
-                            # Add the matching section
-                            if match_length > 0:
-                                wildcard_parts.append(pattern1[match_start1:match_start1 + match_length])
-                            last_pos = match_start1 + match_length
-                        
-                        # Create wildcard pattern if it has differences
-                        wildcard_pattern = ''.join(wildcard_parts)
-                        if '*' in wildcard_pattern:
-                            # Combine indices from both pattern
-                            combined_indices = indices1 + indices2
-
-                            # If we've seen this pattern before, extend its indices
-                            if wildcard_pattern in path_wildcard_patterns:
-                                path_wildcard_patterns[wildcard_pattern][0].extend(combined_indices)
-                            else:
-                                num_asterisks = wildcard_pattern.count('*')
-                                path_wildcard_patterns[wildcard_pattern] = [combined_indices, num_asterisks]
-                
-                # Sort wildcards and combine with regular patterns
-                # Sort wildcard patterns by number of asterisks (ascending), then by file count (descending)
-                sorted_wildcards = sorted(
-                    path_wildcard_patterns.items(),
-                    key=lambda x: (x[1][1], -len(x[1][0]))  # (num_asterisks, -file_count)
-                )
-                
-                # Build final pattern list for this path as tuples: (pattern, indices_list)
-                # Wildcards first, then regular patterns
-                path_pattern_tuples = []
-                for wc_pattern, (indices_list, num_asterisks) in sorted_wildcards:
-                    path_pattern_tuples.append((wc_pattern, indices_list))
-                for pattern, indices_list in sorted_path_patterns:
-                    path_pattern_tuples.append((pattern, indices_list))
-                
-                # Take top 10 total
-                patterns_by_path[i] = path_pattern_tuples[:10]
+        # Scan each path independently
+        patterns_by_path = {}
+        for i, current_data_path in enumerate(data_path_list):
+            full_path = resolve_path_with_root(current_data_path, root_path)
+            patterns_by_path[i] = scan_directory_patterns(
+                full_path, VALID_HDF_EXTENSIONS, num_indices
+            )
         
         if not any(patterns_by_path.values()):
-            return [html.Option(value="", label="No files found in specified path(s)")], dash.no_update, {}
+            return [html.Option(value="", label="No files found in specified path(s)")], dash.no_update
         
-        # MODE DETECTION AND DROPDOWN GENERATION
-        # Convert list to string if needed, then split into delimiter-separated parts
-        current_filename = _merge_field_values(current_filename) if isinstance(current_filename, list) else current_filename
+        # --- Mode detection ---
+        current_filename = (
+            _merge_field_values(current_filename)
+            if isinstance(current_filename, list) else current_filename
+        )
         current_parts = [s.strip() for s in (current_filename or "").split(delimiter)]
-        # Pad with empty strings if fewer than num_paths to ensure safe indexing
         while len(current_parts) < num_paths:
             current_parts.append("")
         
-        # Detect if ANY matches exist AND find first mismatch from left to right
         has_any_match = False
         mismatch_index = None
         
         for i in range(num_paths):
-            suggested_tuples = patterns_by_path.get(i, [])
-            # Extract just the patterns from tuples for comparison
-            suggested_patterns = [p for (p, _) in suggested_tuples] if suggested_tuples else []
-            
-            if current_parts[i] in suggested_patterns:
+            suggested = [p for (p, _) in patterns_by_path.get(i, [])]
+            if current_parts[i] in suggested:
                 has_any_match = True
-            elif mismatch_index is None:  # Record first mismatch
+            elif mismatch_index is None:
                 mismatch_index = i
-            
-            # Early exit optimization: if we have both a match and a mismatch, we're done
             if has_any_match and mismatch_index is not None:
                 break
         
+        # --- Dropdown generation ---
         if not has_any_match or mismatch_index is None:
-            # MODE 1: No matches or only matches found - generate multiple dropdown options
-            # Find max patterns across all paths to determine iteration bounds
-            max_patterns = max((len(patterns_by_path.get(i, [])) for i in range(num_paths)), default=0)
-            
-            if max_patterns == 0:
-                # No patterns found in any path
-                return [html.Option(value="", label="No files found in specified path(s)")], dash.no_update, {}
-            
-            dropdown_options = []
-            first_option_value = None  # Track first option for auto-population
-            
-            # Iterate through pattern indices to create dropdown options
-            for pattern_idx in range(max_patterns):
-                parts = []
-                labels = []
-                
-                # Build parts and labels for each path at this pattern index
-                for i in range(num_paths):
-                    patterns = patterns_by_path.get(i, [])
-                    
-                    if pattern_idx < len(patterns):
-                        # This path has a pattern at this index
-                        pattern, indices_list = patterns[pattern_idx]
-                        parts.append(pattern)
-                        labels.append(_generate_pattern_label(pattern, indices_list))
-                    else:
-                        # This path has fewer patterns - use empty string for value
-                        # and informative label
-                        parts.append("")
-                        labels.append("(no more patterns)")
-                
-                # Skip if all parts are empty (shouldn't happen with our max_patterns logic, but defensive)
-                if not any(parts):
-                    continue
-                
-                # Create the option
-                value = _merge_field_values(parts, delimiter)
-                label = _merge_field_values(labels, delimiter)
-                dropdown_options.append(html.Option(value=value, label=label))
-                
-                # Track first option value for auto-population
-                if first_option_value is None:
-                    first_option_value = value
-            
-            # Preserve any extra segments beyond num_paths in the first option
-            if len(current_parts) > num_paths and first_option_value:
-                extra_parts = current_parts[num_paths:]
-                first_option_parts = first_option_value.split(delimiter)
-                first_option_parts.extend(extra_parts)
-                first_option_value = _merge_field_values(first_option_parts, delimiter)
-                # Update the first dropdown option with the extended value
-                if dropdown_options:
-                    dropdown_options[0] = html.Option(
-                        value=first_option_value,
-                        label=dropdown_options[0]['props']['label']
-                    )
-            
-            if not has_any_match:
-                # MODE 1A: No matches found -> auto-populate field with the first dropdown value
-                # Return: dropdown options, auto-populated value, patterns for caching (only if fresh scan)
-                auto_populated_value = first_option_value if first_option_value else ""
-                return dropdown_options, auto_populated_value, dash.no_update if cached_patterns_found else patterns_by_path
-            else:
-                # MODE 1B: All matches found (mismatch_index is None) -> keep current value, show dropdown
-                # Return: dropdown options, keep current field value, patterns for caching (only if fresh scan)
-                return dropdown_options, dash.no_update, dash.no_update if cached_patterns_found else patterns_by_path
+            return _build_mode1_dropdown(
+                patterns_by_path, num_paths, current_parts,
+                has_any_match, delimiter,
+                scan_points_id=scan_points_id,
+                depth_range_id=depth_range_id,
+            )
         else:
-            # MODE 2: At least one match found -> show suggestions for mismatched position, keep other positions unchanged
-            suggested_tuples = patterns_by_path.get(mismatch_index, [])
-            
-            # MODE 2: Generate dropdown for mismatched position only
-            dropdown_options = []
-            for pattern, indices_list in suggested_tuples:
-                # Build value
-                parts = current_parts.copy()
-                parts[mismatch_index] = pattern
-                value = _merge_field_values(parts, delimiter)
-                
-                # Build label - generate labels inline for all positions with visual indicators
-                label_parts = []
-                for i in range(num_paths):
-                    if i == mismatch_index:
-                        # This is the varying position - add arrow prefix
-                        label_parts.append(f"→ {_generate_pattern_label(pattern, indices_list)}")
-                    else:
-                        # Find the current pattern in this position's patterns and generate label
-                        label_generated = False
-                        for p, idx_list in patterns_by_path.get(i, []):
-                            if p == current_parts[i]:
-                                label_parts.append(_generate_pattern_label(p, idx_list))
-                                label_generated = True
-                                break
-                        if not label_generated:
-                            # Pattern not found, use plain text
-                            label_parts.append(current_parts[i])
-                
-                # Custom merge for Mode 2: use | around varying position, ; elsewhere
-                label_segments = []
-                for i, part in enumerate(label_parts):
-                    if i == 0:
-                        label_segments.append(part)
-                    elif i == mismatch_index or i == mismatch_index + 1:
-                        # Use | before and after the varying position
-                        label_segments.append(f" | {part}")
-                    else:
-                        # Use ; for other separators
-                        label_segments.append(f" {delimiter} {part}")
-                label = ''.join(label_segments)
-                
-                dropdown_options.append(html.Option(value=value, label=label))
-            
-            # Return: dropdown options, keep current field value, patterns for caching (only if fresh scan)
-            return dropdown_options, dash.no_update, dash.no_update if cached_patterns_found else patterns_by_path
+            return _build_mode2_dropdown(
+                patterns_by_path, num_paths, current_parts,
+                mismatch_index, delimiter
+            )
     
     return check_filenames
+
+
+# ---------------------------------------------------------------------------
+# Dropdown builder helpers (used only by check_filenames)
+# ---------------------------------------------------------------------------
+
+def _populate_index_fields(pattern_indices_per_path, num_paths, delimiter,
+                           scan_points_id, depth_range_id=None):
+    """
+    Populate scanPoints (and optionally depthRange) fields via set_props
+    using the index data from the first suggested pattern.
+
+    Parameters:
+        pattern_indices_per_path: List of indices_lists, one per path.
+        num_paths: Number of data paths.
+        delimiter: Delimiter for merging multi-path values.
+        scan_points_id: Component ID for the scan points field.
+        depth_range_id: Component ID for the depth range field (optional).
+    """
+    scanpoint_ranges = []
+    depth_ranges = []
+
+    for path_indices_list in pattern_indices_per_path:
+        path_scanpoints = set()
+        path_depths = set()
+        for indices in path_indices_list:
+            if not indices:
+                continue
+            if len(indices) >= 1:
+                path_scanpoints.add(indices[0])
+            if len(indices) >= 2:
+                path_depths.add(indices[1])
+
+        scanpoint_ranges.append(str(srange(path_scanpoints)) if path_scanpoints else "")
+        depth_ranges.append(str(srange(path_depths)) if path_depths else "")
+
+    scanpoints_str = _merge_field_values(scanpoint_ranges, delimiter)
+    if scanpoints_str:
+        set_props(scan_points_id, {'value': scanpoints_str})
+
+    if depth_range_id:
+        depth_str = _merge_field_values(depth_ranges, delimiter)
+        if depth_str:
+            set_props(depth_range_id, {'value': depth_str})
+
+
+def _find_matched_indices(patterns_by_path, num_paths, current_parts):
+    """
+    For each path, find the indices_list of the pattern that matches the
+    current filename part.  Returns a list of indices_lists (one per path),
+    or None if no matches are found.
+    """
+    result = []
+    found_any = False
+    for i in range(num_paths):
+        matched = False
+        for pattern, indices_list in patterns_by_path.get(i, []):
+            if pattern == current_parts[i]:
+                result.append(indices_list)
+                matched = True
+                found_any = True
+                break
+        if not matched:
+            result.append([])
+    return result if found_any else None
+
+
+def _build_mode1_dropdown(patterns_by_path, num_paths, current_parts,
+                          has_any_match, delimiter,
+                          scan_points_id=None, depth_range_id=None):
+    """
+    Build dropdown for Mode 1A (no match -> auto-populate) or
+    Mode 1B (all match -> show dropdown, keep value).
+    
+    In Mode 1A, if scan_points_id / depth_range_id are provided the
+    corresponding fields are also populated via set_props using the
+    index ranges from the first (best) suggested pattern.
+    """
+    max_patterns = max(
+        (len(patterns_by_path.get(i, [])) for i in range(num_paths)),
+        default=0,
+    )
+    if max_patterns == 0:
+        return [html.Option(value="", label="No files found in specified path(s)")], dash.no_update
+
+    dropdown_options = []
+    first_option_value = None
+    first_option_indices = None  # indices from the first pattern per path
+
+    for pattern_idx in range(max_patterns):
+        parts = []
+        labels = []
+        pattern_indices = []  # collect indices per path for this row
+        for i in range(num_paths):
+            patterns = patterns_by_path.get(i, [])
+            if pattern_idx < len(patterns):
+                pattern, indices_list = patterns[pattern_idx]
+                parts.append(pattern)
+                labels.append(build_pattern_label(pattern, indices_list))
+                pattern_indices.append(indices_list)
+            else:
+                parts.append("")
+                labels.append("(no more patterns)")
+                pattern_indices.append([])
+
+        if not any(parts):
+            continue
+
+        value = _merge_field_values(parts, delimiter)
+        label = _merge_field_values(labels, delimiter)
+        dropdown_options.append(html.Option(value=value, label=label))
+
+        if first_option_value is None:
+            first_option_value = value
+            first_option_indices = pattern_indices
+
+    # Preserve extra segments beyond num_paths
+    if len(current_parts) > num_paths and first_option_value:
+        extra_parts = current_parts[num_paths:]
+        first_option_parts = first_option_value.split(delimiter)
+        first_option_parts.extend(extra_parts)
+        first_option_value = _merge_field_values(first_option_parts, delimiter)
+        if dropdown_options:
+            dropdown_options[0] = html.Option(
+                value=first_option_value,
+                label=dropdown_options[0]['props']['label']
+            )
+
+    # Always populate index fields when scan_points_id is provided.
+    # The user explicitly clicked "Find file names" so they expect a refresh.
+    if scan_points_id:
+        if not has_any_match:
+            # Mode 1A: use indices from the first (best) suggestion
+            indices_to_populate = first_option_indices
+        else:
+            # Mode 1B: filename already matches -- find indices for the
+            # matched pattern in each path
+            indices_to_populate = _find_matched_indices(
+                patterns_by_path, num_paths, current_parts
+            )
+
+        if indices_to_populate:
+            _populate_index_fields(
+                indices_to_populate, num_paths, delimiter,
+                scan_points_id, depth_range_id,
+            )
+
+    if not has_any_match:
+        # Mode 1A: auto-populate filename with first suggestion
+        return dropdown_options, first_option_value or ""
+    else:
+        # Mode 1B: keep current filename value
+        return dropdown_options, dash.no_update
+
+
+def _build_mode2_dropdown(patterns_by_path, num_paths, current_parts,
+                          mismatch_index, delimiter):
+    """
+    Build dropdown for Mode 2: suggest options only for the first mismatched
+    path position, keeping the rest unchanged.
+    """
+    suggested_tuples = patterns_by_path.get(mismatch_index, [])
+    dropdown_options = []
+
+    for pattern, indices_list in suggested_tuples:
+        parts = current_parts.copy()
+        parts[mismatch_index] = pattern
+        value = _merge_field_values(parts, delimiter)
+
+        # Build label with arrow indicator on the varying position
+        label_parts = []
+        for i in range(num_paths):
+            if i == mismatch_index:
+                label_parts.append(
+                    f"→ {build_pattern_label(pattern, indices_list)}"
+                )
+            else:
+                label_generated = False
+                for p, idx_list in patterns_by_path.get(i, []):
+                    if p == current_parts[i]:
+                        label_parts.append(build_pattern_label(p, idx_list))
+                        label_generated = True
+                        break
+                if not label_generated:
+                    label_parts.append(current_parts[i])
+
+        # Use | around the varying position, ; elsewhere
+        label_segments = []
+        for i, part in enumerate(label_parts):
+            if i == 0:
+                label_segments.append(part)
+            elif i == mismatch_index or i == mismatch_index + 1:
+                label_segments.append(f" | {part}")
+            else:
+                label_segments.append(f" {delimiter} {part}")
+        label = ''.join(label_segments)
+
+        dropdown_options.append(html.Option(value=value, label=label))
+
+    return dropdown_options, dash.no_update

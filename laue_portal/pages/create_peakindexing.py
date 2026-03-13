@@ -681,7 +681,7 @@ def validate_peakindexing_inputs(ctx):
                             for current_filename_prefix_i in current_filename_prefix:
                                 # Check if ANY files match this prefix pattern (without scan point substitution)
                                 prefix_pattern = os.path.join(current_full_data_path, current_filename_prefix_i.replace('%d', '*'))
-                                prefix_matches = glob.glob(prefix_pattern + '*')
+                                prefix_matches = glob.glob(prefix_pattern)
                                 
                                 if not prefix_matches:
                                     add_validation_message(validation_result, 'errors', 'filenamePrefix', input_prefix, 
@@ -803,7 +803,7 @@ def validate_peakindexing_inputs(ctx):
                                                 break
                                             
                                             scanpoint_pattern = os.path.join(current_full_data_path, file_str)
-                                            scanpoint_matches = glob.glob(scanpoint_pattern + '*')
+                                            scanpoint_matches = glob.glob(scanpoint_pattern)
                                             
                                             if not scanpoint_matches:
                                                 if depthRange_num is not None:
@@ -1623,13 +1623,13 @@ register_load_file_indices_callback(
 
 register_check_filenames_callback(
     find_filenames_id='peakindex-check-filenames-btn',
-    update_paths_id='peakindex-update-path-fields-btn',
-    data_loaded_signal_id='peakindex-data-loaded-signal',
     data_path_id='data_path',
     filename_prefix_id='filenamePrefix',
     filename_templates_id='peakindex-filename-templates',
-    cached_patterns_store_id='peakindex-cached-patterns',
-    num_indices=2
+    root_path_id='root_path',
+    num_indices=2,
+    scan_points_id='scanPoints',
+    depth_range_id='depthRange',
 )
 
 

@@ -513,7 +513,7 @@ def validate_wire_reconstruction_inputs(ctx):
                             for current_filename_prefix_i in current_filename_prefix:
                                 # Check if ANY files match this prefix pattern (without scan point substitution)
                                 prefix_pattern = os.path.join(current_full_data_path, current_filename_prefix_i.replace('%d', '*'))
-                                prefix_matches = glob.glob(prefix_pattern + '*')
+                                prefix_matches = glob.glob(prefix_pattern)
                                 
                                 if not prefix_matches:
                                     add_validation_message(validation_result, 'errors', 'filenamePrefix', input_prefix, 
@@ -535,7 +535,7 @@ def validate_wire_reconstruction_inputs(ctx):
                                         for scanPoint_num in scanPoint_nums:
                                             file_str = current_filename_prefix_i % scanPoint_num if '%d' in current_filename_prefix_i else current_filename_prefix_i
                                             scanpoint_pattern = os.path.join(current_full_data_path, file_str)
-                                            scanpoint_matches = glob.glob(scanpoint_pattern + '*')
+                                            scanpoint_matches = glob.glob(scanpoint_pattern)
                                             
                                             if not scanpoint_matches:
                                                 missing_scanpoints.append(str(scanPoint_num))
@@ -1106,13 +1106,12 @@ register_load_file_indices_callback(
 
 register_check_filenames_callback(
     find_filenames_id='wirerecon-check-filenames-btn',
-    update_paths_id='wirerecon-update-path-fields-btn',
-    data_loaded_signal_id='wirerecon-data-loaded-signal',
     data_path_id='data_path',
     filename_prefix_id='filenamePrefix',
     filename_templates_id='wirerecon-filename-templates',
-    cached_patterns_store_id='wirerecon-cached-patterns',
-    num_indices=1
+    root_path_id='root_path',
+    num_indices=1,
+    scan_points_id='scanPoints',
 )
 
 @dash.callback(
