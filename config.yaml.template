@@ -13,9 +13,6 @@ DEFAULT_VARIABLES:
 # Valid HDF file extensions for data files
 VALID_HDF_EXTENSIONS:
   - .hdf
-  - .h4
-  - .hdf4
-  - .he2
   - .h5
   - .hdf5
   - .he5
