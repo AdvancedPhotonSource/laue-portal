@@ -20,7 +20,7 @@ navbar = dbc.Navbar(
                 dbc.Nav(
                     [
                         dbc.NavItem(dbc.NavLink("Scans", href="/scans", active="exact")),
-                        dbc.NavItem(dbc.NavLink("Mask Reconstructions", href="/reconstructions", active="exact")),
+                        # dbc.NavItem(dbc.NavLink("Mask Reconstructions", href="/reconstructions", active="exact")),  # temporarily hidden
                         dbc.NavItem(dbc.NavLink("Wire Reconstructions", href="/wire-reconstructions", active="exact")),
                         dbc.NavItem(dbc.NavLink("Indexations", href="/peakindexings", active="exact")),
                         dbc.NavItem(dbc.NavLink("Run Monitor", href="/run-monitor", active="exact")),

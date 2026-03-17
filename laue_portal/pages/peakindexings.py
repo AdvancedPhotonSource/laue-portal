@@ -80,12 +80,12 @@ VISIBLE_COLS = [
     db_schema.Job.status,
 ]
 
+# Columns to condense into the single "Source" column
+SOURCE_COLS = {'scanNumber', 'recon_id', 'wirerecon_id'}
+
 CUSTOM_HEADER_NAMES = {
     'peakindex_id': 'Peak Indexing ID',
-    'scanNumber': 'Scan ID',
     'scanPointslen': 'Points',
-    'recon_id': 'Recon ID',
-    'wirerecon_id': 'Wire Recon ID',
     'boxsize': 'Box',
     'submit_time': 'Date',
 }
@@ -107,6 +107,7 @@ def _get_peakindexings():
             .statement, session.bind)
 
     cols = []
+    source_col_inserted = False
     
     # Add explicit checkbox column as the first column
     cols.append({
@@ -127,6 +128,30 @@ def _get_peakindexings():
     
     for col in VISIBLE_COLS:
         field_key = col.key
+
+        # Replace scanNumber, recon_id, wirerecon_id with a single "Source" column
+        if field_key in SOURCE_COLS:
+            if not source_col_inserted:
+                cols.append({
+                    'headerName': 'Source',
+                    'field': 'source',
+                    'cellRenderer': 'SourceLinksRenderer',
+                    'filter': True,
+                    'sortable': True,
+                    'resizable': True,
+                    'floatingFilter': True,
+                    'unSortIcon': True,
+                    # Build a display string for filtering/sorting: "SN<id> MR<id>" or "SN<id> WR<id>"
+                    'valueGetter': {"function": """
+                        (params.data.scanNumber != null ? 'SN' + params.data.scanNumber : '') +
+                        (params.data.recon_id != null ? ' MR' + params.data.recon_id : '') +
+                        (params.data.wirerecon_id != null ? ' WR' + params.data.wirerecon_id : '')
+                        || 'Unlinked'
+                    """},
+                })
+                source_col_inserted = True
+            continue
+
         header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace('_', ' ').title())
         
         col_def = {
@@ -141,20 +166,12 @@ def _get_peakindexings():
         if field_key == 'peakindex_id':
             col_def['cellRenderer'] = 'PeakIndexLinkRenderer'
             col_def['sort'] = 'desc'
-        elif field_key == 'recon_id':
-            col_def['cellRenderer'] = 'ReconLinkRenderer'
-        elif field_key == 'wirerecon_id':
-            col_def['cellRenderer'] = 'WireReconLinkRenderer'
         elif field_key == 'dataset_id':
             col_def['cellRenderer'] = 'DatasetIdScanLinkRenderer'
-        elif field_key == 'scanNumber':
-            col_def['cellRenderer'] = 'ScanLinkRenderer'  # Use the custom JS renderer
-            # Handle NULL scanNumber for unlinked indexes
-            col_def['valueGetter'] = {"function": "params.data.scanNumber == null ? 'Unlinked' : params.data.scanNumber"}
         elif field_key in ['submit_time', 'start_time', 'finish_time']:
-            col_def['cellRenderer'] = 'DateFormatter'  # Use the date formatter for datetime fields
+            col_def['cellRenderer'] = 'DateFormatter'
         elif field_key == 'status':
-            col_def['cellRenderer'] = 'StatusRenderer'  # Use custom status renderer
+            col_def['cellRenderer'] = 'StatusRenderer'
         cols.append(col_def)
 
     return cols, peakindexings.to_dict('records')

@@ -100,6 +100,49 @@ dagcomponentfuncs.WireReconLinkRenderer = function (props) {
     );
 };
 
+dagcomponentfuncs.SourceLinksRenderer = function (props) {
+    // Renders a condensed "Source" column with prefixed clickable links:
+    //   SN<scanNumber>  MR<recon_id>  or  SN<scanNumber>  WR<wirerecon_id>
+    const data = props.data;
+    const elements = [];
+
+    if (data.scanNumber != null) {
+        if (elements.length > 0) elements.push(' \u00A0');
+        elements.push(
+            React.createElement('a', {
+                key: 'sn',
+                href: '/scan?scan_id=' + data.scanNumber
+            }, 'SN' + data.scanNumber)
+        );
+    }
+
+    if (data.recon_id != null) {
+        if (elements.length > 0) elements.push(' \u00A0');
+        elements.push(
+            React.createElement('a', {
+                key: 'mr',
+                href: '/reconstruction?recon_id=' + data.recon_id
+            }, 'MR' + data.recon_id)
+        );
+    }
+
+    if (data.wirerecon_id != null) {
+        if (elements.length > 0) elements.push(' \u00A0');
+        elements.push(
+            React.createElement('a', {
+                key: 'wr',
+                href: '/wire_reconstruction?wirerecon_id=' + data.wirerecon_id
+            }, 'WR' + data.wirerecon_id)
+        );
+    }
+
+    if (elements.length === 0) {
+        return React.createElement('span', { className: 'text-muted' }, 'Unlinked');
+    }
+
+    return React.createElement('span', null, elements);
+};
+
 dagcomponentfuncs.JobIdLinkRenderer = function (props) {
     const url = `/job?job_id=${props.value}`;
     return React.createElement(
