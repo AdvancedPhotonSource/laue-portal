@@ -137,6 +137,6 @@ class TestPeakIndexRetrievers:
             
             # Verify specific expected columns are present
             column_fields = [col['field'] for col in cols]
-            expected_columns = ['peakindex_id', 'submit_time', 'scanNumber', 'recon_id', 'wirerecon_id', 'notes']
+            expected_columns = ['peakindex_id', 'submit_time', 'source', 'notes']
             for expected_col in expected_columns:
                 assert expected_col in column_fields, f"Column {expected_col} should be present in column definitions"
