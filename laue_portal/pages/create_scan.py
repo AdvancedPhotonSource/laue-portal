@@ -1,5 +1,5 @@
 import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, State, set_props, ALL
+from dash import html, dcc, Input, Output, State, set_props, ALL
 import dash
 import base64
 import laue_portal.database.db_utils as db_utils
@@ -276,6 +276,11 @@ def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_
     State({"type": "hidden_scan_detectorTrig4_VAL", "index": ALL}, 'value'),
     State({"type": "hidden_scan_cpt", "index": ALL}, 'value'),
 
+    running=[
+        (Output("submit_catalog_and_metadata", "disabled"), True, False),
+        (Output("submit_catalog_and_metadata", "children"),
+         [dbc.Spinner(size="sm", spinner_class_name="me-2"), "Submitting..."], "Submit to Database"),
+    ],
     prevent_initial_call=True,
 )
 def submit_catalog_and_metadata(n,
