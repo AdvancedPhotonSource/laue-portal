@@ -6,7 +6,7 @@ Provides functions for enqueueing jobs, checking status, and managing the job qu
 from redis import Redis
 import redis
 from rq import Queue, Worker
-from rq.job import Job, Dependency
+from rq.job import Job
 from rq.registry import StartedJobRegistry, FinishedJobRegistry, FailedJobRegistry
 import logging
 from datetime import datetime
@@ -94,18 +94,10 @@ def enqueue_job(job_id: int, job_type: str, execute_func, at_front: bool = False
         'enqueued_at': datetime.now().isoformat()
     }
     
-    # Update job status in database
-    # Skip status update for batch coordinator since it manages the parent job status
-    if job_type != 'batch_coordinator':
-        with Session(session_utils.get_engine()) as session:
-            # Get the primary key column dynamically
-            mapper = inspect(table)
-            pk_col = list(mapper.primary_key)[0]  # Get first primary key column
-            # Query using the primary key
-            job_data = session.query(table).filter(pk_col == job_id).first()
-            if job_data:
-                job_data.status = STATUS_REVERSE_MAPPING["Queued"]
-                session.commit()
+    # Note: Status is already set to Queued when Job/SubJob records are created
+    # in the submission pages (create_peakindexing.py, create_wire_reconstruction.py, etc.)
+    # so we skip the redundant DB update here to avoid 5000+ individual DB sessions
+    # for large batch jobs.
     
     # Enqueue the job with optional dependency
     rq_job = job_queue.enqueue(
@@ -293,22 +285,27 @@ def execute_peakindexing_batch_coordinator(job_id: int, output_dir: str, output_
             ).first()
             
             if job_data:
-                if all_finished:
+                # If the job was already cancelled by user, don't overwrite the status
+                already_cancelled = (job_data.status == STATUS_REVERSE_MAPPING["Cancelled"])
+                
+                if all_finished and not already_cancelled:
                     job_data.status = STATUS_REVERSE_MAPPING["Finished"]
                     message = f"All {len(subjob_data)} subjobs completed successfully{merge_message}"
-                elif any_failed and all_complete:
+                elif any_failed and all_complete and not already_cancelled:
                     job_data.status = STATUS_REVERSE_MAPPING["Failed"]
                     message = f"Batch failed: {failed_count} failed, {finished_count} succeeded out of {len(subjob_data)} subjobs{merge_message}"
                 elif cancelled_count > 0 and all_complete:
+                    # Keep Cancelled status (may already be set by cancel_batch_job)
                     job_data.status = STATUS_REVERSE_MAPPING["Cancelled"]
-                    message = f"Batch cancelled: {cancelled_count} cancelled, {finished_count} succeeded, {failed_count} failed{merge_message}"
+                    message = f"Batch final: {cancelled_count} cancelled, {finished_count} succeeded, {failed_count} failed{merge_message}"
                 else:
-                    # This shouldn't happen with allow_failure=True, but handle it gracefully
-                    job_data.status = STATUS_REVERSE_MAPPING["Failed"]
-                    message = f"Batch coordinator error: {finished_count} finished, {failed_count} failed, {running_count} running, {queued_count} queued{merge_message}"
+                    if not already_cancelled:
+                        job_data.status = STATUS_REVERSE_MAPPING["Failed"]
+                    message = f"Batch coordinator: {finished_count} finished, {failed_count} failed, {running_count} running, {queued_count} queued{merge_message}"
                     logger.warning(f"Unexpected state in peakindexing batch coordinator for job {job_id}: {message}")
                 
-                job_data.finish_time = datetime.now()
+                if not already_cancelled:
+                    job_data.finish_time = datetime.now()
                 if job_data.messages:
                     job_data.messages += f"\n{message}"
                 else:
@@ -357,22 +354,28 @@ def execute_batch_coordinator(job_id: int):
             ).first()
             
             if job_data:
-                if all_finished:
+                # If the job was already cancelled by user, don't overwrite the status —
+                # just append the final subjob summary as a message
+                already_cancelled = (job_data.status == STATUS_REVERSE_MAPPING["Cancelled"])
+                
+                if all_finished and not already_cancelled:
                     job_data.status = STATUS_REVERSE_MAPPING["Finished"]
                     message = f"All {len(subjob_data)} subjobs completed successfully"
-                elif any_failed and all_complete:
+                elif any_failed and all_complete and not already_cancelled:
                     job_data.status = STATUS_REVERSE_MAPPING["Failed"]
                     message = f"Batch failed: {failed_count} failed, {finished_count} succeeded out of {len(subjob_data)} subjobs"
                 elif cancelled_count > 0 and all_complete:
+                    # Keep Cancelled status (may already be set by cancel_batch_job)
                     job_data.status = STATUS_REVERSE_MAPPING["Cancelled"]
-                    message = f"Batch cancelled: {cancelled_count} cancelled, {finished_count} succeeded, {failed_count} failed"
+                    message = f"Batch final: {cancelled_count} cancelled, {finished_count} succeeded, {failed_count} failed"
                 else:
-                    # This shouldn't happen with allow_failure=True, but handle it gracefully
-                    job_data.status = STATUS_REVERSE_MAPPING["Failed"]
-                    message = f"Batch coordinator error: {finished_count} finished, {failed_count} failed, {running_count} running, {queued_count} queued"
+                    if not already_cancelled:
+                        job_data.status = STATUS_REVERSE_MAPPING["Failed"]
+                    message = f"Batch coordinator: {finished_count} finished, {failed_count} failed, {running_count} running, {queued_count} queued"
                     logger.warning(f"Unexpected state in batch coordinator for job {job_id}: {message}")
                 
-                job_data.finish_time = datetime.now()
+                if not already_cancelled:
+                    job_data.finish_time = datetime.now()
                 if job_data.messages:
                     job_data.messages += f"\n{message}"
                 else:
@@ -427,7 +430,9 @@ def _enqueue_batch(job_id: int, job_type: str, execute_func, at_front: bool = Fa
             raise ValueError(f"Number of output files ({len(output_files)}) "
                            f"does not match number of subjobs ({len(subjob_data)})")
     
-    rq_job_ids = []
+    # Set up the batch completion counter — coordinator will be enqueued
+    # automatically when all subjobs finish (O(1) per completion, not O(N^2))
+    setup_batch_counter(job_id, len(subjob_data), 'execute_batch_coordinator', job_type=job_type)
     
     # Enqueue each subjob in parallel (no dependencies between them)
     for i, subjob in enumerate(subjob_data):
@@ -439,7 +444,7 @@ def _enqueue_batch(job_id: int, job_type: str, execute_func, at_front: bool = Fa
             subjob_args.append(output_files[i])
         subjob_args.extend(args)
             
-        rq_job_id = enqueue_job(
+        enqueue_job(
             subjob.subjob_id,
             job_type,
             execute_func,
@@ -449,27 +454,9 @@ def _enqueue_batch(job_id: int, job_type: str, execute_func, at_front: bool = Fa
             *subjob_args,
             **kwargs
         )
-        rq_job_ids.append(rq_job_id)
-    
-    # Create a Dependency object that allows failure
-    dependency = Dependency(
-        jobs=rq_job_ids,  # List of all subjob RQ IDs
-        allow_failure=True,  # This ensures coordinator runs even if subjobs fail
-        enqueue_at_front=True  # Put coordinator at front of queue
-    )
-    
-    # Enqueue coordinator that depends on all subjobs
-    coordinator_id = enqueue_job(
-        job_id,
-        'batch_coordinator',
-        execute_batch_coordinator,
-        True,  # Put coordinator at front since it depends on subjobs
-        dependency,  # Pass the Dependency object instead of job list
-        db_schema.Job  # Coordinator updates the main Job
-    )
     
     logger.info(f"Enqueued batch {job_type} job {job_id} with {len(subjob_data)} parallel subjobs")
-    return coordinator_id
+    return f"batch_{job_id}"
 
 
 def enqueue_wire_reconstruction(job_id: int, input_files: List[str], output_files: List[str],
@@ -604,11 +591,18 @@ def enqueue_peakindexing(job_id: int, input_files: List[str], output_files: List
     # (individual XML files go to output_dir/xml/, merged goes to output_dir)
     output_dir = output_files[0] if output_files else ''
     
-    rq_job_ids = []
+    # Set up the batch completion counter — coordinator will be enqueued
+    # automatically when all subjobs finish (O(1) per completion, not O(N^2))
+    setup_batch_counter(
+        job_id, len(subjob_data), 
+        'execute_peakindexing_batch_coordinator',
+        coordinator_args=[output_dir, output_xml],
+        job_type='peakindexing'
+    )
     
     # Enqueue each subjob in parallel (no dependencies between them)
     for i, subjob in enumerate(subjob_data):
-        rq_job_id = enqueue_job(
+        enqueue_job(
             subjob.subjob_id,
             'peakindexing',
             execute_peakindexing_job,
@@ -636,29 +630,9 @@ def enqueue_peakindexing(job_id: int, input_files: List[str], output_files: List
             index_l,
             **kwargs
         )
-        rq_job_ids.append(rq_job_id)
-    
-    # Create a Dependency object that allows failure
-    dependency = Dependency(
-        jobs=rq_job_ids,  # List of all subjob RQ IDs
-        allow_failure=True,  # This ensures coordinator runs even if subjobs fail
-        enqueue_at_front=True  # Put coordinator at front of queue
-    )
-    
-    # Enqueue peakindexing-specific coordinator that merges XML files
-    coordinator_id = enqueue_job(
-        job_id,
-        'batch_coordinator',
-        execute_peakindexing_batch_coordinator,
-        True,  # Put coordinator at front since it depends on subjobs
-        dependency,  # Pass the Dependency object instead of job list
-        db_schema.Job,  # Coordinator updates the main Job
-        output_dir,  # Pass output directory for XML merging
-        output_xml   # Pass output XML filename/path
-    )
     
     logger.info(f"Enqueued peakindexing batch job {job_id} with {len(subjob_data)} parallel subjobs, output_xml={output_xml}")
-    return coordinator_id
+    return f"batch_{job_id}"
 
 
 def get_job_status(rq_job_id: str) -> Dict[str, Any]:
@@ -798,6 +772,248 @@ def cancel_job(rq_job_id: str) -> bool:
         return False
 
 
+def cancel_batch_job(db_job_id: int) -> Dict[str, Any]:
+    """
+    Cancel a batch job by its database job ID. Cancels all queued subjobs
+    and the batch coordinator. Running subjobs are left to finish naturally.
+    
+    Works for any job type (wire_reconstruction, peakindexing, reconstruction).
+    
+    Args:
+        db_job_id: Database job ID (Job.job_id)
+        
+    Returns:
+        Dict with keys: success (bool), cancelled_count (int), 
+        skipped_running (int), already_done (int), message (str)
+    """
+    result = {
+        'success': False,
+        'cancelled_count': 0,
+        'skipped_running': 0,
+        'already_done': 0,
+        'message': ''
+    }
+    
+    try:
+        with Session(session_utils.get_engine()) as session:
+            # Get the parent job
+            job_data = session.query(db_schema.Job).filter(
+                db_schema.Job.job_id == db_job_id
+            ).first()
+            
+            if not job_data:
+                result['message'] = f"Job {db_job_id} not found"
+                return result
+            
+            # Don't cancel already-finished/failed/cancelled jobs
+            if job_data.status in [
+                STATUS_REVERSE_MAPPING["Finished"],
+                STATUS_REVERSE_MAPPING["Failed"],
+                STATUS_REVERSE_MAPPING["Cancelled"]
+            ]:
+                result['message'] = f"Job {db_job_id} is already {STATUS_MAPPING[job_data.status]}"
+                result['already_done'] = 1
+                return result
+            
+            # Get all subjobs for this job
+            subjobs = session.query(db_schema.SubJob).filter(
+                db_schema.SubJob.job_id == db_job_id
+            ).all()
+            
+            # Determine the job type — first try batch metadata in Redis,
+            # then fall back to probing RQ job IDs
+            job_type = None
+            meta_raw = redis_conn.get(_batch_meta_key(db_job_id))
+            if meta_raw:
+                meta = json.loads(meta_raw)
+                job_type = meta.get('job_type') or None
+            
+            # Fall back: probe RQ to find the job type prefix
+            if job_type is None and subjobs:
+                for candidate_type in ['wire_reconstruction', 'peakindexing', 'reconstruction']:
+                    test_rq_id = f"{candidate_type}_{subjobs[0].subjob_id}"
+                    try:
+                        Job.fetch(test_rq_id, connection=redis_conn)
+                        job_type = candidate_type
+                        break
+                    except Exception:
+                        continue
+            
+            has_running = False
+            cancelled_subjob_ids = []
+            
+            # Cancel queued subjobs
+            for subjob in subjobs:
+                if subjob.status == STATUS_REVERSE_MAPPING["Queued"]:
+                    # Try to cancel the RQ job
+                    if job_type:
+                        rq_job_id = f"{job_type}_{subjob.subjob_id}"
+                        try:
+                            rq_job = Job.fetch(rq_job_id, connection=redis_conn)
+                            rq_job.cancel()
+                        except Exception as e:
+                            logger.warning(f"Could not cancel RQ job {rq_job_id}: {e}")
+                    
+                    # Update DB status regardless of RQ result
+                    subjob.status = STATUS_REVERSE_MAPPING["Cancelled"]
+                    subjob.finish_time = datetime.now()
+                    if subjob.messages:
+                        subjob.messages += "\nCancelled by user"
+                    else:
+                        subjob.messages = "Cancelled by user"
+                    result['cancelled_count'] += 1
+                    cancelled_subjob_ids.append(subjob.subjob_id)
+                    
+                elif subjob.status == STATUS_REVERSE_MAPPING["Running"]:
+                    # Leave running jobs alone
+                    has_running = True
+                    result['skipped_running'] += 1
+                    
+                else:
+                    # Already finished/failed/cancelled
+                    result['already_done'] += 1
+            
+            # Update parent job status
+            if has_running:
+                # Some subjobs still running - mark as cancelled but note running ones
+                job_data.status = STATUS_REVERSE_MAPPING["Cancelled"]
+                job_data.finish_time = datetime.now()
+                msg = (f"Job cancelled by user. {result['cancelled_count']} queued subjob(s) cancelled, "
+                       f"{result['skipped_running']} running subjob(s) left to finish.")
+            else:
+                # All subjobs are now done (cancelled/finished/failed)
+                job_data.status = STATUS_REVERSE_MAPPING["Cancelled"]
+                job_data.finish_time = datetime.now()
+                msg = f"Job cancelled by user. {result['cancelled_count']} subjob(s) cancelled."
+            
+            if job_data.messages:
+                job_data.messages += f"\n{msg}"
+            else:
+                job_data.messages = msg
+            
+            session.commit()
+        
+        # Notify the batch counter for each cancelled subjob so the coordinator
+        # fires when running subjobs finish. If no running subjobs remain,
+        # clean up the counter keys (coordinator is not needed).
+        if has_running and cancelled_subjob_ids:
+            for _ in cancelled_subjob_ids:
+                notify_subjob_completed(db_job_id)
+        else:
+            # No running subjobs — clean up counter keys, coordinator not needed
+            redis_conn.delete(_batch_counter_key(db_job_id), _batch_meta_key(db_job_id))
+        
+        publish_job_update(db_job_id, 'cancelled', msg)
+        
+        result['success'] = True
+        result['message'] = msg
+        logger.info(f"Cancelled batch job {db_job_id}: {msg}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error cancelling batch job {db_job_id}: {e}")
+        result['message'] = f"Error: {str(e)}"
+        return result
+
+
+def move_batch_to_front(db_job_id: int) -> Dict[str, Any]:
+    """
+    Move all queued subjobs for a batch job to the front of the RQ queue.
+    Running/finished/failed/cancelled subjobs are left unchanged.
+    
+    Args:
+        db_job_id: Database job ID (Job.job_id)
+        
+    Returns:
+        Dict with keys: success (bool), moved_count (int), message (str)
+    """
+    result = {
+        'success': False,
+        'moved_count': 0,
+        'message': ''
+    }
+    
+    try:
+        with Session(session_utils.get_engine()) as session:
+            # Get the parent job
+            job_data = session.query(db_schema.Job).filter(
+                db_schema.Job.job_id == db_job_id
+            ).first()
+            
+            if not job_data:
+                result['message'] = f"Job {db_job_id} not found"
+                return result
+            
+            # Only makes sense for Queued or Running jobs
+            if job_data.status not in [
+                STATUS_REVERSE_MAPPING["Queued"],
+                STATUS_REVERSE_MAPPING["Running"]
+            ]:
+                result['message'] = f"Job {db_job_id} is {STATUS_MAPPING[job_data.status]}, nothing to move"
+                return result
+            
+            # Get all subjobs
+            subjobs = session.query(db_schema.SubJob).filter(
+                db_schema.SubJob.job_id == db_job_id
+            ).all()
+            
+            if not subjobs:
+                result['message'] = f"Job {db_job_id} has no subjobs"
+                return result
+            
+            # Determine job type from batch metadata
+            job_type = None
+            meta_raw = redis_conn.get(_batch_meta_key(db_job_id))
+            if meta_raw:
+                meta = json.loads(meta_raw)
+                job_type = meta.get('job_type') or None
+            
+            # Fall back: probe RQ
+            if job_type is None:
+                for candidate_type in ['wire_reconstruction', 'peakindexing', 'reconstruction']:
+                    test_rq_id = f"{candidate_type}_{subjobs[0].subjob_id}"
+                    try:
+                        Job.fetch(test_rq_id, connection=redis_conn)
+                        job_type = candidate_type
+                        break
+                    except Exception:
+                        continue
+            
+            if not job_type:
+                result['message'] = f"Could not determine job type for job {db_job_id}"
+                return result
+            
+            # Move queued subjobs to front (in reverse order so the first subjob ends up at the very front)
+            queued_subjobs = [
+                s for s in subjobs
+                if s.status == STATUS_REVERSE_MAPPING["Queued"]
+            ]
+            
+            for subjob in reversed(queued_subjobs):
+                rq_job_id = f"{job_type}_{subjob.subjob_id}"
+                try:
+                    # Remove from current position, push to front
+                    job_queue.remove(rq_job_id)
+                    job_queue.push_job_id(rq_job_id, at_front=True)
+                    result['moved_count'] += 1
+                except Exception as e:
+                    logger.warning(f"Could not move RQ job {rq_job_id} to front: {e}")
+        
+        if result['moved_count'] > 0:
+            result['success'] = True
+            result['message'] = f"Moved {result['moved_count']} subjob(s) to front of queue"
+        else:
+            result['message'] = "No queued subjobs found to move"
+        
+        logger.info(f"Move to front for job {db_job_id}: {result['message']}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error moving batch job {db_job_id} to front: {e}")
+        result['message'] = f"Error: {str(e)}"
+        return result
+
+
 def get_workers_info() -> List[Dict[str, Any]]:
     """Get information about all workers."""
     workers_info = []
@@ -841,6 +1057,115 @@ def publish_job_update(job_id: int, status: str, message: str = None):
     redis_conn.publish('laue:job_updates', json.dumps(update_data))
 
 
+# --- Batch completion counter (replaces RQ Dependency for O(N) instead of O(N^2)) ---
+
+def _batch_counter_key(job_id: int) -> str:
+    """Redis key for the batch completion counter."""
+    return f"laue:batch:{job_id}:completed"
+
+def _batch_meta_key(job_id: int) -> str:
+    """Redis key for batch metadata (total count, coordinator info)."""
+    return f"laue:batch:{job_id}:meta"
+
+def setup_batch_counter(job_id: int, total_subjobs: int, coordinator_func_name: str,
+                        coordinator_args: list = None, job_type: str = ''):
+    """
+    Set up a batch completion counter in Redis.
+    Called once when a batch job is enqueued.
+    
+    Args:
+        job_id: Database job ID (the parent/batch job)
+        total_subjobs: Total number of subjobs in the batch
+        coordinator_func_name: Name of the coordinator function to call
+            (e.g., 'execute_batch_coordinator' or 'execute_peakindexing_batch_coordinator')
+        coordinator_args: Additional args to pass to the coordinator (beyond job_id)
+        job_type: The RQ job type prefix (e.g., 'wire_reconstruction', 'peakindexing')
+    """
+    meta = {
+        'total': total_subjobs,
+        'coordinator_func': coordinator_func_name,
+        'coordinator_args': coordinator_args or [],
+        'job_type': job_type,
+    }
+    redis_conn.set(_batch_meta_key(job_id), json.dumps(meta))
+    redis_conn.set(_batch_counter_key(job_id), 0)
+    logger.info(f"Set up batch counter for job {job_id}: {total_subjobs} subjobs, coordinator={coordinator_func_name}")
+
+
+def notify_subjob_completed(parent_job_id: int):
+    """
+    Increment the batch completion counter for a parent job.
+    If all subjobs are done, enqueue the coordinator job directly.
+    
+    Called from execute_with_status_updates() after a subjob finishes, fails, or is cancelled.
+    This is O(1) per subjob — no dependency checking.
+    
+    Args:
+        parent_job_id: Database job ID of the parent/batch job
+    """
+    counter_key = _batch_counter_key(parent_job_id)
+    meta_key = _batch_meta_key(parent_job_id)
+    
+    # Atomic increment
+    completed = redis_conn.incr(counter_key)
+    
+    # Read metadata to check total
+    meta_raw = redis_conn.get(meta_key)
+    if not meta_raw:
+        logger.warning(f"No batch metadata found for job {parent_job_id}, skipping coordinator check")
+        return
+    
+    meta = json.loads(meta_raw)
+    total = meta['total']
+    
+    if completed >= total:
+        # All subjobs are done — enqueue the coordinator
+        coordinator_func_name = meta['coordinator_func']
+        coordinator_args = meta.get('coordinator_args', [])
+        
+        # Look up the coordinator function by name
+        coordinator_funcs = {
+            'execute_batch_coordinator': execute_batch_coordinator,
+            'execute_peakindexing_batch_coordinator': execute_peakindexing_batch_coordinator,
+        }
+        coordinator_func = coordinator_funcs.get(coordinator_func_name)
+        
+        if coordinator_func is None:
+            logger.error(f"Unknown coordinator function: {coordinator_func_name}")
+            # Fall back: run the coordinator inline so the job doesn't hang
+            logger.info(f"Falling back to inline coordinator execution for job {parent_job_id}")
+            try:
+                execute_batch_coordinator(parent_job_id)
+            except Exception as e2:
+                logger.error(f"Inline coordinator also failed for job {parent_job_id}: {e2}")
+            redis_conn.delete(counter_key, meta_key)
+            return
+        
+        # Enqueue the coordinator directly (no Dependency needed)
+        try:
+            enqueue_job(
+                parent_job_id,
+                'batch_coordinator',
+                coordinator_func,
+                True,  # at_front — coordinator should run ASAP
+                None,  # no depends_on
+                db_schema.Job,
+                *coordinator_args
+            )
+            logger.info(f"All {total} subjobs done for job {parent_job_id}, enqueued coordinator")
+        except Exception as e:
+            # If enqueue fails, run the coordinator inline so the job doesn't hang
+            logger.error(f"Failed to enqueue coordinator for job {parent_job_id}: {e}")
+            logger.info(f"Falling back to inline coordinator execution for job {parent_job_id}")
+            try:
+                coordinator_func(parent_job_id, *coordinator_args)
+            except Exception as e2:
+                logger.error(f"Inline coordinator also failed for job {parent_job_id}: {e2}")
+        
+        # Clean up counter keys
+        redis_conn.delete(counter_key, meta_key)
+
+
 # Helper function that wraps job execution with status updates
 def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_schema.Job, *args, **kwargs):
     """
@@ -857,6 +1182,9 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
     mapper = inspect(table)
     pk_col = list(mapper.primary_key)[0]  # Get first primary key column
     
+    is_subjob = (table == db_schema.SubJob)
+    parent_job_id = None  # Will be set for subjobs to trigger batch counter
+    
     try:
         # Update job status to running
         with Session(session_utils.get_engine()) as session:
@@ -868,14 +1196,15 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
                 job_data.start_time = job_start_time
                 
                 # If this is a subjob, also update the parent job status if it's still queued
-                if table == db_schema.SubJob and hasattr(job_data, 'job_id'):
+                if is_subjob and hasattr(job_data, 'job_id'):
+                    parent_job_id = job_data.job_id
                     parent_job_data = session.query(db_schema.Job).filter(
-                        db_schema.Job.job_id == job_data.job_id
+                        db_schema.Job.job_id == parent_job_id
                     ).first()
                     if parent_job_data and parent_job_data.status == STATUS_REVERSE_MAPPING["Queued"]:
                         parent_job_data.status = STATUS_REVERSE_MAPPING["Running"]
                         parent_job_data.start_time = job_start_time
-                        logger.info(f"Updated parent job {job_data.job_id} status to Running")
+                        logger.info(f"Updated parent job {parent_job_id} status to Running")
                 
                 session.commit()
         
@@ -939,6 +1268,11 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
                 session.commit()
         
         publish_job_update(job_id, 'finished', f'{job_type} completed successfully')
+        
+        # Notify the batch counter that this subjob is done
+        if is_subjob and parent_job_id is not None:
+            notify_subjob_completed(parent_job_id)
+        
         return result
         
     except Exception as e:
@@ -954,6 +1288,11 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
                 session.commit()
         
         publish_job_update(job_id, 'failed', f'{job_type} failed: {str(e)}')
+        
+        # Notify the batch counter even on failure — coordinator needs to know
+        if is_subjob and parent_job_id is not None:
+            notify_subjob_completed(parent_job_id)
+        
         raise
 
 

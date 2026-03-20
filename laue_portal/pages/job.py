@@ -9,7 +9,7 @@ import laue_portal.components.navbar as navbar
 from dash.exceptions import PreventUpdate
 import urllib.parse
 import pandas as pd
-from laue_portal.processing.redis_utils import STATUS_MAPPING
+from laue_portal.processing.redis_utils import STATUS_MAPPING, cancel_batch_job
 import laue_portal.database.session_utils as session_utils
 
 dash.register_page(__name__, path="/job")
@@ -99,6 +99,33 @@ layout = html.Div([
             ], className="mb-4 shadow-sm border"),
         ],
         style={'width': '100%', 'overflow-x': 'auto'}
+    ),
+
+    # Confirmation modal for Cancel Job
+    dbc.Modal([
+        dbc.ModalHeader(dbc.ModalTitle("Confirm Cancel")),
+        dbc.ModalBody([
+            html.P("Are you sure you want to cancel this job?"),
+            html.P([
+                "Queued subjobs will be cancelled immediately. ",
+                "Running subjobs will be left to finish naturally."
+            ], className="small text-muted"),
+        ]),
+        dbc.ModalFooter([
+            dbc.Button("Cancel Job", id="cancel-job-confirm-yes-btn", color="danger", className="me-2"),
+            dbc.Button("Go Back", id="cancel-job-confirm-no-btn", color="secondary"),
+        ]),
+    ], id="cancel-job-confirm-modal", is_open=False, centered=True),
+
+    # Toast for cancel result feedback
+    dbc.Toast(
+        id="cancel-job-result-toast",
+        header="Cancel Result",
+        is_open=False,
+        dismissable=True,
+        duration=6000,
+        icon="info",
+        style={"position": "fixed", "top": 66, "right": 10, "width": 400, "zIndex": 1050},
     ),
 ])
 
@@ -380,3 +407,69 @@ def refresh_job_data(n_clicks, current_href):
         # Force a refresh by returning the same URL
         return current_href
     raise PreventUpdate
+
+
+@callback(
+    Output('cancel-job-confirm-modal', 'is_open', allow_duplicate=True),
+    Input('cancel-job-btn', 'n_clicks'),
+    prevent_initial_call=True,
+)
+def open_cancel_confirmation(n_clicks):
+    """Open confirmation modal when Cancel Job button is clicked."""
+    if n_clicks:
+        return True
+    raise PreventUpdate
+
+
+@callback(
+    Output('cancel-job-confirm-modal', 'is_open', allow_duplicate=True),
+    Input('cancel-job-confirm-no-btn', 'n_clicks'),
+    prevent_initial_call=True,
+)
+def close_cancel_confirmation(n_clicks):
+    """Close the confirmation modal without cancelling."""
+    if n_clicks:
+        return False
+    raise PreventUpdate
+
+
+@callback(
+    Output('cancel-job-confirm-modal', 'is_open'),
+    Output('cancel-job-result-toast', 'children'),
+    Output('cancel-job-result-toast', 'icon'),
+    Output('cancel-job-result-toast', 'is_open'),
+    Output('url-job-page', 'href', allow_duplicate=True),
+    Input('cancel-job-confirm-yes-btn', 'n_clicks'),
+    State('url-job-page', 'href'),
+    running=[
+        (Output("cancel-job-confirm-yes-btn", "disabled"), True, False),
+        (Output("cancel-job-confirm-yes-btn", "children"),
+         [dbc.Spinner(size="sm", spinner_class_name="me-2"), "Cancelling..."], "Cancel Job"),
+        (Output("cancel-job-confirm-no-btn", "disabled"), True, False),
+    ],
+    prevent_initial_call=True,
+)
+def execute_cancel(n_clicks, href):
+    """Execute the cancellation after confirmation, then refresh the page."""
+    if not n_clicks or not href:
+        raise PreventUpdate
+    
+    parsed_url = urllib.parse.urlparse(href)
+    query_params = urllib.parse.parse_qs(parsed_url.query)
+    job_id = query_params.get('job_id', [None])[0]
+    
+    if not job_id:
+        raise PreventUpdate
+    
+    job_id = int(job_id)
+    result = cancel_batch_job(job_id)
+    
+    if result['success']:
+        icon = "success"
+        msg = result['message']
+    else:
+        icon = "warning"
+        msg = result['message'] or "Could not cancel job."
+    
+    # Return the same href to trigger a page refresh
+    return False, msg, icon, True, href

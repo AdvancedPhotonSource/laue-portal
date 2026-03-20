@@ -65,6 +65,16 @@ else
     echo "No orphaned processes found"
 fi
 
+# Clean up stale Redis data
+# RQ job state is ephemeral - SQLite is the source of truth for all job records.
+# Stale dump.rdb files cause Redis to reload old job state on restart, which can
+# lead to high CPU usage (especially on NFS) and a stalled pipeline.
+REDIS_DATA_DIR="$SUPERVISOR_DIR/redis_data"
+if [ -f "$REDIS_DATA_DIR/dump.rdb" ]; then
+    echo "  Removing stale Redis data (dump.rdb)..."
+    rm -f "$REDIS_DATA_DIR/dump.rdb"
+fi
+
 echo ""
 echo "Cleanup complete!"
 echo ""
