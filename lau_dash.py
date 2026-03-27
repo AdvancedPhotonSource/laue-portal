@@ -1,13 +1,10 @@
 import dash
-import dash_bootstrap_components as dbc
 from laue_portal.database.session_utils import init_db, get_engine
 import laue_portal.database.db_utils as db_utils
 from laue_portal.processing.redis_utils import init_redis_status
 import os
 from laue_portal import config
 import logging
-
-dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
 
 
 def ensure_database_exists():
@@ -34,8 +31,11 @@ def ensure_database_exists():
 # This ensures the status is set before pages (and navbar) are imported
 init_redis_status()
 
+# Stylesheets (Bootstrap Flatly, DBC templates, Bootstrap Icons) are served
+# locally from the assets/ directory for air-gapped deployment.  Run
+# ``python scripts/download_assets.py`` to populate them from CDNs.
 app = dash.Dash(__name__, 
-                external_stylesheets=[dbc.themes.FLATLY, dbc_css, dbc.icons.BOOTSTRAP], 
+                external_stylesheets=[], 
                 suppress_callback_exceptions=True,
                 pages_folder="laue_portal/pages",)
 

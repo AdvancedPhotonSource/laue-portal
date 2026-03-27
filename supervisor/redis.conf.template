@@ -14,11 +14,12 @@ loglevel notice
 logfile ""
 
 # Data persistence
+# RDB persistence is disabled - RQ job state is ephemeral and SQLite is the
+# source of truth. Persisting to disk (especially on NFS) causes unnecessary
+# CPU usage from periodic BGSAVE fork() operations.
 dir {{SUPERVISOR_DIR}}/redis_data
 dbfilename dump.rdb
-save 900 1
-save 300 10
-save 60 10000
+save ""
 
 # Memory management
 maxmemory 256mb
