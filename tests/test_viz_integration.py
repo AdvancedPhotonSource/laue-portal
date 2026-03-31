@@ -1,4 +1,4 @@
-"""Quick integration test: verify all viz components import and execute."""
+"""Integration tests for visualization components using synthetic fixture."""
 
 import os
 import sys
@@ -19,66 +19,64 @@ from laue_portal.components.visualization.quality_map import (
 )
 from laue_portal.components.visualization.peak_table import make_peak_table
 
-SAMPLE_XML = os.path.join(project_root, "output.xml")
+FIXTURE_XML = os.path.join(os.path.dirname(__file__), "fixtures", "test_indexing.xml")
+
+
+def _parsed():
+    return parse_indexing_xml(FIXTURE_XML)
 
 
 def test_orientation_map_creates_figure():
-    parsed = parse_indexing_xml(SAMPLE_XML)
-    fig = make_orientation_map(parsed, color_by="n_indexed")
+    fig = make_orientation_map(_parsed(), color_by="n_indexed")
     assert len(fig.data) == 1
     assert fig.data[0].type == "scattergl"
 
 
 def test_orientation_map_all_color_modes():
-    parsed = parse_indexing_xml(SAMPLE_XML)
+    parsed = _parsed()
     for mode in ("n_indexed", "goodness", "rms_error", "n_patterns"):
         fig = make_orientation_map(parsed, color_by=mode)
         assert len(fig.data) >= 1
 
 
 def test_quality_map_creates_figure():
-    parsed = parse_indexing_xml(SAMPLE_XML)
-    fig = make_quality_map(parsed, metric="goodness")
+    fig = make_quality_map(_parsed(), metric="goodness")
     assert len(fig.data) == 1
     assert fig.data[0].type == "scattergl"
 
 
 def test_quality_map_all_metrics():
-    parsed = parse_indexing_xml(SAMPLE_XML)
+    parsed = _parsed()
     for metric in ("goodness", "rms_error", "n_indexed", "n_patterns"):
         fig = make_quality_map(parsed, metric=metric)
         assert len(fig.data) >= 1
 
 
 def test_orientation_map_marker_size():
-    parsed = parse_indexing_xml(SAMPLE_XML)
-    fig = make_orientation_map(parsed, marker_size=25)
+    fig = make_orientation_map(_parsed(), marker_size=25)
     assert fig.data[0].marker.size == 25
 
 
 def test_orientation_map_aspect_ratio():
-    parsed = parse_indexing_xml(SAMPLE_XML)
-    fig = make_orientation_map(parsed)
+    fig = make_orientation_map(_parsed())
     assert fig.layout.yaxis.scaleanchor == "x"
     assert fig.layout.yaxis.scaleratio == 1
 
 
 def test_quality_map_marker_size():
-    parsed = parse_indexing_xml(SAMPLE_XML)
-    fig = make_quality_map(parsed, marker_size=30)
+    fig = make_quality_map(_parsed(), marker_size=30)
     assert fig.data[0].marker.size == 30
 
 
 def test_orientation_map_3d_creates_figure():
-    parsed = parse_indexing_xml(SAMPLE_XML)
-    fig = make_orientation_map_3d(parsed, color_by="n_indexed")
+    fig = make_orientation_map_3d(_parsed(), color_by="n_indexed")
     assert len(fig.data) == 1
     assert fig.data[0].type == "scatter3d"
     assert fig.layout.scene.aspectmode == "data"
 
 
 def test_orientation_map_3d_uses_all_coordinates():
-    parsed = parse_indexing_xml(SAMPLE_XML)
+    parsed = _parsed()
     fig = make_orientation_map_3d(parsed)
     trace = fig.data[0]
     n = len(parsed["positions"])
@@ -88,23 +86,20 @@ def test_orientation_map_3d_uses_all_coordinates():
 
 
 def test_quality_map_3d_creates_figure():
-    parsed = parse_indexing_xml(SAMPLE_XML)
-    fig = make_quality_map_3d(parsed, metric="goodness")
+    fig = make_quality_map_3d(_parsed(), metric="goodness")
     assert len(fig.data) == 1
     assert fig.data[0].type == "scatter3d"
 
 
 def test_quality_map_3d_all_metrics():
-    parsed = parse_indexing_xml(SAMPLE_XML)
+    parsed = _parsed()
     for metric in ("goodness", "rms_error", "n_indexed", "n_patterns"):
         fig = make_quality_map_3d(parsed, metric=metric)
         assert len(fig.data) >= 1
 
 
 def test_peak_table_creates_div():
-    parsed = parse_indexing_xml(SAMPLE_XML)
-    peaks = get_all_indexed_peaks(parsed)
+    peaks = get_all_indexed_peaks(_parsed())
     table = make_peak_table(peaks)
     assert table is not None
-    # Should be an html.Div with children
     assert hasattr(table, "children")

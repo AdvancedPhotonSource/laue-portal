@@ -1,0 +1,188 @@
+<AllSteps>
+  <step>
+    <Xsample>100.0</Xsample>
+    <Ysample>200.0</Ysample>
+    <Zsample>300.0</Zsample>
+    <depth>nan</depth>
+    <energy unit="keV">20.0</energy>
+    <scanNum>1001</scanNum>
+    <detector>
+      <inputImage>test/image_001.h5</inputImage>
+      <detectorID>TEST-DET</detectorID>
+      <Nx>2048</Nx>
+      <Ny>2048</Ny>
+      <peaksXY Npeaks="12">
+        <Xpixel>100.1 200.2 300.3 400.4 500.5 600.6 700.7 800.8 900.9 1000.0 1100.1 1200.2</Xpixel>
+        <Ypixel>150.1 250.2 350.3 450.4 550.5 650.6 750.7 850.8 950.9 1050.0 1150.1 1250.2</Ypixel>
+        <Intens>1000 900 800 700 600 500 400 300 200 100 50 25</Intens>
+        <Integral>30.0 28.0 26.0 24.0 22.0 20.0 18.0 16.0 14.0 12.0 10.0 8.0</Integral>
+        <Qx>0.10 -0.17 0.25 -0.30 0.12 -0.22 0.18 -0.14 0.20 -0.11 0.15 -0.19</Qx>
+        <Qy>0.67 0.64 0.55 0.70 0.60 0.58 0.62 0.66 0.53 0.71 0.59 0.63</Qy>
+        <Qz>-0.74 -0.75 -0.80 -0.65 -0.79 -0.78 -0.76 -0.73 -0.82 -0.69 -0.77 -0.74</Qz>
+      </peaksXY>
+    </detector>
+    <indexing Nindexed="12" Npeaks="12" Npatterns="2">
+      <pattern num="0" rms_error="0.005" goodness="150.0" Nindexed="9">
+        <recip_lattice unit="1/nm">
+          <astar>-10.0 5.0 -6.0</astar>
+          <bstar>-15.0 -2.0 -1.0</bstar>
+          <cstar>-2.0 13.0 8.0</cstar>
+        </recip_lattice>
+        <hkl_s>
+          <h>3 5 7 5 7 8 6 8 10</h>
+          <k>-1 -1 -1 1 1 -2 0 0 0</k>
+          <l>1 1 1 1 1 2 2 2 2</l>
+          <PkIndex>0 1 2 3 4 5 6 7 8</PkIndex>
+        </hkl_s>
+      </pattern>
+      <pattern num="1" rms_error="0.008" goodness="120.0" Nindexed="3">
+        <recip_lattice unit="1/nm">
+          <astar>-11.0 4.0 -5.0</astar>
+          <bstar>-14.0 -3.0 -2.0</bstar>
+          <cstar>-3.0 12.0 7.0</cstar>
+        </recip_lattice>
+        <hkl_s>
+          <h>2 4 6</h>
+          <k>0 0 0</k>
+          <l>2 2 2</l>
+          <PkIndex>9 10 11</PkIndex>
+        </hkl_s>
+      </pattern>
+      <xtl>
+        <structureDesc>TestMaterial</structureDesc>
+        <SpaceGroup>225</SpaceGroup>
+        <latticeParameters unit="nm">0.40000 0.40000 0.40000 90 90 90</latticeParameters>
+        <atom n="1" symbol="X" label="X">0 0 0</atom>
+      </xtl>
+    </indexing>
+  </step>
+  <step>
+    <Xsample>101.0</Xsample>
+    <Ysample>200.0</Ysample>
+    <Zsample>300.0</Zsample>
+    <depth>nan</depth>
+    <energy unit="keV">20.0</energy>
+    <scanNum>1002</scanNum>
+    <detector>
+      <inputImage>test/image_002.h5</inputImage>
+      <detectorID>TEST-DET</detectorID>
+      <Nx>2048</Nx>
+      <Ny>2048</Ny>
+      <peaksXY Npeaks="8">
+        <Xpixel>110.0 220.0 330.0 440.0 550.0 660.0 770.0 880.0</Xpixel>
+        <Ypixel>160.0 260.0 360.0 460.0 560.0 660.0 760.0 860.0</Ypixel>
+        <Intens>950 850 750 650 550 450 350 250</Intens>
+        <Integral>29.0 27.0 25.0 23.0 21.0 19.0 17.0 15.0</Integral>
+        <Qx>0.11 -0.16 0.24 -0.29 0.13 -0.21 0.17 -0.13</Qx>
+        <Qy>0.66 0.63 0.54 0.69 0.61 0.57 0.61 0.65</Qy>
+        <Qz>-0.73 -0.76 -0.81 -0.66 -0.78 -0.79 -0.77 -0.74</Qz>
+      </peaksXY>
+    </detector>
+    <indexing Nindexed="6" Npeaks="8" Npatterns="1">
+      <pattern num="0" rms_error="0.006" goodness="140.0" Nindexed="6">
+        <recip_lattice unit="1/nm">
+          <astar>-10.1 5.1 -6.1</astar>
+          <bstar>-15.1 -2.1 -1.1</bstar>
+          <cstar>-2.1 13.1 8.1</cstar>
+        </recip_lattice>
+        <hkl_s>
+          <h>3 5 7 5 7 8</h>
+          <k>-1 -1 -1 1 1 -2</k>
+          <l>1 1 1 1 1 2</l>
+          <PkIndex>0 1 2 3 4 5</PkIndex>
+        </hkl_s>
+      </pattern>
+      <xtl>
+        <structureDesc>TestMaterial</structureDesc>
+        <SpaceGroup>225</SpaceGroup>
+        <latticeParameters unit="nm">0.40000 0.40000 0.40000 90 90 90</latticeParameters>
+      </xtl>
+    </indexing>
+  </step>
+  <step>
+    <Xsample>102.0</Xsample>
+    <Ysample>200.0</Ysample>
+    <Zsample>300.0</Zsample>
+    <depth>nan</depth>
+    <energy unit="keV">20.0</energy>
+    <scanNum>1003</scanNum>
+    <detector>
+      <inputImage>test/image_003.h5</inputImage>
+      <detectorID>TEST-DET</detectorID>
+      <Nx>2048</Nx>
+      <Ny>2048</Ny>
+      <peaksXY Npeaks="5">
+        <Xpixel>120.0 230.0 340.0 450.0 560.0</Xpixel>
+        <Ypixel>170.0 270.0 370.0 470.0 570.0</Ypixel>
+        <Intens>920 820 720 620 520</Intens>
+        <Integral>28.5 26.5 24.5 22.5 20.5</Integral>
+        <Qx>0.12 -0.15 0.23 -0.28 0.14</Qx>
+        <Qy>0.65 0.62 0.53 0.68 0.62</Qy>
+        <Qz>-0.72 -0.77 -0.82 -0.67 -0.77</Qz>
+      </peaksXY>
+    </detector>
+    <indexing Nindexed="4" Npeaks="5" Npatterns="1">
+      <pattern num="0" rms_error="0.007" goodness="130.0" Nindexed="4">
+        <recip_lattice unit="1/nm">
+          <astar>-10.2 5.2 -6.2</astar>
+          <bstar>-15.2 -2.2 -1.2</bstar>
+          <cstar>-2.2 13.2 8.2</cstar>
+        </recip_lattice>
+        <hkl_s>
+          <h>3 5 7 5</h>
+          <k>-1 -1 -1 1</k>
+          <l>1 1 1 1</l>
+          <PkIndex>0 1 2 3</PkIndex>
+        </hkl_s>
+      </pattern>
+      <xtl>
+        <structureDesc>TestMaterial</structureDesc>
+        <SpaceGroup>225</SpaceGroup>
+        <latticeParameters unit="nm">0.40000 0.40000 0.40000 90 90 90</latticeParameters>
+      </xtl>
+    </indexing>
+  </step>
+  <step>
+    <Xsample>103.0</Xsample>
+    <Ysample>200.0</Ysample>
+    <Zsample>300.0</Zsample>
+    <depth>nan</depth>
+    <energy unit="keV">20.0</energy>
+    <scanNum>1004</scanNum>
+    <detector>
+      <inputImage>test/image_004.h5</inputImage>
+      <detectorID>TEST-DET</detectorID>
+      <Nx>2048</Nx>
+      <Ny>2048</Ny>
+      <peaksXY Npeaks="6">
+        <Xpixel>130.0 240.0 350.0 460.0 570.0 680.0</Xpixel>
+        <Ypixel>180.0 280.0 380.0 480.0 580.0 680.0</Ypixel>
+        <Intens>910 810 710 610 510 410</Intens>
+        <Integral>28.0 26.0 24.0 22.0 20.0 18.0</Integral>
+        <Qx>0.13 -0.14 0.22 -0.27 0.15 -0.20</Qx>
+        <Qy>0.64 0.61 0.52 0.67 0.63 0.56</Qy>
+        <Qz>-0.71 -0.78 -0.83 -0.68 -0.76 -0.80</Qz>
+      </peaksXY>
+    </detector>
+    <indexing Nindexed="5" Npeaks="6" Npatterns="1">
+      <pattern num="0" rms_error="0.004" goodness="160.0" Nindexed="5">
+        <recip_lattice unit="1/nm">
+          <astar>-10.3 5.3 -6.3</astar>
+          <bstar>-15.3 -2.3 -1.3</bstar>
+          <cstar>-2.3 13.3 8.3</cstar>
+        </recip_lattice>
+        <hkl_s>
+          <h>3 5 7 5 7</h>
+          <k>-1 -1 -1 1 1</k>
+          <l>1 1 1 1 1</l>
+          <PkIndex>0 1 2 3 4</PkIndex>
+        </hkl_s>
+      </pattern>
+      <xtl>
+        <structureDesc>TestMaterial</structureDesc>
+        <SpaceGroup>225</SpaceGroup>
+        <latticeParameters unit="nm">0.40000 0.40000 0.40000 90 90 90</latticeParameters>
+      </xtl>
+    </indexing>
+  </step>
+</AllSteps>
