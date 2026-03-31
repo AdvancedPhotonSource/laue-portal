@@ -137,6 +137,7 @@ uids.json
 
 # Sandbox scripts
 sandbox.ipynb
+sandbox/
 
 # Databases
 *.db
@@ -165,3 +166,6 @@ modified/
 
 # Config
 config.yaml
+
+# External hosted resources
+assets/
