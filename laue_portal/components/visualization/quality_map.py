@@ -104,6 +104,7 @@ def make_quality_map(
         ),
         margin=dict(l=60, r=20, t=40, b=60),
         height=550,
+        uirevision="quality-2d",
     )
 
     return fig
@@ -169,6 +170,7 @@ def make_quality_map_3d(
         ),
         margin=dict(l=0, r=0, t=40, b=0),
         height=600,
+        uirevision="quality-3d",
     )
 
     return fig

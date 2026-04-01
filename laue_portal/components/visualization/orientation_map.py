@@ -2,8 +2,13 @@
 2D and 3D orientation map scatter plot components.
 
 Renders sample positions (Xsample, Ysample, Zsample) as scatter plots
-colored by crystal orientation. In Stage 1, coloring uses N_indexed as
-a placeholder; full IPF/Rodrigues/HSV coloring will be added in Stage 2.
+colored by crystal orientation or scalar quality metrics.
+
+Coloring modes:
+- Scalar: N Indexed, Goodness, RMS Error, N Patterns (Viridis colorscale)
+- Cubic IPF: crystal direction mapped to standard IPF triangle colors
+- Rodrigues RGB: rotation axis+angle mapped to RGB
+- HSV: placeholder for spatial HSV (reserved for pole figure use)
 
 Styling matches Igor Pro's Make2Dplot_xmlData conventions.
 """
@@ -11,9 +16,25 @@ Styling matches Igor Pro's Make2Dplot_xmlData conventions.
 import numpy as np
 import plotly.graph_objects as go
 
+from laue_portal.analysis.orientation import (
+    batch_crystal_directions,
+    batch_rodrigues,
+)
+from laue_portal.analysis.coloring import (
+    batch_ipf_colors,
+    batch_rodrigues_rgb,
+    rgb_to_plotly_colors,
+)
+
 
 # Igor Pro background: gbRGB=(40000,40000,40000) / 65535
 _GRAY_BG = "rgb(156, 156, 156)"
+
+# Orientation color modes (no colorscale -- per-point RGB)
+_ORIENTATION_MODES = {"cubic_ipf", "rodrigues"}
+
+# Scalar color modes (use Viridis colorscale + colorbar)
+_SCALAR_MODES = {"n_indexed", "goodness", "rms_error", "n_patterns"}
 
 
 def make_orientation_map(
@@ -29,7 +50,8 @@ def make_orientation_map(
     parsed : dict
         Output from xml_parser.parse_indexing_xml().
     color_by : str
-        Which field to use for coloring.
+        Coloring mode: 'n_indexed', 'goodness', 'rms_error', 'n_patterns',
+        'cubic_ipf', or 'rodrigues'.
     marker_size : int
         Marker size in pixels.
 
@@ -42,24 +64,17 @@ def make_orientation_map(
     has_depth = not np.all(np.isnan(depths))
 
     x_vals, y_vals, x_label, y_label = _select_axes(positions, depths, has_depth)
-    color_vals, color_label = _get_color_values(parsed, color_by)
-    n_points = len(x_vals)
     marker_symbol = "diamond" if has_depth else "square"
 
     fig = go.Figure()
+
+    marker_dict = _build_marker_dict(parsed, color_by, marker_size, marker_symbol)
 
     fig.add_trace(go.Scattergl(
         x=x_vals,
         y=y_vals,
         mode="markers",
-        marker=dict(
-            size=marker_size,
-            symbol=marker_symbol,
-            color=color_vals,
-            colorscale="Viridis",
-            colorbar=dict(title=color_label),
-            line=dict(width=0),
-        ),
+        marker=marker_dict,
         hovertemplate=(
             "<b>Step %{customdata[0]}</b><br>"
             "Position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
@@ -82,6 +97,7 @@ def make_orientation_map(
         ),
         margin=dict(l=60, r=20, t=40, b=60),
         height=550,
+        uirevision="orientation-2d",
     )
 
     return fig
@@ -100,7 +116,8 @@ def make_orientation_map_3d(
     parsed : dict
         Output from xml_parser.parse_indexing_xml().
     color_by : str
-        Which field to use for coloring.
+        Coloring mode: 'n_indexed', 'goodness', 'rms_error', 'n_patterns',
+        'cubic_ipf', or 'rodrigues'.
     marker_size : int
         Marker size in pixels.
 
@@ -109,23 +126,17 @@ def make_orientation_map_3d(
     go.Figure
     """
     positions = parsed["positions"]
-    color_vals, color_label = _get_color_values(parsed, color_by)
-    n_points = len(positions)
 
     fig = go.Figure()
+
+    marker_dict = _build_marker_dict(parsed, color_by, max(2, marker_size // 3))
 
     fig.add_trace(go.Scatter3d(
         x=positions[:, 0],
         y=positions[:, 1],
         z=positions[:, 2],
         mode="markers",
-        marker=dict(
-            size=max(2, marker_size // 3),
-            color=color_vals,
-            colorscale="Viridis",
-            colorbar=dict(title=color_label),
-            line=dict(width=0),
-        ),
+        marker=marker_dict,
         hovertemplate=(
             "<b>Step %{customdata[0]}</b><br>"
             "Position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
@@ -147,6 +158,7 @@ def make_orientation_map_3d(
         ),
         margin=dict(l=0, r=0, t=40, b=0),
         height=600,
+        uirevision="orientation-3d",
     )
 
     return fig
@@ -155,6 +167,28 @@ def make_orientation_map_3d(
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
+def _build_marker_dict(parsed, color_by, marker_size, marker_symbol=None):
+    """Build Plotly marker dict for the given coloring mode."""
+    base = dict(
+        size=marker_size,
+        line=dict(width=0),
+    )
+    if marker_symbol is not None:
+        base["symbol"] = marker_symbol
+
+    if color_by in _ORIENTATION_MODES:
+        colors = _get_orientation_colors(parsed, color_by)
+        base["color"] = colors
+        # No colorscale or colorbar for per-point RGB
+    else:
+        color_vals, color_label = _get_scalar_color_values(parsed, color_by)
+        base["color"] = color_vals
+        base["colorscale"] = "Viridis"
+        base["colorbar"] = dict(title=color_label)
+
+    return base
+
 
 def _build_customdata(parsed):
     """Build customdata array shared by 2D and 3D traces."""
@@ -199,8 +233,8 @@ def _select_axes(positions, depths, has_depth):
         )
 
 
-def _get_color_values(parsed, color_by):
-    """Return color array and label for the given coloring mode."""
+def _get_scalar_color_values(parsed, color_by):
+    """Return (color_array, label_string) for scalar coloring modes."""
     if color_by == "n_indexed":
         return parsed["n_indexed"].astype(float), "N Indexed"
     elif color_by == "goodness":
@@ -211,3 +245,25 @@ def _get_color_values(parsed, color_by):
         return parsed["n_patterns"].astype(float), "N Patterns"
     else:
         return parsed["n_indexed"].astype(float), "N Indexed"
+
+
+def _get_orientation_colors(parsed, color_by):
+    """Return list of 'rgb(r,g,b)' strings for orientation coloring modes."""
+    recip_lattices = parsed["recip_lattices"]
+    lattice_params = parsed["lattice_params"]
+
+    if color_by == "cubic_ipf":
+        crystal_dirs = batch_crystal_directions(recip_lattices)
+        rgb = batch_ipf_colors(crystal_dirs)
+        return rgb_to_plotly_colors(rgb)
+
+    elif color_by == "rodrigues":
+        rod_vecs = batch_rodrigues(recip_lattices, lattice_params)
+        rgb = batch_rodrigues_rgb(rod_vecs)
+        return rgb_to_plotly_colors(rgb)
+
+    else:
+        # Fallback to IPF
+        crystal_dirs = batch_crystal_directions(recip_lattices)
+        rgb = batch_ipf_colors(crystal_dirs)
+        return rgb_to_plotly_colors(rgb)
