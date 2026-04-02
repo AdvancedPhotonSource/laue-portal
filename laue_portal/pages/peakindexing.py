@@ -104,6 +104,7 @@ _viz_tabs = dbc.Tabs(
                     dcc.Graph(
                         id="orientation-map-graph",
                         config={"displayModeBar": True, "scrollZoom": True},
+                        style={"height": "calc(100vh - 220px)", "minHeight": "400px"},
                     ),
                     # Selected point details
                     html.Div(
@@ -199,6 +200,7 @@ _viz_tabs = dbc.Tabs(
                             "scrollZoom": True,
                             "modeBarButtonsToAdd": ["lasso2d", "select2d"],
                         },
+                        style={"height": "calc(100vh - 220px)", "minHeight": "400px"},
                     ),
                     # ROI selection info (placeholder for Stage 3)
                     html.Div(
@@ -251,6 +253,7 @@ _viz_tabs = dbc.Tabs(
                     dcc.Graph(
                         id="quality-map-graph",
                         config={"displayModeBar": True, "scrollZoom": True},
+                        style={"height": "calc(100vh - 220px)", "minHeight": "400px"},
                     ),
                     # Indexed peaks table
                     html.Div(id="peak-table-container", className="mt-3"),
@@ -270,6 +273,8 @@ layout = html.Div([
     dcc.Location(id='url-peakindexing-page', refresh=False),
     # Store parsed XML data path so visualization callbacks can load it
     dcc.Store(id='peakindexing-xml-path'),
+    # Store selected grain indices for cross-plot linking (Stage 3)
+    dcc.Store(id='selected-grain-indices', data=[]),
     dbc.Container(
         id='peakindexing-content-container',
         fluid=True,
@@ -431,9 +436,11 @@ def load_peakindexing_data(href):
     Input('orientation-marker-size', 'value'),
     Input('orientation-marker-slider', 'value'),
     Input('orientation-view-toggle', 'value'),
+    Input('selected-grain-indices', 'data'),
     prevent_initial_call=True,
 )
-def update_orientation_map(xml_path, color_by, input_size, slider_size, view_mode):
+def update_orientation_map(xml_path, color_by, input_size, slider_size, view_mode,
+                           selected_grains):
     if not xml_path:
         raise PreventUpdate
 
@@ -456,6 +463,10 @@ def update_orientation_map(xml_path, color_by, input_size, slider_size, view_mod
 
         marker_size = max(1, int(marker_size))
 
+        from laue_portal.components.visualization.orientation_map import (
+            apply_selection_highlight,
+        )
+
         if view_mode == "3d":
             fig = make_orientation_map_3d(
                 parsed, color_by=color_by or "cubic_ipf", marker_size=marker_size,
@@ -464,6 +475,12 @@ def update_orientation_map(xml_path, color_by, input_size, slider_size, view_mod
             fig = make_orientation_map(
                 parsed, color_by=color_by or "cubic_ipf", marker_size=marker_size,
             )
+
+        # Cross-plot highlighting: dim unselected points, ring selected ones
+        if selected_grains:
+            apply_selection_highlight(fig, parsed, selected_grains, marker_size,
+                                     is_3d=(view_mode == "3d"))
+
         return fig, marker_size, marker_size
     except PreventUpdate:
         raise
@@ -564,9 +581,11 @@ def show_point_details(click_data, xml_path):
     Input('quality-marker-size', 'value'),
     Input('quality-marker-slider', 'value'),
     Input('quality-view-toggle', 'value'),
+    Input('selected-grain-indices', 'data'),
     prevent_initial_call=True,
 )
-def update_quality_map(xml_path, metric, input_size, slider_size, view_mode):
+def update_quality_map(xml_path, metric, input_size, slider_size, view_mode,
+                       selected_grains):
     if not xml_path:
         raise PreventUpdate
 
@@ -589,6 +608,10 @@ def update_quality_map(xml_path, metric, input_size, slider_size, view_mode):
 
         marker_size = max(1, int(marker_size))
 
+        from laue_portal.components.visualization.orientation_map import (
+            apply_selection_highlight,
+        )
+
         if view_mode == "3d":
             fig = make_quality_map_3d(
                 parsed, metric=metric or "goodness", marker_size=marker_size,
@@ -597,6 +620,12 @@ def update_quality_map(xml_path, metric, input_size, slider_size, view_mode):
             fig = make_quality_map(
                 parsed, metric=metric or "goodness", marker_size=marker_size,
             )
+
+        # Cross-plot highlighting: dim unselected points, ring selected ones
+        if selected_grains:
+            apply_selection_highlight(fig, parsed, selected_grains, marker_size,
+                                     is_3d=(view_mode == "3d"))
+
         return fig, marker_size, marker_size
     except PreventUpdate:
         raise
@@ -709,6 +738,148 @@ def update_peak_table(xml_path):
         return html.Div(
             dbc.Alert(f"Could not load peak table: {e}", color="warning"),
         )
+
+
+# ---------------------------------------------------------------------------
+# Callback: handle lasso/box selection on pole figure (ROI picking)
+# ---------------------------------------------------------------------------
+
+@callback(
+    Output('selected-grain-indices', 'data'),
+    Output('stereo-selection-info', 'children'),
+    Input('stereo-plot-graph', 'selectedData'),
+    State('peakindexing-xml-path', 'data'),
+    State('stereo-view-select', 'value'),
+    State('stereo-hkl-select', 'value'),
+    prevent_initial_call=True,
+)
+def handle_pole_selection(selected_data, xml_path, view_mode, hkl_str):
+    """Process lasso/box selection on the pole figure to extract grain indices."""
+    # If selection is cleared (double-click to deselect), reset
+    if not selected_data or not selected_data.get("points"):
+        return [], html.Small(
+            "Use lasso or box select on the pole figure to pick regions of interest.",
+            className="text-muted",
+        )
+
+    # Only process selections on pole figure (not stereographic)
+    if view_mode != "pole":
+        raise PreventUpdate
+
+    # Extract unique grain indices from selected points.
+    #
+    # Plotly Scattergl's selectedData may or may not include customdata
+    # depending on the Plotly/browser version.  We try customdata first;
+    # if it is absent we fall back to pointIndex and look up grain indices
+    # by recomputing the pole figure grain-index mapping.
+    grain_set = set()
+    fallback_point_indices = []
+
+    for pt in selected_data["points"]:
+        customdata = pt.get("customdata")
+        if customdata is not None and len(customdata) > 0:
+            grain_set.add(int(customdata[0]))
+        else:
+            # Collect pointIndex / pointNumber for fallback lookup
+            pi = pt.get("pointIndex", pt.get("pointNumber"))
+            if pi is not None:
+                fallback_point_indices.append(int(pi))
+
+    # Fallback: recompute grain_indices mapping from the pole figure and
+    # use pointIndex to look up grain indices.
+    if not grain_set and fallback_point_indices and xml_path:
+        try:
+            import numpy as np
+            from laue_portal.analysis.xml_parser import parse_indexing_xml
+            from laue_portal.analysis.orientation import batch_orientations
+            from laue_portal.analysis.projection import (
+                pole_figure_points,
+                cubic_hkl_family,
+            )
+
+            parsed = parse_indexing_xml(xml_path)
+            orientations = batch_orientations(
+                parsed["recip_lattices"], parsed["lattice_params"],
+            )
+
+            hkl = tuple(int(x) for x in hkl_str.split(","))
+            family = cubic_hkl_family(*hkl)
+            points, grain_indices = pole_figure_points(orientations, family)
+
+            # Apply same NaN filter as make_pole_figure so point indices
+            # match the rendered trace
+            if len(points) > 0:
+                finite_mask = np.all(np.isfinite(points), axis=1)
+                grain_indices = grain_indices[finite_mask]
+
+            for pi in fallback_point_indices:
+                if 0 <= pi < len(grain_indices):
+                    grain_set.add(int(grain_indices[pi]))
+        except Exception as e:
+            print(f"Error in fallback grain extraction: {e}")
+            traceback.print_exc()
+
+    selected = sorted(grain_set)
+
+    if not selected:
+        return [], html.Small(
+            "No grains in selection.", className="text-muted",
+        )
+
+    # Count selected poles
+    n_poles = len(selected_data["points"])
+
+    # Compute misorientation statistics if we have the XML and >= 2 grains
+    misorientation_info = []
+    if xml_path and len(selected) >= 2:
+        try:
+            from laue_portal.analysis.xml_parser import parse_indexing_xml
+            from laue_portal.analysis.orientation import (
+                batch_orientations,
+                pairwise_misorientation,
+            )
+
+            parsed = parse_indexing_xml(xml_path)
+            orientations = batch_orientations(
+                parsed["recip_lattices"], parsed["lattice_params"],
+            )
+
+            # Only compute if selected indices are within bounds
+            valid_indices = [i for i in selected if i < len(orientations)]
+            if len(valid_indices) >= 2:
+                mis = pairwise_misorientation(
+                    orientations, indices=valid_indices,
+                    symmetry_reduce=True,
+                )
+                misorientation_info = [
+                    html.Br(),
+                    html.Strong("Misorientation: "),
+                    f"mean {mis['mean']:.2f}\u00b0, "
+                    f"range [{mis['min']:.2f}\u00b0, {mis['max']:.2f}\u00b0]",
+                ]
+        except Exception as e:
+            print(f"Error computing misorientation: {e}")
+            traceback.print_exc()
+
+    # Build summary card
+    summary = dbc.Card(
+        dbc.CardBody([
+            html.H6("ROI Selection", className="card-title"),
+            html.P([
+                html.Strong(f"Selected: "),
+                f"{n_poles} poles from {len(selected)} grain"
+                f"{'s' if len(selected) != 1 else ''}",
+                *misorientation_info,
+            ]),
+            html.Small(
+                "Selected grains are highlighted on the Orientation and Quality tabs.",
+                className="text-muted",
+            ),
+        ]),
+        className="mt-2",
+    )
+
+    return selected, summary
 
 
 # ---------------------------------------------------------------------------

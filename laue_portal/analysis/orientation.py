@@ -2,11 +2,15 @@
 Orientation analysis: reciprocal lattice -> orientation matrix -> Rodrigues vectors.
 
 Converts reciprocal lattice matrices from indexed XML data to orientation
-representations and computes crystal directions for IPF coloring.
+representations and computes crystal directions for IPF coloring.  Includes
+misorientation angle calculation with cubic symmetry reduction.
 
 All algorithms derived from LaueGo Igor Pro source (LatticeSym.ipf,
-microGeometryN.ipf).  Zero Dash/Plotly dependencies.
+microGeometryN.ipf, GrainMath.ipf, PoleFigure.ipf).  Zero Dash/Plotly
+dependencies.
 """
+
+from itertools import combinations
 
 import numpy as np
 
@@ -245,3 +249,163 @@ def batch_rodrigues(recip_lattices, lattice_params):
         rodrigues[i] = orientation_to_rodrigues(orientations[i])
 
     return rodrigues
+
+
+# ---------------------------------------------------------------------------
+# Cubic symmetry operations (24 proper rotations of point group 432 / m-3m)
+# ---------------------------------------------------------------------------
+
+def _make_cubic_symmetry_ops():
+    """
+    Build the 24 proper rotation matrices for cubic symmetry.
+
+    From ``MakeCubicSymmetryOps()`` in GrainMath.ipf:
+
+    - 1 identity
+    - 9 four-fold: 90, 180, 270 deg about [100], [010], [001]
+    - 8 three-fold: 120, 240 deg about [111], [-111], [1-11], [-1-11]
+    - 6 two-fold: 180 deg about [110], [1-10], [101], [10-1], [011], [01-1]
+
+    Returns
+    -------
+    ndarray (24, 3, 3)
+    """
+    ops = []
+
+    # Helper: rotation matrix about a unit axis by angle (radians)
+    def _rot(axis, angle_deg):
+        a = np.radians(angle_deg)
+        c, s = np.cos(a), np.sin(a)
+        ax = np.asarray(axis, dtype=float)
+        ax = ax / np.linalg.norm(ax)
+        x, y, z = ax
+        c1 = 1.0 - c
+        return np.array([
+            [c + x * x * c1,     x * y * c1 - z * s, x * z * c1 + y * s],
+            [x * y * c1 + z * s, c + y * y * c1,      y * z * c1 - x * s],
+            [x * z * c1 - y * s, y * z * c1 + x * s,  c + z * z * c1],
+        ])
+
+    # Identity
+    ops.append(np.eye(3))
+
+    # Four-fold axes: [100], [010], [001] at 90, 180, 270 deg
+    for axis in ([1, 0, 0], [0, 1, 0], [0, 0, 1]):
+        for angle in (90, 180, 270):
+            ops.append(_rot(axis, angle))
+
+    # Three-fold axes: [111], [-111], [1-11], [-1-11] at 120, 240 deg
+    for axis in ([1, 1, 1], [-1, 1, 1], [1, -1, 1], [-1, -1, 1]):
+        for angle in (120, 240):
+            ops.append(_rot(axis, angle))
+
+    # Two-fold axes: [110], [1-10], [101], [10-1], [011], [01-1] at 180 deg
+    for axis in ([1, 1, 0], [1, -1, 0], [1, 0, 1],
+                 [1, 0, -1], [0, 1, 1], [0, 1, -1]):
+        ops.append(_rot(axis, 180))
+
+    return np.array(ops)
+
+
+# Pre-computed constant: 24 cubic proper rotation matrices
+CUBIC_SYMMETRY_OPS = _make_cubic_symmetry_ops()
+
+
+# ---------------------------------------------------------------------------
+# Misorientation
+# ---------------------------------------------------------------------------
+
+def _rotation_angle(R):
+    """Return rotation angle (degrees) of a 3x3 rotation matrix."""
+    trace = R[0, 0] + R[1, 1] + R[2, 2]
+    return np.degrees(np.arccos(np.clip((trace - 1.0) / 2.0, -1.0, 1.0)))
+
+
+def misorientation_angle(R1, R2, symmetry_reduce=True):
+    """
+    Compute misorientation angle between two orientation matrices.
+
+    From ``AngleBetweenMats()`` in PoleFigure.ipf:606-637.
+
+    Parameters
+    ----------
+    R1, R2 : ndarray (3, 3)
+        Orientation matrices.
+    symmetry_reduce : bool
+        If True (default), apply cubic symmetry to find the minimum
+        misorientation angle (disorientation).
+
+    Returns
+    -------
+    float
+        Misorientation angle in degrees.
+    """
+    R2_inv = np.linalg.inv(R2)
+
+    if not symmetry_reduce:
+        C = R1 @ R2_inv
+        return _rotation_angle(C)
+
+    # Apply all 24 cubic symmetry operations to find minimum angle
+    min_angle = 360.0
+    for sym_op in CUBIC_SYMMETRY_OPS:
+        C = R1 @ np.linalg.inv(R2 @ sym_op)
+        angle = _rotation_angle(C)
+        if angle < min_angle:
+            min_angle = angle
+
+    return min_angle
+
+
+def pairwise_misorientation(orientations, indices=None, symmetry_reduce=True):
+    """
+    Compute pairwise misorientation angles for a subset of grains.
+
+    Parameters
+    ----------
+    orientations : ndarray (N, 3, 3)
+        All orientation matrices.
+    indices : array-like of int, optional
+        Subset of grain indices to compare.  If None, use all.
+    symmetry_reduce : bool
+        Apply cubic symmetry reduction (default True).
+
+    Returns
+    -------
+    dict
+        ``angles`` : ndarray -- all pairwise misorientation angles (degrees)
+        ``mean`` : float -- mean misorientation angle
+        ``min`` : float -- minimum pairwise angle
+        ``max`` : float -- maximum pairwise angle
+        ``pairs`` : list of (i, j) -- grain index pairs
+    """
+    if indices is None:
+        indices = np.arange(len(orientations))
+    else:
+        indices = np.asarray(indices)
+
+    if len(indices) < 2:
+        return {
+            "angles": np.array([]),
+            "mean": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "pairs": [],
+        }
+
+    pairs = list(combinations(indices, 2))
+    angles = np.empty(len(pairs))
+
+    for k, (i, j) in enumerate(pairs):
+        angles[k] = misorientation_angle(
+            orientations[i], orientations[j],
+            symmetry_reduce=symmetry_reduce,
+        )
+
+    return {
+        "angles": angles,
+        "mean": float(np.mean(angles)),
+        "min": float(np.min(angles)),
+        "max": float(np.max(angles)),
+        "pairs": pairs,
+    }

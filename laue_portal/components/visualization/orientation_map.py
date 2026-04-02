@@ -84,6 +84,7 @@ def make_orientation_map(
             "<extra></extra>"
         ),
         customdata=_build_customdata(parsed),
+        uid="orientation-2d-main",
     ))
 
     fig.update_layout(
@@ -96,8 +97,8 @@ def make_orientation_map(
             scaleratio=1,
         ),
         margin=dict(l=60, r=20, t=40, b=60),
-        height=550,
         uirevision="orientation-2d",
+        autosize=True,
     )
 
     return fig
@@ -146,6 +147,7 @@ def make_orientation_map_3d(
             "<extra></extra>"
         ),
         customdata=_build_customdata(parsed),
+        uid="orientation-3d-main",
     ))
 
     fig.update_layout(
@@ -157,8 +159,9 @@ def make_orientation_map_3d(
             bgcolor=_GRAY_BG,
         ),
         margin=dict(l=0, r=0, t=40, b=0),
-        height=600,
         uirevision="orientation-3d",
+        scene_uirevision="orientation-3d",
+        autosize=True,
     )
 
     return fig
@@ -267,3 +270,154 @@ def _get_orientation_colors(parsed, color_by):
         crystal_dirs = batch_crystal_directions(recip_lattices)
         rgb = batch_ipf_colors(crystal_dirs)
         return rgb_to_plotly_colors(rgb)
+
+
+# ---------------------------------------------------------------------------
+# Cross-plot selection highlighting (Stage 3)
+# ---------------------------------------------------------------------------
+
+def apply_selection_highlight(fig, parsed, selected_grains, marker_size,
+                              is_3d=False):
+    """
+    Modify a figure in-place to highlight selected grains.
+
+    Strategy:
+    - Dim the existing (first) data trace by reducing opacity
+    - Add a second highlight trace with bright outlines for selected grains
+
+    Parameters
+    ----------
+    fig : go.Figure
+        The orientation or quality map figure to modify.
+    parsed : dict
+        Parsed XML data from ``parse_indexing_xml()``.
+    selected_grains : list of int
+        Grain (step) indices to highlight.
+    marker_size : int
+        Current marker size (highlight ring will be larger).
+    is_3d : bool
+        Whether the figure is a 3D scatter plot.
+    """
+    if not fig.data or not selected_grains:
+        return
+
+    positions = parsed["positions"]
+    n_points = len(positions)
+    selected_set = set(selected_grains)
+
+    # Dim unselected points on the main trace
+    main_trace = fig.data[0]
+    current_colors = main_trace.marker.color
+
+    # Build opacity array: 0.2 for unselected, 1.0 for selected
+    opacity_arr = np.where(
+        np.isin(np.arange(n_points), list(selected_set)), 1.0, 0.2,
+    )
+
+    # Determine if colors are per-point RGB strings or scalar values
+    is_rgb_strings = (
+        isinstance(current_colors, (list, tuple))
+        and len(current_colors) == n_points
+        and isinstance(current_colors[0], str)
+    )
+
+    if is_rgb_strings:
+        # Per-point RGB strings -- convert to RGBA with opacity
+        new_colors = []
+        for i, c in enumerate(current_colors):
+            if c.startswith("rgb("):
+                new_colors.append(
+                    c.replace("rgb(", "rgba(").replace(")", f",{opacity_arr[i]:.2f})")
+                )
+            else:
+                new_colors.append(c)
+        main_trace.marker.color = new_colors
+    else:
+        # Scalar colorscale mode -- Scattergl doesn't support per-point
+        # opacity, so sample the colorscale to get per-point RGB strings,
+        # then apply per-point opacity via RGBA.
+        import plotly.colors as pc
+
+        color_vals = np.asarray(current_colors, dtype=float)
+        colorscale = main_trace.marker.colorscale
+
+        # Resolve colorscale to list-of-lists format expected by
+        # pc.sample_colorscale.  Plotly stores it as tuple-of-tuples
+        # after figure creation; convert back.
+        if isinstance(colorscale, str):
+            colorscale = pc.get_colorscale(colorscale)
+        else:
+            colorscale = [[pos, col] for pos, col in colorscale]
+
+        # Normalize values to [0, 1]
+        vmin = np.nanmin(color_vals)
+        vmax = np.nanmax(color_vals)
+        if vmax - vmin > 0:
+            normed = (color_vals - vmin) / (vmax - vmin)
+        else:
+            normed = np.zeros_like(color_vals)
+        normed = np.clip(normed, 0, 1)
+
+        # Sample colorscale to get per-point RGB, then apply opacity
+        sampled = pc.sample_colorscale(colorscale, normed, colortype="rgb")
+        new_colors = []
+        for i, c in enumerate(sampled):
+            if c.startswith("rgb("):
+                new_colors.append(
+                    c.replace("rgb(", "rgba(").replace(")", f",{opacity_arr[i]:.2f})")
+                )
+            else:
+                new_colors.append(c)
+        main_trace.marker.color = new_colors
+        # Remove colorscale since we're now using per-point colors
+        main_trace.marker.colorscale = None
+
+    # Add highlight ring trace for selected grains
+    sel_mask = np.isin(np.arange(n_points), list(selected_set))
+    if not np.any(sel_mask):
+        return
+
+    highlight_size = max(marker_size + 6, int(marker_size * 1.4))
+
+    # Derive a stable uid from the main trace so Plotly can track this
+    # highlight trace across figure updates even when trace count changes.
+    main_uid = fig.data[0].uid or "main"
+    highlight_uid = main_uid.replace("-main", "-highlight")
+
+    if is_3d:
+        fig.add_trace(go.Scatter3d(
+            x=positions[sel_mask, 0],
+            y=positions[sel_mask, 1],
+            z=positions[sel_mask, 2],
+            mode="markers",
+            marker=dict(
+                size=max(3, highlight_size // 3),
+                color="rgba(0,0,0,0)",
+                symbol="circle",
+                line=dict(color="white", width=2),
+            ),
+            hoverinfo="skip",
+            showlegend=True,
+            name=f"Selected ({sel_mask.sum()})",
+            uid=highlight_uid,
+        ))
+    else:
+        depths = parsed["depths"]
+        has_depth = not np.all(np.isnan(depths))
+        x_vals, y_vals, _, _ = _select_axes(positions, depths, has_depth)
+
+        fig.add_trace(go.Scattergl(
+            x=x_vals[sel_mask],
+            y=y_vals[sel_mask],
+            mode="markers",
+            marker=dict(
+                size=highlight_size,
+                color="rgba(0,0,0,0)",
+                symbol="circle-open",
+                line=dict(color="white", width=2),
+            ),
+            hoverinfo="skip",
+            showlegend=True,
+            name=f"Selected ({sel_mask.sum()})",
+            uid=highlight_uid,
+        ))

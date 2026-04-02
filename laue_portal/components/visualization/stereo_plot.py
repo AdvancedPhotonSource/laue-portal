@@ -222,6 +222,7 @@ def make_stereo_plot(
                 "<extra></extra>"
             ),
             name=f"Q-vectors ({len(all_sx)} pts)",
+            uid="stereo-qvectors",
         ))
 
     # Wulff net overlay
@@ -280,7 +281,7 @@ def make_stereo_plot(
         plot_bgcolor="white",
         paper_bgcolor="white",
         margin=dict(l=40, r=40, t=40, b=40),
-        height=600,
+        autosize=True,
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
         uirevision=f"stereo-{zoom_deg}",
@@ -368,6 +369,7 @@ def make_pole_figure(
                 "<extra></extra>"
             ),
             name=f"{{{_format_hkl(*hkl)}}} ({len(points)} pts)",
+            uid="pole-figure-data",
         ))
 
     # Unit circle boundary
@@ -399,7 +401,7 @@ def make_pole_figure(
         plot_bgcolor=_GRAY_BG,
         paper_bgcolor="white",
         margin=dict(l=40, r=40, t=40, b=40),
-        height=600,
+        autosize=True,
         title=f"Pole Figure: {{{_format_hkl(*hkl)}}}",
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02),

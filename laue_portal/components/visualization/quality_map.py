@@ -91,6 +91,7 @@ def make_quality_map(
             positions[:, 0],
             positions[:, 1],
         ]),
+        uid="quality-2d-main",
     ))
 
     fig.update_layout(
@@ -103,8 +104,8 @@ def make_quality_map(
             scaleratio=1,
         ),
         margin=dict(l=60, r=20, t=40, b=60),
-        height=550,
         uirevision="quality-2d",
+        autosize=True,
     )
 
     return fig
@@ -158,6 +159,7 @@ def make_quality_map_3d(
         customdata=np.column_stack([
             np.arange(n_points),
         ]),
+        uid="quality-3d-main",
     ))
 
     fig.update_layout(
@@ -169,8 +171,9 @@ def make_quality_map_3d(
             bgcolor=_GRAY_BG,
         ),
         margin=dict(l=0, r=0, t=40, b=0),
-        height=600,
         uirevision="quality-3d",
+        scene_uirevision="quality-3d",
+        autosize=True,
     )
 
     return fig
