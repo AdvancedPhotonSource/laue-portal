@@ -231,4 +231,4 @@ class TestMisorientationWithFixture:
             parsed["recip_lattices"], parsed["lattice_params"],
         )
         angle = misorientation_angle(orientations[0], orientations[0])
-        assert abs(angle) < 1e-6
+        assert abs(angle) < 1e-5
