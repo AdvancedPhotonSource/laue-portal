@@ -414,3 +414,37 @@ def rgb_to_plotly_colors(rgb_array):
         b = int(np.clip(rgb_array[i, 2] * 255, 0, 255))
         colors.append(f"rgb({r},{g},{b})")
     return colors
+
+
+# ===================================================================
+# Pole Figure Color Radius
+# ===================================================================
+
+def pole_figure_color_radius(x0, y0, rad_deg):
+    """
+    Convert angular color radius to stereographic radius.
+
+    Ports LaueGo's ``radiusOnPoleFigure`` (xmlMultiIndex.ipf:601-612).
+    When the center ``(x0, y0)`` is at the pole (origin), the formula
+    simplifies to ``tan(rad_deg / 2)`` (standard stereographic mapping).
+
+    Parameters
+    ----------
+    x0, y0 : float
+        Center point on the pole figure (stereographic coords).
+    rad_deg : float
+        Angular color-saturation radius in degrees.
+
+    Returns
+    -------
+    float
+        Stereographic radius at which colors reach full saturation.
+    """
+    r2d = np.sqrt(x0**2 + y0**2)
+    if r2d < 1e-12:
+        # Center at origin: simple stereographic formula
+        return np.tan(np.radians(rad_deg) / 2.0)
+    phi = 2.0 * np.arctan(1.0 / r2d)
+    dphi = np.radians(rad_deg)
+    phi = phi - dphi if dphi < phi else phi + dphi
+    return abs(r2d - np.sin(phi) / (1.0 - np.cos(phi)))

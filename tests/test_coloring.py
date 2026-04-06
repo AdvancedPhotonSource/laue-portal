@@ -17,6 +17,7 @@ from laue_portal.analysis.coloring import (
     cubic_ipf_color,
     rodrigues_rgb,
     hsv_wheel_color,
+    pole_figure_color_radius,
     make_cubic_ipf_triangle,
     make_color_hexagon,
     batch_ipf_colors,
@@ -239,3 +240,36 @@ class TestBatchUtilities:
         rgb = np.array([[1.5, -0.1, 0.5]])
         colors = rgb_to_plotly_colors(rgb)
         assert colors[0] == "rgb(255,0,127)"
+
+
+# ---------------------------------------------------------------------------
+# Pole figure color radius
+# ---------------------------------------------------------------------------
+
+class TestPoleFigureColorRadius:
+
+    def test_origin_22_5_degrees(self):
+        """At origin, radius = tan(22.5°/2) ≈ 0.1989."""
+        r = pole_figure_color_radius(0, 0, 22.5)
+        np.testing.assert_allclose(r, np.tan(np.radians(22.5) / 2.0), atol=1e-10)
+
+    def test_origin_45_degrees(self):
+        """At origin, radius = tan(45°/2) ≈ 0.4142."""
+        r = pole_figure_color_radius(0, 0, 45)
+        np.testing.assert_allclose(r, np.tan(np.radians(45) / 2.0), atol=1e-10)
+
+    def test_origin_90_degrees(self):
+        """At origin, radius = tan(90°/2) = 1.0."""
+        r = pole_figure_color_radius(0, 0, 90)
+        np.testing.assert_allclose(r, 1.0, atol=1e-10)
+
+    def test_positive_result(self):
+        """Result should always be positive."""
+        r = pole_figure_color_radius(0.1, 0.2, 22.5)
+        assert r > 0
+
+    def test_non_origin_center(self):
+        """Non-origin center should give a finite positive result."""
+        r = pole_figure_color_radius(0.3, 0.0, 22.5)
+        assert np.isfinite(r)
+        assert r > 0

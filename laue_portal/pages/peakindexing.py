@@ -86,6 +86,21 @@ _viz_tabs = dbc.Tabs(
                                 style={"width": "180px", "display": "inline-block"},
                             ),
                         ], width="auto"),
+                        dbc.Col([
+                            dbc.Label("Surface:", className="me-2"),
+                            dbc.Select(
+                                id="orientation-surface-select",
+                                options=[
+                                    {"label": "Normal", "value": "normal"},
+                                    {"label": "X", "value": "X"},
+                                    {"label": "H", "value": "H"},
+                                    {"label": "Y", "value": "Y"},
+                                    {"label": "Z", "value": "Z"},
+                                ],
+                                value="normal",
+                                style={"width": "110px", "display": "inline-block"},
+                            ),
+                        ], width="auto"),
                         _marker_size_control("orientation-marker-slider", "orientation-marker-size"),
                         dbc.Col([
                             dbc.RadioItems(
@@ -191,6 +206,50 @@ _viz_tabs = dbc.Tabs(
                             ),
                         ], width="auto"),
                         _marker_size_control("stereo-marker-slider", "stereo-marker-size", default_value=12),
+                        dbc.Col([
+                            dbc.Label("Color:", className="me-2"),
+                            dbc.Select(
+                                id="stereo-color-select",
+                                options=[
+                                    {"label": "Position HSV", "value": "hsv_position"},
+                                    {"label": "Cubic IPF", "value": "ipf"},
+                                    {"label": "Uniform", "value": "uniform"},
+                                ],
+                                value="hsv_position",
+                                style={"width": "150px", "display": "inline-block"},
+                            ),
+                        ], width="auto"),
+                        dbc.Col([
+                            dbc.Label("Color radius:", className="me-2 mb-0",
+                                      style={"whiteSpace": "nowrap"}),
+                            dbc.Input(
+                                id="stereo-color-rad",
+                                type="number",
+                                min=1,
+                                max=90,
+                                step=0.5,
+                                value=22.5,
+                                size="sm",
+                                style={"width": "75px"},
+                            ),
+                            html.Span("\u00b0", style={"marginLeft": "2px"}),
+                        ], id="stereo-color-rad-col", width="auto",
+                           style={"display": "flex", "alignItems": "center"}),
+                        dbc.Col([
+                            dbc.Label("Surface:", className="me-2"),
+                            dbc.Select(
+                                id="stereo-surface-select",
+                                options=[
+                                    {"label": "Normal", "value": "normal"},
+                                    {"label": "X", "value": "X"},
+                                    {"label": "H", "value": "H"},
+                                    {"label": "Y", "value": "Y"},
+                                    {"label": "Z", "value": "Z"},
+                                ],
+                                value="normal",
+                                style={"width": "110px", "display": "inline-block"},
+                            ),
+                        ], width="auto"),
                     ], className="mb-3 align-items-center g-3"),
                     # Stereo / pole figure plot
                     dcc.Graph(
@@ -433,14 +492,15 @@ def load_peakindexing_data(href):
     Output('orientation-marker-slider', 'value'),
     Input('peakindexing-xml-path', 'data'),
     Input('orientation-color-select', 'value'),
+    Input('orientation-surface-select', 'value'),
     Input('orientation-marker-size', 'value'),
     Input('orientation-marker-slider', 'value'),
     Input('orientation-view-toggle', 'value'),
     Input('selected-grain-indices', 'data'),
     prevent_initial_call=True,
 )
-def update_orientation_map(xml_path, color_by, input_size, slider_size, view_mode,
-                           selected_grains):
+def update_orientation_map(xml_path, color_by, surface, input_size, slider_size,
+                           view_mode, selected_grains):
     if not xml_path:
         raise PreventUpdate
 
@@ -469,11 +529,15 @@ def update_orientation_map(xml_path, color_by, input_size, slider_size, view_mod
 
         if view_mode == "3d":
             fig = make_orientation_map_3d(
-                parsed, color_by=color_by or "cubic_ipf", marker_size=marker_size,
+                parsed, color_by=color_by or "cubic_ipf",
+                marker_size=marker_size,
+                surface=surface or "normal",
             )
         else:
             fig = make_orientation_map(
-                parsed, color_by=color_by or "cubic_ipf", marker_size=marker_size,
+                parsed, color_by=color_by or "cubic_ipf",
+                marker_size=marker_size,
+                surface=surface or "normal",
             )
 
         # Cross-plot highlighting: dim unselected points, ring selected ones
@@ -644,6 +708,7 @@ def update_quality_map(xml_path, metric, input_size, slider_size, view_mode,
     Output('stereo-marker-size', 'value'),
     Output('stereo-marker-slider', 'value'),
     Output('stereo-zoom-label', 'children'),
+    Output('stereo-color-rad-col', 'style'),
     Input('peakindexing-xml-path', 'data'),
     Input('stereo-view-select', 'value'),
     Input('stereo-hkl-select', 'value'),
@@ -652,14 +717,23 @@ def update_quality_map(xml_path, metric, input_size, slider_size, view_mode,
     Input('stereo-wulff-step', 'value'),
     Input('stereo-marker-size', 'value'),
     Input('stereo-marker-slider', 'value'),
+    Input('stereo-color-select', 'value'),
+    Input('stereo-color-rad', 'value'),
+    Input('stereo-surface-select', 'value'),
     prevent_initial_call=True,
 )
 def update_stereo_plot(
     xml_path, view_mode, hkl_str, zoom_deg,
     show_wulff, wulff_step, input_size, slider_size,
+    color_scheme, color_rad_deg, surface,
 ):
     if not xml_path:
         raise PreventUpdate
+
+    # Show/hide color radius input based on color scheme
+    rad_col_style = {"display": "flex", "alignItems": "center"}
+    if color_scheme != "hsv_position":
+        rad_col_style["display"] = "none"
 
     try:
         from laue_portal.analysis.xml_parser import parse_indexing_xml
@@ -690,8 +764,10 @@ def update_stereo_plot(
             fig = make_pole_figure(
                 parsed,
                 hkl=hkl,
-                color_scheme="ipf",
+                color_scheme=color_scheme or "hsv_position",
+                color_rad_deg=float(color_rad_deg or 22.5),
                 marker_size=marker_size,
+                surface=surface or "normal",
             )
         else:
             fig = make_stereo_plot(
@@ -703,7 +779,7 @@ def update_stereo_plot(
                 marker_size=marker_size,
             )
 
-        return fig, marker_size, marker_size, zoom_label
+        return fig, marker_size, marker_size, zoom_label, rad_col_style
     except PreventUpdate:
         raise
     except Exception as e:

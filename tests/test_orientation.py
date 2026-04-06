@@ -277,6 +277,28 @@ class TestBatchOperations:
         rodrigues = batch_rodrigues(recip_lattices, lattice_params)
         np.testing.assert_allclose(rodrigues, 0, atol=1e-10)
 
+    def test_batch_crystal_directions_custom_normal(self, cubic_data):
+        """batch_crystal_directions should use the supplied normal vector."""
+        recip_lattices, _ = cubic_data
+        z_normal = np.array([0.0, 0.0, 1.0])
+        dirs_z = batch_crystal_directions(recip_lattices, normal=z_normal)
+        assert dirs_z.shape == (4, 3)
+        # Should still produce unit vectors
+        for i in range(4):
+            if not np.any(np.isnan(dirs_z[i])):
+                norm = np.linalg.norm(dirs_z[i])
+                assert abs(norm - 1.0) < 1e-8
+
+    def test_batch_crystal_directions_different_normals_differ(self, cubic_data):
+        """Different normals should produce different crystal directions."""
+        recip_lattices, _ = cubic_data
+        dirs_default = batch_crystal_directions(recip_lattices)
+        z_normal = np.array([0.0, 0.0, 1.0])
+        dirs_z = batch_crystal_directions(recip_lattices, normal=z_normal)
+        # At least one non-NaN direction should differ
+        valid = ~np.any(np.isnan(dirs_default), axis=1)
+        assert not np.allclose(dirs_default[valid], dirs_z[valid])
+
 
 # ---------------------------------------------------------------------------
 # Cubic symmetry operations

@@ -112,6 +112,56 @@ def test_pole_figure_lasso_dragmode():
     assert fig.layout.dragmode == "lasso"
 
 
+def test_pole_figure_default_hsv_position():
+    """Default color scheme is now hsv_position (not ipf)."""
+    fig = make_pole_figure(_parsed(), hkl=(1, 0, 0))
+    # With hsv_position and data, there should be: data trace + color circle + unit circle
+    assert len(fig.data) >= 2
+    # Data trace should have per-point colors
+    colors = fig.data[0].marker.color
+    assert isinstance(colors, (list, tuple))
+    assert colors[0].startswith("rgb(")
+
+
+def test_pole_figure_hsv_has_color_circle():
+    """HSV position mode should draw a dashed color saturation circle."""
+    fig = make_pole_figure(_parsed(), hkl=(1, 0, 0), color_scheme="hsv_position")
+    # Find a trace with dash="dot" (the color circle)
+    dot_traces = [t for t in fig.data if hasattr(t, 'line') and t.line and t.line.dash == "dot"]
+    assert len(dot_traces) >= 1
+
+
+def test_pole_figure_ipf_still_works():
+    """IPF coloring should still work when explicitly requested."""
+    fig = make_pole_figure(_parsed(), hkl=(1, 0, 0), color_scheme="ipf")
+    assert fig is not None
+    colors = fig.data[0].marker.color
+    assert isinstance(colors, (list, tuple))
+    assert colors[0].startswith("rgb(")
+
+
+def test_pole_figure_uniform_color():
+    """Uniform mode should give a single color string."""
+    fig = make_pole_figure(_parsed(), hkl=(1, 0, 0), color_scheme="uniform")
+    assert fig is not None
+    colors = fig.data[0].marker.color
+    assert isinstance(colors, str)
+
+
+def test_pole_figure_surface_normal():
+    """Different surface selections should produce figures."""
+    for surface in ("normal", "X", "H", "Y", "Z"):
+        fig = make_pole_figure(_parsed(), hkl=(1, 0, 0), surface=surface)
+        assert fig is not None
+
+
+def test_pole_figure_color_radius_custom():
+    """Custom color radius should work."""
+    fig = make_pole_figure(_parsed(), hkl=(1, 0, 0),
+                           color_scheme="hsv_position", color_rad_deg=45.0)
+    assert fig is not None
+
+
 # ---------------------------------------------------------------------------
 # Updated orientation map with IPF/Rodrigues coloring
 # ---------------------------------------------------------------------------
@@ -168,3 +218,66 @@ def test_orientation_map_scalar_has_colorbar():
     fig = make_orientation_map(_parsed(), color_by="n_indexed")
     assert fig.data[0].marker.colorbar is not None
     assert fig.data[0].marker.colorbar.title.text is not None
+
+
+# ---------------------------------------------------------------------------
+# Orientation map surface normal selection (Fix 3)
+# ---------------------------------------------------------------------------
+
+def test_orientation_map_surface_normal():
+    """Different surface selections should produce valid figures."""
+    for surface in ("normal", "X", "H", "Y", "Z"):
+        fig = make_orientation_map(_parsed(), color_by="cubic_ipf",
+                                   surface=surface)
+        assert fig is not None
+        colors = fig.data[0].marker.color
+        assert isinstance(colors, (list, tuple))
+        assert colors[0].startswith("rgb(")
+
+
+def test_orientation_map_3d_surface_normal():
+    """3D orientation map should accept surface parameter."""
+    for surface in ("normal", "X", "H", "Y", "Z"):
+        fig = make_orientation_map_3d(_parsed(), color_by="cubic_ipf",
+                                      surface=surface)
+        assert fig is not None
+        colors = fig.data[0].marker.color
+        assert isinstance(colors, (list, tuple))
+        assert colors[0].startswith("rgb(")
+
+
+def test_orientation_map_surface_changes_ipf_colors():
+    """Different surfaces should produce different IPF colors."""
+    parsed = _parsed()
+    fig_normal = make_orientation_map(parsed, color_by="cubic_ipf",
+                                      surface="normal")
+    fig_z = make_orientation_map(parsed, color_by="cubic_ipf",
+                                 surface="Z")
+    # At least some colors should differ between different surface normals
+    colors_normal = fig_normal.data[0].marker.color
+    colors_z = fig_z.data[0].marker.color
+    assert colors_normal != colors_z
+
+
+def test_orientation_map_surface_default_is_normal():
+    """Default surface should be 'normal', producing same result as explicit."""
+    parsed = _parsed()
+    fig_default = make_orientation_map(parsed, color_by="cubic_ipf")
+    fig_explicit = make_orientation_map(parsed, color_by="cubic_ipf",
+                                        surface="normal")
+    assert fig_default.data[0].marker.color == fig_explicit.data[0].marker.color
+
+
+def test_orientation_map_surface_scalar_unaffected():
+    """Scalar coloring modes should not be affected by surface selection."""
+    parsed = _parsed()
+    fig_normal = make_orientation_map(parsed, color_by="n_indexed",
+                                      surface="normal")
+    fig_z = make_orientation_map(parsed, color_by="n_indexed",
+                                 surface="Z")
+    # Scalar modes use the same color values regardless of surface
+    import numpy as np
+    np.testing.assert_array_equal(
+        fig_normal.data[0].marker.color,
+        fig_z.data[0].marker.color,
+    )

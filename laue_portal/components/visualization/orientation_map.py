@@ -41,6 +41,7 @@ def make_orientation_map(
     parsed: dict,
     color_by: str = "n_indexed",
     marker_size: int = 10,
+    surface: str = "normal",
 ) -> go.Figure:
     """
     Create a 2D orientation scatter plot.
@@ -54,6 +55,9 @@ def make_orientation_map(
         'cubic_ipf', or 'rodrigues'.
     marker_size : int
         Marker size in pixels.
+    surface : str
+        Surface direction name (``"normal"``, ``"X"``, ``"H"``, ``"Y"``,
+        ``"Z"``).  Affects IPF crystal-direction coloring.
 
     Returns
     -------
@@ -68,7 +72,8 @@ def make_orientation_map(
 
     fig = go.Figure()
 
-    marker_dict = _build_marker_dict(parsed, color_by, marker_size, marker_symbol)
+    marker_dict = _build_marker_dict(parsed, color_by, marker_size, marker_symbol,
+                                     surface=surface)
 
     fig.add_trace(go.Scattergl(
         x=x_vals,
@@ -108,6 +113,7 @@ def make_orientation_map_3d(
     parsed: dict,
     color_by: str = "n_indexed",
     marker_size: int = 10,
+    surface: str = "normal",
 ) -> go.Figure:
     """
     Create a 3D orientation scatter plot using all three sample coordinates.
@@ -121,6 +127,9 @@ def make_orientation_map_3d(
         'cubic_ipf', or 'rodrigues'.
     marker_size : int
         Marker size in pixels.
+    surface : str
+        Surface direction name (``"normal"``, ``"X"``, ``"H"``, ``"Y"``,
+        ``"Z"``).  Affects IPF crystal-direction coloring.
 
     Returns
     -------
@@ -130,7 +139,8 @@ def make_orientation_map_3d(
 
     fig = go.Figure()
 
-    marker_dict = _build_marker_dict(parsed, color_by, max(2, marker_size // 3))
+    marker_dict = _build_marker_dict(parsed, color_by, max(2, marker_size // 3),
+                                     surface=surface)
 
     fig.add_trace(go.Scatter3d(
         x=positions[:, 0],
@@ -171,7 +181,8 @@ def make_orientation_map_3d(
 # Shared helpers
 # ---------------------------------------------------------------------------
 
-def _build_marker_dict(parsed, color_by, marker_size, marker_symbol=None):
+def _build_marker_dict(parsed, color_by, marker_size, marker_symbol=None,
+                       surface="normal"):
     """Build Plotly marker dict for the given coloring mode."""
     base = dict(
         size=marker_size,
@@ -181,7 +192,7 @@ def _build_marker_dict(parsed, color_by, marker_size, marker_symbol=None):
         base["symbol"] = marker_symbol
 
     if color_by in _ORIENTATION_MODES:
-        colors = _get_orientation_colors(parsed, color_by)
+        colors = _get_orientation_colors(parsed, color_by, surface=surface)
         base["color"] = colors
         # No colorscale or colorbar for per-point RGB
     else:
@@ -250,13 +261,18 @@ def _get_scalar_color_values(parsed, color_by):
         return parsed["n_indexed"].astype(float), "N Indexed"
 
 
-def _get_orientation_colors(parsed, color_by):
+def _get_orientation_colors(parsed, color_by, surface="normal"):
     """Return list of 'rgb(r,g,b)' strings for orientation coloring modes."""
     recip_lattices = parsed["recip_lattices"]
     lattice_params = parsed["lattice_params"]
 
+    # Look up the surface normal vector for the chosen surface direction.
+    from laue_portal.analysis.projection import get_surface_vectors
+    surf_normal, _roll, _tilt = get_surface_vectors(surface)
+
     if color_by == "cubic_ipf":
-        crystal_dirs = batch_crystal_directions(recip_lattices)
+        crystal_dirs = batch_crystal_directions(recip_lattices,
+                                                normal=surf_normal)
         rgb = batch_ipf_colors(crystal_dirs)
         return rgb_to_plotly_colors(rgb)
 
@@ -267,7 +283,8 @@ def _get_orientation_colors(parsed, color_by):
 
     else:
         # Fallback to IPF
-        crystal_dirs = batch_crystal_directions(recip_lattices)
+        crystal_dirs = batch_crystal_directions(recip_lattices,
+                                                normal=surf_normal)
         rgb = batch_ipf_colors(crystal_dirs)
         return rgb_to_plotly_colors(rgb)
 

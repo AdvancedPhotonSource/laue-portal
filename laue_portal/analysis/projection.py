@@ -9,10 +9,76 @@ PoleFigure.ipf, xmlMultiIndex.ipf).  Zero Dash/Plotly dependencies.
 import numpy as np
 
 
-# 34ID-E surface coordinate system
+# 34ID-E surface coordinate system (default)
 _DEFAULT_NORMAL = np.array([0.0, 1.0 / np.sqrt(2.0), -1.0 / np.sqrt(2.0)])
 _DEFAULT_ROLL = np.array([0.0, -1.0 / np.sqrt(2.0), -1.0 / np.sqrt(2.0)])
 _DEFAULT_TILT = np.array([1.0, 0.0, 0.0])
+
+
+# ===================================================================
+# Surface Coordinate Frames
+# ===================================================================
+#
+# Predefined surface matrices matching LaueGo's NewPoleFigure
+# (xmlMultiIndex.ipf:419-434).  Each entry defines {tilt, roll, normal}
+# as three perpendicular unit vectors in beam-line XYZ coordinates.
+#
+# Beam-line coordinate system: X = out door, Y = up, Z = downstream.
+
+_ir2 = 1.0 / np.sqrt(2.0)
+
+_SURFACE_MATRICES = {
+    "normal": {  # 34ID-E default: {tilt=X, roll=-H, normal=-F}
+        "tilt":   np.array([1.0, 0.0, 0.0]),
+        "roll":   np.array([0.0, -_ir2, -_ir2]),
+        "normal": np.array([0.0, _ir2, -_ir2]),
+    },
+    "X": {  # normal = X
+        "tilt":   np.array([0.0, -_ir2, -_ir2]),
+        "roll":   np.array([0.0, _ir2, -_ir2]),
+        "normal": np.array([1.0, 0.0, 0.0]),
+    },
+    "H": {  # normal = H
+        "tilt":   np.array([1.0, 0.0, 0.0]),
+        "roll":   np.array([0.0, _ir2, -_ir2]),
+        "normal": np.array([0.0, _ir2, _ir2]),
+    },
+    "Y": {  # normal = Y (lab up)
+        "tilt":   np.array([0.0, 0.0, 1.0]),
+        "roll":   np.array([1.0, 0.0, 0.0]),
+        "normal": np.array([0.0, 1.0, 0.0]),
+    },
+    "Z": {  # normal = Z (downstream)
+        "tilt":   np.array([1.0, 0.0, 0.0]),
+        "roll":   np.array([0.0, 1.0, 0.0]),
+        "normal": np.array([0.0, 0.0, 1.0]),
+    },
+}
+
+
+def get_surface_vectors(surface="normal"):
+    """
+    Look up the ``(normal, roll, tilt)`` vectors for a named surface.
+
+    Parameters
+    ----------
+    surface : str
+        One of ``"normal"`` (default), ``"X"``, ``"H"``, ``"Y"``, ``"Z"``.
+
+    Returns
+    -------
+    normal : ndarray (3,)
+    roll : ndarray (3,)
+    tilt : ndarray (3,)
+
+    Raises
+    ------
+    ValueError
+        If *surface* is not a recognised name.
+    """
+    key = surface if surface in _SURFACE_MATRICES else "normal"
+    entry = _SURFACE_MATRICES[key]
+    return entry["normal"], entry["roll"], entry["tilt"]
 
 
 # ===================================================================
@@ -249,7 +315,8 @@ def _line_weight(angle_deg, step_deg):
 # Pole Figure Computation
 # ===================================================================
 
-def pole_figure_points(orientations, hkl_family, surface_normal=None):
+def pole_figure_points(orientations, hkl_family, surface_normal=None,
+                       surface_roll=None, surface_tilt=None):
     """
     Compute pole figure scatter points.
 
@@ -265,6 +332,10 @@ def pole_figure_points(orientations, hkl_family, surface_normal=None):
         Symmetry-equivalent pole directions (from ``cubic_hkl_family``).
     surface_normal : ndarray (3,), optional
         Sample surface normal. Default: 34ID-E convention.
+    surface_roll : ndarray (3,), optional
+        Roll direction for 2-D projection. Default: 34ID-E convention.
+    surface_tilt : ndarray (3,), optional
+        Tilt direction for 2-D projection. Default: 34ID-E convention.
 
     Returns
     -------
@@ -279,8 +350,8 @@ def pole_figure_points(orientations, hkl_family, surface_normal=None):
         normal = np.asarray(surface_normal, dtype=float)
     normal = normal / np.linalg.norm(normal)
 
-    roll = _DEFAULT_ROLL
-    tilt = _DEFAULT_TILT
+    roll = _DEFAULT_ROLL if surface_roll is None else np.asarray(surface_roll, dtype=float)
+    tilt = _DEFAULT_TILT if surface_tilt is None else np.asarray(surface_tilt, dtype=float)
 
     all_x = []
     all_y = []
@@ -295,11 +366,13 @@ def pole_figure_points(orientations, hkl_family, surface_normal=None):
                 continue
             vec = vec / vec_norm
 
-            # Check hemisphere
+            # Upper hemisphere only (matching Igor Pro's MakePolePoints).
+            # For centrosymmetric crystals every pole direction has an
+            # antipodal partner already in the hkl family, so the upper-
+            # hemisphere version is always present via that partner.
             dot_normal = np.dot(vec, normal)
             if dot_normal < 0:
-                vec = -vec
-                dot_normal = -dot_normal
+                continue
 
             # Stereographic projection
             sin_theta = np.sqrt(1.0 - np.clip(dot_normal, 0, 1)**2)
@@ -334,7 +407,16 @@ def cubic_hkl_family(h, k, l):
     """
     Generate all symmetry-equivalent directions for a cubic {hkl} family.
 
-    Example counts:
+    .. warning::
+       This function uses brute-force permutation and sign enumeration,
+       which is **only correct for cubic crystals**.  For non-cubic
+       crystal systems (hexagonal, tetragonal, orthorhombic, etc.) the
+       generated family will be incorrect because the symmetry-equivalent
+       directions depend on the space-group symmetry operations, not
+       simple index permutations.  See ``CUBIC_SYMMETRY_OPS`` in
+       ``orientation.py`` for the 24 proper rotations of the cubic group.
+
+    Example counts (cubic):
         {100} -> 6 directions
         {110} -> 12 directions
         {111} -> 8 directions
@@ -344,7 +426,7 @@ def cubic_hkl_family(h, k, l):
     Parameters
     ----------
     h, k, l : int
-        Miller indices.
+        Miller indices.  Must be from a **cubic** crystal system.
 
     Returns
     -------
