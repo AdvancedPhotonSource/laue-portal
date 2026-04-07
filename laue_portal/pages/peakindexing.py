@@ -114,6 +114,23 @@ _viz_tabs = dbc.Tabs(
                                 className="mb-0",
                             ),
                         ], width="auto"),
+                        dbc.Col(
+                            dcc.Loading(
+                                type="circle",
+                                overlay_style={"visibility": "visible", "opacity": 1},
+                                custom_spinner=html.Div([
+                                    dbc.Spinner(size="sm", color="secondary",
+                                                spinner_class_name="me-2"),
+                                    html.Span("Updating\u2026",
+                                              style={"color": "#0d6efd",
+                                                     "fontSize": "1.05rem",
+                                                     "fontWeight": "700"}),
+                                ], style={"display": "flex", "alignItems": "center"}),
+                                children=html.Div(id="orientation-loading-target"),
+                            ),
+                            width="auto",
+                            style={"paddingLeft": "3.5rem"},
+                        ),
                     ], className="mb-3 align-items-center g-3"),
                     # Plot
                     dcc.Graph(
@@ -134,24 +151,12 @@ _viz_tabs = dbc.Tabs(
             ],
         ),
         dbc.Tab(
-            label="Stereo / Poles",
-            tab_id="tab-stereo",
+            label="Pole Figure",
+            tab_id="tab-poles",
             children=[
-                html.Div(id="tab-stereo-content", className="pt-3", children=[
+                html.Div(id="tab-poles-content", className="pt-3", children=[
                     # Controls row
                     dbc.Row([
-                        dbc.Col([
-                            dbc.Label("View:", className="me-2"),
-                            dbc.Select(
-                                id="stereo-view-select",
-                                options=[
-                                    {"label": "Stereographic", "value": "stereo"},
-                                    {"label": "Pole Figure", "value": "pole"},
-                                ],
-                                value="pole",
-                                style={"width": "160px", "display": "inline-block"},
-                            ),
-                        ], width="auto"),
                         dbc.Col([
                             dbc.Label("Pole {hkl}:", className="me-2"),
                             dbc.Select(
@@ -164,45 +169,6 @@ _viz_tabs = dbc.Tabs(
                                 ],
                                 value="1,0,0",
                                 style={"width": "120px", "display": "inline-block"},
-                            ),
-                        ], width="auto"),
-                        dbc.Col([
-                            dbc.Label("Zoom:", className="me-2 mb-0",
-                                      style={"whiteSpace": "nowrap"}),
-                            dcc.Input(
-                                id="stereo-zoom-slider",
-                                type="range",
-                                min=5,
-                                max=90,
-                                step=5,
-                                value=90,
-                                style={"width": "160px"},
-                            ),
-                            html.Span(
-                                id="stereo-zoom-label",
-                                children="90\u00b0",
-                                style={"marginLeft": "8px", "minWidth": "40px"},
-                            ),
-                        ], width="auto",
-                           style={"display": "flex", "alignItems": "center"}),
-                        dbc.Col([
-                            dbc.Checkbox(
-                                id="stereo-wulff-toggle",
-                                label="Wulff net",
-                                value=True,
-                            ),
-                        ], width="auto"),
-                        dbc.Col([
-                            dbc.Label("Wulff step:", className="me-2"),
-                            dbc.Select(
-                                id="stereo-wulff-step",
-                                options=[
-                                    {"label": "5\u00b0", "value": "5"},
-                                    {"label": "10\u00b0", "value": "10"},
-                                    {"label": "20\u00b0", "value": "20"},
-                                ],
-                                value="10",
-                                style={"width": "80px", "display": "inline-block"},
                             ),
                         ], width="auto"),
                         _marker_size_control("stereo-marker-slider", "stereo-marker-size", default_value=12),
@@ -250,8 +216,25 @@ _viz_tabs = dbc.Tabs(
                                 style={"width": "110px", "display": "inline-block"},
                             ),
                         ], width="auto"),
+                        dbc.Col(
+                            dcc.Loading(
+                                type="circle",
+                                overlay_style={"visibility": "visible", "opacity": 1},
+                                custom_spinner=html.Div([
+                                    dbc.Spinner(size="sm", color="secondary",
+                                                spinner_class_name="me-2"),
+                                    html.Span("Updating\u2026",
+                                              style={"color": "#0d6efd",
+                                                     "fontSize": "1.05rem",
+                                                     "fontWeight": "700"}),
+                                ], style={"display": "flex", "alignItems": "center"}),
+                                children=html.Div(id="poles-loading-target"),
+                            ),
+                            width="auto",
+                            style={"paddingLeft": "3.5rem"},
+                        ),
                     ], className="mb-3 align-items-center g-3"),
-                    # Stereo / pole figure plot
+                    # Pole figure plot
                     dcc.Graph(
                         id="stereo-plot-graph",
                         config={
@@ -261,7 +244,7 @@ _viz_tabs = dbc.Tabs(
                         },
                         style={"height": "calc(100vh - 220px)", "minHeight": "400px"},
                     ),
-                    # ROI selection info (placeholder for Stage 3)
+                    # ROI selection info
                     html.Div(
                         id="stereo-selection-info",
                         className="mt-3",
@@ -274,48 +257,94 @@ _viz_tabs = dbc.Tabs(
             ],
         ),
         dbc.Tab(
-            label="Quality",
-            tab_id="tab-quality",
+            label="Stereographic",
+            tab_id="tab-stereo",
             children=[
-                html.Div(id="tab-quality-content", className="pt-3", children=[
+                html.Div(id="tab-stereo-content", className="pt-3", children=[
                     # Controls row
                     dbc.Row([
                         dbc.Col([
-                            dbc.Label("Metric:", className="me-2"),
-                            dbc.Select(
-                                id="quality-metric-select",
-                                options=[
-                                    {"label": "Goodness", "value": "goodness"},
-                                    {"label": "RMS Error", "value": "rms_error"},
-                                    {"label": "N Indexed", "value": "n_indexed"},
-                                    {"label": "N Patterns", "value": "n_patterns"},
-                                ],
-                                value="goodness",
-                                style={"width": "180px", "display": "inline-block"},
+                            dbc.Label("Zoom:", className="me-2 mb-0",
+                                      style={"whiteSpace": "nowrap"}),
+                            dcc.Input(
+                                id="stereo-zoom-slider",
+                                type="range",
+                                min=5,
+                                max=90,
+                                step=5,
+                                value=90,
+                                style={"width": "160px"},
                             ),
-                        ], width="auto"),
-                        _marker_size_control("quality-marker-slider", "quality-marker-size"),
+                            html.Span(
+                                id="stereo-zoom-label",
+                                children="90\u00b0",
+                                style={"marginLeft": "8px", "minWidth": "40px"},
+                            ),
+                        ], width="auto",
+                           style={"display": "flex", "alignItems": "center"}),
                         dbc.Col([
-                            dbc.RadioItems(
-                                id="quality-view-toggle",
-                                options=[
-                                    {"label": "2D", "value": "2d"},
-                                    {"label": "3D", "value": "3d"},
-                                ],
-                                value="2d",
-                                inline=True,
-                                className="mb-0",
+                            dbc.Checkbox(
+                                id="stereo-wulff-toggle",
+                                label="Wulff net",
+                                value=True,
                             ),
                         ], width="auto"),
+                        dbc.Col([
+                            dbc.Label("Wulff step:", className="me-2"),
+                            dbc.Select(
+                                id="stereo-wulff-step",
+                                options=[
+                                    {"label": "5\u00b0", "value": "5"},
+                                    {"label": "10\u00b0", "value": "10"},
+                                    {"label": "20\u00b0", "value": "20"},
+                                ],
+                                value="10",
+                                style={"width": "80px", "display": "inline-block"},
+                            ),
+                        ], width="auto"),
+                        _marker_size_control("stereoprojection-marker-slider",
+                                             "stereoprojection-marker-size", default_value=12),
+                        dbc.Col([
+                            dbc.Button(
+                                "Render",
+                                id="stereo-render-btn",
+                                color="primary",
+                                size="sm",
+                            ),
+                        ], width="auto"),
+                        dbc.Col(
+                            dcc.Loading(
+                                type="circle",
+                                overlay_style={"visibility": "visible", "opacity": 1},
+                                custom_spinner=html.Div([
+                                    dbc.Spinner(size="sm", color="secondary",
+                                                spinner_class_name="me-2"),
+                                    html.Span("Rendering\u2026",
+                                              style={"color": "#0d6efd",
+                                                     "fontSize": "1.05rem",
+                                                     "fontWeight": "700"}),
+                                ], style={"display": "flex", "alignItems": "center"}),
+                                children=html.Div(id="stereo-loading-target"),
+                            ),
+                            width="auto",
+                            style={"paddingLeft": "3.5rem"},
+                        ),
                     ], className="mb-3 align-items-center g-3"),
-                    # Quality map plot
+                    # Stereographic projection plot
                     dcc.Graph(
-                        id="quality-map-graph",
+                        id="stereo-projection-graph",
                         config={"displayModeBar": True, "scrollZoom": True},
                         style={"height": "calc(100vh - 220px)", "minHeight": "400px"},
                     ),
-                    # Indexed peaks table
-                    html.Div(id="peak-table-container", className="mt-3"),
+                ]),
+            ],
+        ),
+        dbc.Tab(
+            label="Peaks",
+            tab_id="tab-peaks",
+            children=[
+                html.Div(id="tab-peaks-content", className="pt-3", children=[
+                    html.Div(id="peak-table-container"),
                 ]),
             ],
         ),
@@ -490,6 +519,7 @@ def load_peakindexing_data(href):
     Output('orientation-map-graph', 'figure'),
     Output('orientation-marker-size', 'value'),
     Output('orientation-marker-slider', 'value'),
+    Output('orientation-loading-target', 'children'),
     Input('peakindexing-xml-path', 'data'),
     Input('orientation-color-select', 'value'),
     Input('orientation-surface-select', 'value'),
@@ -545,7 +575,7 @@ def update_orientation_map(xml_path, color_by, surface, input_size, slider_size,
             apply_selection_highlight(fig, parsed, selected_grains, marker_size,
                                      is_3d=(view_mode == "3d"))
 
-        return fig, marker_size, marker_size
+        return fig, marker_size, marker_size, ""
     except PreventUpdate:
         raise
     except Exception as e:
@@ -633,88 +663,17 @@ def show_point_details(click_data, xml_path):
 
 
 # ---------------------------------------------------------------------------
-# Callback: update quality map when XML is available or metric changes
-# ---------------------------------------------------------------------------
-
-@callback(
-    Output('quality-map-graph', 'figure'),
-    Output('quality-marker-size', 'value'),
-    Output('quality-marker-slider', 'value'),
-    Input('peakindexing-xml-path', 'data'),
-    Input('quality-metric-select', 'value'),
-    Input('quality-marker-size', 'value'),
-    Input('quality-marker-slider', 'value'),
-    Input('quality-view-toggle', 'value'),
-    Input('selected-grain-indices', 'data'),
-    prevent_initial_call=True,
-)
-def update_quality_map(xml_path, metric, input_size, slider_size, view_mode,
-                       selected_grains):
-    if not xml_path:
-        raise PreventUpdate
-
-    try:
-        from laue_portal.analysis.xml_parser import parse_indexing_xml
-        from laue_portal.components.visualization.quality_map import (
-            make_quality_map,
-            make_quality_map_3d,
-        )
-
-        parsed = parse_indexing_xml(xml_path)
-
-        triggered = dash.ctx.triggered_id
-        if triggered == "quality-marker-slider":
-            marker_size = slider_size
-        elif triggered == "quality-marker-size":
-            marker_size = input_size
-        else:
-            marker_size = input_size if input_size is not None else 40
-
-        marker_size = max(1, int(marker_size))
-
-        from laue_portal.components.visualization.orientation_map import (
-            apply_selection_highlight,
-        )
-
-        if view_mode == "3d":
-            fig = make_quality_map_3d(
-                parsed, metric=metric or "goodness", marker_size=marker_size,
-            )
-        else:
-            fig = make_quality_map(
-                parsed, metric=metric or "goodness", marker_size=marker_size,
-            )
-
-        # Cross-plot highlighting: dim unselected points, ring selected ones
-        if selected_grains:
-            apply_selection_highlight(fig, parsed, selected_grains, marker_size,
-                                     is_3d=(view_mode == "3d"))
-
-        return fig, marker_size, marker_size
-    except PreventUpdate:
-        raise
-    except Exception as e:
-        print(f"Error creating quality map: {e}")
-        traceback.print_exc()
-        raise PreventUpdate
-
-
-# ---------------------------------------------------------------------------
-# Callback: update stereo / pole figure plot
+# Callback: update pole figure plot (auto-renders on data/control changes)
 # ---------------------------------------------------------------------------
 
 @callback(
     Output('stereo-plot-graph', 'figure'),
     Output('stereo-marker-size', 'value'),
     Output('stereo-marker-slider', 'value'),
-    Output('stereo-zoom-label', 'children'),
     Output('stereo-color-rad-col', 'style'),
+    Output('poles-loading-target', 'children'),
     Input('peakindexing-xml-path', 'data'),
-    Input('stereo-view-select', 'value'),
     Input('stereo-hkl-select', 'value'),
-    Input('stereo-zoom-slider', 'value'),
-    Input('stereo-wulff-toggle', 'value'),
-    Input('stereo-wulff-step', 'value'),
     Input('stereo-marker-size', 'value'),
     Input('stereo-marker-slider', 'value'),
     Input('stereo-color-select', 'value'),
@@ -722,9 +681,8 @@ def update_quality_map(xml_path, metric, input_size, slider_size, view_mode,
     Input('stereo-surface-select', 'value'),
     prevent_initial_call=True,
 )
-def update_stereo_plot(
-    xml_path, view_mode, hkl_str, zoom_deg,
-    show_wulff, wulff_step, input_size, slider_size,
+def update_pole_figure(
+    xml_path, hkl_str, input_size, slider_size,
     color_scheme, color_rad_deg, surface,
 ):
     if not xml_path:
@@ -738,7 +696,6 @@ def update_stereo_plot(
     try:
         from laue_portal.analysis.xml_parser import parse_indexing_xml
         from laue_portal.components.visualization.stereo_plot import (
-            make_stereo_plot,
             make_pole_figure,
         )
 
@@ -753,37 +710,79 @@ def update_stereo_plot(
             marker_size = input_size if input_size is not None else 12
 
         marker_size = max(1, int(marker_size))
+        hkl = tuple(int(x) for x in hkl_str.split(","))
+
+        fig = make_pole_figure(
+            parsed,
+            hkl=hkl,
+            color_scheme=color_scheme or "hsv_position",
+            color_rad_deg=float(color_rad_deg or 22.5),
+            marker_size=marker_size,
+            surface=surface or "normal",
+        )
+
+        return fig, marker_size, marker_size, rad_col_style, ""
+    except PreventUpdate:
+        raise
+    except Exception as e:
+        print(f"Error creating pole figure: {e}")
+        traceback.print_exc()
+        raise PreventUpdate
+
+
+# ---------------------------------------------------------------------------
+# Callback: render stereographic projection (on-demand via button click)
+# ---------------------------------------------------------------------------
+
+@callback(
+    Output('stereo-projection-graph', 'figure'),
+    Output('stereoprojection-marker-size', 'value'),
+    Output('stereoprojection-marker-slider', 'value'),
+    Output('stereo-zoom-label', 'children'),
+    Output('stereo-loading-target', 'children'),
+    Input('stereo-render-btn', 'n_clicks'),
+    State('peakindexing-xml-path', 'data'),
+    State('stereo-zoom-slider', 'value'),
+    State('stereo-wulff-toggle', 'value'),
+    State('stereo-wulff-step', 'value'),
+    State('stereoprojection-marker-size', 'value'),
+    State('stereoprojection-marker-slider', 'value'),
+    prevent_initial_call=True,
+)
+def render_stereo_projection(
+    n_clicks, xml_path, zoom_deg,
+    show_wulff, wulff_step, input_size, slider_size,
+):
+    if not xml_path:
+        raise PreventUpdate
+
+    try:
+        from laue_portal.analysis.xml_parser import parse_indexing_xml
+        from laue_portal.components.visualization.stereo_plot import (
+            make_stereo_plot,
+        )
+
+        parsed = parse_indexing_xml(xml_path)
+
+        marker_size = max(1, int(input_size or 12))
         zoom = int(zoom_deg) if zoom_deg else 90
         wulff_step_int = int(wulff_step) if wulff_step else 10
         zoom_label = f"{zoom}\u00b0"
 
-        # Parse hkl from comma-separated string
-        hkl = tuple(int(x) for x in hkl_str.split(","))
+        fig = make_stereo_plot(
+            parsed,
+            step_index=None,
+            zoom_deg=zoom,
+            show_wulff=bool(show_wulff),
+            wulff_step_deg=wulff_step_int,
+            marker_size=marker_size,
+        )
 
-        if view_mode == "pole":
-            fig = make_pole_figure(
-                parsed,
-                hkl=hkl,
-                color_scheme=color_scheme or "hsv_position",
-                color_rad_deg=float(color_rad_deg or 22.5),
-                marker_size=marker_size,
-                surface=surface or "normal",
-            )
-        else:
-            fig = make_stereo_plot(
-                parsed,
-                step_index=None,
-                zoom_deg=zoom,
-                show_wulff=bool(show_wulff),
-                wulff_step_deg=wulff_step_int,
-                marker_size=marker_size,
-            )
-
-        return fig, marker_size, marker_size, zoom_label, rad_col_style
+        return fig, marker_size, marker_size, zoom_label, ""
     except PreventUpdate:
         raise
     except Exception as e:
-        print(f"Error creating stereo/pole plot: {e}")
+        print(f"Error creating stereo projection: {e}")
         traceback.print_exc()
         raise PreventUpdate
 
@@ -825,11 +824,10 @@ def update_peak_table(xml_path):
     Output('stereo-selection-info', 'children'),
     Input('stereo-plot-graph', 'selectedData'),
     State('peakindexing-xml-path', 'data'),
-    State('stereo-view-select', 'value'),
     State('stereo-hkl-select', 'value'),
     prevent_initial_call=True,
 )
-def handle_pole_selection(selected_data, xml_path, view_mode, hkl_str):
+def handle_pole_selection(selected_data, xml_path, hkl_str):
     """Process lasso/box selection on the pole figure to extract grain indices."""
     # If selection is cleared (double-click to deselect), reset
     if not selected_data or not selected_data.get("points"):
@@ -837,10 +835,6 @@ def handle_pole_selection(selected_data, xml_path, view_mode, hkl_str):
             "Use lasso or box select on the pole figure to pick regions of interest.",
             className="text-muted",
         )
-
-    # Only process selections on pole figure (not stereographic)
-    if view_mode != "pole":
-        raise PreventUpdate
 
     # Extract unique grain indices from selected points.
     #
@@ -905,37 +899,49 @@ def handle_pole_selection(selected_data, xml_path, view_mode, hkl_str):
     # Count selected poles
     n_poles = len(selected_data["points"])
 
-    # Compute misorientation statistics if we have the XML and >= 2 grains
+    # Compute misorientation statistics if we have the XML and >= 2 grains.
+    # Pairwise misorientation is O(k^2 * 24) so cap the grain count to
+    # keep the response interactive.
+    _MAX_GRAINS_FOR_MISORIENTATION = 700
     misorientation_info = []
     if xml_path and len(selected) >= 2:
-        try:
-            from laue_portal.analysis.xml_parser import parse_indexing_xml
-            from laue_portal.analysis.orientation import (
-                batch_orientations,
-                pairwise_misorientation,
-            )
-
-            parsed = parse_indexing_xml(xml_path)
-            orientations = batch_orientations(
-                parsed["recip_lattices"], parsed["lattice_params"],
-            )
-
-            # Only compute if selected indices are within bounds
-            valid_indices = [i for i in selected if i < len(orientations)]
-            if len(valid_indices) >= 2:
-                mis = pairwise_misorientation(
-                    orientations, indices=valid_indices,
-                    symmetry_reduce=True,
+        if len(selected) > _MAX_GRAINS_FOR_MISORIENTATION:
+            misorientation_info = [
+                html.Br(),
+                html.Small(
+                    f"Misorientation stats skipped (>{_MAX_GRAINS_FOR_MISORIENTATION} grains selected).",
+                    className="text-muted",
+                ),
+            ]
+        else:
+            try:
+                from laue_portal.analysis.xml_parser import parse_indexing_xml
+                from laue_portal.analysis.orientation import (
+                    batch_orientations,
+                    pairwise_misorientation,
                 )
-                misorientation_info = [
-                    html.Br(),
-                    html.Strong("Misorientation: "),
-                    f"mean {mis['mean']:.2f}\u00b0, "
-                    f"range [{mis['min']:.2f}\u00b0, {mis['max']:.2f}\u00b0]",
-                ]
-        except Exception as e:
-            print(f"Error computing misorientation: {e}")
-            traceback.print_exc()
+
+                parsed = parse_indexing_xml(xml_path)
+                orientations = batch_orientations(
+                    parsed["recip_lattices"], parsed["lattice_params"],
+                )
+
+                # Only compute if selected indices are within bounds
+                valid_indices = [i for i in selected if i < len(orientations)]
+                if len(valid_indices) >= 2:
+                    mis = pairwise_misorientation(
+                        orientations, indices=valid_indices,
+                        symmetry_reduce=True,
+                    )
+                    misorientation_info = [
+                        html.Br(),
+                        html.Strong("Misorientation: "),
+                        f"mean {mis['mean']:.2f}\u00b0, "
+                        f"range [{mis['min']:.2f}\u00b0, {mis['max']:.2f}\u00b0]",
+                    ]
+            except Exception as e:
+                print(f"Error computing misorientation: {e}")
+                traceback.print_exc()
 
     # Build summary card
     summary = dbc.Card(
@@ -948,7 +954,7 @@ def handle_pole_selection(selected_data, xml_path, view_mode, hkl_str):
                 *misorientation_info,
             ]),
             html.Small(
-                "Selected grains are highlighted on the Orientation and Quality tabs.",
+                "Selected grains are highlighted on the Orientation tab.",
                 className="text-muted",
             ),
         ]),

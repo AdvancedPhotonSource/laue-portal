@@ -6,13 +6,39 @@ This module has zero Dash/Plotly dependencies.
 """
 
 import xml.etree.ElementTree as ET
+import functools
+import os
 import numpy as np
 from pathlib import Path
+
+
+# ---------------------------------------------------------------------------
+# Caching layer
+# ---------------------------------------------------------------------------
+# NOTE: This in-process lru_cache works for single-worker deployments
+# (the current setup).  If Dash is ever run with multiple Gunicorn workers
+# or behind a multi-process load balancer, replace this with a shared cache
+# backend such as flask_caching + diskcache so that all workers share parsed
+# results instead of each maintaining an independent copy.
+# ---------------------------------------------------------------------------
+
+@functools.lru_cache(maxsize=4)
+def _cached_parse(xml_path: str, mtime_ns: int) -> dict:
+    """Cache-internal parser keyed on (path, mtime).
+
+    The *mtime_ns* argument is only used as a cache-key so that edits
+    to the XML file invalidate stale entries.  It is not read inside
+    the function body.
+    """
+    return _parse_indexing_xml_impl(xml_path)
 
 
 def parse_indexing_xml(xml_path: str) -> dict:
     """
     Parse an AllSteps XML file into numpy arrays.
+
+    Results are cached in-process by (path, mtime) so that multiple
+    Dash callbacks referencing the same file don't re-parse it.
 
     Parameters
     ----------
@@ -42,6 +68,17 @@ def parse_indexing_xml(xml_path: str) -> dict:
         # Raw per-step peak data stored for detail views:
         _steps : list[dict] -- raw per-step data for get_step_peaks()
     """
+    xml_path = str(xml_path)
+    try:
+        mtime_ns = os.stat(xml_path).st_mtime_ns
+    except OSError:
+        # File doesn't exist yet or is inaccessible -- skip cache
+        return _parse_indexing_xml_impl(xml_path)
+    return _cached_parse(xml_path, mtime_ns)
+
+
+def _parse_indexing_xml_impl(xml_path: str) -> dict:
+    """Uncached implementation of parse_indexing_xml."""
     xml_path = str(xml_path)
     tree = ET.parse(xml_path)
     root = tree.getroot()

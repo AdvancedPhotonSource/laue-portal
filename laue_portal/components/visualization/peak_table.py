@@ -154,7 +154,7 @@ def make_peak_table(indexed_peaks: list[dict]) -> html.Div:
             "animateRows": True,
             "rowSelection": "single",
         },
-        style={"height": "400px", "width": "100%"},
+        style={"height": "calc(100vh - 260px)", "minHeight": "400px", "width": "100%"},
         className="ag-theme-alpine",
     )
 

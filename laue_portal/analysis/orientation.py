@@ -310,6 +310,11 @@ def _make_cubic_symmetry_ops():
 # Pre-computed constant: 24 cubic proper rotation matrices
 CUBIC_SYMMETRY_OPS = _make_cubic_symmetry_ops()
 
+# Pre-computed transposes for vectorized misorientation.
+# Since symmetry ops are orthogonal, inv(S) = S.T.
+# Stacked as (24, 3, 3) for batch matmul.
+_SYM_OPS_T = np.array([s.T for s in CUBIC_SYMMETRY_OPS])
+
 
 # ---------------------------------------------------------------------------
 # Misorientation
@@ -326,6 +331,9 @@ def misorientation_angle(R1, R2, symmetry_reduce=True):
     Compute misorientation angle between two orientation matrices.
 
     From ``AngleBetweenMats()`` in PoleFigure.ipf:606-637.
+
+    Uses vectorized numpy operations: all 24 cubic symmetry equivalents
+    are evaluated in a single batched matmul.
 
     Parameters
     ----------
@@ -344,17 +352,15 @@ def misorientation_angle(R1, R2, symmetry_reduce=True):
 
     if not symmetry_reduce:
         C = R1 @ R2_inv
-        return _rotation_angle(C)
+        return float(_rotation_angle(C))
 
-    # Apply all 24 cubic symmetry operations to find minimum angle
-    min_angle = 360.0
-    for sym_op in CUBIC_SYMMETRY_OPS:
-        C = R1 @ np.linalg.inv(R2 @ sym_op)
-        angle = _rotation_angle(C)
-        if angle < min_angle:
-            min_angle = angle
-
-    return min_angle
+    # R1 @ inv(R2 @ S) = R1 @ S.T @ R2_inv  (since S is orthogonal)
+    # Compute all 24 products in one batch:
+    #   (24, 3, 3) = _SYM_OPS_T @ R2_inv[None]  →  R1 @ each
+    C_all = R1 @ (_SYM_OPS_T @ R2_inv)  # (24, 3, 3)
+    traces = C_all[:, 0, 0] + C_all[:, 1, 1] + C_all[:, 2, 2]
+    angles = np.degrees(np.arccos(np.clip((traces - 1.0) / 2.0, -1.0, 1.0)))
+    return float(np.min(angles))
 
 
 def pairwise_misorientation(orientations, indices=None, symmetry_reduce=True):
