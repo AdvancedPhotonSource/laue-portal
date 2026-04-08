@@ -169,3 +169,4 @@ config.yaml
 
 # External hosted resources
 assets/
+!assets/customAgGridFunctions.js

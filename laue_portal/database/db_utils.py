@@ -1193,3 +1193,154 @@ def parse_IDnumber(IDnumber, session, delimiter=";"):
             final_result[field_name] = f"{delimiter} ".join(str(v) if v is not None else '' for v in id_list)
     
     return final_result
+
+
+def parse_all_scans_from_xml(xml_bytes):
+    """
+    Parse ALL <fullScan> elements from an XML log file.
+    
+    Returns a list of dicts, one per scan, each containing:
+        - 'scan_index': index of the scan element in the XML root
+        - 'scanNumber': the scan number as a string
+        - 'log': the parsed metadata dict (from parse_metadata)
+        - 'scans': list of parsed scan-dimension dicts (from parse_metadata)
+        - 'time': timestamp string
+        - 'user_name': user name string
+        - 'energy': energy value string
+        - 'sample_XYZ': sample position string
+        - 'num_dims': number of scan dimensions
+    """
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(xml_bytes)
+    
+    results = []
+    for i, elem in enumerate(root):
+        if elem.tag.endswith('Scan'):
+            try:
+                log, scans = parse_metadata(xml_bytes, scan_no=i)
+                results.append({
+                    'scan_index': i,
+                    'scanNumber': log.get('scanNumber', ''),
+                    'log': log,
+                    'scans': scans,
+                    'time': log.get('time', ''),
+                    'user_name': log.get('user_name', ''),
+                    'energy': log.get('source_energy', ''),
+                    'energy_unit': log.get('source_energy_unit', ''),
+                    'sample_XYZ': log.get('sample_XYZ', ''),
+                    'num_dims': len(scans),
+                })
+            except Exception:
+                # Skip scans that fail to parse
+                continue
+    
+    return results
+
+
+def check_existing_scan_numbers(scan_numbers):
+    """
+    Check which scan numbers already exist in the database.
+    
+    Args:
+        scan_numbers: list of scan number values (strings or ints)
+        
+    Returns:
+        set of scan numbers (as ints) that already exist in the DB
+    """
+    from sqlalchemy.orm import Session
+    import laue_portal.database.session_utils as session_utils
+    
+    int_scan_numbers = [int(sn) for sn in scan_numbers]
+    
+    with Session(session_utils.get_engine()) as session:
+        existing = session.query(db_schema.Metadata.scanNumber).filter(
+            db_schema.Metadata.scanNumber.in_(int_scan_numbers)
+        ).all()
+        return {row[0] for row in existing}
+
+
+def bulk_import_scans(parsed_scans, catalog_defaults):
+    """
+    Import multiple scans into the database, committing each scan individually
+    so that a failure in one scan does not roll back the others.
+    
+    Args:
+        parsed_scans: list of dicts from parse_all_scans_from_xml(),
+                      filtered to only scans the user wants to import
+        catalog_defaults: dict with keys: filefolder, filenamePrefix, 
+                         aperture, sample_name, notes
+    
+    Returns:
+        dict mapping scanNumber -> {'status': 'success'|'skipped'|'failed', 'message': str}
+    """
+    from sqlalchemy.orm import Session
+    import laue_portal.database.session_utils as session_utils
+    
+    results = {}
+    
+    for parsed in parsed_scans:
+        scan_number = parsed['scanNumber']
+        
+        with Session(session_utils.get_engine()) as session:
+            try:
+                # Check if already exists
+                exists = session.query(db_schema.Metadata).filter(
+                    db_schema.Metadata.scanNumber == int(scan_number)
+                ).first()
+                
+                if exists:
+                    results[scan_number] = {
+                        'status': 'skipped',
+                        'message': f'Scan {scan_number} already exists'
+                    }
+                    continue
+                
+                # Create metadata ORM object
+                metadata = import_metadata_row(parsed['log'])
+                
+                # Create scan dimension ORM objects and compute motor groups
+                motor_group_totals = {}
+                for scan_dict in parsed['scans']:
+                    scan_row = import_scan_row(scan_dict)
+                    session.add(scan_row)
+                    motor_group_totals = update_motor_group_totals(motor_group_totals, scan_row)
+                
+                # Apply motor group totals with fallback logic
+                if motor_group_totals:
+                    for specific_motor_group in ['sample', 'depth']:
+                        if specific_motor_group not in motor_group_totals:
+                            if any(group.get('completed', 0) for group in motor_group_totals.values()):
+                                motor_group_totals[specific_motor_group] = {'points': 0, 'completed': 1}
+                    
+                    for motor_group, totals in motor_group_totals.items():
+                        setattr(metadata, f'motorGroup_{motor_group}_npts_total', totals['points'])
+                        setattr(metadata, f'motorGroup_{motor_group}_cpt_total', totals['completed'])
+                
+                session.add(metadata)
+                
+                # Create catalog entry
+                catalog = db_schema.Catalog(
+                    scanNumber=int(scan_number),
+                    filefolder=catalog_defaults.get('filefolder', ''),
+                    filenamePrefix=catalog_defaults.get('filenamePrefix', []),
+                    aperture=catalog_defaults.get('aperture', None),
+                    sample_name=catalog_defaults.get('sample_name', ''),
+                    notes=catalog_defaults.get('notes', ''),
+                )
+                session.add(catalog)
+                
+                session.commit()
+                
+                results[scan_number] = {
+                    'status': 'success',
+                    'message': f'Scan {scan_number} imported successfully'
+                }
+                
+            except Exception as e:
+                session.rollback()
+                results[scan_number] = {
+                    'status': 'failed',
+                    'message': f'Error importing scan {scan_number}: {str(e)}'
+                }
+    
+    return results

@@ -1,539 +1,437 @@
 import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, Output, State, set_props, ALL
+import dash_ag_grid as dag
+from dash import html, dcc, Input, Output, State
 import dash
 import base64
+import json
 import laue_portal.database.db_utils as db_utils
-import laue_portal.database.db_schema as db_schema
-from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
-from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, set_scan_accordions
-from laue_portal.components.catalog_form import catalog_form, set_catalog_form_props
-import laue_portal.database.session_utils as session_utils
-
-CATALOG_DEFAULTS = {
-    'filefolder': '/net/s34data/export/s34data1/LauePortal/portal_workspace/Run1/data/scan_1',
-    'filenamePrefix': ['Si-wire_%d'],
-    'aperture': {'options': 'wire'},
-    'sample_name': 'Si',
-    'notes': '',
-}
 
 dash.register_page(__name__)
 
+# ---------------------------------------------------------------------------
+# Layout
+# ---------------------------------------------------------------------------
+
 layout = dbc.Container(
     [
-        # Store for uploaded XML data
-        dcc.Store(id='uploaded-xml-data'),
+        # Client-side stores
+        dcc.Store(id='bulk-parsed-scans', data=None),  # full parsed scan data (list of dicts)
+
         html.Div([
-        navbar.navbar,
-        dbc.Alert(
-            id="alert-upload",
-            dismissable=True,
-            duration=4000,
-            is_open=False,
-        ),
-        dbc.Alert(
-            id="alert-submit",
-            dismissable=True,
-            duration=4000,
-            is_open=False,
-        ),
-        dbc.Alert(
-            id="alert-catalog-submit",
-            dismissable=True,
-            duration=4000,
-            is_open=False,
-        ),
-        html.Hr(),
-        html.Center(
-            html.Div(
+            navbar.navbar,
+
+            # Alerts
+            dbc.Alert(id="alert-upload", dismissable=True, duration=4000, is_open=False),
+            dbc.Alert(id="alert-import", dismissable=True, is_open=False),
+
+            html.Hr(),
+
+            # ---- Upload Section ----
+            html.Center(
+                dcc.Upload(
+                    id='upload-metadata-log',
+                    children=dbc.Button(
+                        [html.I(className="bi bi-upload me-2"), "Upload Scan Log XML"],
+                        color='primary',
+                        size='lg',
+                    ),
+                    multiple=False,
+                ),
+            ),
+
+            html.Hr(),
+
+            # ---- Catalog Defaults Card (collapsed until scans loaded) ----
+            dbc.Card(
                 [
-                    html.Div([
-                            dcc.Upload(dbc.Button('Upload Log'), id='upload-metadata-log'),
-                    ], style={'display':'inline-block'}),
+                    dbc.CardHeader(
+                        html.H5("Catalog Defaults (applied to all imported scans)", className="mb-0"),
+                    ),
+                    dbc.CardBody([
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.InputGroup([
+                                    dbc.InputGroupText("Aperture"),
+                                    dbc.Select(
+                                        id='bulk-aperture',
+                                        options=[
+                                            {"label": "None", "value": ""},
+                                            {"label": "Wire", "value": "wire"},
+                                            {"label": "Coded Aperture", "value": "mask"},
+                                        ],
+                                        value='wire',
+                                    ),
+                                ], className="mb-2"),
+                            ], md=3),
+                            dbc.Col([
+                                dbc.InputGroup([
+                                    dbc.InputGroupText("Sample Name"),
+                                    dbc.Input(id='bulk-sample-name', value='', placeholder='e.g. Si'),
+                                ], className="mb-2"),
+                            ], md=3),
+                            dbc.Col([
+                                dbc.InputGroup([
+                                    dbc.InputGroupText("Files Path"),
+                                    dbc.Input(id='bulk-filefolder', value='', placeholder='/path/to/data'),
+                                ], className="mb-2"),
+                            ], md=3),
+                            dbc.Col([
+                                dbc.InputGroup([
+                                    dbc.InputGroupText("Filename Prefix"),
+                                    dbc.Input(id='bulk-filename-prefix', value='', placeholder='prefix_%d'),
+                                ], className="mb-2"),
+                            ], md=3),
+                        ]),
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.InputGroup([
+                                    dbc.InputGroupText("Notes"),
+                                    dbc.Input(id='bulk-notes', value='', placeholder='Optional notes'),
+                                ], className="mb-2"),
+                            ], md=12),
+                        ]),
+                    ]),
                 ],
-            )
-        ),
-        html.Hr(),
-        html.Center(
-            dbc.Button('Submit to Database', id='submit_catalog_and_metadata', color='primary'),
-        ),
-        html.Hr(),
-        catalog_form,
-        html.Hr(),
-        metadata_form,
-        
-        # Modal for scan selection
-        dbc.Modal(
-            [
-                dbc.ModalHeader(dbc.ModalTitle("Select Scan")),
-                dbc.ModalBody([
-                    html.P("Select which scan to import from the uploaded file:"),
-                    dcc.Dropdown(
-                        id='scan-selection-dropdown',
-                        placeholder="Select a scan...",
-                        searchable=True,
-                        options=[],
-                        value=None
+                id='catalog-defaults-card',
+                style={'display': 'none'},
+                className='mb-3',
+            ),
+
+            # ---- Action Bar ----
+            dbc.Row([
+                dbc.Col([
+                    dbc.Nav([
+                        dbc.Button(
+                            [html.I(className="bi bi-check2-all me-1"), "Import Selected"],
+                            id="btn-import-selected",
+                            color="primary",
+                            className="me-2",
+                            disabled=True,
+                        ),
+                        html.Span(id='import-summary-text', className='align-self-center text-muted me-2'),
+                    ], className="px-2 py-2 d-flex align-items-center"),
+                ], width=12),
+            ], id='action-bar', className="mb-3 mt-0", style={'display': 'none'}),
+
+            # ---- AG Grid Scan Table ----
+            html.Div(
+                dbc.Container(fluid=True, className="p-0", children=[
+                    dag.AgGrid(
+                        id='bulk-scan-table',
+                        columnSize="responsiveSizeToFit",
+                        columnDefs=[],
+                        rowData=[],
+                        defaultColDef={
+                            "filter": True,
+                            "sortable": True,
+                            "resizable": True,
+                        },
+                        dashGridOptions={
+                            "pagination": True,
+                            "paginationPageSize": 50,
+                            "domLayout": 'autoHeight',
+                            "rowSelection": "multiple",
+                            "suppressRowClickSelection": True,
+                            "animateRows": False,
+                            "rowHeight": 32,
+                            "isRowSelectable": {"function": "params.data && params.data.status === 'New'"},
+                        },
+                        style={'width': '100%'},
+                        className="ag-theme-alpine",
+                        getRowId="params.data.scanNumber",
                     ),
                 ]),
-                dbc.ModalFooter([
-                    dbc.Button("Cancel", id="scan-modal-cancel", className="ms-auto", n_clicks=0),
-                    dbc.Button("Select", id="scan-modal-select", className="ms-2", color="primary", n_clicks=0),
-                ]),
-            ],
-            id="scan-selection-modal",
-            is_open=False,
-            size="lg",
-        ),
+                id='scan-table-container',
+                style={'display': 'none'},
+            ),
+        ]),
     ],
-    )
-    ],
-    className='dbc', 
-    fluid=True
+    className='dbc',
+    fluid=True,
 )
 
-def get_scan_elements(xml_data):
-    """Parse XML data and return available scan options for dropdown."""
-    import xml.etree.ElementTree as ET
-    root = ET.fromstring(xml_data)
-    
-    # Get all scan elements and create dropdown options
-    scan_options = []
-    for i, scan_elem in enumerate(root):
-        if scan_elem.tag.endswith('Scan'):
-            scan_number = scan_elem.get('scanNumber', f'Scan {i+1}')
-            scan_options.append({'label': f'{scan_number}', 'value': i})
-    
-    return scan_options
+# ---------------------------------------------------------------------------
+# Column definitions for the bulk scan AG Grid
+# ---------------------------------------------------------------------------
+
+BULK_SCAN_COLS = [
+    {
+        'headerName': '',
+        'field': 'checkbox',
+        'checkboxSelection': True,
+        'headerCheckboxSelection': True,
+        'headerCheckboxSelectionFilteredOnly': True,
+        'width': 50,
+        'pinned': 'left',
+        'sortable': False,
+        'filter': False,
+        'resizable': False,
+        'suppressMenu': True,
+        'floatingFilter': False,
+    },
+    {
+        'headerName': 'Scan ID',
+        'field': 'scanNumber',
+        'sort': 'asc',
+        'filter': 'agNumberColumnFilter',
+        'width': 110,
+    },
+    {
+        'headerName': 'Date / Time',
+        'field': 'time',
+        'width': 180,
+    },
+    {
+        'headerName': 'User',
+        'field': 'user_name',
+        'width': 100,
+    },
+    {
+        'headerName': 'Energy',
+        'field': 'energy_display',
+        'width': 120,
+    },
+    {
+        'headerName': 'Sample XYZ',
+        'field': 'sample_XYZ',
+        'width': 200,
+    },
+    {
+        'headerName': 'Dims',
+        'field': 'num_dims',
+        'width': 70,
+        'filter': 'agNumberColumnFilter',
+    },
+    {
+        'headerName': 'Status',
+        'field': 'status',
+        'cellRenderer': 'ScanImportStatusRenderer',
+        'width': 110,
+        'pinned': 'right',
+    },
+]
+
+
+# ---------------------------------------------------------------------------
+# Callback 1: Upload XML -> parse all scans -> populate table
+# ---------------------------------------------------------------------------
 
 @dash.callback(
-    [dash.Output('scan-selection-modal', 'is_open'),
-     dash.Output('scan-selection-dropdown', 'options'),
-     dash.Output('alert-upload', 'is_open'),
-     dash.Output('alert-upload', 'children'),
-     dash.Output('alert-upload', 'color'),
-     dash.Output('upload-metadata-log', 'contents'),
-     dash.Output('uploaded-xml-data', 'data')],
+    Output('bulk-scan-table', 'columnDefs'),
+    Output('bulk-scan-table', 'rowData'),
+    Output('bulk-parsed-scans', 'data'),
+    Output('alert-upload', 'is_open'),
+    Output('alert-upload', 'children'),
+    Output('alert-upload', 'color'),
+    Output('upload-metadata-log', 'contents'),
+    Output('scan-table-container', 'style'),
+    Output('catalog-defaults-card', 'style'),
+    Output('action-bar', 'style'),
     Input('upload-metadata-log', 'contents'),
     prevent_initial_call=True,
 )
-def upload_log(contents):
+def upload_and_parse(contents):
+    """Decode the uploaded XML, parse every scan, check for duplicates, and populate the AG Grid."""
+    if not contents:
+        raise dash.exceptions.PreventUpdate
+
     try:
-        content_type, content_string = contents.split(',')
-        decoded = base64.b64decode(content_string)
-        
-        # Get available scan options
-        scan_options = get_scan_elements(decoded)
-        
-        # If no scans found, show error
-        if not scan_options:
-            return False, [], True, 'No scans found in uploaded file', 'danger', None, None
-        
-        # Show modal with scan options, clear upload contents to allow re-upload, store XML data
-        return True, scan_options, True, 'File uploaded successfully. Please select a scan.', 'info', None, decoded.decode('utf-8')
-
+        _, content_string = contents.split(',')
+        xml_bytes = base64.b64decode(content_string)
     except Exception as e:
-        return False, [], True, f'Upload Failed! Error: {e}', 'danger', None, None
+        return (
+            [], [], None,
+            True, f'Failed to decode uploaded file: {e}', 'danger',
+            None, {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
+        )
 
+    # Parse all scans
+    try:
+        parsed = db_utils.parse_all_scans_from_xml(xml_bytes)
+    except Exception as e:
+        return (
+            [], [], None,
+            True, f'Failed to parse XML: {e}', 'danger',
+            None, {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
+        )
+
+    if not parsed:
+        return (
+            [], [], None,
+            True, 'No scans found in the uploaded file.', 'warning',
+            None, {'display': 'none'}, {'display': 'none'}, {'display': 'none'},
+        )
+
+    # Check which scan numbers already exist in the DB
+    all_scan_numbers = [p['scanNumber'] for p in parsed]
+    existing = db_utils.check_existing_scan_numbers(all_scan_numbers)
+
+    # Build AG Grid row data
+    row_data = []
+    for p in parsed:
+        sn = p['scanNumber']
+        energy_str = ''
+        if p.get('energy'):
+            energy_str = f"{p['energy']}"
+            if p.get('energy_unit'):
+                energy_str += f" {p['energy_unit']}"
+
+        row_data.append({
+            'scanNumber': str(sn),
+            'time': p.get('time', ''),
+            'user_name': p.get('user_name', ''),
+            'energy_display': energy_str,
+            'sample_XYZ': p.get('sample_XYZ', ''),
+            'num_dims': p.get('num_dims', 0),
+            'status': 'Exists' if int(sn) in existing else 'New',
+            'scan_index': p['scan_index'],
+        })
+
+    # Store full parsed data for later import (minus the large log/scans dicts to save memory)
+    # We keep them because we need them for import
+    store_data = json.dumps(parsed, default=str)
+
+    num_new = sum(1 for r in row_data if r['status'] == 'New')
+    num_existing = sum(1 for r in row_data if r['status'] == 'Exists')
+    alert_msg = f"Parsed {len(row_data)} scans: {num_new} new, {num_existing} already in database."
+    alert_color = 'success' if num_new > 0 else 'info'
+
+    show = {'display': 'block'}
+    return (
+        BULK_SCAN_COLS, row_data, store_data,
+        True, alert_msg, alert_color,
+        None,  # clear upload contents to allow re-upload
+        show, show, show,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Callback 2: Enable/disable the import button based on selection
+# ---------------------------------------------------------------------------
 
 @dash.callback(
-    [dash.Output('scan-selection-modal', 'is_open', allow_duplicate=True),
-     dash.Output('alert-submit', 'is_open'),
-     dash.Output('alert-submit', 'children'),
-     dash.Output('alert-submit', 'color')],
-    [Input('scan-modal-cancel', 'n_clicks'),
-     Input('scan-modal-select', 'n_clicks')],
-    [State('scan-selection-dropdown', 'value'),
-     State('uploaded-xml-data', 'data')],
+    Output('btn-import-selected', 'disabled'),
+    Output('btn-import-selected', 'children'),
+    Output('import-summary-text', 'children'),
+    Input('bulk-scan-table', 'selectedRows'),
     prevent_initial_call=True,
 )
-def handle_modal_actions(cancel_clicks, select_clicks, selected_scan_index, xml_data):
-    ctx = dash.callback_context
-    if not ctx.triggered:
-        return False, False, '', 'info'
-    
-    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    
-    if button_id == 'scan-modal-cancel':
-        # Just close modal on cancel
-        return False, False, '', 'info'
-    
-    elif button_id == 'scan-modal-select':
-        if selected_scan_index is None:
-            # No scan selected, show error but keep modal open
-            return True, True, 'Please select a scan before submitting.', 'warning'
-        
-        if xml_data is None:
-            # No XML data available, show error
-            return True, True, 'No XML data available. Please upload a file first.', 'danger'
-        
-        try:
-            # Convert stored string back to bytes for processing
-            uploaded_xml_data = xml_data.encode('utf-8')
-            
-            # Process the selected scan
-            log, scans = db_utils.parse_metadata(uploaded_xml_data, scan_no=selected_scan_index)
-            metadata_row = db_utils.import_metadata_row(log)
-            
-            CATALOG_DEFAULTS.update({'scanNumber':log['scanNumber']})
-            catalog_row = db_utils.import_catalog_row(CATALOG_DEFAULTS)
-            
-            set_catalog_form_props(catalog_row)
+def update_import_button(selected_rows):
+    if not selected_rows:
+        return True, [html.I(className="bi bi-check2-all me-1"), "Import Selected"], ""
 
-            scan_rows = [db_utils.import_scan_row(scan) for scan in scans]
-            
-            # Create and add scan accordions to the form with pre-populated data
-            set_scan_accordions(scan_rows, read_only=True)
-            
-            # Set the form properties, including scan data
-            set_metadata_form_props(metadata_row, scan_rows, read_only=True)
-            
-            return False, True, 'Scan data loaded successfully! Please review the forms and click "Submit to Database" to save.', 'success'
-            
-        except Exception as e:
-            # Close modal and show error
-            if "UNIQUE constraint failed: metadata.scanNumber" in f'{e}':
-                return False, True, f"Import failed! Scan {log['scanNumber']} already exists.", 'danger'
-            else:
-                return False, True, f'Import failed! Error: {e}', 'danger'
-    
-    # Default case
-    return False, False, '', 'info'
+    importable = [r for r in selected_rows if r.get('status') == 'New']
+    n = len(importable)
+    label = [html.I(className="bi bi-check2-all me-1"), f"Import Selected ({n})"]
+    summary = f"{n} new scan{'s' if n != 1 else ''} selected"
+    return (n == 0), label, summary
 
+
+# ---------------------------------------------------------------------------
+# Callback 3: Import selected scans
+# ---------------------------------------------------------------------------
 
 @dash.callback(
-    Input('submit_catalog_and_metadata', 'n_clicks'),
-
-    # Catalog form fields
-    State('filefolder', 'value'),
-    State('filenamePrefix', 'value'),
-    State('aperture', 'value'),
-    State('sample_name', 'value'),
-    State('notes', 'value'),
-    
-    # Metadata form fields
-    State('scanNumber', 'value'),
-    State('time_epoch', 'value'),
-    State('time', 'value'),
-    State('user_name', 'value'),
-    State('source_beamBad', 'value'),
-    State('source_CCDshutter', 'value'),
-    State('source_monoTransStatus', 'value'),
-    State('source_energy_unit', 'value'),
-    State('source_energy', 'value'),
-    State('source_IDgap_unit', 'value'),
-    State('source_IDgap', 'value'),
-    State('source_IDtaper_unit', 'value'),
-    State('source_IDtaper', 'value'),
-    State('source_ringCurrent_unit', 'value'),
-    State('source_ringCurrent', 'value'),
-    State('sample_XYZ_unit', 'value'),
-    State('sample_XYZ_desc', 'value'),
-    State('sample_XYZ', 'value'),
-    State('knife-edge_XYZ_unit', 'value'),
-    State('knife-edge_XYZ_desc', 'value'),
-    State('knife-edge_XYZ', 'value'),
-    State('knife-edge_knifeScan_unit', 'value'),
-    State('knife-edge_knifeScan', 'value'),
-    State('mda_file', 'value'),
-    State('scanEnd_abort', 'value'),
-    State('scanEnd_time_epoch', 'value'),
-    State('scanEnd_time', 'value'),
-    State('scanEnd_scanDuration_unit', 'value'),
-    State('scanEnd_scanDuration', 'value'),
-    State('scanEnd_source_beamBad', 'value'),
-    State('scanEnd_source_ringCurrent_unit', 'value'),
-    State('scanEnd_source_ringCurrent', 'value'),
-    
-    # Scan form fields using ALL pattern with hidden_ prefix
-    State({"type": "hidden_scan_dim", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_npts", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_after", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_positioner1_PV", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_positioner1_ar", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_positioner1_mode", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_positioner1", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_positioner2_PV", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_positioner2_ar", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_positioner2_mode", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_positioner2", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_positioner3_PV", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_positioner3_ar", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_positioner3_mode", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_positioner3", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_positioner4_PV", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_positioner4_ar", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_positioner4_mode", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_positioner4", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_detectorTrig1_PV", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_detectorTrig1_VAL", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_detectorTrig2_PV", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_detectorTrig2_VAL", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_detectorTrig3_PV", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_detectorTrig3_VAL", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_detectorTrig4_PV", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_detectorTrig4_VAL", "index": ALL}, 'value'),
-    State({"type": "hidden_scan_cpt", "index": ALL}, 'value'),
-
+    Output('bulk-scan-table', 'rowData', allow_duplicate=True),
+    Output('alert-import', 'is_open'),
+    Output('alert-import', 'children'),
+    Output('alert-import', 'color'),
+    Output('alert-import', 'duration'),
+    Input('btn-import-selected', 'n_clicks'),
+    State('bulk-scan-table', 'selectedRows'),
+    State('bulk-scan-table', 'rowData'),
+    State('bulk-parsed-scans', 'data'),
+    # Catalog defaults
+    State('bulk-aperture', 'value'),
+    State('bulk-sample-name', 'value'),
+    State('bulk-filefolder', 'value'),
+    State('bulk-filename-prefix', 'value'),
+    State('bulk-notes', 'value'),
     running=[
-        (Output("submit_catalog_and_metadata", "disabled"), True, False),
-        (Output("submit_catalog_and_metadata", "children"),
-         [dbc.Spinner(size="sm", spinner_class_name="me-2"), "Submitting..."], "Submit to Database"),
+        (Output("btn-import-selected", "disabled"), True, False),
+        (Output("btn-import-selected", "children"),
+         [dbc.Spinner(size="sm", spinner_class_name="me-2"), "Importing..."],
+         [html.I(className="bi bi-check2-all me-1"), "Import Selected"]),
     ],
     prevent_initial_call=True,
 )
-def submit_catalog_and_metadata(n,
-    # Catalog parameters
-    filefolder,
-    filenamePrefix,
-    aperture,
-    sample_name,
-    notes,
-    
-    # Metadata parameters
-    scanNumber,
-    time_epoch,
-    time,
-    user_name,
-    source_beamBad,
-    source_CCDshutter,
-    source_monoTransStatus,
-    source_energy_unit,
-    source_energy,
-    source_IDgap_unit,
-    source_IDgap,
-    source_IDtaper_unit,
-    source_IDtaper,
-    source_ringCurrent_unit,
-    source_ringCurrent,
-    sample_XYZ_unit,
-    sample_XYZ_desc,
-    sample_XYZ,
-    knifeEdge_XYZ_unit,
-    knifeEdge_XYZ_desc,
-    knifeEdge_XYZ,
-    knifeEdge_knifeScan_unit,
-    knifeEdge_knifeScan,
-    mda_file,
-    scanEnd_abort,
-    scanEnd_time_epoch,
-    scanEnd_time,
-    scanEnd_scanDuration_unit,
-    scanEnd_scanDuration,
-    scanEnd_source_beamBad,
-    scanEnd_source_ringCurrent_unit,
-    scanEnd_source_ringCurrent,
-    
-    # Scan parameters (ALL pattern returns lists)
-    scan_dims,
-    scan_npts_list,
-    scan_afters,
-    scan_positioner1_PVs,
-    scan_positioner1_ars,
-    scan_positioner1_modes,
-    scan_positioner1s,
-    scan_positioner2_PVs,
-    scan_positioner2_ars,
-    scan_positioner2_modes,
-    scan_positioner2s,
-    scan_positioner3_PVs,
-    scan_positioner3_ars,
-    scan_positioner3_modes,
-    scan_positioner3s,
-    scan_positioner4_PVs,
-    scan_positioner4_ars,
-    scan_positioner4_modes,
-    scan_positioner4s,
-    scan_detectorTrig1_PVs,
-    scan_detectorTrig1_VALs,
-    scan_detectorTrig2_PVs,
-    scan_detectorTrig2_VALs,
-    scan_detectorTrig3_PVs,
-    scan_detectorTrig3_VALs,
-    scan_detectorTrig4_PVs,
-    scan_detectorTrig4_VALs,
-    scan_cpts,
+def import_selected_scans(
+    n_clicks, selected_rows, current_row_data, parsed_scans_json,
+    aperture, sample_name, filefolder, filename_prefix, notes,
 ):
-    try:
-        # Convert scanNumber to int if it's a string
-        if isinstance(scanNumber, str):
-            scanNumber = int(scanNumber)
-        
-        with Session(session_utils.get_engine()) as session:
-            try:
-                # Check if metadata record exists for this scanNumber
-                metadata_data = session.query(db_schema.Metadata).filter(
-                    db_schema.Metadata.scanNumber == scanNumber
-                ).first()
-                
-                if metadata_data:
-                    set_props("alert-submit", {'is_open': True, 
-                                                'children': f'Error: Scan {scanNumber} already exists in the database.',
-                                                'color': 'danger'})
-                else:
-                    # Create new metadata entry
-                    metadata = db_schema.Metadata(
-                        scanNumber=scanNumber,
-                        time_epoch=time_epoch,
-                        time=db_utils.convert_time_string_to_datetime(time) if time else None,
-                        user_name=user_name,
-                        source_beamBad=source_beamBad,
-                        source_CCDshutter=source_CCDshutter,
-                        source_monoTransStatus=source_monoTransStatus,
-                        source_energy_unit=source_energy_unit,
-                        source_energy=source_energy,
-                        source_IDgap_unit=source_IDgap_unit,
-                        source_IDgap=source_IDgap,
-                        source_IDtaper_unit=source_IDtaper_unit,
-                        source_IDtaper=source_IDtaper,
-                        source_ringCurrent_unit=source_ringCurrent_unit,
-                        source_ringCurrent=source_ringCurrent,
-                        sample_XYZ_unit=sample_XYZ_unit,
-                        sample_XYZ_desc=sample_XYZ_desc,
-                        sample_XYZ=sample_XYZ,
-                        knifeEdge_XYZ_unit=knifeEdge_XYZ_unit,
-                        knifeEdge_XYZ_desc=knifeEdge_XYZ_desc,
-                        knifeEdge_XYZ=knifeEdge_XYZ,
-                        knifeEdge_knifeScan_unit=knifeEdge_knifeScan_unit,
-                        knifeEdge_knifeScan=knifeEdge_knifeScan,
-                        mda_file=mda_file,
-                        scanEnd_abort=scanEnd_abort,
-                        scanEnd_time_epoch=scanEnd_time_epoch,
-                        scanEnd_time=db_utils.convert_time_string_to_datetime(scanEnd_time) if scanEnd_time else None,
-                        scanEnd_scanDuration_unit=scanEnd_scanDuration_unit,
-                        scanEnd_scanDuration=scanEnd_scanDuration,
-                        scanEnd_source_beamBad=scanEnd_source_beamBad,
-                        scanEnd_source_ringCurrent_unit=scanEnd_source_ringCurrent_unit,
-                        scanEnd_source_ringCurrent=scanEnd_source_ringCurrent,
-                    )
-                    
-                    # Add scan rows from the form data
-                    if scan_dims and len(scan_dims) > 0:
-                        motor_group_totals = {}
-                        # Reconstruct scan objects from form values
-                        for i in range(len(scan_dims)):
-                            # Check if all required fields have values (not None)
-                            if all(field is not None for field in 
-                                   [
-                                    scan_afters[i],
-                                    scan_positioner1_PVs[i], scan_positioner1_ars[i],
-                                    scan_positioner1_modes[i], scan_positioner1s[i],
-                                    scan_positioner2_PVs[i], scan_positioner2_ars[i],
-                                    scan_positioner2_modes[i], scan_positioner2s[i],
-                                    scan_positioner3_PVs[i], scan_positioner3_ars[i],
-                                    scan_positioner3_modes[i], scan_positioner3s[i],
-                                    scan_positioner4_PVs[i], scan_positioner4_ars[i],
-                                    scan_positioner4_modes[i], scan_positioner4s[i],
-                                    scan_detectorTrig1_PVs[i],scan_detectorTrig1_VALs[i],
-                                    scan_detectorTrig2_PVs[i], scan_detectorTrig2_VALs[i],
-                                    scan_detectorTrig3_PVs[i], scan_detectorTrig3_VALs[i],
-                                    scan_detectorTrig4_PVs[i], scan_detectorTrig4_VALs[i],
-                                    ]
-                            ):
-                                scan = db_schema.Scan(
-                                    scanNumber=scanNumber,
-                                    scan_dim=scan_dims[i],
-                                    scan_npts=scan_npts_list[i],
-                                    scan_after=scan_afters[i],
-                                    scan_positioner1_PV=scan_positioner1_PVs[i],
-                                    scan_positioner1_ar=scan_positioner1_ars[i],
-                                    scan_positioner1_mode=scan_positioner1_modes[i],
-                                    scan_positioner1=scan_positioner1s[i],
-                                    scan_positioner2_PV=scan_positioner2_PVs[i],
-                                    scan_positioner2_ar=scan_positioner2_ars[i],
-                                    scan_positioner2_mode=scan_positioner2_modes[i],
-                                    scan_positioner2=scan_positioner2s[i],
-                                    scan_positioner3_PV=scan_positioner3_PVs[i],
-                                    scan_positioner3_ar=scan_positioner3_ars[i],
-                                    scan_positioner3_mode=scan_positioner3_modes[i],
-                                    scan_positioner3=scan_positioner3s[i],
-                                    scan_positioner4_PV=scan_positioner4_PVs[i],
-                                    scan_positioner4_ar=scan_positioner4_ars[i],
-                                    scan_positioner4_mode=scan_positioner4_modes[i],
-                                    scan_positioner4=scan_positioner4s[i],
-                                    scan_detectorTrig1_PV=scan_detectorTrig1_PVs[i],
-                                    scan_detectorTrig1_VAL=scan_detectorTrig1_VALs[i],
-                                    scan_detectorTrig2_PV=scan_detectorTrig2_PVs[i],
-                                    scan_detectorTrig2_VAL=scan_detectorTrig2_VALs[i],
-                                    scan_detectorTrig3_PV=scan_detectorTrig3_PVs[i],
-                                    scan_detectorTrig3_VAL=scan_detectorTrig3_VALs[i],
-                                    scan_detectorTrig4_PV=scan_detectorTrig4_PVs[i],
-                                    scan_detectorTrig4_VAL=scan_detectorTrig4_VALs[i],
-                                    scan_cpt=scan_cpts[i],
-                                )
-                                session.add(scan)
-                                motor_group_totals = db_utils.update_motor_group_totals(motor_group_totals, scan)
-                        
-                        # Fallback value of 1 for 'sample' and 'depth' completed points if any motor has completed points
-                        if motor_group_totals:
-                            for specific_motor_group in ['sample', 'depth']:
-                                if specific_motor_group not in motor_group_totals:
-                                    if any(group.get('completed', 0) for group in motor_group_totals.values()):
-                                        motor_group_totals[specific_motor_group] = {'points': 0, 'completed': 1}
+    if not n_clicks or not selected_rows or not parsed_scans_json:
+        raise dash.exceptions.PreventUpdate
 
-                        for motor_group, totals in motor_group_totals.items():
-                            setattr(metadata, f'motorGroup_{motor_group}_npts_total', totals['points'])
-                            setattr(metadata, f'motorGroup_{motor_group}_cpt_total', totals['completed'])
-                    
-                    session.add(metadata)
-                       
-            except Exception as e:
-                set_props("alert-submit", {'is_open': True, 
-                                            'children': f'Error creating metadata entry: {str(e)}',
-                                            'color': 'danger'})
-                return
+    # Deserialize stored parsed data
+    all_parsed = json.loads(parsed_scans_json)
 
-            try:
-                # Check if catalog entry already exists
-                catalog_data = session.query(db_schema.Catalog).filter(
-                    db_schema.Catalog.scanNumber == scanNumber
-                ).first()
-                
-                filenamePrefix = [s.strip() for s in filenamePrefix.split(',')] if filenamePrefix else []
-                if catalog_data:
-                    # Update existing catalog entry
-                    catalog_data.filefolder = filefolder
-                    catalog_data.filenamePrefix = filenamePrefix
-                    catalog_data.aperture = aperture
-                    catalog_data.sample_name = sample_name
-                    catalog_data.notes = notes
-                    
-                else:
-                    # Create new catalog entry
-                    catalog = db_schema.Catalog(
-                        scanNumber=scanNumber,
-                        filefolder=filefolder,
-                        filenamePrefix=filenamePrefix,
-                        aperture=aperture,
-                        sample_name=sample_name,
-                        notes=notes,
-                    )
-                    
-                    session.add(catalog)
-                    
-            except Exception as e:
-                set_props("alert-catalog-submit", {'is_open': True, 
-                                            'children': f'Error creating catalog entry: {str(e)}',
-                                            'color': 'danger'})
-                return
-            
-            # Commit all changes
-            session.commit()
+    # Build lookup: scanNumber -> parsed entry
+    parsed_lookup = {str(p['scanNumber']): p for p in all_parsed}
 
-            set_props("alert-submit", {'is_open': True, 
-                                        'children': f'Metadata Entry Added to Database for scan {scanNumber}',
-                                        'color': 'success'})
-            if catalog_data:
-                set_props("alert-catalog-submit", {'is_open': True, 
-                                            'children': f'Catalog Entry Updated for scan {scanNumber}',
-                                            'color': 'success'})
-            else:
-                set_props("alert-catalog-submit", {'is_open': True, 
-                                            'children': f'Catalog Entry Added to Database for scan {scanNumber}',
-                                            'color': 'success'})
-                                            
-    except ValueError as e:
-        set_props("alert-submit", {'is_open': True, 
-                                    'children': f'Error: Invalid scan number format. Please enter a valid integer.',
-                                    'color': 'danger'})
+    # Filter to only selected NEW scans
+    scans_to_import = []
+    for row in selected_rows:
+        if row.get('status') == 'New':
+            sn = str(row['scanNumber'])
+            if sn in parsed_lookup:
+                scans_to_import.append(parsed_lookup[sn])
+
+    if not scans_to_import:
+        return (
+            dash.no_update,
+            True, 'No new scans selected for import.', 'warning', 4000,
+        )
+
+    # Build catalog defaults
+    prefix_list = [s.strip() for s in filename_prefix.split(',')] if filename_prefix else []
+    catalog_defaults = {
+        'filefolder': filefolder or '',
+        'filenamePrefix': prefix_list,
+        'aperture': aperture or None,
+        'sample_name': sample_name or '',
+        'notes': notes or '',
+    }
+
+    # Do the bulk import
+    results = db_utils.bulk_import_scans(scans_to_import, catalog_defaults)
+
+    # Update row data with new statuses
+    updated_rows = []
+    for row in current_row_data:
+        sn = str(row['scanNumber'])
+        if sn in results:
+            r = results[sn]
+            if r['status'] == 'success':
+                row['status'] = 'Imported'
+            elif r['status'] == 'skipped':
+                row['status'] = 'Exists'
+            elif r['status'] == 'failed':
+                row['status'] = 'Failed'
+        updated_rows.append(row)
+
+    # Build summary message
+    n_success = sum(1 for r in results.values() if r['status'] == 'success')
+    n_failed = sum(1 for r in results.values() if r['status'] == 'failed')
+    n_skipped = sum(1 for r in results.values() if r['status'] == 'skipped')
+
+    parts = []
+    if n_success:
+        parts.append(f"{n_success} imported")
+    if n_skipped:
+        parts.append(f"{n_skipped} skipped (already exist)")
+    if n_failed:
+        parts.append(f"{n_failed} failed")
+
+    summary = f"Bulk import complete: {', '.join(parts)}."
+
+    if n_failed:
+        # Include failure details
+        failures = [r['message'] for r in results.values() if r['status'] == 'failed']
+        summary += " Errors: " + "; ".join(failures[:5])
+        if len(failures) > 5:
+            summary += f" ... and {len(failures) - 5} more"
+
+    alert_color = 'success' if n_failed == 0 else ('warning' if n_success > 0 else 'danger')
+
+    return updated_rows, True, summary, alert_color, None

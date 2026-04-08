@@ -296,51 +296,25 @@ dagcomponentfuncs.SubJobProgressRenderer = function (props) {
     ]);
 };
 
-// dagcomponentfuncs.ActionButtonsRenderer = function (props) {
-//     const { data } = props; // data contains the row data
+// Scan import status renderer for bulk upload page
+dagcomponentfuncs.ScanImportStatusRenderer = function (props) {
+    const statusMapping = {
+        'new':      { text: 'New',      color: 'success' },
+        'exists':   { text: 'Exists',   color: 'warning' },
+        'imported': { text: 'Imported', color: 'info' },
+        'failed':   { text: 'Failed',   color: 'danger' },
+        'skipped':  { text: 'Skipped',  color: 'secondary' },
+    };
 
-//     // Ensure scanNumber is available from row data
-//     const scanNumber = data.scanNumber;
-//     if (scanNumber === undefined || scanNumber === null) {
-//         console.error("scanNumber is missing in row data for ActionButtonsRenderer", data);
-//         return null; // Or return an empty span or placeholder
-//     }
+    const key = (props.value || '').toLowerCase();
+    const info = statusMapping[key] || { text: props.value || '', color: 'secondary' };
 
-//     const viewScanUrl = `/create-peakindexing?scan_id=${scanNumber}`;
-//     const viewReconstructionUrl = `/view_reconstruction?scan_id=${scanNumber}`;
-
-//     function handleScanClick() {
-//         window.location.href = viewScanUrl;
-//     }
-
-//     function handleReconstructClick() {
-//         window.location.href = viewReconstructionUrl;
-//     }
-
-//     return React.createElement('div', null, [
-//         React.createElement(
-//             window.dash_bootstrap_components.Button,
-//             {
-//                 key: 'indexBtn-' + scanNumber,
-//                 onClick: handleScanClick,
-//                 color: 'primary', 
-//                 size: 'sm',
-//                 style: { marginRight: '5px' }
-//             },
-//             'Index'
-//         ),
-//         React.createElement(
-//             window.dash_bootstrap_components.Button,
-//             {
-//                 key: 'reconstructBtn-' + scanNumber,
-//                 onClick: handleReconstructClick,
-//                 color: 'primary', 
-//                 size: 'sm'
-//             },
-//             'Reconstruct'
-//         )
-//     ]);
-// };
+    return React.createElement(
+        window.dash_bootstrap_components.Badge,
+        { color: info.color, className: 'text-white' },
+        info.text
+    );
+};
 
 dagcomponentfuncs.ActionButtonsRenderer = function (props) {
     const { data } = props; // data contains the row data

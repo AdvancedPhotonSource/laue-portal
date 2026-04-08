@@ -28,7 +28,7 @@ navbar = dbc.Navbar(
                             label="Menu",
                             nav=True, in_navbar=True, align_end=True,   
                             children=[
-                                dbc.DropdownMenuItem("New Scan", href="/create-scan"),
+                                dbc.DropdownMenuItem("Import Scans", href="/create-scan"),
                                 dbc.DropdownMenuItem("New CA Reconstruction", href="/create-reconstruction"),
                                 dbc.DropdownMenuItem("New Wire Reconstruction", href="/create-wire-reconstruction"),
                                 dbc.DropdownMenuItem("New LaueGo Indexation", href="/create-peakindexing"),
