@@ -29,7 +29,6 @@ from laue_portal.analysis.projection import (
     _DEFAULT_TILT,
 )
 from laue_portal.analysis.orientation import (
-    batch_orientations,
     batch_crystal_directions,
 )
 from laue_portal.analysis.coloring import (
@@ -371,15 +370,13 @@ def make_pole_figure(
     # Look up surface vectors
     surf_normal, surf_roll, surf_tilt = get_surface_vectors(surface)
 
-    # Compute orientation matrices (NaN recip lattices -> identity)
-    orientations = batch_orientations(recip_lattices, lattice_params)
-
     # Generate hkl family
     family = cubic_hkl_family(*hkl)
 
-    # Compute pole figure points using the selected surface
+    # Compute pole figure points using the measured reciprocal lattices
+    # directly (matching Igor Pro's MakePolePoints: q = gm * hkl).
     points, grain_indices = pole_figure_points(
-        orientations, family,
+        recip_lattices, family,
         surface_normal=surf_normal,
         surface_roll=surf_roll,
         surface_tilt=surf_tilt,

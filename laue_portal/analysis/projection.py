@@ -315,19 +315,25 @@ def _line_weight(angle_deg, step_deg):
 # Pole Figure Computation
 # ===================================================================
 
-def pole_figure_points(orientations, hkl_family, surface_normal=None,
+def pole_figure_points(recip_lattices, hkl_family, surface_normal=None,
                        surface_roll=None, surface_tilt=None):
     """
     Compute pole figure scatter points.
 
-    For each grain orientation, transforms all symmetry-equivalent pole
-    directions into the lab frame and stereographically projects them
-    onto the sample surface plane.
+    For each grain, transforms all symmetry-equivalent pole directions
+    into the lab frame using the measured reciprocal lattice and
+    stereographically projects them onto the sample surface plane.
+
+    This matches Igor Pro's ``MakePolePoints`` (xmlMultiIndex.ipf) which
+    computes ``q = gm * hkl`` directly rather than going through an
+    intermediate orientation matrix.
 
     Parameters
     ----------
-    orientations : ndarray (N, 3, 3)
-        Orientation matrices (from ``batch_orientations``).
+    recip_lattices : ndarray (N, 3, 3)
+        Measured reciprocal lattice matrices with a*, b*, c* as **rows**
+        (as returned by ``xml_parser.parse_indexing_xml``).  Each
+        ``recip_lattices[i]`` is the 3x3 matrix for grain *i*.
     hkl_family : list of ndarray (3,)
         Symmetry-equivalent pole directions (from ``cubic_hkl_family``).
     surface_normal : ndarray (3,), optional
@@ -357,10 +363,13 @@ def pole_figure_points(orientations, hkl_family, surface_normal=None,
     all_y = []
     all_grains = []
 
-    for i, orient in enumerate(orientations):
+    for i, gm in enumerate(recip_lattices):
         for pole_dir in hkl_family:
-            # Transform pole to lab frame
-            vec = orient @ pole_dir
+            # Transform pole to lab frame using reciprocal lattice
+            # directly, matching Igor's: MatrixOp vec3 = gmi x vec3
+            # Python stores a*,b*,c* as rows, so gm.T @ hkl gives
+            # q = a*·h + b*·k + c*·l  (the lab-frame Q-vector).
+            vec = gm.T @ pole_dir
             vec_norm = np.linalg.norm(vec)
             if vec_norm < 1e-12:
                 continue

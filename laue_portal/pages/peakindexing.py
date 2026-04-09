@@ -861,20 +861,18 @@ def handle_pole_selection(selected_data, xml_path, hkl_str):
         try:
             import numpy as np
             from laue_portal.analysis.xml_parser import parse_indexing_xml
-            from laue_portal.analysis.orientation import batch_orientations
             from laue_portal.analysis.projection import (
                 pole_figure_points,
                 cubic_hkl_family,
             )
 
             parsed = parse_indexing_xml(xml_path)
-            orientations = batch_orientations(
-                parsed["recip_lattices"], parsed["lattice_params"],
-            )
 
             hkl = tuple(int(x) for x in hkl_str.split(","))
             family = cubic_hkl_family(*hkl)
-            points, grain_indices = pole_figure_points(orientations, family)
+            points, grain_indices = pole_figure_points(
+                parsed["recip_lattices"], family,
+            )
 
             # Apply same NaN filter as make_pole_figure so point indices
             # match the rendered trace
