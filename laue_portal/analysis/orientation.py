@@ -65,7 +65,7 @@ def recip_to_orientation(recip_lattice, reference_recip):
     """
     Compute orientation matrix from measured and reference reciprocal lattices.
 
-    R = measured @ inv(reference)
+    R = measured.T @ inv(reference.T)
 
     Parameters
     ----------
@@ -79,7 +79,11 @@ def recip_to_orientation(recip_lattice, reference_recip):
     ndarray (3, 3)
         Rotation / orientation matrix.
     """
-    return recip_lattice @ np.linalg.inv(reference_recip)
+    # Convention note: both matrices store a*, b*, c* as **rows** (Python
+    # convention), but the crystallographic relation G_meas = R @ G_ref
+    # assumes the column convention (Igor Pro / LaueGo).  Transpose both
+    # to match:  R = G_meas_col @ inv(G_ref_col) = meas.T @ inv(ref.T).
+    return recip_lattice.T @ np.linalg.inv(reference_recip.T)
 
 
 def orientation_to_rodrigues(R):
@@ -122,7 +126,7 @@ def crystal_direction_along_normal(recip_lattice, normal=None):
     """
     Compute crystal direction (hkl) that points along the sample normal.
 
-    hkl = inv(recip_lattice) @ normal
+    hkl = inv(recip_lattice.T) @ normal
 
     Parameters
     ----------
@@ -143,7 +147,14 @@ def crystal_direction_along_normal(recip_lattice, normal=None):
         normal = _DEFAULT_NORMAL
 
     try:
-        hkl = np.linalg.inv(recip_lattice) @ normal
+        # Convention note: the XML parser stores a*, b*, c* as **rows**
+        # (Python / numpy convention), but the crystallographic equation
+        # Q_lab = G @ hkl requires a*, b*, c* as **columns** (the Igor
+        # Pro / LaueGo convention used in xmlMultiIndex.ipf).  Transpose
+        # to convert from row convention to column convention before
+        # inverting.  See also pole_figure_points() in projection.py
+        # which applies the same transpose for the forward transform.
+        hkl = np.linalg.inv(recip_lattice.T) @ normal
     except np.linalg.LinAlgError:
         return np.zeros(3)
 

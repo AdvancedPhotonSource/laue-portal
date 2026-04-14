@@ -106,14 +106,15 @@ class TestRecipToOrientation:
 
     def test_returns_3x3(self):
         ref = lattice_params_to_reciprocal(0.40495, 0.40495, 0.40495, 90, 90, 90)
-        # Slightly rotated
+        # Slightly rotated.  Column-convention relation: G_cols = R @ G_ref_cols.
+        # Python stores rows, so: measured_rows = (R @ ref_rows.T).T
         angle = np.radians(10)
         rot = np.array([
             [np.cos(angle), -np.sin(angle), 0],
             [np.sin(angle),  np.cos(angle), 0],
             [0, 0, 1],
         ])
-        measured = rot @ ref
+        measured = (rot @ ref.T).T
         R = recip_to_orientation(measured, ref)
         assert R.shape == (3, 3)
 
@@ -126,7 +127,9 @@ class TestRecipToOrientation:
             [0, np.cos(angle), -np.sin(angle)],
             [0, np.sin(angle),  np.cos(angle)],
         ])
-        measured = rot @ ref
+        # Column-convention relation: G_cols = R @ G_ref_cols.
+        # Python stores rows, so: measured_rows = (R @ ref_rows.T).T
+        measured = (rot @ ref.T).T
         R = recip_to_orientation(measured, ref)
         np.testing.assert_allclose(R, rot, atol=1e-10)
 
@@ -207,7 +210,11 @@ class TestBatchOperations:
 
     @pytest.fixture
     def cubic_data(self):
-        """Synthetic data: 4 steps with known reciprocal lattices."""
+        """Synthetic data: 4 steps with known reciprocal lattices.
+
+        Uses column convention: G_cols = R @ G_ref_cols.
+        Python stores rows, so: measured_rows = (R @ ref.T).T
+        """
         lattice_params = np.array([0.40495, 0.40495, 0.40495, 90, 90, 90])
         ref = lattice_params_to_reciprocal(*lattice_params)
 
@@ -224,7 +231,7 @@ class TestBatchOperations:
                 R = np.array([[np.cos(a),0,np.sin(a)],[0,1,0],[-np.sin(a),0,np.cos(a)]])
             else:
                 R = np.array([[np.cos(a),-np.sin(a),0],[np.sin(a),np.cos(a),0],[0,0,1]])
-            recip_lattices[i] = R @ ref
+            recip_lattices[i] = (R @ ref.T).T
 
         return recip_lattices, lattice_params
 
