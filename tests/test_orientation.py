@@ -23,6 +23,7 @@ from laue_portal.analysis.orientation import (
     batch_rodrigues,
     CUBIC_SYMMETRY_OPS,
     misorientation_angle,
+    misorientation_from_reference,
     pairwise_misorientation,
 )
 
@@ -504,3 +505,106 @@ class TestPairwiseMisorientation:
         assert result["min"] <= result["mean"] <= result["max"]
         assert abs(result["min"] - 10.0) < 1e-4
         assert abs(result["max"] - 20.0) < 1e-4
+
+
+# ---------------------------------------------------------------------------
+# Misorientation from reference
+# ---------------------------------------------------------------------------
+
+class TestMisorientationFromReference:
+
+    @pytest.fixture
+    def orientations(self):
+        """3 orientation matrices: identity, 10 deg about z, 20 deg about z."""
+        R0 = np.eye(3)
+        a10 = np.radians(10)
+        R1 = np.array([
+            [np.cos(a10), -np.sin(a10), 0],
+            [np.sin(a10),  np.cos(a10), 0],
+            [0, 0, 1],
+        ])
+        a20 = np.radians(20)
+        R2 = np.array([
+            [np.cos(a20), -np.sin(a20), 0],
+            [np.sin(a20),  np.cos(a20), 0],
+            [0, 0, 1],
+        ])
+        return np.array([R0, R1, R2])
+
+    def test_returns_correct_keys(self, orientations):
+        result = misorientation_from_reference(orientations, ref_index=0)
+        assert "rodrigues" in result
+        assert "angles" in result
+
+    def test_shapes(self, orientations):
+        result = misorientation_from_reference(orientations, ref_index=0)
+        assert result["rodrigues"].shape == (3, 3)
+        assert result["angles"].shape == (3,)
+
+    def test_reference_is_zero(self, orientations):
+        """Reference grain should have zero Rodrigues vector and zero angle."""
+        result = misorientation_from_reference(orientations, ref_index=0)
+        np.testing.assert_allclose(result["rodrigues"][0], [0, 0, 0], atol=1e-12)
+        assert abs(result["angles"][0]) < 1e-12
+
+    def test_known_angles_no_symmetry(self, orientations):
+        """Without symmetry, angles from identity should be 0, 10, 20 deg."""
+        result = misorientation_from_reference(
+            orientations, ref_index=0, symmetry_reduce=False,
+        )
+        assert abs(result["angles"][0]) < 1e-8
+        assert abs(result["angles"][1] - 10.0) < 1e-4
+        assert abs(result["angles"][2] - 20.0) < 1e-4
+
+    def test_known_angles_with_symmetry(self, orientations):
+        """Small angles should be unchanged by symmetry reduction."""
+        result = misorientation_from_reference(
+            orientations, ref_index=0, symmetry_reduce=True,
+        )
+        assert abs(result["angles"][1] - 10.0) < 1e-4
+        assert abs(result["angles"][2] - 20.0) < 1e-4
+
+    def test_rodrigues_length_matches_angle(self, orientations):
+        """Rodrigues vector length should be tan(angle/2)."""
+        result = misorientation_from_reference(
+            orientations, ref_index=0, symmetry_reduce=False,
+        )
+        for i in range(1, 3):
+            length = np.linalg.norm(result["rodrigues"][i])
+            expected = np.tan(np.radians(result["angles"][i]) / 2.0)
+            assert abs(length - expected) < 1e-8
+
+    def test_nonzero_reference(self, orientations):
+        """Using grain 1 as reference: grain 0 should be 10 deg away, grain 2 10 deg."""
+        result = misorientation_from_reference(
+            orientations, ref_index=1, symmetry_reduce=False,
+        )
+        np.testing.assert_allclose(result["rodrigues"][1], [0, 0, 0], atol=1e-12)
+        assert abs(result["angles"][0] - 10.0) < 1e-4
+        assert abs(result["angles"][2] - 10.0) < 1e-4
+
+    def test_symmetry_reduces_90deg(self):
+        """90 deg about [001] is a cubic symmetry op -> angle should be 0."""
+        a90 = np.radians(90)
+        R0 = np.eye(3)
+        R1 = np.array([
+            [np.cos(a90), -np.sin(a90), 0],
+            [np.sin(a90),  np.cos(a90), 0],
+            [0, 0, 1],
+        ])
+        orientations = np.array([R0, R1])
+        result = misorientation_from_reference(
+            orientations, ref_index=0, symmetry_reduce=True,
+        )
+        assert abs(result["angles"][1]) < 1e-6
+
+    def test_consistency_with_pairwise(self, orientations):
+        """Angles from reference should match pairwise results for the same pairs."""
+        ref_result = misorientation_from_reference(
+            orientations, ref_index=0, symmetry_reduce=True,
+        )
+        for i in range(1, len(orientations)):
+            pairwise_angle = misorientation_angle(
+                orientations[0], orientations[i], symmetry_reduce=True,
+            )
+            assert abs(ref_result["angles"][i] - pairwise_angle) < 1e-6

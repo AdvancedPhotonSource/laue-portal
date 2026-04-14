@@ -22,20 +22,11 @@ dash.register_page(__name__, path="/peakindexing") # Simplified path
 # Visualization tabs (shown when XML results are available)
 # ---------------------------------------------------------------------------
 
-def _marker_size_control(slider_id, input_id, default_value=40):
-    """Reusable marker-size slider + number input."""
+def _marker_size_control(input_id, default_value=40):
+    """Reusable marker-size number input."""
     return dbc.Col([
         dbc.Label("Marker size:", className="me-2 mb-0",
                   style={"whiteSpace": "nowrap"}),
-        dcc.Input(
-            id=slider_id,
-            type="range",
-            min=1,
-            max=75,
-            step=1,
-            value=default_value,
-            style={"width": "160px"},
-        ),
         dbc.Input(
             id=input_id,
             type="number",
@@ -44,7 +35,7 @@ def _marker_size_control(slider_id, input_id, default_value=40):
             step=1,
             value=default_value,
             size="sm",
-            style={"width": "60px", "marginLeft": "8px"},
+            style={"width": "60px"},
         ),
     ], width="auto",
        style={"display": "flex", "alignItems": "center"})
@@ -77,6 +68,7 @@ _viz_tabs = dbc.Tabs(
                                 options=[
                                     {"label": "Cubic IPF", "value": "cubic_ipf"},
                                     {"label": "Rodrigues RGB", "value": "rodrigues"},
+                                    {"label": "Misorientation", "value": "misorientation"},
                                     {"label": "N Indexed", "value": "n_indexed"},
                                     {"label": "Goodness", "value": "goodness"},
                                     {"label": "RMS Error", "value": "rms_error"},
@@ -101,7 +93,7 @@ _viz_tabs = dbc.Tabs(
                                 style={"width": "110px", "display": "inline-block"},
                             ),
                         ], width="auto"),
-                        _marker_size_control("orientation-marker-slider", "orientation-marker-size"),
+                        _marker_size_control("orientation-marker-size"),
                         dbc.Col([
                             dbc.RadioItems(
                                 id="orientation-view-toggle",
@@ -171,7 +163,7 @@ _viz_tabs = dbc.Tabs(
                                 style={"width": "120px", "display": "inline-block"},
                             ),
                         ], width="auto"),
-                        _marker_size_control("stereo-marker-slider", "stereo-marker-size", default_value=12),
+                        _marker_size_control("stereo-marker-size", default_value=12),
                         dbc.Col([
                             dbc.Label("Color:", className="me-2"),
                             dbc.Select(
@@ -191,9 +183,9 @@ _viz_tabs = dbc.Tabs(
                             dbc.Input(
                                 id="stereo-color-rad",
                                 type="number",
-                                min=1,
+                                min=0.1,
                                 max=90,
-                                step=0.5,
+                                step="any",
                                 value=22.5,
                                 size="sm",
                                 style={"width": "75px"},
@@ -233,6 +225,18 @@ _viz_tabs = dbc.Tabs(
                             width="auto",
                             style={"paddingLeft": "3.5rem"},
                         ),
+                        # Reset color center button (hidden until a center is set)
+                        dbc.Col(
+                            dbc.Button(
+                                "Reset color center",
+                                id="pole-figure-reset-btn",
+                                color="secondary",
+                                size="sm",
+                            ),
+                            width="auto",
+                            id="pole-figure-reset-col",
+                            style={"display": "none"},
+                        ),
                     ], className="mb-3 align-items-center g-3"),
                     # Pole figure plot
                     dcc.Graph(
@@ -244,10 +248,20 @@ _viz_tabs = dbc.Tabs(
                         },
                         style={"height": "calc(100vh - 220px)", "minHeight": "400px"},
                     ),
+                    # Reference point info (click-to-recenter)
+                    html.Div(
+                        id="pole-figure-center-info",
+                        className="mt-2",
+                        children=html.Small(
+                            "Click a point to set color center.",
+                            className="text-muted",
+                        ),
+                    ),
+
                     # ROI selection info
                     html.Div(
                         id="stereo-selection-info",
-                        className="mt-3",
+                        className="mt-1",
                         children=html.Small(
                             "Use lasso or box select on the pole figure to pick regions of interest.",
                             className="text-muted",
@@ -302,7 +316,7 @@ _viz_tabs = dbc.Tabs(
                                 style={"width": "80px", "display": "inline-block"},
                             ),
                         ], width="auto"),
-                        _marker_size_control("stereoprojection-marker-slider",
+                        _marker_size_control(
                                              "stereoprojection-marker-size", default_value=12),
                         dbc.Col([
                             dbc.Button(
@@ -363,6 +377,8 @@ layout = html.Div([
     dcc.Store(id='peakindexing-xml-path'),
     # Store selected grain indices for cross-plot linking (Stage 3)
     dcc.Store(id='selected-grain-indices', data=[]),
+    # Store pole figure color center: {x, y, grain_index} or None
+    dcc.Store(id='pole-figure-center', data=None),
     dbc.Container(
         id='peakindexing-content-container',
         fluid=True,
@@ -518,19 +534,18 @@ def load_peakindexing_data(href):
 @callback(
     Output('orientation-map-graph', 'figure'),
     Output('orientation-marker-size', 'value'),
-    Output('orientation-marker-slider', 'value'),
     Output('orientation-loading-target', 'children'),
     Input('peakindexing-xml-path', 'data'),
     Input('orientation-color-select', 'value'),
     Input('orientation-surface-select', 'value'),
     Input('orientation-marker-size', 'value'),
-    Input('orientation-marker-slider', 'value'),
     Input('orientation-view-toggle', 'value'),
     Input('selected-grain-indices', 'data'),
+    Input('pole-figure-center', 'data'),
     prevent_initial_call=True,
 )
-def update_orientation_map(xml_path, color_by, surface, input_size, slider_size,
-                           view_mode, selected_grains):
+def update_orientation_map(xml_path, color_by, surface, input_size,
+                           view_mode, selected_grains, pole_center):
     if not xml_path:
         raise PreventUpdate
 
@@ -543,31 +558,31 @@ def update_orientation_map(xml_path, color_by, surface, input_size, slider_size,
 
         parsed = parse_indexing_xml(xml_path)
 
-        triggered = dash.ctx.triggered_id
-        if triggered == "orientation-marker-slider":
-            marker_size = slider_size
-        elif triggered == "orientation-marker-size":
-            marker_size = input_size
-        else:
-            marker_size = input_size if input_size is not None else 40
-
-        marker_size = max(1, int(marker_size))
+        marker_size = max(1, int(input_size or 40))
 
         from laue_portal.components.visualization.orientation_map import (
             apply_selection_highlight,
         )
 
+        # Determine effective color mode and reference grain.
+        effective_color = color_by or "cubic_ipf"
+        ref_grain_index = None
+        if pole_center and pole_center.get("grain_index") is not None:
+            ref_grain_index = pole_center["grain_index"]
+
         if view_mode == "3d":
             fig = make_orientation_map_3d(
-                parsed, color_by=color_by or "cubic_ipf",
+                parsed, color_by=effective_color,
                 marker_size=marker_size,
                 surface=surface or "normal",
+                ref_grain_index=ref_grain_index,
             )
         else:
             fig = make_orientation_map(
-                parsed, color_by=color_by or "cubic_ipf",
+                parsed, color_by=effective_color,
                 marker_size=marker_size,
                 surface=surface or "normal",
+                ref_grain_index=ref_grain_index,
             )
 
         # Cross-plot highlighting: dim unselected points, ring selected ones
@@ -575,7 +590,7 @@ def update_orientation_map(xml_path, color_by, surface, input_size, slider_size,
             apply_selection_highlight(fig, parsed, selected_grains, marker_size,
                                      is_3d=(view_mode == "3d"))
 
-        return fig, marker_size, marker_size, ""
+        return fig, marker_size, ""
     except PreventUpdate:
         raise
     except Exception as e:
@@ -669,21 +684,20 @@ def show_point_details(click_data, xml_path):
 @callback(
     Output('stereo-plot-graph', 'figure'),
     Output('stereo-marker-size', 'value'),
-    Output('stereo-marker-slider', 'value'),
     Output('stereo-color-rad-col', 'style'),
     Output('poles-loading-target', 'children'),
     Input('peakindexing-xml-path', 'data'),
     Input('stereo-hkl-select', 'value'),
     Input('stereo-marker-size', 'value'),
-    Input('stereo-marker-slider', 'value'),
     Input('stereo-color-select', 'value'),
     Input('stereo-color-rad', 'value'),
     Input('stereo-surface-select', 'value'),
+    Input('pole-figure-center', 'data'),
     prevent_initial_call=True,
 )
 def update_pole_figure(
-    xml_path, hkl_str, input_size, slider_size,
-    color_scheme, color_rad_deg, surface,
+    xml_path, hkl_str, input_size,
+    color_scheme, color_rad_deg, surface, pole_center,
 ):
     if not xml_path:
         raise PreventUpdate
@@ -701,16 +715,13 @@ def update_pole_figure(
 
         parsed = parse_indexing_xml(xml_path)
 
-        triggered = dash.ctx.triggered_id
-        if triggered == "stereo-marker-slider":
-            marker_size = slider_size
-        elif triggered == "stereo-marker-size":
-            marker_size = input_size
-        else:
-            marker_size = input_size if input_size is not None else 12
-
-        marker_size = max(1, int(marker_size))
+        marker_size = max(1, int(input_size or 12))
         hkl = tuple(int(x) for x in hkl_str.split(","))
+
+        # Pass center from store if available
+        center_xy = None
+        if pole_center and color_scheme == "hsv_position":
+            center_xy = (pole_center["x"], pole_center["y"])
 
         fig = make_pole_figure(
             parsed,
@@ -719,9 +730,10 @@ def update_pole_figure(
             color_rad_deg=float(color_rad_deg or 22.5),
             marker_size=marker_size,
             surface=surface or "normal",
+            center_xy=center_xy,
         )
 
-        return fig, marker_size, marker_size, rad_col_style, ""
+        return fig, marker_size, rad_col_style, ""
     except PreventUpdate:
         raise
     except Exception as e:
@@ -737,7 +749,6 @@ def update_pole_figure(
 @callback(
     Output('stereo-projection-graph', 'figure'),
     Output('stereoprojection-marker-size', 'value'),
-    Output('stereoprojection-marker-slider', 'value'),
     Output('stereo-zoom-label', 'children'),
     Output('stereo-loading-target', 'children'),
     Input('stereo-render-btn', 'n_clicks'),
@@ -746,12 +757,11 @@ def update_pole_figure(
     State('stereo-wulff-toggle', 'value'),
     State('stereo-wulff-step', 'value'),
     State('stereoprojection-marker-size', 'value'),
-    State('stereoprojection-marker-slider', 'value'),
     prevent_initial_call=True,
 )
 def render_stereo_projection(
     n_clicks, xml_path, zoom_deg,
-    show_wulff, wulff_step, input_size, slider_size,
+    show_wulff, wulff_step, input_size,
 ):
     if not xml_path:
         raise PreventUpdate
@@ -778,7 +788,7 @@ def render_stereo_projection(
             marker_size=marker_size,
         )
 
-        return fig, marker_size, marker_size, zoom_label, ""
+        return fig, marker_size, zoom_label, ""
     except PreventUpdate:
         raise
     except Exception as e:
@@ -813,6 +823,118 @@ def update_peak_table(xml_path):
         return html.Div(
             dbc.Alert(f"Could not load peak table: {e}", color="warning"),
         )
+
+
+# ---------------------------------------------------------------------------
+# Callback: handle click on pole figure to set/clear color center
+# ---------------------------------------------------------------------------
+
+@callback(
+    Output('pole-figure-center', 'data'),
+    Output('pole-figure-center-info', 'children'),
+    Output('pole-figure-reset-col', 'style'),
+    Output('orientation-color-select', 'value'),
+    Input('stereo-plot-graph', 'clickData'),
+    Input('pole-figure-reset-btn', 'n_clicks'),
+    State('pole-figure-center', 'data'),
+    State('peakindexing-xml-path', 'data'),
+    State('stereo-hkl-select', 'value'),
+    State('stereo-surface-select', 'value'),
+    State('orientation-color-select', 'value'),
+    prevent_initial_call=True,
+)
+def handle_pole_figure_click(click_data, reset_clicks, current_center,
+                             xml_path, hkl_str, surface, current_color_by):
+    """Set or clear the HSV color center when a point is clicked or reset is pressed."""
+    triggered = dash.ctx.triggered_id
+    _default_hint = html.Small(
+        "Click a point to set color center.",
+        className="text-muted",
+    )
+    _hide_btn = {"display": "none"}
+
+    # Reset button was clicked -- revert to default IPF coloring
+    if triggered == "pole-figure-reset-btn":
+        restore_color = "cubic_ipf"
+        if (current_center is not None
+                and current_center.get("prev_color_by")):
+            restore_color = current_center["prev_color_by"]
+        return None, _default_hint, _hide_btn, restore_color
+
+    # Pole figure click
+    if not click_data or not click_data.get("points"):
+        raise PreventUpdate
+
+    point = click_data["points"][0]
+
+    x = point.get("x")
+    y = point.get("y")
+    customdata = point.get("customdata")
+    if x is None or y is None:
+        raise PreventUpdate
+
+    # Extract grain index -- try customdata first, fall back to pointIndex
+    grain_index = None
+    if customdata is not None and len(customdata) > 0:
+        grain_index = int(customdata[0])
+    else:
+        # Scattergl may omit customdata in clickData.  Use pointIndex to
+        # look up the grain index from the pole figure mapping.
+        point_index = point.get("pointIndex", point.get("pointNumber"))
+        if point_index is not None and xml_path:
+            try:
+                import numpy as np
+                from laue_portal.analysis.xml_parser import parse_indexing_xml
+                from laue_portal.analysis.projection import (
+                    pole_figure_points,
+                    cubic_hkl_family,
+                    get_surface_vectors,
+                )
+
+                parsed = parse_indexing_xml(xml_path)
+                hkl = tuple(int(v) for v in hkl_str.split(","))
+                family = cubic_hkl_family(*hkl)
+                surf_normal, _, _ = get_surface_vectors(surface or "normal")
+                pts, grain_indices = pole_figure_points(
+                    parsed["recip_lattices"], family,
+                    surface_normal=surf_normal,
+                )
+                if len(pts) > 0:
+                    finite_mask = np.all(np.isfinite(pts), axis=1)
+                    grain_indices = grain_indices[finite_mask]
+                if 0 <= point_index < len(grain_indices):
+                    grain_index = int(grain_indices[point_index])
+            except Exception as e:
+                print(f"Error resolving grain index from click: {e}")
+                traceback.print_exc()
+
+    if grain_index is None:
+        raise PreventUpdate
+
+    # Toggle: clicking the current reference clears it
+    if (current_center is not None
+            and current_center.get("grain_index") == grain_index):
+        restore_color = "cubic_ipf"
+        if (current_center is not None
+                and current_center.get("prev_color_by")):
+            restore_color = current_center["prev_color_by"]
+        return None, _default_hint, _hide_btn, restore_color
+
+    # Save the current color mode so we can restore it on reset
+    prev_color = current_color_by if current_color_by != "misorientation" else "cubic_ipf"
+    new_center = {
+        "x": float(x), "y": float(y),
+        "grain_index": grain_index,
+        "prev_color_by": prev_color,
+    }
+    grain_label = f"grain #{grain_index}"
+    info = html.Small([
+        html.Strong("Color center: "),
+        f"{grain_label} at ({x:.3f}, {y:.3f})",
+    ])
+    _show_btn = {"display": "inline-block"}
+
+    return new_center, info, _show_btn, "misorientation"
 
 
 # ---------------------------------------------------------------------------

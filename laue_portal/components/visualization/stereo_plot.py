@@ -306,6 +306,7 @@ def make_pole_figure(
     color_rad_deg=22.5,
     marker_size=5,
     surface="normal",
+    center_xy=None,
 ):
     """
     Create a pole figure scatter plot.
@@ -340,6 +341,11 @@ def make_pole_figure(
     surface : str
         Surface direction name for the projection.  One of ``"normal"``
         (default 34ID-E), ``"X"``, ``"H"``, ``"Y"``, ``"Z"``.
+    center_xy : tuple of float, optional
+        ``(x0, y0)`` center for HSV position coloring.  Default ``(0, 0)``.
+        When a user clicks a point on the pole figure, pass its
+        stereographic coordinates here to recenter the HSV color wheel
+        (matching Igor Pro's cursor-based ``MakePolePoints``).
 
     Returns
     -------
@@ -391,7 +397,10 @@ def make_pole_figure(
     # Compute colors
     if color_scheme == "hsv_position" and len(points) > 0:
         # LaueGo-style HSV position coloring (MakePolePoints + poleXY2rgb)
-        x0, y0 = 0.0, 0.0  # center (cursor not applicable in web UI)
+        if center_xy is not None:
+            x0, y0 = float(center_xy[0]), float(center_xy[1])
+        else:
+            x0, y0 = 0.0, 0.0
         rmax = pole_figure_color_radius(x0, y0, color_rad_deg)
 
         N_grains = len(recip_lattices)
@@ -446,7 +455,10 @@ def make_pole_figure(
 
     # Color saturation circle overlay (HSV position mode only)
     if color_scheme == "hsv_position" and len(points) > 0:
-        x0, y0 = 0.0, 0.0
+        if center_xy is not None:
+            x0, y0 = float(center_xy[0]), float(center_xy[1])
+        else:
+            x0, y0 = 0.0, 0.0
         rmax = pole_figure_color_radius(x0, y0, color_rad_deg)
         theta_circle = np.linspace(0, 2 * np.pi, 100)
         fig.add_trace(go.Scattergl(
@@ -457,6 +469,7 @@ def make_pole_figure(
             showlegend=False,
             hoverinfo="skip",
         ))
+
 
     # Unit circle boundary
     theta = np.linspace(0, 2 * np.pi, 200)
@@ -469,6 +482,30 @@ def make_pole_figure(
         hoverinfo="skip",
     ))
 
+    # Crosshair (+) on the selected reference point, scaled to color radius
+    if center_xy is not None:
+        cx, cy = float(center_xy[0]), float(center_xy[1])
+        rmax = pole_figure_color_radius(cx, cy, color_rad_deg)
+        arm = rmax * 0.1  # 10% of color radius
+        # Horizontal bar
+        fig.add_trace(go.Scattergl(
+            x=[cx - arm, cx + arm],
+            y=[cy, cy],
+            mode="lines",
+            line=dict(color="black", width=2),
+            showlegend=False,
+            hoverinfo="skip",
+        ))
+        # Vertical bar
+        fig.add_trace(go.Scattergl(
+            x=[cx, cx],
+            y=[cy - arm, cy + arm],
+            mode="lines",
+            line=dict(color="black", width=2),
+            showlegend=False,
+            hoverinfo="skip",
+        ))
+
     fig.update_layout(
         xaxis=dict(
             range=[-1.1, 1.1],
@@ -477,12 +514,14 @@ def make_pole_figure(
             showgrid=False,
             zeroline=False,
             title="",
+            uirevision="pole-figure-x",
         ),
         yaxis=dict(
             range=[-1.1, 1.1],
             showgrid=False,
             zeroline=False,
             title="",
+            uirevision="pole-figure-y",
         ),
         plot_bgcolor=_GRAY_BG,
         paper_bgcolor="white",

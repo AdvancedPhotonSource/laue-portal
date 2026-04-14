@@ -18,7 +18,9 @@ import plotly.graph_objects as go
 
 from laue_portal.analysis.orientation import (
     batch_crystal_directions,
+    batch_orientations,
     batch_rodrigues,
+    misorientation_from_reference,
 )
 from laue_portal.analysis.coloring import (
     batch_ipf_colors,
@@ -31,7 +33,7 @@ from laue_portal.analysis.coloring import (
 _GRAY_BG = "rgb(156, 156, 156)"
 
 # Orientation color modes (no colorscale -- per-point RGB)
-_ORIENTATION_MODES = {"cubic_ipf", "rodrigues"}
+_ORIENTATION_MODES = {"cubic_ipf", "rodrigues", "misorientation"}
 
 # Scalar color modes (use Viridis colorscale + colorbar)
 _SCALAR_MODES = {"n_indexed", "goodness", "rms_error", "n_patterns"}
@@ -42,6 +44,7 @@ def make_orientation_map(
     color_by: str = "n_indexed",
     marker_size: int = 10,
     surface: str = "normal",
+    ref_grain_index: int = None,
 ) -> go.Figure:
     """
     Create a 2D orientation scatter plot.
@@ -52,12 +55,14 @@ def make_orientation_map(
         Output from xml_parser.parse_indexing_xml().
     color_by : str
         Coloring mode: 'n_indexed', 'goodness', 'rms_error', 'n_patterns',
-        'cubic_ipf', or 'rodrigues'.
+        'cubic_ipf', 'rodrigues', or 'misorientation'.
     marker_size : int
         Marker size in pixels.
     surface : str
         Surface direction name (``"normal"``, ``"X"``, ``"H"``, ``"Y"``,
         ``"Z"``).  Affects IPF crystal-direction coloring.
+    ref_grain_index : int, optional
+        Reference grain index for ``"misorientation"`` coloring.
 
     Returns
     -------
@@ -73,7 +78,8 @@ def make_orientation_map(
     fig = go.Figure()
 
     marker_dict = _build_marker_dict(parsed, color_by, marker_size, marker_symbol,
-                                     surface=surface)
+                                     surface=surface,
+                                     ref_grain_index=ref_grain_index)
 
     fig.add_trace(go.Scattergl(
         x=x_vals,
@@ -95,11 +101,13 @@ def make_orientation_map(
     fig.update_layout(
         xaxis_title=x_label,
         yaxis_title=y_label,
+        xaxis=dict(uirevision="orientation-2d-x"),
         plot_bgcolor=_GRAY_BG,
         paper_bgcolor="white",
         yaxis=dict(
             scaleanchor="x",
             scaleratio=1,
+            uirevision="orientation-2d-y",
         ),
         margin=dict(l=60, r=20, t=40, b=60),
         uirevision="orientation-2d",
@@ -114,6 +122,7 @@ def make_orientation_map_3d(
     color_by: str = "n_indexed",
     marker_size: int = 10,
     surface: str = "normal",
+    ref_grain_index: int = None,
 ) -> go.Figure:
     """
     Create a 3D orientation scatter plot using all three sample coordinates.
@@ -124,12 +133,14 @@ def make_orientation_map_3d(
         Output from xml_parser.parse_indexing_xml().
     color_by : str
         Coloring mode: 'n_indexed', 'goodness', 'rms_error', 'n_patterns',
-        'cubic_ipf', or 'rodrigues'.
+        'cubic_ipf', 'rodrigues', or 'misorientation'.
     marker_size : int
         Marker size in pixels.
     surface : str
         Surface direction name (``"normal"``, ``"X"``, ``"H"``, ``"Y"``,
         ``"Z"``).  Affects IPF crystal-direction coloring.
+    ref_grain_index : int, optional
+        Reference grain index for ``"misorientation"`` coloring.
 
     Returns
     -------
@@ -140,7 +151,8 @@ def make_orientation_map_3d(
     fig = go.Figure()
 
     marker_dict = _build_marker_dict(parsed, color_by, max(2, marker_size // 3),
-                                     surface=surface)
+                                     surface=surface,
+                                     ref_grain_index=ref_grain_index)
 
     fig.add_trace(go.Scatter3d(
         x=positions[:, 0],
@@ -182,7 +194,7 @@ def make_orientation_map_3d(
 # ---------------------------------------------------------------------------
 
 def _build_marker_dict(parsed, color_by, marker_size, marker_symbol=None,
-                       surface="normal"):
+                       surface="normal", ref_grain_index=None):
     """Build Plotly marker dict for the given coloring mode."""
     base = dict(
         size=marker_size,
@@ -192,7 +204,8 @@ def _build_marker_dict(parsed, color_by, marker_size, marker_symbol=None,
         base["symbol"] = marker_symbol
 
     if color_by in _ORIENTATION_MODES:
-        colors = _get_orientation_colors(parsed, color_by, surface=surface)
+        colors = _get_orientation_colors(parsed, color_by, surface=surface,
+                                         ref_grain_index=ref_grain_index)
         base["color"] = colors
         # No colorscale or colorbar for per-point RGB
     else:
@@ -261,7 +274,8 @@ def _get_scalar_color_values(parsed, color_by):
         return parsed["n_indexed"].astype(float), "N Indexed"
 
 
-def _get_orientation_colors(parsed, color_by, surface="normal"):
+def _get_orientation_colors(parsed, color_by, surface="normal",
+                            ref_grain_index=None):
     """Return list of 'rgb(r,g,b)' strings for orientation coloring modes."""
     recip_lattices = parsed["recip_lattices"]
     lattice_params = parsed["lattice_params"]
@@ -279,6 +293,20 @@ def _get_orientation_colors(parsed, color_by, surface="normal"):
     elif color_by == "rodrigues":
         rod_vecs = batch_rodrigues(recip_lattices, lattice_params)
         rgb = batch_rodrigues_rgb(rod_vecs)
+        return rgb_to_plotly_colors(rgb)
+
+    elif color_by == "misorientation" and ref_grain_index is not None:
+        orientations = batch_orientations(recip_lattices, lattice_params)
+        ref_idx = int(ref_grain_index)
+        if ref_idx < 0 or ref_idx >= len(orientations):
+            # Invalid reference -- fall back to IPF
+            crystal_dirs = batch_crystal_directions(recip_lattices,
+                                                    normal=surf_normal)
+            rgb = batch_ipf_colors(crystal_dirs)
+            return rgb_to_plotly_colors(rgb)
+
+        result = misorientation_from_reference(orientations, ref_idx)
+        rgb = batch_rodrigues_rgb(result["rodrigues"])
         return rgb_to_plotly_colors(rgb)
 
     else:

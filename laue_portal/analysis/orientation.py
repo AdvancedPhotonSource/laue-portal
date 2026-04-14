@@ -374,6 +374,102 @@ def misorientation_angle(R1, R2, symmetry_reduce=True):
     return float(np.min(angles))
 
 
+def misorientation_from_reference(orientations, ref_index, symmetry_reduce=True):
+    """
+    Compute symmetry-reduced misorientation of every grain relative to one
+    reference grain.  Returns Rodrigues vectors suitable for RGB coloring.
+
+    Ports the inner loop of Igor's ``ProcessLoadedXMLfile``
+    (xmlMultiIndex.ipf:4193-4241) combined with ``makeRGBJZT``.
+
+    Complexity is O(N * 24) -- linear in the number of grains, fully
+    vectorized across symmetry operations.
+
+    Parameters
+    ----------
+    orientations : ndarray (N, 3, 3)
+        Orientation matrices for all grains.
+    ref_index : int
+        Index of the reference grain.
+    symmetry_reduce : bool
+        Apply cubic symmetry reduction (default True).
+
+    Returns
+    -------
+    dict
+        ``rodrigues`` : ndarray (N, 3) -- Rodrigues vectors relative to the
+            reference grain.  The reference grain itself has [0, 0, 0].
+        ``angles`` : ndarray (N,) -- misorientation angles in degrees.
+    """
+    N = len(orientations)
+    R_ref = orientations[ref_index]
+    R_ref_inv = np.linalg.inv(R_ref)
+
+    rodrigues = np.zeros((N, 3))
+    angles = np.zeros(N)
+
+    if symmetry_reduce:
+        # Pre-compute all 24 symmetry-equivalent inverses of the reference:
+        #   S.T @ R_ref_inv  for each symmetry op S  -> shape (24, 3, 3)
+        sym_ref_inv = _SYM_OPS_T @ R_ref_inv  # (24, 3, 3)
+
+        for i in range(N):
+            if i == ref_index:
+                continue  # stays at zero
+
+            # C_all[s] = R_i @ sym_ref_inv[s]  ->  (24, 3, 3)
+            C_all = orientations[i] @ sym_ref_inv  # (24, 3, 3)
+            traces = C_all[:, 0, 0] + C_all[:, 1, 1] + C_all[:, 2, 2]
+            all_angles = np.degrees(
+                np.arccos(np.clip((traces - 1.0) / 2.0, -1.0, 1.0))
+            )
+            best = int(np.argmin(all_angles))
+            angle = all_angles[best]
+            angles[i] = angle
+
+            if angle < 1e-12:
+                continue
+
+            C = C_all[best]
+            axis = np.array([
+                C[1, 2] - C[2, 1],
+                C[2, 0] - C[0, 2],
+                C[0, 1] - C[1, 0],
+            ])
+            axis_norm = np.linalg.norm(axis)
+            if axis_norm < 1e-12:
+                continue
+            axis /= axis_norm
+            rodrigues[i] = axis * np.tan(np.radians(angle) / 2.0)
+    else:
+        for i in range(N):
+            if i == ref_index:
+                continue
+            C = orientations[i] @ R_ref_inv
+            trace = C[0, 0] + C[1, 1] + C[2, 2]
+            angle = np.degrees(
+                np.arccos(np.clip((trace - 1.0) / 2.0, -1.0, 1.0))
+            )
+            angles[i] = angle
+            if angle < 1e-12:
+                continue
+            axis = np.array([
+                C[1, 2] - C[2, 1],
+                C[2, 0] - C[0, 2],
+                C[0, 1] - C[1, 0],
+            ])
+            axis_norm = np.linalg.norm(axis)
+            if axis_norm < 1e-12:
+                continue
+            axis /= axis_norm
+            rodrigues[i] = axis * np.tan(np.radians(angle) / 2.0)
+
+    return {
+        "rodrigues": rodrigues,
+        "angles": angles,
+    }
+
+
 def pairwise_misorientation(orientations, indices=None, symmetry_reduce=True):
     """
     Compute pairwise misorientation angles for a subset of grains.
