@@ -1,26 +1,28 @@
-import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, set_props, State
-from dash.exceptions import PreventUpdate
-import dash
 import base64
-import yaml
-import os
-import urllib.parse
-import laue_portal.database.db_utils as db_utils
 import datetime
-import laue_portal.database.db_schema as db_schema
-from sqlalchemy.orm import Session
 import logging
+import urllib.parse
+
+import dash
+import dash_bootstrap_components as dbc
+import yaml
+from dash import Input, State, dcc, html, set_props
+from dash.exceptions import PreventUpdate
+from sqlalchemy.orm import Session
+
+import laue_portal.database.db_schema as db_schema
+import laue_portal.database.db_utils as db_utils
+
 logger = logging.getLogger(__name__)
 import laue_portal.components.navbar as navbar
-from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix
-from laue_portal.components.recon_form import recon_form, set_recon_form_props
-from laue_portal.processing.redis_utils import enqueue_reconstruction, STATUS_REVERSE_MAPPING
-from laue_portal.config import DEFAULT_VARIABLES
 import laue_portal.database.session_utils as session_utils
+from laue_portal.components.recon_form import recon_form, set_recon_form_props
+from laue_portal.config import DEFAULT_VARIABLES
+from laue_portal.database.db_utils import remove_root_path_prefix
+from laue_portal.processing.redis_utils import STATUS_REVERSE_MAPPING, enqueue_reconstruction
 
 JOB_DEFAULTS = {
-    "computer_name": 'example_computer',
+    "computer_name": "example_computer",
     "status": 0,
     "priority": 0,
     "submit_time": datetime.datetime.now(),
@@ -29,166 +31,159 @@ JOB_DEFAULTS = {
 }
 
 RECON_DEFAULTS = {
-    'calib_id': 0,
+    "calib_id": 0,
 }
 
 dash.register_page(__name__)
 
 layout = dbc.Container(
-    [html.Div([
-        navbar.navbar,
-        dcc.Location(id='url-create-recon', refresh=False),
-        dbc.Alert(
-            id="alert-upload",
-            dismissable=True,
-            is_open=False,
-        ),
-        dbc.Alert(
-            id="alert-submit",
-            dismissable=True,
-            is_open=False,
-        ),
-        dbc.Alert(
-            id="alert-submit-job",
-            dismissable=True,
-            is_open=False,
-        ),
-        dbc.Alert(
-            "Scan data loaded successfully",
-            id="alert-scan-loaded",
-            dismissable=True,
-            is_open=False,
-            color="success",
-        ),
-        html.Hr(),
-        html.Center(
-            html.Div(
-                [
-                    html.Div([
-                            dcc.Upload(dbc.Button('Upload Config'), id='upload-config'),
-                    ], style={'display':'inline-block'}),
-                ],
-            )
-        ),
-        html.Hr(),
-        html.Center(
-            dbc.Button('Submit', id='submit_recon', color='primary'),
-        ),
-        html.Hr(),
-        recon_form,
+    [
+        html.Div(
+            [
+                navbar.navbar,
+                dcc.Location(id="url-create-recon", refresh=False),
+                dbc.Alert(
+                    id="alert-upload",
+                    dismissable=True,
+                    is_open=False,
+                ),
+                dbc.Alert(
+                    id="alert-submit",
+                    dismissable=True,
+                    is_open=False,
+                ),
+                dbc.Alert(
+                    id="alert-submit-job",
+                    dismissable=True,
+                    is_open=False,
+                ),
+                dbc.Alert(
+                    "Scan data loaded successfully",
+                    id="alert-scan-loaded",
+                    dismissable=True,
+                    is_open=False,
+                    color="success",
+                ),
+                html.Hr(),
+                html.Center(
+                    html.Div(
+                        [
+                            html.Div(
+                                [
+                                    dcc.Upload(dbc.Button("Upload Config"), id="upload-config"),
+                                ],
+                                style={"display": "inline-block"},
+                            ),
+                        ],
+                    )
+                ),
+                html.Hr(),
+                html.Center(
+                    dbc.Button("Submit", id="submit_recon", color="primary"),
+                ),
+                html.Hr(),
+                recon_form,
+            ],
+        )
     ],
-    )
-    ],
-    className='dbc', 
-    fluid=True
+    className="dbc",
+    fluid=True,
 )
 
 
 @dash.callback(
-    Input('upload-config', 'contents'),
+    Input("upload-config", "contents"),
     prevent_initial_call=True,
 )
 def upload_config(contents):
     try:
-        content_type, content_string = contents.split(',')
+        content_type, content_string = contents.split(",")
         decoded = base64.b64decode(content_string)
         config = yaml.safe_load(decoded)
         recon_row = db_utils.import_recon_row(config)
 
-        set_props("alert-upload", {'is_open': True, 
-                                    'children': 'Config uploaded successfully',
-                                    'color': 'success'})
+        set_props("alert-upload", {"is_open": True, "children": "Config uploaded successfully", "color": "success"})
         set_recon_form_props(recon_row)
 
     except Exception as e:
-        set_props("alert-upload", {'is_open': True, 
-                                    'children': f'Upload Failed! Error: {e}',
-                                    'color': 'danger'})
+        set_props("alert-upload", {"is_open": True, "children": f"Upload Failed! Error: {e}", "color": "danger"})
 
 
 @dash.callback(
-    Input('submit_recon', 'n_clicks'),
-
-    State('scanNumber', 'value'),
-    State('frame_start', 'value'),
-    State('frame_end', 'value'),
-    State('x_start', 'value'),
-    State('x_end', 'value'),
-    State('y_start', 'value'),
-    State('y_end', 'value'),
-    State('depth_start', 'value'),
-    State('depth_end', 'value'),
-    State('depth_resolution', 'value'),
-    State('recon_name', 'value'),
-    
-    State('file_path', 'value'),
-    State('file_output', 'value'),
-    State('data_stacked', 'value'),
-    State('h5_key', 'value'),
-
-    State('cenx', 'value'),
-    State('ceny', 'value'),
-    State('cenz', 'value'),
-    State('anglex', 'value'),
-    State('angley', 'value'),
-    State('anglez', 'value'),
-    State('shift', 'value'),
-
-    State('mask_path', 'value'),
-    State('reversed', 'value'),
-    State('bitsize_0', 'value'),
-    State('bitsize_1', 'value'),
-    State('thickness', 'value'),
-    State('resolution', 'value'),
-    State('widening', 'value'),
-    State('pad', 'value'),
-    State('stretch', 'value'),
-
-    State('step', 'value'),
-    State('mot_rot_a', 'value'),
-    State('mot_rot_b', 'value'),
-    State('mot_rot_c', 'value'),
-    State('mot_axis_x', 'value'),
-    State('mot_axis_y', 'value'),
-    State('mot_axis_z', 'value'),
-    State('pixels_x', 'value'),
-    State('pixels_y', 'value'),
-    State('size_x', 'value'),
-    State('size_y', 'value'),
-    State('det_rot_a', 'value'),
-    State('det_rot_b', 'value'),
-    State('det_rot_c', 'value'),
-    State('det_pos_x', 'value'),
-    State('det_pos_y', 'value'),
-    State('det_pos_z', 'value'),
-    State('source_offset', 'value'),
-
-    State('iters', 'value'),
-    State('pos_method', 'value'),
-    State('pos_regpar', 'value'),
-    State('pos_init', 'value'),
-    State('recon_sig', 'value'),
-    State('sig_method', 'value'),
-    State('sig_order', 'value'),
-    State('sig_scale', 'value'),
-    State('sig_maxsize', 'value'),
-    State('sig_avgsize', 'value'),
-    State('sig_atol', 'value'),
-    State('recon_ene', 'value'),
-    State('exact_ene', 'value'),
-    State('ene_method', 'value'),
-    State('ene_min', 'value'),
-    State('ene_max', 'value'),
-    State('ene_step', 'value'),
-    
-    State('author', 'value'),
-    State('notes', 'value'),
-    
+    Input("submit_recon", "n_clicks"),
+    State("scanNumber", "value"),
+    State("frame_start", "value"),
+    State("frame_end", "value"),
+    State("x_start", "value"),
+    State("x_end", "value"),
+    State("y_start", "value"),
+    State("y_end", "value"),
+    State("depth_start", "value"),
+    State("depth_end", "value"),
+    State("depth_resolution", "value"),
+    State("recon_name", "value"),
+    State("file_path", "value"),
+    State("file_output", "value"),
+    State("data_stacked", "value"),
+    State("h5_key", "value"),
+    State("cenx", "value"),
+    State("ceny", "value"),
+    State("cenz", "value"),
+    State("anglex", "value"),
+    State("angley", "value"),
+    State("anglez", "value"),
+    State("shift", "value"),
+    State("mask_path", "value"),
+    State("reversed", "value"),
+    State("bitsize_0", "value"),
+    State("bitsize_1", "value"),
+    State("thickness", "value"),
+    State("resolution", "value"),
+    State("widening", "value"),
+    State("pad", "value"),
+    State("stretch", "value"),
+    State("step", "value"),
+    State("mot_rot_a", "value"),
+    State("mot_rot_b", "value"),
+    State("mot_rot_c", "value"),
+    State("mot_axis_x", "value"),
+    State("mot_axis_y", "value"),
+    State("mot_axis_z", "value"),
+    State("pixels_x", "value"),
+    State("pixels_y", "value"),
+    State("size_x", "value"),
+    State("size_y", "value"),
+    State("det_rot_a", "value"),
+    State("det_rot_b", "value"),
+    State("det_rot_c", "value"),
+    State("det_pos_x", "value"),
+    State("det_pos_y", "value"),
+    State("det_pos_z", "value"),
+    State("source_offset", "value"),
+    State("iters", "value"),
+    State("pos_method", "value"),
+    State("pos_regpar", "value"),
+    State("pos_init", "value"),
+    State("recon_sig", "value"),
+    State("sig_method", "value"),
+    State("sig_order", "value"),
+    State("sig_scale", "value"),
+    State("sig_maxsize", "value"),
+    State("sig_avgsize", "value"),
+    State("sig_atol", "value"),
+    State("recon_ene", "value"),
+    State("exact_ene", "value"),
+    State("ene_method", "value"),
+    State("ene_min", "value"),
+    State("ene_max", "value"),
+    State("ene_step", "value"),
+    State("author", "value"),
+    State("notes", "value"),
     prevent_initial_call=True,
 )
-def submit_config(n,
+def submit_config(
+    n,
     scanNumbers,
-
     frame_start,
     frame_end,
     x_start,
@@ -199,12 +194,10 @@ def submit_config(n,
     depth_end,
     depth_resolution,
     recon_name,
-
     file_path,
     file_output,
     data_stacked,
     h5_key,
-
     cenx,
     ceny,
     cenz,
@@ -212,7 +205,6 @@ def submit_config(n,
     angley,
     anglez,
     shift,
-
     mask_path,
     mask_reversed,
     bitsize_0,
@@ -222,7 +214,6 @@ def submit_config(n,
     widening,
     pad,
     stretch,
-
     step,
     mot_rot_a,
     mot_rot_b,
@@ -241,7 +232,6 @@ def submit_config(n,
     det_pos_y,
     det_pos_z,
     source_offset,
-
     iters,
     pos_method,
     pos_regpar,
@@ -259,59 +249,53 @@ def submit_config(n,
     ene_min,
     ene_max,
     ene_step,
-    
     author,
     notes,
 ):
-    for scanNumber in str(scanNumbers).split(','):
+    for scanNumber in str(scanNumbers).split(","):
         now = datetime.datetime.now()
-        
+
         job = db_schema.Job(
-            computer_name=JOB_DEFAULTS['computer_name'],
-            status=JOB_DEFAULTS['status'],
-            priority=JOB_DEFAULTS['priority'],
+            computer_name=JOB_DEFAULTS["computer_name"],
+            status=JOB_DEFAULTS["status"],
+            priority=JOB_DEFAULTS["priority"],
             submit_time=now,
             start_time=now,
             finish_time=now,
         )
 
         with Session(session_utils.get_engine()) as session:
-            
             session.add(job)
             session.flush()
             job_id = job.job_id
-            
-            for i in range(6):
+
+            for _ in range(6):
                 subjob = db_schema.SubJob(
                     job_id=job_id,
-                    computer_name=JOB_DEFAULTS['computer_name'],
+                    computer_name=JOB_DEFAULTS["computer_name"],
                     status=STATUS_REVERSE_MAPPING["Queued"],
-                    priority=JOB_DEFAULTS['priority']
+                    priority=JOB_DEFAULTS["priority"],
                 )
                 session.add(subjob)
-            
+
             recon = db_schema.Recon(
                 scanNumber=scanNumber,
-                calib_id=RECON_DEFAULTS['calib_id'],
+                calib_id=RECON_DEFAULTS["calib_id"],
                 job_id=job_id,
-                
                 author=author,
                 notes=notes,
-
                 file_path=file_path,
                 file_output=file_output,
                 file_stacked=data_stacked,
                 file_range=[frame_start, frame_end],
                 file_threshold=0,
                 file_frame=[x_start, x_end, y_start, y_end],
-                file_ext='h5',
+                file_ext="h5",
                 file_h5_key=h5_key,
-                
-                comp_server='TODO',
+                comp_server="TODO",
                 comp_workers=0,
                 comp_usegpu=True,
                 comp_batch_size=0,
-                
                 geo_mask_path=mask_path,
                 geo_mask_reversed=mask_reversed,
                 geo_mask_bitsizes=[bitsize_0, bitsize_1],
@@ -323,28 +307,23 @@ def submit_config(n,
                 geo_mask_pad=pad,
                 geo_mask_stretch=stretch,
                 geo_mask_shift=shift,
-
                 geo_mask_focus_cenx=cenx,
-                geo_mask_focus_dist=ceny, 
+                geo_mask_focus_dist=ceny,
                 geo_mask_focus_anglez=anglez,
                 geo_mask_focus_angley=angley,
                 geo_mask_focus_anglex=anglex,
                 geo_mask_focus_cenz=cenz,
-
                 geo_mask_cal_id=0,
-                geo_mask_cal_path='TODO',
-
+                geo_mask_cal_path="TODO",
                 geo_scanner_step=step,
                 geo_scanner_rot=[mot_rot_a, mot_rot_b, mot_rot_c],
                 geo_scanner_axis=[mot_axis_x, mot_axis_y, mot_axis_z],
-
                 geo_detector_shape=[pixels_x, pixels_y],
                 geo_detector_size=[size_x, size_y],
                 geo_detector_rot=[det_rot_a, det_rot_b, det_rot_c],
                 geo_detector_pos=[det_pos_x, det_pos_y, det_pos_z],
                 geo_source_offset=source_offset,
                 geo_source_grid=[depth_start, depth_end, depth_resolution],
-
                 algo_iter=iters,
                 algo_pos_method=pos_method,
                 algo_pos_regpar=pos_regpar,
@@ -366,27 +345,27 @@ def submit_config(n,
             config_dict = db_utils.create_config_obj(recon)
 
             session.commit()
-            
-            set_props("alert-submit", {'is_open': True, 
-                                        'children': 'Config Added to Database',
-                                        'color': 'success'})
+
+            set_props("alert-submit", {"is_open": True, "children": "Config Added to Database", "color": "success"})
 
             try:
                 rq_job_id = enqueue_reconstruction(job_id, config_dict)
                 logger.info(f"Job {job_id} enqueued with RQ ID: {rq_job_id}")
-                
-                set_props("alert-submit-job", {'is_open': True, 
-                                               'children': f'Job {job_id} submitted to queue',
-                                               'color': 'info'})
+
+                set_props(
+                    "alert-submit-job",
+                    {"is_open": True, "children": f"Job {job_id} submitted to queue", "color": "info"},
+                )
             except Exception as e:
                 logger.error(f"Failed to enqueue job: {e}")
-                set_props("alert-submit-job", {'is_open': True, 
-                                               'children': f'Failed to queue job: {str(e)}',
-                                               'color': 'danger'})
+                set_props(
+                    "alert-submit-job",
+                    {"is_open": True, "children": f"Failed to queue job: {str(e)}", "color": "danger"},
+                )
 
 
 @dash.callback(
-    Input('url-create-recon', 'href'),
+    Input("url-create-recon", "href"),
     prevent_initial_call=True,
 )
 def load_scan_data_from_url(href):
@@ -396,48 +375,56 @@ def load_scan_data_from_url(href):
 
     parsed_url = urllib.parse.urlparse(href)
     query_params = urllib.parse.parse_qs(parsed_url.query)
-    
-    scan_id = query_params.get('scan_id', [None])[0]
-    recon_id = query_params.get('recon_id', [None])[0]
+
+    scan_id = query_params.get("scan_id", [None])[0]
+    recon_id = query_params.get("recon_id", [None])[0]
     root_path = DEFAULT_VARIABLES.get("root_path", "")
 
     if scan_id:
         with Session(session_utils.get_engine()) as session:
             try:
                 scan_id = int(scan_id)
-                
+
                 if recon_id:
                     try:
                         recon_id = int(recon_id)
-                        recon_data = session.query(db_schema.Recon).filter(
-                            db_schema.Recon.recon_id == recon_id
-                        ).first()
-                        
+                        recon_data = session.query(db_schema.Recon).filter(db_schema.Recon.recon_id == recon_id).first()
+
                         if recon_data:
-                            recon_data.file_path = remove_root_path_prefix(recon_data.file_path, root_path) if recon_data.file_path else ""
-                            recon_data.file_output = remove_root_path_prefix(recon_data.file_output, root_path) if recon_data.file_output else ""
-                            recon_data.geo_mask_path = remove_root_path_prefix(recon_data.geo_mask_path, root_path) if recon_data.geo_mask_path else ""
-                            
+                            recon_data.file_path = (
+                                remove_root_path_prefix(recon_data.file_path, root_path) if recon_data.file_path else ""
+                            )
+                            recon_data.file_output = (
+                                remove_root_path_prefix(recon_data.file_output, root_path)
+                                if recon_data.file_output
+                                else ""
+                            )
+                            recon_data.geo_mask_path = (
+                                remove_root_path_prefix(recon_data.geo_mask_path, root_path)
+                                if recon_data.geo_mask_path
+                                else ""
+                            )
+
                             set_recon_form_props(recon_data)
-                            
-                            set_props("alert-scan-loaded", {
-                                'is_open': True, 
-                                'children': f'Loaded existing reconstruction {recon_id} data for scan {scan_id}',
-                                'color': 'success'
-                            })
+
+                            set_props(
+                                "alert-scan-loaded",
+                                {
+                                    "is_open": True,
+                                    "children": f"Loaded existing reconstruction {recon_id} data for scan {scan_id}",
+                                    "color": "success",
+                                },
+                            )
                             return
                     except Exception as e:
                         logger.warning(f"Failed to load recon {recon_id}: {e}")
-                
-                set_props("alert-scan-loaded", {
-                    'is_open': True, 
-                    'children': f'Loaded scan {scan_id} data',
-                    'color': 'info'
-                })
-                
+
+                set_props(
+                    "alert-scan-loaded", {"is_open": True, "children": f"Loaded scan {scan_id} data", "color": "info"}
+                )
+
             except Exception as e:
-                set_props("alert-scan-loaded", {
-                    'is_open': True, 
-                    'children': f'Error loading data: {str(e)}',
-                    'color': 'danger'
-                })
+                set_props(
+                    "alert-scan-loaded",
+                    {"is_open": True, "children": f"Error loading data: {str(e)}", "color": "danger"},
+                )

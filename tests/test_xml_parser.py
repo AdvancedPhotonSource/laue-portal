@@ -6,16 +6,17 @@ Uses a synthetic fixture XML at tests/fixtures/test_indexing.xml.
 
 import os
 import sys
+
 import numpy as np
 import pytest
 
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 from laue_portal.analysis.xml_parser import (
-    parse_indexing_xml,
-    get_step_peaks,
     get_all_indexed_peaks,
+    get_step_peaks,
+    parse_indexing_xml,
 )
 
 FIXTURE_XML = os.path.join(os.path.dirname(__file__), "fixtures", "test_indexing.xml")
@@ -30,17 +31,26 @@ def parsed():
 # parse_indexing_xml tests
 # ---------------------------------------------------------------------------
 
-class TestParseIndexingXml:
 
+class TestParseIndexingXml:
     def test_returns_dict(self, parsed):
         assert isinstance(parsed, dict)
 
     def test_required_keys_present(self, parsed):
         expected_keys = [
-            "positions", "depths", "energies", "scan_nums",
-            "n_patterns", "recip_lattices", "rms_errors",
-            "goodnesses", "n_indexed", "space_group",
-            "lattice_params", "structure_desc", "_steps",
+            "positions",
+            "depths",
+            "energies",
+            "scan_nums",
+            "n_patterns",
+            "recip_lattices",
+            "rms_errors",
+            "goodnesses",
+            "n_indexed",
+            "space_group",
+            "lattice_params",
+            "structure_desc",
+            "_steps",
         ]
         for key in expected_keys:
             assert key in parsed, f"Missing key: {key}"
@@ -104,8 +114,8 @@ class TestParseIndexingXml:
 # get_step_peaks tests
 # ---------------------------------------------------------------------------
 
-class TestGetStepPeaks:
 
+class TestGetStepPeaks:
     def test_returns_dict(self, parsed):
         assert isinstance(get_step_peaks(parsed, 0), dict)
 
@@ -145,8 +155,8 @@ class TestGetStepPeaks:
 # get_all_indexed_peaks tests
 # ---------------------------------------------------------------------------
 
-class TestGetAllIndexedPeaks:
 
+class TestGetAllIndexedPeaks:
     def test_returns_list(self, parsed):
         assert isinstance(get_all_indexed_peaks(parsed), list)
 
@@ -154,11 +164,22 @@ class TestGetAllIndexedPeaks:
         rows = get_all_indexed_peaks(parsed)
         assert len(rows) > 0
         expected = [
-            "step_index", "step_scan_num", "pattern_num",
-            "h", "k", "l", "peak_index",
-            "x_pixel", "y_pixel", "intensity", "integral",
-            "qx", "qy", "qz",
-            "rms_error", "goodness",
+            "step_index",
+            "step_scan_num",
+            "pattern_num",
+            "h",
+            "k",
+            "l",
+            "peak_index",
+            "x_pixel",
+            "y_pixel",
+            "intensity",
+            "integral",
+            "qx",
+            "qy",
+            "qz",
+            "rms_error",
+            "goodness",
         ]
         for key in expected:
             assert key in rows[0], f"Missing key: {key}"
@@ -186,10 +207,10 @@ class TestGetAllIndexedPeaks:
 # Edge cases
 # ---------------------------------------------------------------------------
 
-class TestEdgeCases:
 
+class TestEdgeCases:
     def test_nonexistent_file_raises(self):
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             parse_indexing_xml("/nonexistent/path.xml")
 
     def test_all_steps_parseable(self, parsed):

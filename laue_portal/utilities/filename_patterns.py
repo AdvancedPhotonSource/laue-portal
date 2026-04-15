@@ -32,16 +32,10 @@ def filter_files_by_extension(directory_path, valid_extensions):
     Returns:
         List of matching filenames (basename only, not full paths).
     """
-    all_files = [
-        f for f in os.listdir(directory_path)
-        if os.path.isfile(os.path.join(directory_path, f))
-    ]
+    all_files = [f for f in os.listdir(directory_path) if os.path.isfile(os.path.join(directory_path, f))]
 
     if valid_extensions:
-        return [
-            f for f in all_files
-            if any(f.lower().endswith(ext.lower()) for ext in valid_extensions)
-        ]
+        return [f for f in all_files if any(f.lower().endswith(ext.lower()) for ext in valid_extensions)]
     return all_files
 
 
@@ -61,8 +55,8 @@ def extract_index_patterns(files, num_indices):
         Dict mapping pattern strings to lists of index lists, e.g.::
 
             {
-                'Si_wire_%d.h5':      [[7], [8], [9]],
-                'Si_wire_%d_%d.h5':   [[7, 5], [8, 5]],
+                "Si_wire_%d.h5": [[7], [8], [9]],
+                "Si_wire_%d_%d.h5": [[7, 5], [8, 5]],
             }
     """
     pattern_files = {}
@@ -73,21 +67,16 @@ def extract_index_patterns(files, num_indices):
         matched = False
         for n in range(num_indices, 0, -1):
             if n == 1:
-                regex_pattern = r'(\d+)(?!.*\d)'
+                regex_pattern = r"(\d+)(?!.*\d)"
             else:
-                regex_pattern = r'_'.join([r'(\d+)'] * n) + r'(?!.*\d)'
+                regex_pattern = r"_".join([r"(\d+)"] * n) + r"(?!.*\d)"
 
             match = re.search(regex_pattern, base_name)
             if match:
                 indices = [int(match.group(i)) for i in range(1, n + 1)]
 
-                placeholder = '_'.join(['%d'] * n)
-                pattern = (
-                    base_name[:match.start()]
-                    + placeholder
-                    + base_name[match.end():]
-                    + extension
-                )
+                placeholder = "_".join(["%d"] * n)
+                pattern = base_name[: match.start()] + placeholder + base_name[match.end() :] + extension
 
                 pattern_files.setdefault(pattern, []).append(indices)
                 matched = True
@@ -103,7 +92,7 @@ def extract_index_patterns(files, num_indices):
 # Segment-level wildcard generation
 # ---------------------------------------------------------------------------
 
-_PLACEHOLDER_TOKEN = '\x00'  # sentinel used during segment splitting
+_PLACEHOLDER_TOKEN = "\x00"  # sentinel used during segment splitting
 
 
 def _split_pattern_segments(pattern):
@@ -129,9 +118,9 @@ def _split_pattern_segments(pattern):
     base, ext = os.path.splitext(pattern)
 
     # Temporarily replace %d so underscores inside it aren't split
-    protected = base.replace('%d', _PLACEHOLDER_TOKEN)
-    parts = protected.split('_')
-    parts = [p.replace(_PLACEHOLDER_TOKEN, '%d') for p in parts]
+    protected = base.replace("%d", _PLACEHOLDER_TOKEN)
+    parts = protected.split("_")
+    parts = [p.replace(_PLACEHOLDER_TOKEN, "%d") for p in parts]
 
     if parts:
         parts[-1] = parts[-1] + ext
@@ -179,15 +168,15 @@ def generate_wildcard_patterns(pattern_dict):
         merged = []
         diff_count = 0
         valid = True
-        for s1, s2 in zip(segs1, segs2):
+        for s1, s2 in zip(segs1, segs2, strict=False):
             if s1 == s2:
                 merged.append(s1)
             else:
                 # Don't merge if a %d placeholder is in one but not the other
-                if ('%d' in s1) != ('%d' in s2):
+                if ("%d" in s1) != ("%d" in s2):
                     valid = False
                     break
-                merged.append('*')
+                merged.append("*")
                 diff_count += 1
 
         if not valid or diff_count == 0:
@@ -197,7 +186,7 @@ def generate_wildcard_patterns(pattern_dict):
         if diff_count > len(segs1) / 2:
             continue
 
-        wildcard = '_'.join(merged)
+        wildcard = "_".join(merged)
 
         if wildcard not in wildcard_accum:
             wildcard_accum[wildcard] = set()
@@ -208,7 +197,7 @@ def generate_wildcard_patterns(pattern_dict):
 
     results = []
     for wc, idx_set in wildcard_accum.items():
-        num_asterisks = wc.count('*')
+        num_asterisks = wc.count("*")
         indices_list = [list(t) for t in sorted(idx_set)]
         results.append((wc, indices_list, num_asterisks))
 
@@ -220,6 +209,7 @@ def generate_wildcard_patterns(pattern_dict):
 # ---------------------------------------------------------------------------
 # Label generation
 # ---------------------------------------------------------------------------
+
 
 def build_pattern_label(pattern, indices_list):
     """
@@ -241,15 +231,10 @@ def build_pattern_label(pattern, indices_list):
         vals = set(idx[0] for idx in indices_list)
         return f"{pattern} (files {srange(vals)})"
 
-    dim_names = (
-        ['scanPoints', 'depths'] if num_dims == 2
-        else [f"dim{i+1}" for i in range(num_dims)]
-    )
+    dim_names = ["scanPoints", "depths"] if num_dims == 2 else [f"dim{i + 1}" for i in range(num_dims)]
     range_labels = []
     for dim in range(num_dims):
-        dim_values = sorted(set(
-            idx[dim] for idx in indices_list if len(idx) > dim
-        ))
+        dim_values = sorted(set(idx[dim] for idx in indices_list if len(idx) > dim))
         if dim_values:
             range_labels.append(f"{dim_names[dim]}: {srange(dim_values)}")
 
@@ -264,8 +249,8 @@ def build_pattern_label(pattern, indices_list):
 # High-level orchestrator
 # ---------------------------------------------------------------------------
 
-def scan_directory_patterns(directory, valid_extensions, num_indices,
-                            max_results=10):
+
+def scan_directory_patterns(directory, valid_extensions, num_indices, max_results=10):
     """
     Scan a directory and return the top filename patterns with wildcards.
 
@@ -299,9 +284,7 @@ def scan_directory_patterns(directory, valid_extensions, num_indices,
 
     pattern_dict = extract_index_patterns(files, num_indices)
 
-    sorted_patterns = sorted(
-        pattern_dict.items(), key=lambda x: len(x[1]), reverse=True
-    )[:max_results]
+    sorted_patterns = sorted(pattern_dict.items(), key=lambda x: len(x[1]), reverse=True)[:max_results]
 
     top_pattern_dict = dict(sorted_patterns)
     wildcards = generate_wildcard_patterns(top_pattern_dict)

@@ -1,9 +1,12 @@
 """
 Contains scan data taken from the MDA scan log XML file.
 """
+
 from typing import Optional
+
+from sqlalchemy import DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Integer, String, DateTime, Float
+
 from laue_portal.database.base import Base
 
 
@@ -16,7 +19,9 @@ class Metadata(Base):
     time: Mapped[DateTime] = mapped_column(DateTime)
     user_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
-    source_beamBad: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # Mapped[bool] = mapped_column(Boolean)
+    source_beamBad: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True
+    )  # Mapped[bool] = mapped_column(Boolean)
     source_CCDshutter: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # bool?
     source_monoTransStatus: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # bool?
     source_energy_unit: Mapped[Optional[str]] = mapped_column(String, nullable=True)
@@ -54,7 +59,9 @@ class Metadata(Base):
     scanEnd_scanDuration_unit: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     scanEnd_scanDuration: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     # scanEnd_cpt: Mapped[int] = mapped_column(Integer)
-    scanEnd_source_beamBad: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # Mapped[bool] = mapped_column(Boolean)
+    scanEnd_source_beamBad: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True
+    )  # Mapped[bool] = mapped_column(Boolean)
     scanEnd_source_ringCurrent_unit: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     scanEnd_source_ringCurrent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
@@ -68,12 +75,12 @@ class Metadata(Base):
     motorGroup_other_cpt_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Parent of:
-    scan_: Mapped["Scan"] = relationship(backref="metadata")
-    catalog_: Mapped["Catalog"] = relationship(backref="metadata")
-    calib_: Mapped["Calib"] = relationship(backref="metadata")
-    recon_: Mapped["Recon"] = relationship(backref="metadata")
-    wirerecon_: Mapped["WireRecon"] = relationship(backref="metadata")
-    peakindex_: Mapped["PeakIndex"] = relationship(backref="metadata")
+    scan_: Mapped["Scan"] = relationship(backref="metadata")  # noqa: F821
+    catalog_: Mapped["Catalog"] = relationship(backref="metadata")  # noqa: F821
+    calib_: Mapped["Calib"] = relationship(backref="metadata")  # noqa: F821
+    recon_: Mapped["Recon"] = relationship(backref="metadata")  # noqa: F821
+    wirerecon_: Mapped["WireRecon"] = relationship(backref="metadata")  # noqa: F821
+    peakindex_: Mapped["PeakIndex"] = relationship(backref="metadata")  # noqa: F821
 
     def __repr__(self) -> str:
         pass  # TODO: Consider implemeting for debugging

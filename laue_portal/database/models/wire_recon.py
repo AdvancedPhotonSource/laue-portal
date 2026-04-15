@@ -1,8 +1,10 @@
 """
 Table of wire reconstruction parameters and results.
 """
+
+from sqlalchemy import JSON, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Integer, String, Float, JSON, ForeignKey
+
 from laue_portal.database.base import Base
 
 
@@ -45,7 +47,7 @@ class WireRecon(Base):
     verbose: Mapped[int] = mapped_column(Integer)
 
     # Parent of:
-    peakindex_: Mapped["PeakIndex"] = relationship(backref="wirerecon")
+    peakindex_: Mapped["PeakIndex"] = relationship(backref="wirerecon")  # noqa: F821
 
     def __repr__(self) -> str:
         return f"WireRecon {self.wirerecon_id}"  # TODO: Consider implementing for debugging

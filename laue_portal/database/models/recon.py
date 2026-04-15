@@ -1,8 +1,10 @@
 """
 Table of mask reconstruction parameters and results.
 """
+
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Integer, String, Float, Boolean, JSON, ForeignKey
+
 from laue_portal.database.base import Base
 
 
@@ -94,7 +96,7 @@ class Recon(Base):
     algo_ene_range: Mapped[list[int]] = mapped_column(JSON)
 
     # Parent of:
-    peakindex_: Mapped["PeakIndex"] = relationship(backref="recon")
+    peakindex_: Mapped["PeakIndex"] = relationship(backref="recon")  # noqa: F821
 
     def __repr__(self) -> str:
         return f"Recon {self.recon_id}"  # TODO: Consider implementing for debugging

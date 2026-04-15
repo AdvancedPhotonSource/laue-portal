@@ -1,8 +1,10 @@
 """
 Job table with info on compute jobs.
 """
+
+from sqlalchemy import DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Integer, String, DateTime
+
 from laue_portal.database.base import Base
 
 
@@ -22,8 +24,8 @@ class Job(Base):
     messages: Mapped[str] = mapped_column(String, nullable=True)
 
     # Parent of:
-    subjob_: Mapped["SubJob"] = relationship(backref="job")
-    calib_: Mapped["Calib"] = relationship(backref="job")
-    recon_: Mapped["Recon"] = relationship(backref="job")
-    wirerecon_: Mapped["WireRecon"] = relationship(backref="job")
-    peakindex_: Mapped["PeakIndex"] = relationship(backref="job")
+    subjob_: Mapped["SubJob"] = relationship(backref="job")  # noqa: F821
+    calib_: Mapped["Calib"] = relationship(backref="job")  # noqa: F821
+    recon_: Mapped["Recon"] = relationship(backref="job")  # noqa: F821
+    wirerecon_: Mapped["WireRecon"] = relationship(backref="job")  # noqa: F821
+    peakindex_: Mapped["PeakIndex"] = relationship(backref="job")  # noqa: F821

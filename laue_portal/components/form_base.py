@@ -2,20 +2,23 @@ import dash_bootstrap_components as dbc
 from dash import html
 
 
-def _stack(objects,gap=3):
+def _stack(objects, gap=3):
     return dbc.Stack(
-        objects, 
+        objects,
         direction="horizontal",
-        gap=gap#3
+        gap=gap,  # 3
     )
 
-def _field(label, field_id, size='', kwargs={}):
-    if size == 'sm':
-        width='200px'
-    elif size == 'md':
-        width='350px'
-    elif size == 'lg':
-        width='500px'
+
+def _field(label, field_id, size="", kwargs=None):
+    if kwargs is None:
+        kwargs = {}
+    if size == "sm":
+        width = "200px"
+    elif size == "md":
+        width = "350px"
+    elif size == "lg":
+        width = "500px"
 
     if size:
         return dbc.InputGroup(
@@ -23,7 +26,7 @@ def _field(label, field_id, size='', kwargs={}):
                 dbc.InputGroupText(label),
                 dbc.Input(id=field_id, **kwargs),
             ],
-            style={'width': width},
+            style={"width": width},
             className="mb-3",
         )
     else:
@@ -35,13 +38,16 @@ def _field(label, field_id, size='', kwargs={}):
             className="mb-3 w-100",
         )
 
-def _select(label, field_id, select_options, size='', kwargs={}):
-    if size == 'sm':
-        width='200px'
-    elif size == 'md':
-        width='350px'
-    elif size == 'lg':
-        width='500px'
+
+def _select(label, field_id, select_options, size="", kwargs=None):
+    if kwargs is None:
+        kwargs = {}
+    if size == "sm":
+        width = "200px"
+    elif size == "md":
+        width = "350px"
+    elif size == "lg":
+        width = "500px"
 
     if size:
         return dbc.InputGroup(
@@ -49,10 +55,11 @@ def _select(label, field_id, select_options, size='', kwargs={}):
                 dbc.InputGroupText(label),
                 dbc.Select(
                     options=select_options,
-                    id=field_id, **kwargs,
+                    id=field_id,
+                    **kwargs,
                 ),
             ],
-            style={'width': width},
+            style={"width": width},
             className="mb-3",
         )
     else:
@@ -61,41 +68,44 @@ def _select(label, field_id, select_options, size='', kwargs={}):
                 dbc.InputGroupText(label),
                 dbc.Select(
                     options=select_options,
-                    id=field_id, **kwargs,
+                    id=field_id,
+                    **kwargs,
                 ),
             ],
             className="mb-3 w-100",
         )
 
-def _ckbx(label, field_id, size='', kwargs={}):
-    if size == 'sm':
-        width='200px'
-    elif size == 'md':
-        width='350px'
-    elif size == 'lg':
-        width='500px'
+
+def _ckbx(label, field_id, size="", kwargs=None):
+    if kwargs is None:
+        kwargs = {}
+    if size == "sm":
+        width = "200px"
+    elif size == "md":
+        width = "350px"
+    elif size == "lg":
+        width = "500px"
 
     if size:
-        return dbc.Checkbox(id=field_id, 
-                            label=label,
-                            style={'width': width},
-                            className="mb-3",
-                            **kwargs)
+        return dbc.Checkbox(id=field_id, label=label, style={"width": width}, className="mb-3", **kwargs)
     else:
-        return dbc.Checkbox(id=field_id, 
-                        label=label,
-                        className="mb-3 w-100",
-                        **kwargs)
+        return dbc.Checkbox(id=field_id, label=label, className="mb-3 w-100", **kwargs)
 
-def _notes(field_id, kwargs={}):
+
+def _notes(field_id, kwargs=None):
+    if kwargs is None:
+        kwargs = {}
     return dbc.Row(
         [
-            dbc.Col(
-                html.P(html.Strong("Notes:")),
-                width="auto", align="start"),
+            dbc.Col(html.P(html.Strong("Notes:")), width="auto", align="start"),
             dbc.Col(
                 dbc.Textarea(
-                    id=field_id, #"notes",
+                    id=field_id,  # "notes",
                     style={"width": "100%", "minHeight": "100px"},
-                    **kwargs))
-        ], className="mb-3 w-100", align="start")
+                    **kwargs,
+                )
+            ),
+        ],
+        className="mb-3 w-100",
+        align="start",
+    )

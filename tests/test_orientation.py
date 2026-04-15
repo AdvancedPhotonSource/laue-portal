@@ -7,33 +7,33 @@ Rodrigues vector conversion, and crystal direction calculation.
 
 import os
 import sys
+
 import numpy as np
 import pytest
 
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 from laue_portal.analysis.orientation import (
-    lattice_params_to_reciprocal,
-    recip_to_orientation,
-    orientation_to_rodrigues,
-    crystal_direction_along_normal,
+    CUBIC_SYMMETRY_OPS,
     batch_crystal_directions,
     batch_orientations,
     batch_rodrigues,
-    CUBIC_SYMMETRY_OPS,
+    crystal_direction_along_normal,
+    lattice_params_to_reciprocal,
     misorientation_angle,
     misorientation_from_reference,
+    orientation_to_rodrigues,
     pairwise_misorientation,
+    recip_to_orientation,
 )
-
 
 # ---------------------------------------------------------------------------
 # lattice_params_to_reciprocal
 # ---------------------------------------------------------------------------
 
-class TestLatticeParamsToReciprocal:
 
+class TestLatticeParamsToReciprocal:
     def test_cubic_returns_3x3(self):
         recip = lattice_params_to_reciprocal(0.40495, 0.40495, 0.40495, 90, 90, 90)
         assert recip.shape == (3, 3)
@@ -83,11 +83,13 @@ class TestLatticeParamsToReciprocal:
         a, b, c = 0.40495, 0.40495, 0.40495
         recip = lattice_params_to_reciprocal(a, b, c, 90, 90, 90)
         # Reconstruct direct lattice
-        direct = np.array([
-            [a, 0, 0],
-            [0, b, 0],
-            [0, 0, c],
-        ])
+        direct = np.array(
+            [
+                [a, 0, 0],
+                [0, b, 0],
+                [0, 0, c],
+            ]
+        )
         product = direct @ recip.T
         expected = 2 * np.pi * np.eye(3)
         np.testing.assert_allclose(product, expected, atol=1e-8)
@@ -97,8 +99,8 @@ class TestLatticeParamsToReciprocal:
 # recip_to_orientation
 # ---------------------------------------------------------------------------
 
-class TestRecipToOrientation:
 
+class TestRecipToOrientation:
     def test_identity_for_reference(self):
         """Reference reciprocal lattice should give identity orientation."""
         ref = lattice_params_to_reciprocal(0.40495, 0.40495, 0.40495, 90, 90, 90)
@@ -110,11 +112,13 @@ class TestRecipToOrientation:
         # Slightly rotated.  Column-convention relation: G_cols = R @ G_ref_cols.
         # Python stores rows, so: measured_rows = (R @ ref_rows.T).T
         angle = np.radians(10)
-        rot = np.array([
-            [np.cos(angle), -np.sin(angle), 0],
-            [np.sin(angle),  np.cos(angle), 0],
-            [0, 0, 1],
-        ])
+        rot = np.array(
+            [
+                [np.cos(angle), -np.sin(angle), 0],
+                [np.sin(angle), np.cos(angle), 0],
+                [0, 0, 1],
+            ]
+        )
         measured = (rot @ ref.T).T
         R = recip_to_orientation(measured, ref)
         assert R.shape == (3, 3)
@@ -123,11 +127,13 @@ class TestRecipToOrientation:
         """Should recover a known rotation."""
         ref = lattice_params_to_reciprocal(0.40495, 0.40495, 0.40495, 90, 90, 90)
         angle = np.radians(30)
-        rot = np.array([
-            [1, 0, 0],
-            [0, np.cos(angle), -np.sin(angle)],
-            [0, np.sin(angle),  np.cos(angle)],
-        ])
+        rot = np.array(
+            [
+                [1, 0, 0],
+                [0, np.cos(angle), -np.sin(angle)],
+                [0, np.sin(angle), np.cos(angle)],
+            ]
+        )
         # Column-convention relation: G_cols = R @ G_ref_cols.
         # Python stores rows, so: measured_rows = (R @ ref_rows.T).T
         measured = (rot @ ref.T).T
@@ -139,8 +145,8 @@ class TestRecipToOrientation:
 # orientation_to_rodrigues
 # ---------------------------------------------------------------------------
 
-class TestOrientationToRodrigues:
 
+class TestOrientationToRodrigues:
     def test_identity_gives_zero_vector(self):
         rod = orientation_to_rodrigues(np.eye(3))
         np.testing.assert_allclose(rod, [0, 0, 0], atol=1e-12)
@@ -148,11 +154,13 @@ class TestOrientationToRodrigues:
     def test_90_deg_about_z(self):
         """90 deg about z: |rod| = tan(45) = 1, axis along z."""
         angle = np.radians(90)
-        R = np.array([
-            [np.cos(angle), -np.sin(angle), 0],
-            [np.sin(angle),  np.cos(angle), 0],
-            [0, 0, 1],
-        ])
+        R = np.array(
+            [
+                [np.cos(angle), -np.sin(angle), 0],
+                [np.sin(angle), np.cos(angle), 0],
+                [0, 0, 1],
+            ]
+        )
         rod = orientation_to_rodrigues(R)
         # Length should be tan(45 deg) = 1
         np.testing.assert_allclose(np.linalg.norm(rod), 1.0, atol=1e-10)
@@ -163,11 +171,13 @@ class TestOrientationToRodrigues:
     def test_rodrigues_length_is_tan_half_angle(self):
         """For arbitrary rotation, |R_vec| = tan(angle/2)."""
         angle = np.radians(60)
-        R = np.array([
-            [1, 0, 0],
-            [0, np.cos(angle), -np.sin(angle)],
-            [0, np.sin(angle),  np.cos(angle)],
-        ])
+        R = np.array(
+            [
+                [1, 0, 0],
+                [0, np.cos(angle), -np.sin(angle)],
+                [0, np.sin(angle), np.cos(angle)],
+            ]
+        )
         rod = orientation_to_rodrigues(R)
         expected_length = np.tan(np.radians(60) / 2)
         assert abs(np.linalg.norm(rod) - expected_length) < 1e-10
@@ -181,8 +191,8 @@ class TestOrientationToRodrigues:
 # crystal_direction_along_normal
 # ---------------------------------------------------------------------------
 
-class TestCrystalDirectionAlongNormal:
 
+class TestCrystalDirectionAlongNormal:
     def test_returns_unit_vector(self):
         recip = lattice_params_to_reciprocal(0.40495, 0.40495, 0.40495, 90, 90, 90)
         d = crystal_direction_along_normal(recip)
@@ -207,8 +217,8 @@ class TestCrystalDirectionAlongNormal:
 # Batch operations
 # ---------------------------------------------------------------------------
 
-class TestBatchOperations:
 
+class TestBatchOperations:
     @pytest.fixture
     def cubic_data(self):
         """Synthetic data: 4 steps with known reciprocal lattices.
@@ -221,17 +231,17 @@ class TestBatchOperations:
 
         # 4 orientations: identity, 30deg about x, 45deg about y, 60deg about z
         angles = [0, 30, 45, 60]
-        axes = ['x', 'x', 'y', 'z']
+        axes = ["x", "x", "y", "z"]
         recip_lattices = np.zeros((4, 3, 3))
 
-        for i, (angle, axis) in enumerate(zip(angles, axes)):
+        for i, (angle, axis) in enumerate(zip(angles, axes, strict=True)):
             a = np.radians(angle)
-            if axis == 'x':
-                R = np.array([[1,0,0],[0,np.cos(a),-np.sin(a)],[0,np.sin(a),np.cos(a)]])
-            elif axis == 'y':
-                R = np.array([[np.cos(a),0,np.sin(a)],[0,1,0],[-np.sin(a),0,np.cos(a)]])
+            if axis == "x":
+                R = np.array([[1, 0, 0], [0, np.cos(a), -np.sin(a)], [0, np.sin(a), np.cos(a)]])
+            elif axis == "y":
+                R = np.array([[np.cos(a), 0, np.sin(a)], [0, 1, 0], [-np.sin(a), 0, np.cos(a)]])
             else:
-                R = np.array([[np.cos(a),-np.sin(a),0],[np.sin(a),np.cos(a),0],[0,0,1]])
+                R = np.array([[np.cos(a), -np.sin(a), 0], [np.sin(a), np.cos(a), 0], [0, 0, 1]])
             recip_lattices[i] = (R @ ref.T).T
 
         return recip_lattices, lattice_params
@@ -312,8 +322,8 @@ class TestBatchOperations:
 # Cubic symmetry operations
 # ---------------------------------------------------------------------------
 
-class TestCubicSymmetryOps:
 
+class TestCubicSymmetryOps:
     def test_count(self):
         """There should be exactly 24 proper cubic rotations."""
         assert CUBIC_SYMMETRY_OPS.shape == (24, 3, 3)
@@ -322,8 +332,7 @@ class TestCubicSymmetryOps:
         """Each matrix should be orthogonal: R @ R^T = I."""
         for i, R in enumerate(CUBIC_SYMMETRY_OPS):
             product = R @ R.T
-            np.testing.assert_allclose(product, np.eye(3), atol=1e-10,
-                                       err_msg=f"Op {i} not orthogonal")
+            np.testing.assert_allclose(product, np.eye(3), atol=1e-10, err_msg=f"Op {i} not orthogonal")
 
     def test_all_proper(self):
         """Each matrix should have determinant +1 (proper rotation)."""
@@ -344,9 +353,9 @@ class TestCubicSymmetryOps:
         """All 24 operations should be distinct."""
         for i in range(24):
             for j in range(i + 1, 24):
-                assert not np.allclose(CUBIC_SYMMETRY_OPS[i],
-                                       CUBIC_SYMMETRY_OPS[j], atol=1e-10), \
+                assert not np.allclose(CUBIC_SYMMETRY_OPS[i], CUBIC_SYMMETRY_OPS[j], atol=1e-10), (
                     f"Ops {i} and {j} are identical"
+                )
 
     def test_closure(self):
         """Product of any two ops should also be in the set (group closure)."""
@@ -355,34 +364,36 @@ class TestCubicSymmetryOps:
             for j in range(24):
                 product = CUBIC_SYMMETRY_OPS[i] @ CUBIC_SYMMETRY_OPS[j]
                 found = any(np.allclose(product, op, atol=1e-10) for op in ops_list)
-                assert found, (
-                    f"Product of ops {i} and {j} not found in group"
-                )
+                assert found, f"Product of ops {i} and {j} not found in group"
 
 
 # ---------------------------------------------------------------------------
 # Misorientation angle
 # ---------------------------------------------------------------------------
 
-class TestMisorientationAngle:
 
+class TestMisorientationAngle:
     def _rot_z(self, deg):
         """Rotation matrix about z by deg degrees."""
         a = np.radians(deg)
-        return np.array([
-            [np.cos(a), -np.sin(a), 0],
-            [np.sin(a),  np.cos(a), 0],
-            [0, 0, 1],
-        ])
+        return np.array(
+            [
+                [np.cos(a), -np.sin(a), 0],
+                [np.sin(a), np.cos(a), 0],
+                [0, 0, 1],
+            ]
+        )
 
     def _rot_x(self, deg):
         """Rotation matrix about x by deg degrees."""
         a = np.radians(deg)
-        return np.array([
-            [1, 0, 0],
-            [0, np.cos(a), -np.sin(a)],
-            [0, np.sin(a),  np.cos(a)],
-        ])
+        return np.array(
+            [
+                [1, 0, 0],
+                [0, np.cos(a), -np.sin(a)],
+                [0, np.sin(a), np.cos(a)],
+            ]
+        )
 
     def test_identical_orientations_zero(self):
         """Misorientation between identical orientations is 0."""
@@ -444,24 +455,28 @@ class TestMisorientationAngle:
 # Pairwise misorientation
 # ---------------------------------------------------------------------------
 
-class TestPairwiseMisorientation:
 
+class TestPairwiseMisorientation:
     @pytest.fixture
     def orientations(self):
         """3 orientation matrices: identity, 10 deg about z, 20 deg about z."""
         R0 = np.eye(3)
         a10 = np.radians(10)
-        R1 = np.array([
-            [np.cos(a10), -np.sin(a10), 0],
-            [np.sin(a10),  np.cos(a10), 0],
-            [0, 0, 1],
-        ])
+        R1 = np.array(
+            [
+                [np.cos(a10), -np.sin(a10), 0],
+                [np.sin(a10), np.cos(a10), 0],
+                [0, 0, 1],
+            ]
+        )
         a20 = np.radians(20)
-        R2 = np.array([
-            [np.cos(a20), -np.sin(a20), 0],
-            [np.sin(a20),  np.cos(a20), 0],
-            [0, 0, 1],
-        ])
+        R2 = np.array(
+            [
+                [np.cos(a20), -np.sin(a20), 0],
+                [np.sin(a20), np.cos(a20), 0],
+                [0, 0, 1],
+            ]
+        )
         return np.array([R0, R1, R2])
 
     def test_returns_dict_keys(self, orientations):
@@ -489,8 +504,7 @@ class TestPairwiseMisorientation:
 
     def test_subset_indices(self, orientations):
         """Selecting only grains 0 and 2 should give 1 pair with ~20 deg."""
-        result = pairwise_misorientation(orientations, indices=[0, 2],
-                                          symmetry_reduce=False)
+        result = pairwise_misorientation(orientations, indices=[0, 2], symmetry_reduce=False)
         assert len(result["angles"]) == 1
         assert abs(result["angles"][0] - 20.0) < 1e-4
 
@@ -511,24 +525,28 @@ class TestPairwiseMisorientation:
 # Misorientation from reference
 # ---------------------------------------------------------------------------
 
-class TestMisorientationFromReference:
 
+class TestMisorientationFromReference:
     @pytest.fixture
     def orientations(self):
         """3 orientation matrices: identity, 10 deg about z, 20 deg about z."""
         R0 = np.eye(3)
         a10 = np.radians(10)
-        R1 = np.array([
-            [np.cos(a10), -np.sin(a10), 0],
-            [np.sin(a10),  np.cos(a10), 0],
-            [0, 0, 1],
-        ])
+        R1 = np.array(
+            [
+                [np.cos(a10), -np.sin(a10), 0],
+                [np.sin(a10), np.cos(a10), 0],
+                [0, 0, 1],
+            ]
+        )
         a20 = np.radians(20)
-        R2 = np.array([
-            [np.cos(a20), -np.sin(a20), 0],
-            [np.sin(a20),  np.cos(a20), 0],
-            [0, 0, 1],
-        ])
+        R2 = np.array(
+            [
+                [np.cos(a20), -np.sin(a20), 0],
+                [np.sin(a20), np.cos(a20), 0],
+                [0, 0, 1],
+            ]
+        )
         return np.array([R0, R1, R2])
 
     def test_returns_correct_keys(self, orientations):
@@ -550,7 +568,9 @@ class TestMisorientationFromReference:
     def test_known_angles_no_symmetry(self, orientations):
         """Without symmetry, angles from identity should be 0, 10, 20 deg."""
         result = misorientation_from_reference(
-            orientations, ref_index=0, symmetry_reduce=False,
+            orientations,
+            ref_index=0,
+            symmetry_reduce=False,
         )
         assert abs(result["angles"][0]) < 1e-8
         assert abs(result["angles"][1] - 10.0) < 1e-4
@@ -559,7 +579,9 @@ class TestMisorientationFromReference:
     def test_known_angles_with_symmetry(self, orientations):
         """Small angles should be unchanged by symmetry reduction."""
         result = misorientation_from_reference(
-            orientations, ref_index=0, symmetry_reduce=True,
+            orientations,
+            ref_index=0,
+            symmetry_reduce=True,
         )
         assert abs(result["angles"][1] - 10.0) < 1e-4
         assert abs(result["angles"][2] - 20.0) < 1e-4
@@ -567,7 +589,9 @@ class TestMisorientationFromReference:
     def test_rodrigues_length_matches_angle(self, orientations):
         """Rodrigues vector length should be tan(angle/2)."""
         result = misorientation_from_reference(
-            orientations, ref_index=0, symmetry_reduce=False,
+            orientations,
+            ref_index=0,
+            symmetry_reduce=False,
         )
         for i in range(1, 3):
             length = np.linalg.norm(result["rodrigues"][i])
@@ -577,7 +601,9 @@ class TestMisorientationFromReference:
     def test_nonzero_reference(self, orientations):
         """Using grain 1 as reference: grain 0 should be 10 deg away, grain 2 10 deg."""
         result = misorientation_from_reference(
-            orientations, ref_index=1, symmetry_reduce=False,
+            orientations,
+            ref_index=1,
+            symmetry_reduce=False,
         )
         np.testing.assert_allclose(result["rodrigues"][1], [0, 0, 0], atol=1e-12)
         assert abs(result["angles"][0] - 10.0) < 1e-4
@@ -587,24 +613,32 @@ class TestMisorientationFromReference:
         """90 deg about [001] is a cubic symmetry op -> angle should be 0."""
         a90 = np.radians(90)
         R0 = np.eye(3)
-        R1 = np.array([
-            [np.cos(a90), -np.sin(a90), 0],
-            [np.sin(a90),  np.cos(a90), 0],
-            [0, 0, 1],
-        ])
+        R1 = np.array(
+            [
+                [np.cos(a90), -np.sin(a90), 0],
+                [np.sin(a90), np.cos(a90), 0],
+                [0, 0, 1],
+            ]
+        )
         orientations = np.array([R0, R1])
         result = misorientation_from_reference(
-            orientations, ref_index=0, symmetry_reduce=True,
+            orientations,
+            ref_index=0,
+            symmetry_reduce=True,
         )
         assert abs(result["angles"][1]) < 1e-6
 
     def test_consistency_with_pairwise(self, orientations):
         """Angles from reference should match pairwise results for the same pairs."""
         ref_result = misorientation_from_reference(
-            orientations, ref_index=0, symmetry_reduce=True,
+            orientations,
+            ref_index=0,
+            symmetry_reduce=True,
         )
         for i in range(1, len(orientations)):
             pairwise_angle = misorientation_angle(
-                orientations[0], orientations[i], symmetry_reduce=True,
+                orientations[0],
+                orientations[i],
+                symmetry_reduce=True,
             )
             assert abs(ref_result["angles"][i] - pairwise_angle) < 1e-6

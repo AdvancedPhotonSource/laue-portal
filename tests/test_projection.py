@@ -7,28 +7,27 @@ computation, and cubic hkl family generation.
 
 import os
 import sys
-import numpy as np
-import pytest
 
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+import numpy as np
+
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 from laue_portal.analysis.projection import (
+    cubic_hkl_family,
+    pole_figure_points,
+    project_q_vectors,
     stereographic_project,
     wulff_net_lines,
-    pole_figure_points,
-    cubic_hkl_family,
     zoom_axis_range,
-    project_q_vectors,
 )
-
 
 # ---------------------------------------------------------------------------
 # Stereographic Projection
 # ---------------------------------------------------------------------------
 
-class TestStereographicProject:
 
+class TestStereographicProject:
     def test_pole_projects_to_origin(self):
         """A vector along the pole should project to (0, 0)."""
         vectors = np.array([[0, 0, 1.0]])
@@ -41,7 +40,7 @@ class TestStereographicProject:
         """Vector on equator (90 deg from pole) -> r = tan(45) = 1."""
         vectors = np.array([[1, 0, 0.0]])
         sx, sy, lower = stereographic_project(vectors)
-        r = np.sqrt(sx[0]**2 + sy[0]**2)
+        r = np.sqrt(sx[0] ** 2 + sy[0] ** 2)
         np.testing.assert_allclose(r, 1.0, atol=1e-10)
 
     def test_lower_hemisphere_detected(self):
@@ -62,7 +61,7 @@ class TestStereographicProject:
         angle = np.radians(45)
         vectors = np.array([[np.sin(angle), 0, np.cos(angle)]])
         sx, sy, lower = stereographic_project(vectors)
-        r = np.sqrt(sx[0]**2 + sy[0]**2)
+        r = np.sqrt(sx[0] ** 2 + sy[0] ** 2)
         expected = np.tan(angle / 2)
         np.testing.assert_allclose(r, expected, atol=1e-10)
 
@@ -85,8 +84,8 @@ class TestStereographicProject:
 # Wulff Net
 # ---------------------------------------------------------------------------
 
-class TestWulffNet:
 
+class TestWulffNet:
     def test_returns_list_of_dicts(self):
         lines = wulff_net_lines(step_deg=10)
         assert isinstance(lines, list)
@@ -123,7 +122,7 @@ class TestWulffNet:
         lines_45 = wulff_net_lines(step_deg=20, phi_rotation=45)
         # At least one line should differ
         differs = False
-        for l0, l45 in zip(lines_0, lines_45):
+        for l0, l45 in zip(lines_0, lines_45, strict=True):
             if not np.allclose(l0["x"], l45["x"], atol=1e-6, equal_nan=True):
                 differs = True
                 break
@@ -134,8 +133,8 @@ class TestWulffNet:
 # Cubic {hkl} Family
 # ---------------------------------------------------------------------------
 
-class TestCubicHklFamily:
 
+class TestCubicHklFamily:
     def test_100_gives_6_directions(self):
         family = cubic_hkl_family(1, 0, 0)
         assert len(family) == 6
@@ -181,8 +180,8 @@ class TestCubicHklFamily:
 # Pole Figure Points
 # ---------------------------------------------------------------------------
 
-class TestPoleFigurePoints:
 
+class TestPoleFigurePoints:
     def test_returns_arrays(self):
         recip_lattices = np.tile(np.eye(3), (3, 1, 1))
         family = cubic_hkl_family(1, 0, 0)
@@ -212,7 +211,7 @@ class TestPoleFigurePoints:
         recip_lattices = np.tile(np.eye(3), (3, 1, 1))
         family = cubic_hkl_family(1, 0, 0)
         points, indices = pole_figure_points(recip_lattices, family)
-        radii = np.sqrt(points[:, 0]**2 + points[:, 1]**2)
+        radii = np.sqrt(points[:, 0] ** 2 + points[:, 1] ** 2)
         assert np.all(radii <= 1.1)  # allow small numerical margin
 
     def test_empty_recip_lattices(self):
@@ -232,15 +231,17 @@ class TestPoleFigurePoints:
         """
         # A 90-degree rotation about Z: a*->(0,1,0), b*->(-1,0,0), c*->(0,0,1)
         # In Python row convention (rows = a*, b*, c*):
-        gm_rows = np.array([
-            [0.0, 1.0, 0.0],   # a*
-            [-1.0, 0.0, 0.0],  # b*
-            [0.0, 0.0, 1.0],   # c*
-        ])
+        gm_rows = np.array(
+            [
+                [0.0, 1.0, 0.0],  # a*
+                [-1.0, 0.0, 0.0],  # b*
+                [0.0, 0.0, 1.0],  # c*
+            ]
+        )
         # Igor stores these as columns, so Igor gm = gm_rows.T
         # Igor computes: q = gm_col @ hkl = gm_rows.T @ hkl
         hkl = np.array([1.0, 0.0, 0.0])
-        q_igor = gm_rows.T @ hkl  # = (0, -1, 0) i.e. a* direction
+        q_igor = gm_rows.T @ hkl  # = (0, -1, 0) i.e. a* direction  # noqa: F841
 
         recip_lattices = gm_rows[np.newaxis, :, :]
         family = [hkl]  # single direction, no symmetry expansion
@@ -256,7 +257,7 @@ class TestPoleFigurePoints:
         points2, _ = pole_figure_points(recip_lattices, family2)
         assert len(points2) > 0
         # The projected point must be finite and within the unit circle
-        radii = np.sqrt(points2[:, 0]**2 + points2[:, 1]**2)
+        radii = np.sqrt(points2[:, 0] ** 2 + points2[:, 1] ** 2)
         assert np.all(radii <= 1.0 + 1e-10)
 
 
@@ -264,8 +265,8 @@ class TestPoleFigurePoints:
 # Zoom helper
 # ---------------------------------------------------------------------------
 
-class TestZoomAxisRange:
 
+class TestZoomAxisRange:
     def test_90_degrees(self):
         d = zoom_axis_range(90)
         np.testing.assert_allclose(d, 1.0, atol=1e-6)
@@ -285,8 +286,8 @@ class TestZoomAxisRange:
 # Q-vector projection
 # ---------------------------------------------------------------------------
 
-class TestProjectQVectors:
 
+class TestProjectQVectors:
     def test_basic_projection(self):
         q_vecs = np.array([[0, 0, 1], [1, 0, 0], [0, 1, 0.0]])
         sx, sy, lower = project_q_vectors(q_vecs)
