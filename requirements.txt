@@ -1,26 +1,46 @@
-gladier
-gladier-tools
-funcx
-globus_automate_client
-dash-ag-grid
-dash-bootstrap-components
-dash
-pandas
-SQLAlchemy
-scipy
-xraydb
-scikit-image
-matplotlib
-h5py
-fire
-pyyaml
-numpy
-plotly
-pytest
-rq
+# Dash / web framework
+dash==3.1.1
+dash-ag-grid==31.3.1
+dash-bootstrap-components==2.0.3
+plotly==6.2.0
+Flask==3.1.0
 
-# GitHub repository dependencies
-git+https://github.com/dgursoy/cold.git
-git+https://github.com/data-exchange/dxchange.git
-git+https://github.com/data-exchange/dxfile.git
-git+https://github.com/Linked-Liszt/laue-analysis.git
+# Data / scientific
+numpy==2.2.3
+pandas==2.3.1
+scipy==1.16.0
+scikit-image==0.25.2
+matplotlib==3.10.3
+h5py==3.14.0
+xraydb==4.5.6
+
+# Database
+SQLAlchemy==2.0.41
+
+# Task queue
+rq==2.4.1
+redis==6.2.0
+
+# Utilities
+fire==0.7.0
+PyYAML==6.0.2
+
+# Globus / remote workflow (used by polaris_workflow)
+gladier==0.9.6
+gladier-tools==0.5.4
+funcx==2.4.0
+globus-automate-client==0.18.0
+
+# Testing
+pytest==8.4.1
+pytest-mock==3.14.1
+
+# Linting / formatting / hooks
+ruff==0.15.10
+pre-commit==4.5.1
+
+# Git-hosted dependencies (pinned to commit SHA)
+cold @ git+https://github.com/dgursoy/cold.git@29b587fce2d7565decd030f1d873dd830a97f8ae
+dxchange @ git+https://github.com/data-exchange/dxchange.git@10c9d870bd403f1ea5fbba4c8194b9c8d9295aca
+dxfile @ git+https://github.com/data-exchange/dxfile.git@392ba204966befc39c6c78e60bcb70a588859775
+laueanalysis @ git+https://github.com/AdvancedPhotonSource/laue-analysis.git@030bbff4d16da7c661d0a760494b5312510eb8ca
