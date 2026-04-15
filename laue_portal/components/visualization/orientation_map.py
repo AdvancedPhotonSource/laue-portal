@@ -16,18 +16,17 @@ Styling matches Igor Pro's Make2Dplot_xmlData conventions.
 import numpy as np
 import plotly.graph_objects as go
 
+from laue_portal.analysis.coloring import (
+    batch_ipf_colors,
+    batch_rodrigues_rgb,
+    rgb_to_plotly_colors,
+)
 from laue_portal.analysis.orientation import (
     batch_crystal_directions,
     batch_orientations,
     batch_rodrigues,
     misorientation_from_reference,
 )
-from laue_portal.analysis.coloring import (
-    batch_ipf_colors,
-    batch_rodrigues_rgb,
-    rgb_to_plotly_colors,
-)
-
 
 # Igor Pro background: gbRGB=(40000,40000,40000) / 65535
 _GRAY_BG = "rgb(156, 156, 156)"
@@ -77,26 +76,28 @@ def make_orientation_map(
 
     fig = go.Figure()
 
-    marker_dict = _build_marker_dict(parsed, color_by, marker_size, marker_symbol,
-                                     surface=surface,
-                                     ref_grain_index=ref_grain_index)
+    marker_dict = _build_marker_dict(
+        parsed, color_by, marker_size, marker_symbol, surface=surface, ref_grain_index=ref_grain_index
+    )
 
-    fig.add_trace(go.Scattergl(
-        x=x_vals,
-        y=y_vals,
-        mode="markers",
-        marker=marker_dict,
-        hovertemplate=(
-            "<b>Step %{customdata[0]}</b><br>"
-            "Position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
-            "Patterns: %{customdata[4]}<br>"
-            "Indexed: %{customdata[5]}  Goodness: %{customdata[6]:.1f}<br>"
-            "RMS error: %{customdata[7]:.5f}<br>"
-            "<extra></extra>"
-        ),
-        customdata=_build_customdata(parsed),
-        uid="orientation-2d-main",
-    ))
+    fig.add_trace(
+        go.Scattergl(
+            x=x_vals,
+            y=y_vals,
+            mode="markers",
+            marker=marker_dict,
+            hovertemplate=(
+                "<b>Step %{customdata[0]}</b><br>"
+                "Position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
+                "Patterns: %{customdata[4]}<br>"
+                "Indexed: %{customdata[5]}  Goodness: %{customdata[6]:.1f}<br>"
+                "RMS error: %{customdata[7]:.5f}<br>"
+                "<extra></extra>"
+            ),
+            customdata=_build_customdata(parsed),
+            uid="orientation-2d-main",
+        )
+    )
 
     fig.update_layout(
         xaxis_title=x_label,
@@ -150,27 +151,29 @@ def make_orientation_map_3d(
 
     fig = go.Figure()
 
-    marker_dict = _build_marker_dict(parsed, color_by, max(2, marker_size // 3),
-                                     surface=surface,
-                                     ref_grain_index=ref_grain_index)
+    marker_dict = _build_marker_dict(
+        parsed, color_by, max(2, marker_size // 3), surface=surface, ref_grain_index=ref_grain_index
+    )
 
-    fig.add_trace(go.Scatter3d(
-        x=positions[:, 0],
-        y=positions[:, 1],
-        z=positions[:, 2],
-        mode="markers",
-        marker=marker_dict,
-        hovertemplate=(
-            "<b>Step %{customdata[0]}</b><br>"
-            "Position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
-            "Patterns: %{customdata[4]}<br>"
-            "Indexed: %{customdata[5]}  Goodness: %{customdata[6]:.1f}<br>"
-            "RMS error: %{customdata[7]:.5f}<br>"
-            "<extra></extra>"
-        ),
-        customdata=_build_customdata(parsed),
-        uid="orientation-3d-main",
-    ))
+    fig.add_trace(
+        go.Scatter3d(
+            x=positions[:, 0],
+            y=positions[:, 1],
+            z=positions[:, 2],
+            mode="markers",
+            marker=marker_dict,
+            hovertemplate=(
+                "<b>Step %{customdata[0]}</b><br>"
+                "Position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
+                "Patterns: %{customdata[4]}<br>"
+                "Indexed: %{customdata[5]}  Goodness: %{customdata[6]:.1f}<br>"
+                "RMS error: %{customdata[7]:.5f}<br>"
+                "<extra></extra>"
+            ),
+            customdata=_build_customdata(parsed),
+            uid="orientation-3d-main",
+        )
+    )
 
     fig.update_layout(
         scene=dict(
@@ -193,8 +196,8 @@ def make_orientation_map_3d(
 # Shared helpers
 # ---------------------------------------------------------------------------
 
-def _build_marker_dict(parsed, color_by, marker_size, marker_symbol=None,
-                       surface="normal", ref_grain_index=None):
+
+def _build_marker_dict(parsed, color_by, marker_size, marker_symbol=None, surface="normal", ref_grain_index=None):
     """Build Plotly marker dict for the given coloring mode."""
     base = dict(
         size=marker_size,
@@ -204,8 +207,7 @@ def _build_marker_dict(parsed, color_by, marker_size, marker_symbol=None,
         base["symbol"] = marker_symbol
 
     if color_by in _ORIENTATION_MODES:
-        colors = _get_orientation_colors(parsed, color_by, surface=surface,
-                                         ref_grain_index=ref_grain_index)
+        colors = _get_orientation_colors(parsed, color_by, surface=surface, ref_grain_index=ref_grain_index)
         base["color"] = colors
         # No colorscale or colorbar for per-point RGB
     else:
@@ -221,16 +223,18 @@ def _build_customdata(parsed):
     """Build customdata array shared by 2D and 3D traces."""
     positions = parsed["positions"]
     n_points = len(positions)
-    return np.column_stack([
-        np.arange(n_points),
-        positions[:, 0],
-        positions[:, 1],
-        positions[:, 2],
-        parsed["n_patterns"],
-        parsed["n_indexed"],
-        np.nan_to_num(parsed["goodnesses"], nan=0),
-        np.nan_to_num(parsed["rms_errors"], nan=0),
-    ])
+    return np.column_stack(
+        [
+            np.arange(n_points),
+            positions[:, 0],
+            positions[:, 1],
+            positions[:, 2],
+            parsed["n_patterns"],
+            parsed["n_indexed"],
+            np.nan_to_num(parsed["goodnesses"], nan=0),
+            np.nan_to_num(parsed["rms_errors"], nan=0),
+        ]
+    )
 
 
 def _select_axes(positions, depths, has_depth):
@@ -245,18 +249,24 @@ def _select_axes(positions, depths, has_depth):
         x_range = np.nanmax(positions[:, 0]) - np.nanmin(positions[:, 0])
         if x_range < 1.0:
             return (
-                positions[:, 2], positions[:, 1],
-                "Z (um)", "Y (um)",
+                positions[:, 2],
+                positions[:, 1],
+                "Z (um)",
+                "Y (um)",
             )
         else:
             return (
-                positions[:, 0], positions[:, 2],
-                "X (um)", "Z (um)",
+                positions[:, 0],
+                positions[:, 2],
+                "X (um)",
+                "Z (um)",
             )
     else:
         return (
-            positions[:, 0], positions[:, 1],
-            "X (um)", "Y (um)",
+            positions[:, 0],
+            positions[:, 1],
+            "X (um)",
+            "Y (um)",
         )
 
 
@@ -274,19 +284,18 @@ def _get_scalar_color_values(parsed, color_by):
         return parsed["n_indexed"].astype(float), "N Indexed"
 
 
-def _get_orientation_colors(parsed, color_by, surface="normal",
-                            ref_grain_index=None):
+def _get_orientation_colors(parsed, color_by, surface="normal", ref_grain_index=None):
     """Return list of 'rgb(r,g,b)' strings for orientation coloring modes."""
     recip_lattices = parsed["recip_lattices"]
     lattice_params = parsed["lattice_params"]
 
     # Look up the surface normal vector for the chosen surface direction.
     from laue_portal.analysis.projection import get_surface_vectors
+
     surf_normal, _roll, _tilt = get_surface_vectors(surface)
 
     if color_by == "cubic_ipf":
-        crystal_dirs = batch_crystal_directions(recip_lattices,
-                                                normal=surf_normal)
+        crystal_dirs = batch_crystal_directions(recip_lattices, normal=surf_normal)
         rgb = batch_ipf_colors(crystal_dirs)
         return rgb_to_plotly_colors(rgb)
 
@@ -300,8 +309,7 @@ def _get_orientation_colors(parsed, color_by, surface="normal",
         ref_idx = int(ref_grain_index)
         if ref_idx < 0 or ref_idx >= len(orientations):
             # Invalid reference -- fall back to IPF
-            crystal_dirs = batch_crystal_directions(recip_lattices,
-                                                    normal=surf_normal)
+            crystal_dirs = batch_crystal_directions(recip_lattices, normal=surf_normal)
             rgb = batch_ipf_colors(crystal_dirs)
             return rgb_to_plotly_colors(rgb)
 
@@ -311,8 +319,7 @@ def _get_orientation_colors(parsed, color_by, surface="normal",
 
     else:
         # Fallback to IPF
-        crystal_dirs = batch_crystal_directions(recip_lattices,
-                                                normal=surf_normal)
+        crystal_dirs = batch_crystal_directions(recip_lattices, normal=surf_normal)
         rgb = batch_ipf_colors(crystal_dirs)
         return rgb_to_plotly_colors(rgb)
 
@@ -321,8 +328,8 @@ def _get_orientation_colors(parsed, color_by, surface="normal",
 # Cross-plot selection highlighting (Stage 3)
 # ---------------------------------------------------------------------------
 
-def apply_selection_highlight(fig, parsed, selected_grains, marker_size,
-                              is_3d=False):
+
+def apply_selection_highlight(fig, parsed, selected_grains, marker_size, is_3d=False):
     """
     Modify a figure in-place to highlight selected grains.
 
@@ -356,7 +363,9 @@ def apply_selection_highlight(fig, parsed, selected_grains, marker_size,
 
     # Build opacity array: 0.2 for unselected, 1.0 for selected
     opacity_arr = np.where(
-        np.isin(np.arange(n_points), list(selected_set)), 1.0, 0.2,
+        np.isin(np.arange(n_points), list(selected_set)),
+        1.0,
+        0.2,
     )
 
     # Determine if colors are per-point RGB strings or scalar values
@@ -371,9 +380,7 @@ def apply_selection_highlight(fig, parsed, selected_grains, marker_size,
         new_colors = []
         for i, c in enumerate(current_colors):
             if c.startswith("rgb("):
-                new_colors.append(
-                    c.replace("rgb(", "rgba(").replace(")", f",{opacity_arr[i]:.2f})")
-                )
+                new_colors.append(c.replace("rgb(", "rgba(").replace(")", f",{opacity_arr[i]:.2f})"))
             else:
                 new_colors.append(c)
         main_trace.marker.color = new_colors
@@ -408,9 +415,7 @@ def apply_selection_highlight(fig, parsed, selected_grains, marker_size,
         new_colors = []
         for i, c in enumerate(sampled):
             if c.startswith("rgb("):
-                new_colors.append(
-                    c.replace("rgb(", "rgba(").replace(")", f",{opacity_arr[i]:.2f})")
-                )
+                new_colors.append(c.replace("rgb(", "rgba(").replace(")", f",{opacity_arr[i]:.2f})"))
             else:
                 new_colors.append(c)
         main_trace.marker.color = new_colors
@@ -430,39 +435,43 @@ def apply_selection_highlight(fig, parsed, selected_grains, marker_size,
     highlight_uid = main_uid.replace("-main", "-highlight")
 
     if is_3d:
-        fig.add_trace(go.Scatter3d(
-            x=positions[sel_mask, 0],
-            y=positions[sel_mask, 1],
-            z=positions[sel_mask, 2],
-            mode="markers",
-            marker=dict(
-                size=max(3, highlight_size // 3),
-                color="rgba(0,0,0,0)",
-                symbol="circle",
-                line=dict(color="white", width=2),
-            ),
-            hoverinfo="skip",
-            showlegend=True,
-            name=f"Selected ({sel_mask.sum()})",
-            uid=highlight_uid,
-        ))
+        fig.add_trace(
+            go.Scatter3d(
+                x=positions[sel_mask, 0],
+                y=positions[sel_mask, 1],
+                z=positions[sel_mask, 2],
+                mode="markers",
+                marker=dict(
+                    size=max(3, highlight_size // 3),
+                    color="rgba(0,0,0,0)",
+                    symbol="circle",
+                    line=dict(color="white", width=2),
+                ),
+                hoverinfo="skip",
+                showlegend=True,
+                name=f"Selected ({sel_mask.sum()})",
+                uid=highlight_uid,
+            )
+        )
     else:
         depths = parsed["depths"]
         has_depth = not np.all(np.isnan(depths))
         x_vals, y_vals, _, _ = _select_axes(positions, depths, has_depth)
 
-        fig.add_trace(go.Scattergl(
-            x=x_vals[sel_mask],
-            y=y_vals[sel_mask],
-            mode="markers",
-            marker=dict(
-                size=highlight_size,
-                color="rgba(0,0,0,0)",
-                symbol="circle-open",
-                line=dict(color="white", width=2),
-            ),
-            hoverinfo="skip",
-            showlegend=True,
-            name=f"Selected ({sel_mask.sum()})",
-            uid=highlight_uid,
-        ))
+        fig.add_trace(
+            go.Scattergl(
+                x=x_vals[sel_mask],
+                y=y_vals[sel_mask],
+                mode="markers",
+                marker=dict(
+                    size=highlight_size,
+                    color="rgba(0,0,0,0)",
+                    symbol="circle-open",
+                    line=dict(color="white", width=2),
+                ),
+                hoverinfo="skip",
+                showlegend=True,
+                name=f"Selected ({sel_mask.sum()})",
+                uid=highlight_uid,
+            )
+        )

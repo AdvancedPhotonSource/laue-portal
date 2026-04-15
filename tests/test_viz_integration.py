@@ -3,21 +3,22 @@
 import os
 import sys
 
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 from laue_portal.analysis.xml_parser import (
-    parse_indexing_xml, get_step_peaks, get_all_indexed_peaks,
+    get_all_indexed_peaks,
+    parse_indexing_xml,
 )
 from laue_portal.components.visualization.orientation_map import (
     make_orientation_map,
     make_orientation_map_3d,
 )
+from laue_portal.components.visualization.peak_table import make_peak_table
 from laue_portal.components.visualization.quality_map import (
     make_quality_map,
     make_quality_map_3d,
 )
-from laue_portal.components.visualization.peak_table import make_peak_table
 
 FIXTURE_XML = os.path.join(os.path.dirname(__file__), "fixtures", "test_indexing.xml")
 

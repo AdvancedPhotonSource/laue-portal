@@ -1,9 +1,12 @@
 """
 Table of scan PV parameters extracted from MDA scan log XML.
 """
+
 from typing import Optional
+
+from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import Integer, String, Float, Boolean, ForeignKey
+
 from laue_portal.database.base import Base
 
 

@@ -5,12 +5,11 @@ into structured numpy arrays for visualization.
 This module has zero Dash/Plotly dependencies.
 """
 
-import xml.etree.ElementTree as ET
 import functools
 import os
-import numpy as np
-from pathlib import Path
+import xml.etree.ElementTree as ET
 
+import numpy as np
 
 # ---------------------------------------------------------------------------
 # Caching layer
@@ -21,6 +20,7 @@ from pathlib import Path
 # backend such as flask_caching + diskcache so that all workers share parsed
 # results instead of each maintaining an independent copy.
 # ---------------------------------------------------------------------------
+
 
 @functools.lru_cache(maxsize=4)
 def _cached_parse(xml_path: str, mtime_ns: int) -> dict:
@@ -333,28 +333,24 @@ def get_all_indexed_peaks(parsed: dict) -> list[dict]:
                 }
 
                 # Add pixel position and Q-vector if available
-                if (step_peaks["pixel_positions"] is not None
-                        and pk_i < len(step_peaks["pixel_positions"])):
+                if step_peaks["pixel_positions"] is not None and pk_i < len(step_peaks["pixel_positions"]):
                     row["x_pixel"] = float(step_peaks["pixel_positions"][pk_i, 0])
                     row["y_pixel"] = float(step_peaks["pixel_positions"][pk_i, 1])
                 else:
                     row["x_pixel"] = None
                     row["y_pixel"] = None
 
-                if (step_peaks["intensities"] is not None
-                        and pk_i < len(step_peaks["intensities"])):
+                if step_peaks["intensities"] is not None and pk_i < len(step_peaks["intensities"]):
                     row["intensity"] = float(step_peaks["intensities"][pk_i])
                 else:
                     row["intensity"] = None
 
-                if (step_peaks["integrals"] is not None
-                        and pk_i < len(step_peaks["integrals"])):
+                if step_peaks["integrals"] is not None and pk_i < len(step_peaks["integrals"]):
                     row["integral"] = float(step_peaks["integrals"][pk_i])
                 else:
                     row["integral"] = None
 
-                if (step_peaks["q_vectors"] is not None
-                        and pk_i < len(step_peaks["q_vectors"])):
+                if step_peaks["q_vectors"] is not None and pk_i < len(step_peaks["q_vectors"]):
                     row["qx"] = float(step_peaks["q_vectors"][pk_i, 0])
                     row["qy"] = float(step_peaks["q_vectors"][pk_i, 1])
                     row["qz"] = float(step_peaks["q_vectors"][pk_i, 2])
@@ -371,6 +367,7 @@ def get_all_indexed_peaks(parsed: dict) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _text(parent, tag: str) -> str | None:
     """Get text content of a child element, or None."""

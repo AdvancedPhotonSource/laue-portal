@@ -9,22 +9,20 @@ import os
 import sys
 
 import numpy as np
-import pytest
 
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
-from laue_portal.analysis.xml_parser import parse_indexing_xml
 from laue_portal.analysis.orientation import (
     batch_orientations,
-    pairwise_misorientation,
     misorientation_angle,
-    CUBIC_SYMMETRY_OPS,
+    pairwise_misorientation,
 )
+from laue_portal.analysis.xml_parser import parse_indexing_xml
 from laue_portal.components.visualization.orientation_map import (
+    apply_selection_highlight,
     make_orientation_map,
     make_orientation_map_3d,
-    apply_selection_highlight,
 )
 from laue_portal.components.visualization.quality_map import (
     make_quality_map,
@@ -43,8 +41,8 @@ def _parsed():
 # Pole figure provides grain indices in customdata for lasso selection
 # ---------------------------------------------------------------------------
 
-class TestPoleFigureCustomdata:
 
+class TestPoleFigureCustomdata:
     def test_customdata_contains_grain_indices(self):
         """Pole figure scatter trace should have grain_indices in customdata."""
         fig = make_pole_figure(_parsed(), hkl=(1, 0, 0))
@@ -79,8 +77,8 @@ class TestPoleFigureCustomdata:
 # Cross-plot highlighting on orientation map
 # ---------------------------------------------------------------------------
 
-class TestOrientationMapHighlighting:
 
+class TestOrientationMapHighlighting:
     def test_no_highlight_without_selection(self):
         """Without selection, orientation map should have 1 trace."""
         fig = make_orientation_map(_parsed(), color_by="cubic_ipf")
@@ -164,8 +162,8 @@ class TestOrientationMapHighlighting:
 # Cross-plot highlighting on quality map
 # ---------------------------------------------------------------------------
 
-class TestQualityMapHighlighting:
 
+class TestQualityMapHighlighting:
     def test_highlight_adds_trace(self):
         parsed = _parsed()
         fig = make_quality_map(parsed, metric="goodness")
@@ -186,8 +184,8 @@ class TestQualityMapHighlighting:
 # 3D orientation map highlighting
 # ---------------------------------------------------------------------------
 
-class TestOrientationMap3DHighlighting:
 
+class TestOrientationMap3DHighlighting:
     def test_3d_highlight_adds_scatter3d(self):
         parsed = _parsed()
         fig = make_orientation_map_3d(parsed, color_by="cubic_ipf")
@@ -200,13 +198,14 @@ class TestOrientationMap3DHighlighting:
 # Misorientation with real XML data
 # ---------------------------------------------------------------------------
 
-class TestMisorientationWithFixture:
 
+class TestMisorientationWithFixture:
     def test_pairwise_on_fixture_data(self):
         """Pairwise misorientation should work on fixture data."""
         parsed = _parsed()
         orientations = batch_orientations(
-            parsed["recip_lattices"], parsed["lattice_params"],
+            parsed["recip_lattices"],
+            parsed["lattice_params"],
         )
         result = pairwise_misorientation(orientations, symmetry_reduce=True)
         assert "angles" in result
@@ -218,7 +217,8 @@ class TestMisorientationWithFixture:
         """Subset misorientation should produce fewer pairs."""
         parsed = _parsed()
         orientations = batch_orientations(
-            parsed["recip_lattices"], parsed["lattice_params"],
+            parsed["recip_lattices"],
+            parsed["lattice_params"],
         )
         full = pairwise_misorientation(orientations)
         sub = pairwise_misorientation(orientations, indices=[0, 1])
@@ -228,7 +228,8 @@ class TestMisorientationWithFixture:
         """Misorientation of a grain with itself should be 0."""
         parsed = _parsed()
         orientations = batch_orientations(
-            parsed["recip_lattices"], parsed["lattice_params"],
+            parsed["recip_lattices"],
+            parsed["lattice_params"],
         )
         angle = misorientation_angle(orientations[0], orientations[0])
         assert abs(angle) < 1e-5

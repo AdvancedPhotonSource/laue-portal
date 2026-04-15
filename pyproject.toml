@@ -1,0 +1,31 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = [
+    "laue_portal/utilities/srange.py",    # Vendored, Python 2 artifacts
+    "laue_portal/utilities/hkl_parse.py", # Vendored
+]
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "B"]
+ignore = [
+    "E501", # Line too long -- handled by formatter; comments/strings are ok long
+    "E741", # Ambiguous variable name 'l' -- used intentionally in scientific code
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["E402"]                        # sys.path manipulation before imports
+"laue_portal/recon/analysis_recon.py" = ["E402"] # warnings.filterwarnings before imports
+"laue_portal/pages/create_reconstruction.py" = ["E402"] # logger setup between import groups
+"polaris_workflow/**/*.py" = ["E402", "B018"]   # standalone scripts
+
+[tool.ruff.lint.isort]
+known-first-party = ["laue_portal"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

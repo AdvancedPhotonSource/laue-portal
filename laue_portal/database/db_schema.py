@@ -8,17 +8,18 @@ Models are now organized under:
 - laue_portal/database/base.py            -> Declarative Base
 - laue_portal/database/models/*.py        -> Individual model classes
 """
+
 from laue_portal.database.base import Base
 from laue_portal.database.models import (
-    Metadata,
-    Scan,
+    Calib,
     Catalog,
     Job,
-    SubJob,
-    Calib,
-    Recon,
-    WireRecon,
+    Metadata,
     PeakIndex,
+    Recon,
+    Scan,
+    SubJob,
+    WireRecon,
 )
 
 __all__ = [

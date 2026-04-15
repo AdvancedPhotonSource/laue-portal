@@ -13,21 +13,25 @@ Responsibilities:
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
-from laue_portal.database.base import Base
+
 from laue_portal import config
+from laue_portal.database.base import Base
 
 # Shared SQLAlchemy Engine (static, based on config.db_file at import time)
 # Shared SQLAlchemy Engine, created lazily based on current config.db_file
 engine = None
 _engine_db_file = None
 
+
 def enable_sqlite_fks(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
 
+
 # Session factory, bound to the shared engine
 SessionLocal = sessionmaker(autoflush=False, autocommit=False)
+
 
 def get_engine():
     """
@@ -54,6 +58,7 @@ def get_engine():
         _engine_db_file = config.db_file
     return engine
 
+
 def get_session():
     """
     Create and return a new SQLAlchemy session bound to the shared Engine.
@@ -63,6 +68,7 @@ def get_session():
     get_engine()
     return SessionLocal()
 
+
 def load_all_models():
     """
     Import all ORM model modules to register mappers on Base.metadata.
@@ -71,6 +77,7 @@ def load_all_models():
     so repeated calls are effectively no-ops after the first import.
     """
     import laue_portal.database.models  # noqa: F401
+
 
 def init_db():
     """
@@ -86,5 +93,6 @@ def init_db():
 
     # Create tables using the shared engine
     Base.metadata.create_all(bind=get_engine())
+
 
 __all__ = ["engine", "SessionLocal", "get_engine", "get_session", "load_all_models", "init_db"]

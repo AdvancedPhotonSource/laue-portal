@@ -4,10 +4,10 @@ Reads configuration from config.yaml file in the project root.
 If config.yaml doesn't exist, it will be created from config.yaml.template.
 """
 
-import os
 import shutil
-import yaml
 from pathlib import Path
+
+import yaml
 
 # Get the project root directory (parent of laue_portal)
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -36,10 +36,10 @@ def _load_config():
     Load configuration from config.yaml file.
     """
     _ensure_config_exists()
-    
-    with open(CONFIG_FILE, 'r') as f:
+
+    with open(CONFIG_FILE, "r") as f:
         config = yaml.safe_load(f)
-    
+
     return config
 
 
@@ -47,11 +47,11 @@ def _load_config():
 _config = _load_config()
 
 # Export configuration variables
-db_file = _config.get('db_file', 'Laue_Records.db')
-DEFAULT_VARIABLES = _config.get('DEFAULT_VARIABLES', {})
-REDIS_CONFIG = _config.get('REDIS_CONFIG', {})
-DASH_CONFIG = _config.get('DASH_CONFIG', {})
-MOTOR_GROUPS = _config.get('MOTOR_GROUPS', {})
-VALID_HDF_EXTENSIONS = _config.get('VALID_HDF_EXTENSIONS', [])
-PEAKINDEX_DEFAULTS = _config.get('PEAKINDEX_DEFAULTS', {})
-WIRERECON_DEFAULTS = _config.get('WIRERECON_DEFAULTS', {})
+db_file = _config.get("db_file", "Laue_Records.db")
+DEFAULT_VARIABLES = _config.get("DEFAULT_VARIABLES", {})
+REDIS_CONFIG = _config.get("REDIS_CONFIG", {})
+DASH_CONFIG = _config.get("DASH_CONFIG", {})
+MOTOR_GROUPS = _config.get("MOTOR_GROUPS", {})
+VALID_HDF_EXTENSIONS = _config.get("VALID_HDF_EXTENSIONS", [])
+PEAKINDEX_DEFAULTS = _config.get("PEAKINDEX_DEFAULTS", {})
+WIRERECON_DEFAULTS = _config.get("WIRERECON_DEFAULTS", {})

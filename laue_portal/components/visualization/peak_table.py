@@ -158,10 +158,12 @@ def make_peak_table(indexed_peaks: list[dict]) -> html.Div:
         className="ag-theme-alpine",
     )
 
-    return html.Div([
-        html.H5(
-            f"Indexed Peaks ({len(indexed_peaks)} total)",
-            className="mt-3 mb-2",
-        ),
-        grid,
-    ])
+    return html.Div(
+        [
+            html.H5(
+                f"Indexed Peaks ({len(indexed_peaks)} total)",
+                className="mt-3 mb-2",
+            ),
+            grid,
+        ]
+    )

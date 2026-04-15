@@ -7,17 +7,17 @@ Tests stereo_plot and updated orientation_map with real XML fixture data.
 import os
 import sys
 
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 from laue_portal.analysis.xml_parser import parse_indexing_xml
-from laue_portal.components.visualization.stereo_plot import (
-    make_stereo_plot,
-    make_pole_figure,
-)
 from laue_portal.components.visualization.orientation_map import (
     make_orientation_map,
     make_orientation_map_3d,
+)
+from laue_portal.components.visualization.stereo_plot import (
+    make_pole_figure,
+    make_stereo_plot,
 )
 
 FIXTURE_XML = os.path.join(os.path.dirname(__file__), "fixtures", "test_indexing.xml")
@@ -30,6 +30,7 @@ def _parsed():
 # ---------------------------------------------------------------------------
 # Stereo plot
 # ---------------------------------------------------------------------------
+
 
 def test_stereo_plot_creates_figure():
     fig = make_stereo_plot(_parsed())
@@ -72,6 +73,7 @@ def test_stereo_plot_marker_size():
 # ---------------------------------------------------------------------------
 # Pole figure
 # ---------------------------------------------------------------------------
+
 
 def test_pole_figure_creates_figure():
     fig = make_pole_figure(_parsed(), hkl=(1, 0, 0))
@@ -127,7 +129,7 @@ def test_pole_figure_hsv_has_color_circle():
     """HSV position mode should draw a dashed color saturation circle."""
     fig = make_pole_figure(_parsed(), hkl=(1, 0, 0), color_scheme="hsv_position")
     # Find a trace with dash="dot" (the color circle)
-    dot_traces = [t for t in fig.data if hasattr(t, 'line') and t.line and t.line.dash == "dot"]
+    dot_traces = [t for t in fig.data if hasattr(t, "line") and t.line and t.line.dash == "dot"]
     assert len(dot_traces) >= 1
 
 
@@ -157,14 +159,14 @@ def test_pole_figure_surface_normal():
 
 def test_pole_figure_color_radius_custom():
     """Custom color radius should work."""
-    fig = make_pole_figure(_parsed(), hkl=(1, 0, 0),
-                           color_scheme="hsv_position", color_rad_deg=45.0)
+    fig = make_pole_figure(_parsed(), hkl=(1, 0, 0), color_scheme="hsv_position", color_rad_deg=45.0)
     assert fig is not None
 
 
 # ---------------------------------------------------------------------------
 # Updated orientation map with IPF/Rodrigues coloring
 # ---------------------------------------------------------------------------
+
 
 def test_orientation_map_cubic_ipf():
     fig = make_orientation_map(_parsed(), color_by="cubic_ipf")
@@ -206,9 +208,7 @@ def test_orientation_map_ipf_no_colorbar():
     marker = fig.data[0].marker
     # When no colorbar is set, Plotly creates an empty object with no title
     has_colorbar_title = (
-        marker.colorbar is not None
-        and marker.colorbar.title is not None
-        and marker.colorbar.title.text is not None
+        marker.colorbar is not None and marker.colorbar.title is not None and marker.colorbar.title.text is not None
     )
     assert not has_colorbar_title
 
@@ -224,11 +224,11 @@ def test_orientation_map_scalar_has_colorbar():
 # Orientation map surface normal selection (Fix 3)
 # ---------------------------------------------------------------------------
 
+
 def test_orientation_map_surface_normal():
     """Different surface selections should produce valid figures."""
     for surface in ("normal", "X", "H", "Y", "Z"):
-        fig = make_orientation_map(_parsed(), color_by="cubic_ipf",
-                                   surface=surface)
+        fig = make_orientation_map(_parsed(), color_by="cubic_ipf", surface=surface)
         assert fig is not None
         colors = fig.data[0].marker.color
         assert isinstance(colors, (list, tuple))
@@ -238,8 +238,7 @@ def test_orientation_map_surface_normal():
 def test_orientation_map_3d_surface_normal():
     """3D orientation map should accept surface parameter."""
     for surface in ("normal", "X", "H", "Y", "Z"):
-        fig = make_orientation_map_3d(_parsed(), color_by="cubic_ipf",
-                                      surface=surface)
+        fig = make_orientation_map_3d(_parsed(), color_by="cubic_ipf", surface=surface)
         assert fig is not None
         colors = fig.data[0].marker.color
         assert isinstance(colors, (list, tuple))
@@ -249,10 +248,8 @@ def test_orientation_map_3d_surface_normal():
 def test_orientation_map_surface_changes_ipf_colors():
     """Different surfaces should produce different IPF colors."""
     parsed = _parsed()
-    fig_normal = make_orientation_map(parsed, color_by="cubic_ipf",
-                                      surface="normal")
-    fig_z = make_orientation_map(parsed, color_by="cubic_ipf",
-                                 surface="Z")
+    fig_normal = make_orientation_map(parsed, color_by="cubic_ipf", surface="normal")
+    fig_z = make_orientation_map(parsed, color_by="cubic_ipf", surface="Z")
     # At least some colors should differ between different surface normals
     colors_normal = fig_normal.data[0].marker.color
     colors_z = fig_z.data[0].marker.color
@@ -263,20 +260,18 @@ def test_orientation_map_surface_default_is_normal():
     """Default surface should be 'normal', producing same result as explicit."""
     parsed = _parsed()
     fig_default = make_orientation_map(parsed, color_by="cubic_ipf")
-    fig_explicit = make_orientation_map(parsed, color_by="cubic_ipf",
-                                        surface="normal")
+    fig_explicit = make_orientation_map(parsed, color_by="cubic_ipf", surface="normal")
     assert fig_default.data[0].marker.color == fig_explicit.data[0].marker.color
 
 
 def test_orientation_map_surface_scalar_unaffected():
     """Scalar coloring modes should not be affected by surface selection."""
     parsed = _parsed()
-    fig_normal = make_orientation_map(parsed, color_by="n_indexed",
-                                      surface="normal")
-    fig_z = make_orientation_map(parsed, color_by="n_indexed",
-                                 surface="Z")
+    fig_normal = make_orientation_map(parsed, color_by="n_indexed", surface="normal")
+    fig_z = make_orientation_map(parsed, color_by="n_indexed", surface="Z")
     # Scalar modes use the same color values regardless of surface
     import numpy as np
+
     np.testing.assert_array_equal(
         fig_normal.data[0].marker.color,
         fig_z.data[0].marker.color,

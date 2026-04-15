@@ -8,7 +8,6 @@ PoleFigure.ipf, xmlMultiIndex.ipf).  Zero Dash/Plotly dependencies.
 
 import numpy as np
 
-
 # 34ID-E surface coordinate system (default)
 _DEFAULT_NORMAL = np.array([0.0, 1.0 / np.sqrt(2.0), -1.0 / np.sqrt(2.0)])
 _DEFAULT_ROLL = np.array([0.0, -1.0 / np.sqrt(2.0), -1.0 / np.sqrt(2.0)])
@@ -29,28 +28,28 @@ _ir2 = 1.0 / np.sqrt(2.0)
 
 _SURFACE_MATRICES = {
     "normal": {  # 34ID-E default: {tilt=X, roll=-H, normal=-F}
-        "tilt":   np.array([1.0, 0.0, 0.0]),
-        "roll":   np.array([0.0, -_ir2, -_ir2]),
+        "tilt": np.array([1.0, 0.0, 0.0]),
+        "roll": np.array([0.0, -_ir2, -_ir2]),
         "normal": np.array([0.0, _ir2, -_ir2]),
     },
     "X": {  # normal = X
-        "tilt":   np.array([0.0, -_ir2, -_ir2]),
-        "roll":   np.array([0.0, _ir2, -_ir2]),
+        "tilt": np.array([0.0, -_ir2, -_ir2]),
+        "roll": np.array([0.0, _ir2, -_ir2]),
         "normal": np.array([1.0, 0.0, 0.0]),
     },
     "H": {  # normal = H
-        "tilt":   np.array([1.0, 0.0, 0.0]),
-        "roll":   np.array([0.0, _ir2, -_ir2]),
+        "tilt": np.array([1.0, 0.0, 0.0]),
+        "roll": np.array([0.0, _ir2, -_ir2]),
         "normal": np.array([0.0, _ir2, _ir2]),
     },
     "Y": {  # normal = Y (lab up)
-        "tilt":   np.array([0.0, 0.0, 1.0]),
-        "roll":   np.array([1.0, 0.0, 0.0]),
+        "tilt": np.array([0.0, 0.0, 1.0]),
+        "roll": np.array([1.0, 0.0, 0.0]),
         "normal": np.array([0.0, 1.0, 0.0]),
     },
     "Z": {  # normal = Z (downstream)
-        "tilt":   np.array([1.0, 0.0, 0.0]),
-        "roll":   np.array([0.0, 1.0, 0.0]),
+        "tilt": np.array([1.0, 0.0, 0.0]),
+        "roll": np.array([0.0, 1.0, 0.0]),
         "normal": np.array([0.0, 0.0, 1.0]),
     },
 }
@@ -84,6 +83,7 @@ def get_surface_vectors(surface="normal"):
 # ===================================================================
 # Stereographic Projection
 # ===================================================================
+
 
 def stereographic_project(vectors, pole=None, azimuth_ref=None):
     """
@@ -175,6 +175,7 @@ def stereographic_project(vectors, pole=None, azimuth_ref=None):
 # Wulff Net
 # ===================================================================
 
+
 def wulff_net_lines(step_deg=10, phi_rotation=0.0, n_points_per_line=91):
     """
     Generate Wulff net lines for stereographic projection overlay.
@@ -245,11 +246,13 @@ def wulff_net_lines(step_deg=10, phi_rotation=0.0, n_points_per_line=91):
             pts_y.append(y_rot)
 
         weight = _line_weight(lat_deg, step_deg)
-        lines.append({
-            'x': np.array(pts_x),
-            'y': np.array(pts_y),
-            'weight': weight,
-        })
+        lines.append(
+            {
+                "x": np.array(pts_x),
+                "y": np.array(pts_y),
+                "weight": weight,
+            }
+        )
 
     # Longitude lines: constant longitude, varying latitude
     for lon_deg in range(-90 + step_deg, 90, step_deg):
@@ -291,11 +294,13 @@ def wulff_net_lines(step_deg=10, phi_rotation=0.0, n_points_per_line=91):
             pts_y.append(y_rot)
 
         weight = _line_weight(lon_deg, step_deg)
-        lines.append({
-            'x': np.array(pts_x),
-            'y': np.array(pts_y),
-            'weight': weight,
-        })
+        lines.append(
+            {
+                "x": np.array(pts_x),
+                "y": np.array(pts_y),
+                "weight": weight,
+            }
+        )
 
     return lines
 
@@ -304,9 +309,9 @@ def _line_weight(angle_deg, step_deg):
     """Determine Wulff net line weight based on angle."""
     angle = abs(angle_deg)
     if angle % 20 == 0:
-        return 1.0   # black
+        return 1.0  # black
     elif angle % 10 == 0:
-        return 0.3   # gray
+        return 0.3  # gray
     else:
         return 0.09  # light gray
 
@@ -315,8 +320,8 @@ def _line_weight(angle_deg, step_deg):
 # Pole Figure Computation
 # ===================================================================
 
-def pole_figure_points(recip_lattices, hkl_family, surface_normal=None,
-                       surface_roll=None, surface_tilt=None):
+
+def pole_figure_points(recip_lattices, hkl_family, surface_normal=None, surface_roll=None, surface_tilt=None):
     """
     Compute pole figure scatter points.
 
@@ -384,7 +389,7 @@ def pole_figure_points(recip_lattices, hkl_family, surface_normal=None,
                 continue
 
             # Stereographic projection
-            sin_theta = np.sqrt(1.0 - np.clip(dot_normal, 0, 1)**2)
+            sin_theta = np.sqrt(1.0 - np.clip(dot_normal, 0, 1) ** 2)
             r = sin_theta / (1.0 + dot_normal) if (1.0 + dot_normal) > 1e-12 else 0.0
 
             # Project to 2D
@@ -411,6 +416,7 @@ def pole_figure_points(recip_lattices, hkl_family, surface_normal=None,
 # ===================================================================
 # Cubic {hkl} Family Generation
 # ===================================================================
+
 
 def cubic_hkl_family(h, k, l):
     """
@@ -486,6 +492,7 @@ def cubic_hkl_family(h, k, l):
 # Stereographic zoom helper
 # ===================================================================
 
+
 def zoom_axis_range(zoom_deg):
     """
     Compute axis range for a given zoom angle.
@@ -507,6 +514,7 @@ def zoom_axis_range(zoom_deg):
 # ===================================================================
 # Q-vector stereographic projection for single-step detail
 # ===================================================================
+
 
 def project_q_vectors(q_vectors, pole=None):
     """

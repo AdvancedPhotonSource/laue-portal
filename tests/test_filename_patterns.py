@@ -7,21 +7,19 @@ Tests the pure filename-pattern logic independently of Dash.
 import os
 import tempfile
 
-import pytest
-
 from laue_portal.utilities.filename_patterns import (
-    filter_files_by_extension,
-    extract_index_patterns,
-    generate_wildcard_patterns,
-    build_pattern_label,
-    scan_directory_patterns,
     _split_pattern_segments,
+    build_pattern_label,
+    extract_index_patterns,
+    filter_files_by_extension,
+    generate_wildcard_patterns,
+    scan_directory_patterns,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_temp_dir(filenames):
     """Create a temp directory populated with empty files and return the path."""
@@ -35,8 +33,8 @@ def _make_temp_dir(filenames):
 # filter_files_by_extension
 # ---------------------------------------------------------------------------
 
-class TestFilterFilesByExtension:
 
+class TestFilterFilesByExtension:
     def test_filters_by_extension(self):
         tmpdir = _make_temp_dir(["a.h5", "b.hdf5", "c.txt", "d.log"])
         result = filter_files_by_extension(tmpdir, [".h5", ".hdf5"])
@@ -78,8 +76,8 @@ class TestFilterFilesByExtension:
 # extract_index_patterns
 # ---------------------------------------------------------------------------
 
-class TestExtractIndexPatterns:
 
+class TestExtractIndexPatterns:
     def test_single_index(self):
         files = ["Si_001.h5", "Si_002.h5", "Si_003.h5"]
         result = extract_index_patterns(files, num_indices=1)
@@ -129,8 +127,8 @@ class TestExtractIndexPatterns:
 # _split_pattern_segments
 # ---------------------------------------------------------------------------
 
-class TestSplitPatternSegments:
 
+class TestSplitPatternSegments:
     def test_basic_split(self):
         assert _split_pattern_segments("Si_PE2_%d.h5") == ["Si", "PE2", "%d.h5"]
 
@@ -154,8 +152,8 @@ class TestSplitPatternSegments:
 # generate_wildcard_patterns
 # ---------------------------------------------------------------------------
 
-class TestGenerateWildcardPatterns:
 
+class TestGenerateWildcardPatterns:
     def test_same_structure_different_name(self):
         """Two patterns differing by one segment should produce a wildcard."""
         pattern_dict = {
@@ -243,8 +241,8 @@ class TestGenerateWildcardPatterns:
 # build_pattern_label
 # ---------------------------------------------------------------------------
 
-class TestBuildPatternLabel:
 
+class TestBuildPatternLabel:
     def test_single_index_label(self):
         label = build_pattern_label("Si_%d.h5", [[1], [2], [3]])
         assert "Si_%d.h5" in label
@@ -268,8 +266,8 @@ class TestBuildPatternLabel:
 # scan_directory_patterns (integration)
 # ---------------------------------------------------------------------------
 
-class TestScanDirectoryPatterns:
 
+class TestScanDirectoryPatterns:
     def test_basic_scan(self):
         files = [f"Si_PE2_{i}.h5" for i in range(1, 11)]
         tmpdir = _make_temp_dir(files)
@@ -279,10 +277,7 @@ class TestScanDirectoryPatterns:
         assert "Si_PE2_%d.h5" in patterns
 
     def test_with_wildcards(self):
-        files = (
-            [f"Si_PE2_{i}.h5" for i in range(1, 6)]
-            + [f"Si_Eiger1_{i}.h5" for i in range(1, 4)]
-        )
+        files = [f"Si_PE2_{i}.h5" for i in range(1, 6)] + [f"Si_Eiger1_{i}.h5" for i in range(1, 4)]
         tmpdir = _make_temp_dir(files)
         result = scan_directory_patterns(tmpdir, [".h5"], num_indices=1)
         patterns = [p for p, _ in result]

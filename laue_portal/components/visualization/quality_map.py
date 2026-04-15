@@ -12,7 +12,6 @@ import plotly.graph_objects as go
 
 from laue_portal.components.visualization.orientation_map import _select_axes
 
-
 _GRAY_BG = "rgb(156, 156, 156)"
 
 # Metric definitions: key -> (array_key, display_name, colorscale)
@@ -26,9 +25,7 @@ _METRICS = {
 
 def _get_metric(parsed, metric):
     """Return (color_vals, display_name, colorscale) for a metric key."""
-    array_key, display_name, colorscale = _METRICS.get(
-        metric, _METRICS["goodness"]
-    )
+    array_key, display_name, colorscale = _METRICS.get(metric, _METRICS["goodness"])
     color_vals = parsed[array_key]
     if hasattr(color_vals, "astype") and color_vals.dtype in (np.int32, np.int64):
         color_vals = color_vals.astype(float)
@@ -68,31 +65,35 @@ def make_quality_map(
 
     fig = go.Figure()
 
-    fig.add_trace(go.Scattergl(
-        x=x_vals,
-        y=y_vals,
-        mode="markers",
-        marker=dict(
-            size=marker_size,
-            symbol=marker_symbol,
-            color=color_vals,
-            colorscale=colorscale,
-            colorbar=dict(title=display_name),
-            line=dict(width=0),
-        ),
-        hovertemplate=(
-            "<b>Step %{customdata[0]}</b><br>"
-            f"{display_name}: " + "%{marker.color:.4f}<br>"
-            "Position: (%{customdata[1]:.1f}, %{customdata[2]:.1f})<br>"
-            "<extra></extra>"
-        ),
-        customdata=np.column_stack([
-            np.arange(n_points),
-            positions[:, 0],
-            positions[:, 1],
-        ]),
-        uid="quality-2d-main",
-    ))
+    fig.add_trace(
+        go.Scattergl(
+            x=x_vals,
+            y=y_vals,
+            mode="markers",
+            marker=dict(
+                size=marker_size,
+                symbol=marker_symbol,
+                color=color_vals,
+                colorscale=colorscale,
+                colorbar=dict(title=display_name),
+                line=dict(width=0),
+            ),
+            hovertemplate=(
+                "<b>Step %{customdata[0]}</b><br>"
+                f"{display_name}: " + "%{marker.color:.4f}<br>"
+                "Position: (%{customdata[1]:.1f}, %{customdata[2]:.1f})<br>"
+                "<extra></extra>"
+            ),
+            customdata=np.column_stack(
+                [
+                    np.arange(n_points),
+                    positions[:, 0],
+                    positions[:, 1],
+                ]
+            ),
+            uid="quality-2d-main",
+        )
+    )
 
     fig.update_layout(
         xaxis_title=x_label,
@@ -138,29 +139,33 @@ def make_quality_map_3d(
 
     fig = go.Figure()
 
-    fig.add_trace(go.Scatter3d(
-        x=positions[:, 0],
-        y=positions[:, 1],
-        z=positions[:, 2],
-        mode="markers",
-        marker=dict(
-            size=max(2, marker_size // 3),
-            color=color_vals,
-            colorscale=colorscale,
-            colorbar=dict(title=display_name),
-            line=dict(width=0),
-        ),
-        hovertemplate=(
-            "<b>Step %{customdata[0]}</b><br>"
-            f"{display_name}: " + "%{marker.color:.4f}<br>"
-            "Position: (%{x:.1f}, %{y:.1f}, %{z:.1f})<br>"
-            "<extra></extra>"
-        ),
-        customdata=np.column_stack([
-            np.arange(n_points),
-        ]),
-        uid="quality-3d-main",
-    ))
+    fig.add_trace(
+        go.Scatter3d(
+            x=positions[:, 0],
+            y=positions[:, 1],
+            z=positions[:, 2],
+            mode="markers",
+            marker=dict(
+                size=max(2, marker_size // 3),
+                color=color_vals,
+                colorscale=colorscale,
+                colorbar=dict(title=display_name),
+                line=dict(width=0),
+            ),
+            hovertemplate=(
+                "<b>Step %{customdata[0]}</b><br>"
+                f"{display_name}: " + "%{marker.color:.4f}<br>"
+                "Position: (%{x:.1f}, %{y:.1f}, %{z:.1f})<br>"
+                "<extra></extra>"
+            ),
+            customdata=np.column_stack(
+                [
+                    np.arange(n_points),
+                ]
+            ),
+            uid="quality-3d-main",
+        )
+    )
 
     fig.update_layout(
         scene=dict(

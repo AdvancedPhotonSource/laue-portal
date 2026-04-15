@@ -7,31 +7,30 @@ generation, and batch coloring utilities.
 
 import os
 import sys
-import numpy as np
-import pytest
 
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+import numpy as np
+
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 from laue_portal.analysis.coloring import (
-    cubic_ipf_color,
-    rodrigues_rgb,
-    hsv_wheel_color,
-    pole_figure_color_radius,
-    make_cubic_ipf_triangle,
-    make_color_hexagon,
     batch_ipf_colors,
     batch_rodrigues_rgb,
+    cubic_ipf_color,
+    hsv_wheel_color,
+    make_color_hexagon,
+    make_cubic_ipf_triangle,
+    pole_figure_color_radius,
     rgb_to_plotly_colors,
+    rodrigues_rgb,
 )
-
 
 # ---------------------------------------------------------------------------
 # Cubic IPF coloring
 # ---------------------------------------------------------------------------
 
-class TestCubicIpfColor:
 
+class TestCubicIpfColor:
     def test_001_is_red(self):
         """(001) direction should map to red."""
         rgb = cubic_ipf_color([0, 0, 1])
@@ -100,8 +99,8 @@ class TestCubicIpfColor:
 # Rodrigues RGB coloring
 # ---------------------------------------------------------------------------
 
-class TestRodriguesRgb:
 
+class TestRodriguesRgb:
     def test_zero_rotation_is_black(self):
         rgb = rodrigues_rgb([0, 0, 0])
         np.testing.assert_allclose(rgb, [0, 0, 0])
@@ -143,8 +142,8 @@ class TestRodriguesRgb:
 # HSV wheel coloring
 # ---------------------------------------------------------------------------
 
-class TestHsvWheelColor:
 
+class TestHsvWheelColor:
     def test_center_is_white(self):
         rgb = hsv_wheel_color(0.0, 0.0)
         np.testing.assert_allclose(rgb, [1, 1, 1])
@@ -175,8 +174,8 @@ class TestHsvWheelColor:
 # Legend image generation
 # ---------------------------------------------------------------------------
 
-class TestLegendImages:
 
+class TestLegendImages:
     def test_ipf_triangle_shape(self):
         img = make_cubic_ipf_triangle(resolution=64)
         assert img.shape == (64, 64, 4)
@@ -212,8 +211,8 @@ class TestLegendImages:
 # Batch utilities
 # ---------------------------------------------------------------------------
 
-class TestBatchUtilities:
 
+class TestBatchUtilities:
     def test_batch_ipf_colors_shape(self):
         dirs = np.array([[0, 0, 1], [0, 1, 1], [1, 1, 1], [1, 2, 3]])
         rgb = batch_ipf_colors(dirs)
@@ -246,8 +245,8 @@ class TestBatchUtilities:
 # Pole figure color radius
 # ---------------------------------------------------------------------------
 
-class TestPoleFigureColorRadius:
 
+class TestPoleFigureColorRadius:
     def test_origin_22_5_degrees(self):
         """At origin, radius = tan(22.5°/2) ≈ 0.1989."""
         r = pole_figure_color_radius(0, 0, 22.5)

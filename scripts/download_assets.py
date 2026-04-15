@@ -16,7 +16,6 @@ Usage:
 import argparse
 import os
 import re
-import sys
 import urllib.request
 
 # ---------------------------------------------------------------------------
@@ -29,34 +28,24 @@ ASSETS_DIR = os.path.join(PROJECT_ROOT, "assets")
 FONTS_DIR = os.path.join(ASSETS_DIR, "fonts")
 
 # The three external stylesheets used by lau_dash.py
-FLATLY_CSS_URL = (
-    "https://cdn.jsdelivr.net/npm/bootswatch@5.3.6/dist/flatly/bootstrap.min.css"
-)
-DBC_CSS_URL = (
-    "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
-)
-BOOTSTRAP_ICONS_CSS_URL = (
-    "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
-)
+FLATLY_CSS_URL = "https://cdn.jsdelivr.net/npm/bootswatch@5.3.6/dist/flatly/bootstrap.min.css"
+DBC_CSS_URL = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
+BOOTSTRAP_ICONS_CSS_URL = "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
 
 # Bootstrap Icons font files (referenced by bootstrap-icons.css)
-BOOTSTRAP_ICONS_FONT_BASE = (
-    "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts"
-)
+BOOTSTRAP_ICONS_FONT_BASE = "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts"
 BOOTSTRAP_ICONS_FONTS = [
     "bootstrap-icons.woff2",
     "bootstrap-icons.woff",
 ]
 
 # Google Fonts CSS endpoint for Lato (referenced by Flatly theme via @import)
-LATO_GOOGLE_FONTS_URL = (
-    "https://fonts.googleapis.com/css2?"
-    "family=Lato:ital,wght@0,400;0,700;1,400&display=swap"
-)
+LATO_GOOGLE_FONTS_URL = "https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;1,400&display=swap"
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _download(url, dest, *, force=False, user_agent=None):
     """Download *url* to *dest*, skipping if the file already exists."""
@@ -97,19 +86,14 @@ def _download_google_fonts(force=False):
 
     Returns the ``@font-face`` CSS text to embed in the Flatly stylesheet.
     """
-    ua = (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    )
+    ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
     print("\nFetching Google Fonts CSS for Lato...")
     css = _download_text(LATO_GOOGLE_FONTS_URL, user_agent=ua)
 
     # Split into (comment, @font-face block) pairs.
     # Google Fonts CSS has   /* subset-name */\n@font-face { ... }
-    entries = re.findall(
-        r"/\*\s*([\w-]+)\s*\*/\s*(@font-face\s*\{[^}]+\})", css, re.DOTALL
-    )
+    entries = re.findall(r"/\*\s*([\w-]+)\s*\*/\s*(@font-face\s*\{[^}]+\})", css, re.DOTALL)
 
     font_face_parts = []
     downloaded = 0
@@ -123,8 +107,8 @@ def _download_google_fonts(force=False):
         if not (style_m and weight_m and url_m):
             continue
 
-        style = style_m.group(1)   # normal | italic
-        weight = weight_m.group(1) # 400 | 700
+        style = style_m.group(1)  # normal | italic
+        weight = weight_m.group(1)  # 400 | 700
 
         # Build a unique filename per weight/style/subset
         if style == "italic":
@@ -183,7 +167,7 @@ def _patch_flatly_css(lato_font_face_css, force=False):
 
     # Replace the @import url(...) for Google Fonts with our local @font-face
     patched, n = re.subn(
-        r'@import\s+url\([^)]*fonts\.googleapis\.com[^)]*\)\s*;?',
+        r"@import\s+url\([^)]*fonts\.googleapis\.com[^)]*\)\s*;?",
         lato_font_face_css,
         css,
     )
@@ -230,12 +214,12 @@ def _patch_bootstrap_icons_css(force=False):
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Download external CSS/font assets for air-gapped deployment."
-    )
+    parser = argparse.ArgumentParser(description="Download external CSS/font assets for air-gapped deployment.")
     parser.add_argument(
-        "--force", action="store_true",
+        "--force",
+        action="store_true",
         help="Re-download all files even if they already exist.",
     )
     args = parser.parse_args()

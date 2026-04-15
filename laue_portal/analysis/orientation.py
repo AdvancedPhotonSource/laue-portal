@@ -49,11 +49,13 @@ def lattice_params_to_reciprocal(a, b, c, alpha_deg, beta_deg, gamma_deg):
     V = np.sqrt(1.0 - cos_a**2 - cos_b**2 - cos_g**2 + 2.0 * cos_a * cos_b * cos_g)
 
     # Direct lattice matrix (rows = a, b, c vectors)
-    direct = np.array([
-        [a,         0.0,                                       0.0],
-        [b * cos_g, b * sin_g,                                 0.0],
-        [c * cos_b, c * (cos_a - cos_b * cos_g) / sin_g,      c * V / sin_g],
-    ])
+    direct = np.array(
+        [
+            [a, 0.0, 0.0],
+            [b * cos_g, b * sin_g, 0.0],
+            [c * cos_b, c * (cos_a - cos_b * cos_g) / sin_g, c * V / sin_g],
+        ]
+    )
 
     # Reciprocal lattice = 2*pi * inv(direct)^T
     reciprocal = 2.0 * np.pi * np.linalg.inv(direct).T
@@ -109,11 +111,13 @@ def orientation_to_rodrigues(R):
         return np.zeros(3)
 
     # Rotation axis from skew-symmetric part
-    axis = np.array([
-        R[1, 2] - R[2, 1],
-        R[2, 0] - R[0, 2],
-        R[0, 1] - R[1, 0],
-    ])
+    axis = np.array(
+        [
+            R[1, 2] - R[2, 1],
+            R[2, 0] - R[0, 2],
+            R[0, 1] - R[1, 0],
+        ]
+    )
     axis_norm = np.linalg.norm(axis)
     if axis_norm < 1e-12:
         return np.zeros(3)
@@ -167,6 +171,7 @@ def crystal_direction_along_normal(recip_lattice, normal=None):
 # ---------------------------------------------------------------------------
 # Batch operations for full datasets
 # ---------------------------------------------------------------------------
+
 
 def batch_crystal_directions(recip_lattices, normal=None):
     """
@@ -266,6 +271,7 @@ def batch_rodrigues(recip_lattices, lattice_params):
 # Cubic symmetry operations (24 proper rotations of point group 432 / m-3m)
 # ---------------------------------------------------------------------------
 
+
 def _make_cubic_symmetry_ops():
     """
     Build the 24 proper rotation matrices for cubic symmetry.
@@ -291,11 +297,13 @@ def _make_cubic_symmetry_ops():
         ax = ax / np.linalg.norm(ax)
         x, y, z = ax
         c1 = 1.0 - c
-        return np.array([
-            [c + x * x * c1,     x * y * c1 - z * s, x * z * c1 + y * s],
-            [x * y * c1 + z * s, c + y * y * c1,      y * z * c1 - x * s],
-            [x * z * c1 - y * s, y * z * c1 + x * s,  c + z * z * c1],
-        ])
+        return np.array(
+            [
+                [c + x * x * c1, x * y * c1 - z * s, x * z * c1 + y * s],
+                [x * y * c1 + z * s, c + y * y * c1, y * z * c1 - x * s],
+                [x * z * c1 - y * s, y * z * c1 + x * s, c + z * z * c1],
+            ]
+        )
 
     # Identity
     ops.append(np.eye(3))
@@ -311,8 +319,7 @@ def _make_cubic_symmetry_ops():
             ops.append(_rot(axis, angle))
 
     # Two-fold axes: [110], [1-10], [101], [10-1], [011], [01-1] at 180 deg
-    for axis in ([1, 1, 0], [1, -1, 0], [1, 0, 1],
-                 [1, 0, -1], [0, 1, 1], [0, 1, -1]):
+    for axis in ([1, 1, 0], [1, -1, 0], [1, 0, 1], [1, 0, -1], [0, 1, 1], [0, 1, -1]):
         ops.append(_rot(axis, 180))
 
     return np.array(ops)
@@ -330,6 +337,7 @@ _SYM_OPS_T = np.array([s.T for s in CUBIC_SYMMETRY_OPS])
 # ---------------------------------------------------------------------------
 # Misorientation
 # ---------------------------------------------------------------------------
+
 
 def _rotation_angle(R):
     """Return rotation angle (degrees) of a 3x3 rotation matrix."""
@@ -420,9 +428,7 @@ def misorientation_from_reference(orientations, ref_index, symmetry_reduce=True)
             # C_all[s] = R_i @ sym_ref_inv[s]  ->  (24, 3, 3)
             C_all = orientations[i] @ sym_ref_inv  # (24, 3, 3)
             traces = C_all[:, 0, 0] + C_all[:, 1, 1] + C_all[:, 2, 2]
-            all_angles = np.degrees(
-                np.arccos(np.clip((traces - 1.0) / 2.0, -1.0, 1.0))
-            )
+            all_angles = np.degrees(np.arccos(np.clip((traces - 1.0) / 2.0, -1.0, 1.0)))
             best = int(np.argmin(all_angles))
             angle = all_angles[best]
             angles[i] = angle
@@ -431,11 +437,13 @@ def misorientation_from_reference(orientations, ref_index, symmetry_reduce=True)
                 continue
 
             C = C_all[best]
-            axis = np.array([
-                C[1, 2] - C[2, 1],
-                C[2, 0] - C[0, 2],
-                C[0, 1] - C[1, 0],
-            ])
+            axis = np.array(
+                [
+                    C[1, 2] - C[2, 1],
+                    C[2, 0] - C[0, 2],
+                    C[0, 1] - C[1, 0],
+                ]
+            )
             axis_norm = np.linalg.norm(axis)
             if axis_norm < 1e-12:
                 continue
@@ -447,17 +455,17 @@ def misorientation_from_reference(orientations, ref_index, symmetry_reduce=True)
                 continue
             C = orientations[i] @ R_ref_inv
             trace = C[0, 0] + C[1, 1] + C[2, 2]
-            angle = np.degrees(
-                np.arccos(np.clip((trace - 1.0) / 2.0, -1.0, 1.0))
-            )
+            angle = np.degrees(np.arccos(np.clip((trace - 1.0) / 2.0, -1.0, 1.0)))
             angles[i] = angle
             if angle < 1e-12:
                 continue
-            axis = np.array([
-                C[1, 2] - C[2, 1],
-                C[2, 0] - C[0, 2],
-                C[0, 1] - C[1, 0],
-            ])
+            axis = np.array(
+                [
+                    C[1, 2] - C[2, 1],
+                    C[2, 0] - C[0, 2],
+                    C[0, 1] - C[1, 0],
+                ]
+            )
             axis_norm = np.linalg.norm(axis)
             if axis_norm < 1e-12:
                 continue
@@ -511,7 +519,8 @@ def pairwise_misorientation(orientations, indices=None, symmetry_reduce=True):
 
     for k, (i, j) in enumerate(pairs):
         angles[k] = misorientation_angle(
-            orientations[i], orientations[j],
+            orientations[i],
+            orientations[j],
             symmetry_reduce=symmetry_reduce,
         )
 

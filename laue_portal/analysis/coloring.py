@@ -14,10 +14,10 @@ Utility_JZT.ipf).  Zero Dash/Plotly dependencies.
 
 import numpy as np
 
-
 # ===================================================================
 # Scheme 1: Cubic IPF Standard Triangle
 # ===================================================================
+
 
 def cubic_ipf_color(hkl):
     """
@@ -98,6 +98,7 @@ def _ipf_single(vec):
 # ===================================================================
 # Scheme 2: Rodrigues Vector RGB
 # ===================================================================
+
 
 def rodrigues_rgb(rodrigues_vec, max_angle_deg=None):
     """
@@ -187,6 +188,7 @@ def rodrigues_rgb(rodrigues_vec, max_angle_deg=None):
 # Scheme 3: HSV Color Wheel
 # ===================================================================
 
+
 def hsv_wheel_color(dx, dy, rmax=1.0):
     """
     HSV-style color from position on a polar plot.
@@ -259,6 +261,7 @@ def _hsv_to_rgb(h, s, v):
 # ===================================================================
 # Color Legend Generation
 # ===================================================================
+
 
 def make_cubic_ipf_triangle(resolution=256):
     """
@@ -347,6 +350,7 @@ def make_color_hexagon(resolution=512):
 # Batch coloring for datasets
 # ===================================================================
 
+
 def batch_ipf_colors(crystal_directions):
     """
     Compute cubic IPF colors for an array of crystal directions.
@@ -419,6 +423,7 @@ def rgb_to_plotly_colors(rgb_array):
 # ===================================================================
 # Pole Figure Color Radius
 # ===================================================================
+
 
 def pole_figure_color_radius(x0, y0, rad_deg):
     """

@@ -1,10 +1,11 @@
-import dash
-from laue_portal.database.session_utils import init_db, get_engine
-import laue_portal.database.db_utils as db_utils
-from laue_portal.processing.redis_utils import init_redis_status
-import os
-from laue_portal import config
 import logging
+import os
+
+import dash
+
+from laue_portal import config
+from laue_portal.database.session_utils import init_db
+from laue_portal.processing.redis_utils import init_redis_status
 
 
 def ensure_database_exists():
@@ -34,14 +35,16 @@ init_redis_status()
 # Stylesheets (Bootstrap Flatly, DBC templates, Bootstrap Icons) are served
 # locally from the assets/ directory for air-gapped deployment.  Run
 # ``python scripts/download_assets.py`` to populate them from CDNs.
-app = dash.Dash(__name__, 
-                external_stylesheets=[], 
-                suppress_callback_exceptions=True,
-                pages_folder="laue_portal/pages",)
+app = dash.Dash(
+    __name__,
+    external_stylesheets=[],
+    suppress_callback_exceptions=True,
+    pages_folder="laue_portal/pages",
+)
 
 
 app.layout = dash.page_container
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     ensure_database_exists()
-    app.run(debug=config.DASH_CONFIG['debug'], port=config.DASH_CONFIG['port'], host=config.DASH_CONFIG['host'])
+    app.run(debug=config.DASH_CONFIG["debug"], port=config.DASH_CONFIG["port"], host=config.DASH_CONFIG["host"])

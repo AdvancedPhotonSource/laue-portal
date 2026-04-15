@@ -571,7 +571,7 @@ class srange:
                 count = 0
                 i = 0
                 new_stride = -1
-                for (lo, hi, stride) in l:
+                for (lo, hi, _stride) in l:
                         if not (lo==hi):                                        # reset for next search, start again
                                 if count > 2:                                   # done with this run, save info
                                         lcombine.append((istart,istart+count-1,new_stride))

@@ -1,20 +1,21 @@
 import dash_bootstrap_components as dbc
-from dash import html, Input, Output, State, callback, dcc
+from dash import Input, Output, State, callback, html
+
 from laue_portal.processing.redis_utils import REDIS_CONNECTED_AT_STARTUP
 
 navbar = dbc.Navbar(
     dbc.Container(
         [
             dbc.NavbarBrand("3DMN Portal", href="/", id="navbar-brand"),
-            html.Div([
-                html.I(
-                    className="bi bi-hdd-network",
-                    style={
-                        'fontSize': '1.5rem',
-                        'color': '#18BC9C' if REDIS_CONNECTED_AT_STARTUP else '#FF6B6B'
-                    }
-                ),
-            ], className="d-flex align-items-center ms-2"),
+            html.Div(
+                [
+                    html.I(
+                        className="bi bi-hdd-network",
+                        style={"fontSize": "1.5rem", "color": "#18BC9C" if REDIS_CONNECTED_AT_STARTUP else "#FF6B6B"},
+                    ),
+                ],
+                className="d-flex align-items-center ms-2",
+            ),
             dbc.NavbarToggler(id="nav-toggler"),
             dbc.Collapse(
                 dbc.Nav(
@@ -26,7 +27,9 @@ navbar = dbc.Navbar(
                         dbc.NavItem(dbc.NavLink("Run Monitor", href="/run-monitor", active="exact")),
                         dbc.DropdownMenu(
                             label="Menu",
-                            nav=True, in_navbar=True, align_end=True,   
+                            nav=True,
+                            in_navbar=True,
+                            align_end=True,
                             children=[
                                 dbc.DropdownMenuItem("Import Scans", href="/create-scan"),
                                 dbc.DropdownMenuItem("New CA Reconstruction", href="/create-reconstruction"),
@@ -37,7 +40,8 @@ navbar = dbc.Navbar(
                             ],
                         ),
                     ],
-                    navbar=True, className="ms-auto",
+                    navbar=True,
+                    className="ms-auto",
                 ),
                 id="nav-collapse",
                 is_open=False,
@@ -50,6 +54,7 @@ navbar = dbc.Navbar(
     color="primary",
     dark=True,
 )
+
 
 @callback(
     Output("nav-collapse", "is_open"),

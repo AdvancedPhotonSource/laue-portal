@@ -18,26 +18,24 @@ import logging
 import numpy as np
 import plotly.graph_objects as go
 
-from laue_portal.analysis.projection import (
-    stereographic_project,
-    wulff_net_lines,
-    pole_figure_points,
-    cubic_hkl_family,
-    zoom_axis_range,
-    _DEFAULT_NORMAL,
-    _DEFAULT_ROLL,
-    _DEFAULT_TILT,
-)
-from laue_portal.analysis.orientation import (
-    batch_crystal_directions,
-)
 from laue_portal.analysis.coloring import (
     batch_ipf_colors,
     hsv_wheel_color,
     pole_figure_color_radius,
     rgb_to_plotly_colors,
 )
-
+from laue_portal.analysis.orientation import (
+    batch_crystal_directions,
+)
+from laue_portal.analysis.projection import (
+    _DEFAULT_NORMAL,
+    _DEFAULT_ROLL,
+    _DEFAULT_TILT,
+    cubic_hkl_family,
+    pole_figure_points,
+    wulff_net_lines,
+    zoom_axis_range,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +118,7 @@ def _project_q_to_surface(q_vectors):
 # ===================================================================
 # Stereographic Projection Plot (Q-vectors)
 # ===================================================================
+
 
 def make_stereo_plot(
     parsed,
@@ -206,29 +205,27 @@ def make_stereo_plot(
         # Show hkl text labels only for single-step view (too cluttered for all)
         use_text = step_index is not None and len(all_sx) < 50
 
-        fig.add_trace(go.Scattergl(
-            x=all_sx,
-            y=all_sy,
-            mode="markers+text" if use_text else "markers",
-            marker=dict(
-                size=marker_size,
-                color="rgb(214, 20, 0)",  # Igor peak marker color
-                symbol="circle",
-                line=dict(width=0),
-            ),
-            text=all_labels if use_text else None,
-            textposition="top center" if use_text else None,
-            textfont=dict(size=9) if use_text else None,
-            hovertemplate=(
-                "x: %{x:.4f}<br>y: %{y:.4f}<br>"
-                "%{text}<br><extra></extra>"
-            ) if use_text else (
-                "x: %{x:.4f}<br>y: %{y:.4f}<br>"
-                "<extra></extra>"
-            ),
-            name=f"Q-vectors ({len(all_sx)} pts)",
-            uid="stereo-qvectors",
-        ))
+        fig.add_trace(
+            go.Scattergl(
+                x=all_sx,
+                y=all_sy,
+                mode="markers+text" if use_text else "markers",
+                marker=dict(
+                    size=marker_size,
+                    color="rgb(214, 20, 0)",  # Igor peak marker color
+                    symbol="circle",
+                    line=dict(width=0),
+                ),
+                text=all_labels if use_text else None,
+                textposition="top center" if use_text else None,
+                textfont=dict(size=9) if use_text else None,
+                hovertemplate=("x: %{x:.4f}<br>y: %{y:.4f}<br>%{text}<br><extra></extra>")
+                if use_text
+                else ("x: %{x:.4f}<br>y: %{y:.4f}<br><extra></extra>"),
+                name=f"Q-vectors ({len(all_sx)} pts)",
+                uid="stereo-qvectors",
+            )
+        )
 
     # Wulff net overlay
     if show_wulff:
@@ -248,27 +245,31 @@ def make_stereo_plot(
                 opacity = 0.09
                 width = 0.3
 
-            fig.add_trace(go.Scattergl(
-                x=line["x"],
-                y=line["y"],
-                mode="lines",
-                line=dict(color=color, width=width),
-                opacity=opacity,
-                showlegend=False,
-                hoverinfo="skip",
-            ))
+            fig.add_trace(
+                go.Scattergl(
+                    x=line["x"],
+                    y=line["y"],
+                    mode="lines",
+                    line=dict(color=color, width=width),
+                    opacity=opacity,
+                    showlegend=False,
+                    hoverinfo="skip",
+                )
+            )
 
     # Unit circle boundary
     theta = np.linspace(0, 2 * np.pi, 200)
     d = zoom_axis_range(zoom_deg)
-    fig.add_trace(go.Scattergl(
-        x=d * np.cos(theta),
-        y=d * np.sin(theta),
-        mode="lines",
-        line=dict(color="black", width=1, dash="dash"),
-        showlegend=False,
-        hoverinfo="skip",
-    ))
+    fig.add_trace(
+        go.Scattergl(
+            x=d * np.cos(theta),
+            y=d * np.sin(theta),
+            mode="lines",
+            line=dict(color="black", width=1, dash="dash"),
+            showlegend=False,
+            hoverinfo="skip",
+        )
+    )
 
     fig.update_layout(
         xaxis=dict(
@@ -298,6 +299,7 @@ def make_stereo_plot(
 # ===================================================================
 # Pole Figure Plot
 # ===================================================================
+
 
 def make_pole_figure(
     parsed,
@@ -362,15 +364,15 @@ def make_pole_figure(
     if len(lattice_params) >= 6:
         alpha, beta, gamma = lattice_params[3], lattice_params[4], lattice_params[5]
         _ANG_TOL = 0.5  # degrees
-        if (abs(alpha - 90.0) > _ANG_TOL
-                or abs(beta - 90.0) > _ANG_TOL
-                or abs(gamma - 90.0) > _ANG_TOL):
+        if abs(alpha - 90.0) > _ANG_TOL or abs(beta - 90.0) > _ANG_TOL or abs(gamma - 90.0) > _ANG_TOL:
             logger.warning(
                 "Non-cubic lattice detected (alpha=%.1f, beta=%.1f, "
                 "gamma=%.1f deg). Pole family generation via "
                 "cubic_hkl_family() may be inaccurate for non-cubic "
                 "crystal systems.",
-                alpha, beta, gamma,
+                alpha,
+                beta,
+                gamma,
             )
 
     # Look up surface vectors
@@ -382,7 +384,8 @@ def make_pole_figure(
     # Compute pole figure points using the measured reciprocal lattices
     # directly (matching Igor Pro's MakePolePoints: q = gm * hkl).
     points, grain_indices = pole_figure_points(
-        recip_lattices, family,
+        recip_lattices,
+        family,
         surface_normal=surf_normal,
         surface_roll=surf_roll,
         surface_tilt=surf_tilt,
@@ -411,7 +414,7 @@ def make_pole_figure(
             if not np.any(mask):
                 continue
             grain_pts = points[mask]
-            dists = np.sum((grain_pts - np.array([x0, y0]))**2, axis=1)
+            dists = np.sum((grain_pts - np.array([x0, y0])) ** 2, axis=1)
             closest = np.argmin(dists)
             dx = grain_pts[closest, 0] - x0
             dy = grain_pts[closest, 1] - y0
@@ -421,7 +424,8 @@ def make_pole_figure(
 
     elif color_scheme == "ipf" and len(points) > 0:
         crystal_dirs = batch_crystal_directions(
-            recip_lattices, normal=surf_normal,
+            recip_lattices,
+            normal=surf_normal,
         )
         ipf_rgb = batch_ipf_colors(crystal_dirs)
 
@@ -433,25 +437,23 @@ def make_pole_figure(
     fig = go.Figure()
 
     if len(points) > 0:
-        fig.add_trace(go.Scattergl(
-            x=points[:, 0],
-            y=points[:, 1],
-            mode="markers",
-            marker=dict(
-                size=marker_size,
-                color=point_colors,
-                symbol="circle",
-                line=dict(width=0),
-            ),
-            customdata=grain_indices.reshape(-1, 1),
-            hovertemplate=(
-                "x: %{x:.4f}<br>y: %{y:.4f}<br>"
-                "Grain: %{customdata[0]}<br>"
-                "<extra></extra>"
-            ),
-            name=f"{{{_format_hkl(*hkl)}}} ({len(points)} pts)",
-            uid="pole-figure-data",
-        ))
+        fig.add_trace(
+            go.Scattergl(
+                x=points[:, 0],
+                y=points[:, 1],
+                mode="markers",
+                marker=dict(
+                    size=marker_size,
+                    color=point_colors,
+                    symbol="circle",
+                    line=dict(width=0),
+                ),
+                customdata=grain_indices.reshape(-1, 1),
+                hovertemplate=("x: %{x:.4f}<br>y: %{y:.4f}<br>Grain: %{customdata[0]}<br><extra></extra>"),
+                name=f"{{{_format_hkl(*hkl)}}} ({len(points)} pts)",
+                uid="pole-figure-data",
+            )
+        )
 
     # Color saturation circle overlay (HSV position mode only)
     if color_scheme == "hsv_position" and len(points) > 0:
@@ -461,26 +463,29 @@ def make_pole_figure(
             x0, y0 = 0.0, 0.0
         rmax = pole_figure_color_radius(x0, y0, color_rad_deg)
         theta_circle = np.linspace(0, 2 * np.pi, 100)
-        fig.add_trace(go.Scattergl(
-            x=x0 + rmax * np.cos(theta_circle),
-            y=y0 + rmax * np.sin(theta_circle),
-            mode="lines",
-            line=dict(color="black", width=1, dash="dot"),
-            showlegend=False,
-            hoverinfo="skip",
-        ))
-
+        fig.add_trace(
+            go.Scattergl(
+                x=x0 + rmax * np.cos(theta_circle),
+                y=y0 + rmax * np.sin(theta_circle),
+                mode="lines",
+                line=dict(color="black", width=1, dash="dot"),
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
 
     # Unit circle boundary
     theta = np.linspace(0, 2 * np.pi, 200)
-    fig.add_trace(go.Scattergl(
-        x=np.cos(theta),
-        y=np.sin(theta),
-        mode="lines",
-        line=dict(color="black", width=1, dash="dash"),
-        showlegend=False,
-        hoverinfo="skip",
-    ))
+    fig.add_trace(
+        go.Scattergl(
+            x=np.cos(theta),
+            y=np.sin(theta),
+            mode="lines",
+            line=dict(color="black", width=1, dash="dash"),
+            showlegend=False,
+            hoverinfo="skip",
+        )
+    )
 
     # Crosshair (+) on the selected reference point, scaled to color radius
     if center_xy is not None:
@@ -488,23 +493,27 @@ def make_pole_figure(
         rmax = pole_figure_color_radius(cx, cy, color_rad_deg)
         arm = rmax * 0.1  # 10% of color radius
         # Horizontal bar
-        fig.add_trace(go.Scattergl(
-            x=[cx - arm, cx + arm],
-            y=[cy, cy],
-            mode="lines",
-            line=dict(color="black", width=2),
-            showlegend=False,
-            hoverinfo="skip",
-        ))
+        fig.add_trace(
+            go.Scattergl(
+                x=[cx - arm, cx + arm],
+                y=[cy, cy],
+                mode="lines",
+                line=dict(color="black", width=2),
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
         # Vertical bar
-        fig.add_trace(go.Scattergl(
-            x=[cx, cx],
-            y=[cy - arm, cy + arm],
-            mode="lines",
-            line=dict(color="black", width=2),
-            showlegend=False,
-            hoverinfo="skip",
-        ))
+        fig.add_trace(
+            go.Scattergl(
+                x=[cx, cx],
+                y=[cy - arm, cy + arm],
+                mode="lines",
+                line=dict(color="black", width=2),
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
 
     fig.update_layout(
         xaxis=dict(

@@ -1,8 +1,10 @@
 """
-Contains scan metadata not contained in the scan XML log. 
+Contains scan metadata not contained in the scan XML log.
 """
+
+from sqlalchemy import JSON, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import Integer, String, JSON, ForeignKey
+
 from laue_portal.database.base import Base
 
 
