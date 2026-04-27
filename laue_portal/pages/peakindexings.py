@@ -36,12 +36,6 @@ layout = html.Div(
                                     style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
                                     className="me-2",
                                 ),
-                                dbc.Button(
-                                    "New Recon + Index",
-                                    id="peakindexings-page-recon-index-btn-placeholder",
-                                    style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
-                                    className="me-2",
-                                ),
                             ],
                             className="bg-light px-2 py-2 d-flex justify-content-end w-100",
                         )
@@ -216,8 +210,6 @@ def get_peakindexings(path):
     Output("peakindexings-page-wire-recon-btn", "style"),
     Output("peakindexings-page-peakindex-btn", "disabled"),
     Output("peakindexings-page-peakindex-btn", "style"),
-    Output("peakindexings-page-recon-index-btn-placeholder", "disabled"),
-    Output("peakindexings-page-recon-index-btn-placeholder", "style"),
     Input("peakindexing-table", "selectedRows"),
     prevent_initial_call=False,
 )
@@ -233,8 +225,6 @@ def update_button_states(selected_rows):
             enabled_style,  # New Recon
             False,
             enabled_style,  # New Index
-            True,
-            disabled_style,  # New Recon + Index (placeholder)
         )
     else:
         return (
@@ -242,8 +232,6 @@ def update_button_states(selected_rows):
             disabled_style,  # New Recon
             True,
             disabled_style,  # New Index
-            True,
-            disabled_style,  # New Recon + Index (placeholder)
         )
 
 

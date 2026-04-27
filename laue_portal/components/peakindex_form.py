@@ -45,15 +45,6 @@ peakindex_form = dbc.Row(
                             dbc.Card(
                                 dbc.CardBody(
                                     [
-                                        _stack(
-                                            [
-                                                dbc.Switch(
-                                                    id="files switch-switch",
-                                                    label="All Files",
-                                                    value=False,
-                                                ),
-                                            ]
-                                        ),
                                         dbc.Row(
                                             [
                                                 dbc.Col(
@@ -139,63 +130,13 @@ peakindex_form = dbc.Row(
                                 ),
                                 className="mb-3",
                             ),
-                            dbc.Row(
-                                [
-                                    dbc.Col(
-                                        _field(
-                                            "Geometry File",
-                                            "geoFile",
-                                            kwargs={
-                                                "type": "text",
-                                                "placeholder": "",
-                                            },
-                                        ),
-                                        className="flex-grow-1",
-                                        style={"minWidth": 0},
-                                    ),
-                                    dbc.Col(
-                                        dbc.Row(
-                                            [
-                                                dbc.Col(
-                                                    dbc.Button(
-                                                        "Load default",
-                                                        id="peakindex-load-default-geo-btn",
-                                                        color="secondary",
-                                                        size="md",
-                                                        style={"minWidth": "120px", "whiteSpace": "nowrap"},
-                                                    ),
-                                                    width="auto",
-                                                ),
-                                                dbc.Col(
-                                                    dbc.Button(
-                                                        "Load...",
-                                                        id="peakindex-load-from-geo-btn",
-                                                        color="secondary",
-                                                        size="md",
-                                                        style={"minWidth": "120px", "whiteSpace": "nowrap"},
-                                                    ),
-                                                    width="auto",
-                                                ),
-                                                dbc.Col(
-                                                    dbc.Button(
-                                                        "Edit",
-                                                        id="peakindex-edit-modify-params-btn",
-                                                        color="secondary",
-                                                        size="md",
-                                                        style={"minWidth": "120px", "whiteSpace": "nowrap"},
-                                                    ),
-                                                    width="auto",
-                                                ),
-                                            ],
-                                            className="g-2 justify-content-end",
-                                        ),
-                                        xs=12,
-                                        md="auto",
-                                        className="mb-3",
-                                    ),
-                                ],
-                                className="mb-3 g-2",
-                                align="center",
+                            _field(
+                                "Geometry File",
+                                "geoFile",
+                                kwargs={
+                                    "type": "text",
+                                    "placeholder": "",
+                                },
                             ),
                             _field("Output Path", "outputFolder"),
                             _field(
@@ -212,28 +153,6 @@ peakindex_form = dbc.Row(
                     ),
                     dbc.AccordionItem(
                         [
-                            html.Div(
-                                dbc.Row(
-                                    [
-                                        dbc.Col(
-                                            dbc.Button("Set to defaults", size="sm", color="light"),
-                                            width="auto",
-                                        ),
-                                        dbc.Col(
-                                            dbc.Button("Set from ...", size="sm", color="light"),
-                                            width="auto",
-                                        ),
-                                    ],
-                                    className="g-2 align-items-center",
-                                ),
-                                style={
-                                    "background": "var(--bs-accordion-active-bg)",
-                                    "padding": ".5rem 1rem",
-                                    "margin": "-1rem -1.25rem 1rem",
-                                    "borderTop": "none",
-                                    "borderBottom": "1px solid var(--bs-accordion-border-color)",
-                                },
-                            ),
                             _stack(
                                 [
                                     _field("Box Size [pixels]", "boxsize", size="md"),
@@ -265,34 +184,13 @@ peakindex_form = dbc.Row(
                                     _ckbx("Cosmic Filter", "cosmicFilter", size="md"),
                                 ]
                             ),
-                            dbc.Row(
-                                [
-                                    dbc.Col(
-                                        _field(
-                                            "Mask File",
-                                            "maskFile",
-                                            kwargs={
-                                                "type": "text",
-                                                "placeholder": "",
-                                            },
-                                        ),
-                                        className="flex-grow-1",
-                                        style={"minWidth": 0},
-                                    ),
-                                    dbc.Col(
-                                        dbc.Button(
-                                            "Load...",
-                                            id="peakindex-load-mask-file-btn",
-                                            color="secondary",
-                                            size="md",
-                                            style={"minWidth": "220px", "whiteSpace": "nowrap"},
-                                        ),
-                                        width="auto",
-                                        className="d-flex justify-content-end",
-                                    ),
-                                ],
-                                className="mb-3",
-                                align="center",
+                            _field(
+                                "Mask File",
+                                "maskFile",
+                                kwargs={
+                                    "type": "text",
+                                    "placeholder": "",
+                                },
                             ),
                         ],
                         title="Peak Search Parameters",
@@ -301,56 +199,13 @@ peakindex_form = dbc.Row(
                     ),
                     dbc.AccordionItem(
                         [
-                            html.Div(
-                                dbc.Row(
-                                    [
-                                        dbc.Col(
-                                            dbc.Button("Set to defaults", size="sm", color="light"),
-                                            width="auto",
-                                        ),
-                                        dbc.Col(
-                                            dbc.Button("Set from ...", size="sm", color="light"),
-                                            width="auto",
-                                        ),
-                                    ],
-                                    className="g-2 align-items-center",
-                                ),
-                                style={
-                                    "background": "var(--bs-accordion-active-bg)",
-                                    "padding": ".5rem 1rem",
-                                    "margin": "-1rem -1.25rem 1rem",
-                                    "borderTop": "none",
-                                    "borderBottom": "1px solid var(--bs-accordion-border-color)",
+                            _field(
+                                "Crystal Structure File",
+                                "crystFile",
+                                kwargs={
+                                    "type": "text",
+                                    "placeholder": "",
                                 },
-                            ),
-                            dbc.Row(
-                                [
-                                    dbc.Col(
-                                        _field(
-                                            "Crystal Structure File",
-                                            "crystFile",
-                                            kwargs={
-                                                "type": "text",
-                                                "placeholder": "",
-                                            },
-                                        ),
-                                        className="flex-grow-1",
-                                        style={"minWidth": 0},
-                                    ),
-                                    dbc.Col(
-                                        dbc.Button(
-                                            "Load...",
-                                            id="peakindex-load-cryst-file-btn",
-                                            color="secondary",
-                                            size="md",
-                                            style={"minWidth": "220px", "whiteSpace": "nowrap"},
-                                        ),
-                                        width="auto",
-                                        className="d-flex justify-content-end",
-                                    ),
-                                ],
-                                className="mb-3",
-                                align="center",
                             ),
                             _stack(
                                 [

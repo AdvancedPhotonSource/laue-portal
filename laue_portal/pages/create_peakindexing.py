@@ -226,16 +226,6 @@ layout = dbc.Container(
                         ),
                         dbc.Col(
                             dbc.Button(
-                                "Set from ...",
-                                id="upload-peakindexing-config",
-                                color="secondary",
-                                style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
-                            ),
-                            width="auto",
-                            className="ms-3",  # small gap from title
-                        ),
-                        dbc.Col(
-                            dbc.Button(
                                 "Validate",
                                 id="peakindex-validate-btn",
                                 color="secondary",
@@ -391,10 +381,6 @@ def validate_peakindexing_inputs(ctx):
         "indexAngleTolerance",
         "indexCone",
         "indexHKL",
-        "detectorCropX1",
-        "detectorCropX2",
-        "detectorCropY1",
-        "detectorCropY2",
     ]
 
     # Optional parameters list - these fields are not required
@@ -534,10 +520,6 @@ def validate_peakindexing_inputs(ctx):
             "indexKeVmaxTest",
             "indexAngleTolerance",
             "indexCone",
-            "detectorCropX1",
-            "detectorCropX2",
-            "detectorCropY1",
-            "detectorCropY2",
         ]:
             # Numeric fields: check for None or empty string (0 is valid)
             if field_value is None or field_value == "":
@@ -1063,50 +1045,7 @@ def validate_peakindexing_inputs(ctx):
                         validation_result, "errors", "crystFile", input_prefix, custom_message="Crystal File not found"
                     )
 
-        # 6. Validate detector crop parameters for this input
-        x1_val = validate_field("detectorCropX1", converter=safe_int)
-
-        x2_val = validate_field("detectorCropX2", converter=safe_int)
-
-        y1_val = validate_field("detectorCropY1", converter=safe_int)
-
-        y2_val = validate_field("detectorCropY2", converter=safe_int)
-
-        # Check X1 < X2 (only if both values are valid)
-        if x1_val is not None and x2_val is not None and x1_val >= x2_val:
-            add_validation_message(
-                validation_result,
-                "errors",
-                "detectorCropX1",
-                input_prefix,
-                custom_message="Detector Crop X1 must be less than X2",
-            )
-            add_validation_message(
-                validation_result,
-                "errors",
-                "detectorCropX2",
-                input_prefix,
-                custom_message="Detector Crop X1 must be less than X2",
-            )
-
-        # Check Y1 < Y2 (only if both values are valid)
-        if y1_val is not None and y2_val is not None and y1_val >= y2_val:
-            add_validation_message(
-                validation_result,
-                "errors",
-                "detectorCropY1",
-                input_prefix,
-                custom_message="Detector Crop Y1 must be less than Y2",
-            )
-            add_validation_message(
-                validation_result,
-                "errors",
-                "detectorCropY2",
-                input_prefix,
-                custom_message="Detector Crop Y1 must be less than Y2",
-            )
-
-        # 7. Validate numeric parameters for this input
+        # 6. Validate numeric parameters for this input
         threshold_val = validate_field("threshold", converter=safe_int)
         if threshold_val is not None:
             if threshold_val < 0:
