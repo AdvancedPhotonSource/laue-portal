@@ -76,6 +76,7 @@ _viz_tabs = dbc.Tabs(
                                                 {"label": "Cubic IPF", "value": "cubic_ipf"},
                                                 {"label": "Rodrigues RGB", "value": "rodrigues"},
                                                 {"label": "Misorientation", "value": "misorientation"},
+                                                {"label": "Pole Figure HSV", "value": "pole_hsv"},
                                                 {"label": "N Indexed", "value": "n_indexed"},
                                                 {"label": "Goodness", "value": "goodness"},
                                                 {"label": "RMS Error", "value": "rms_error"},
@@ -642,15 +643,38 @@ def load_peakindexing_data(href):
     Input("orientation-view-toggle", "value"),
     Input("selected-grain-indices", "data"),
     Input("pole-figure-center", "data"),
+    Input("stereo-hkl-select", "value"),
+    Input("stereo-color-rad", "value"),
+    Input("stereo-surface-select", "value"),
     prevent_initial_call=True,
 )
-def update_orientation_map(xml_path, color_by, surface, input_size, view_mode, selected_grains, pole_center):
+def update_orientation_map(
+    xml_path,
+    color_by,
+    surface,
+    input_size,
+    view_mode,
+    selected_grains,
+    pole_center,
+    pole_hkl_str,
+    pole_color_rad_deg,
+    pole_surface,
+):
     if not xml_path:
+        raise PreventUpdate
+
+    # Skip unnecessary re-renders: if a pole-figure-only control
+    # (hkl, color radius, surface) changed but the orientation map
+    # isn't using pole_hsv mode, there is nothing to update.
+    triggered = dash.ctx.triggered_id
+    _POLE_ONLY_TRIGGERS = {"stereo-hkl-select", "stereo-color-rad", "stereo-surface-select"}
+    if triggered in _POLE_ONLY_TRIGGERS and (color_by or "cubic_ipf") != "pole_hsv":
         raise PreventUpdate
 
     try:
         from laue_portal.analysis.xml_parser import parse_indexing_xml
         from laue_portal.components.visualization.orientation_map import (
+            apply_selection_highlight,
             make_orientation_map,
             make_orientation_map_3d,
         )
@@ -659,15 +683,31 @@ def update_orientation_map(xml_path, color_by, surface, input_size, view_mode, s
 
         marker_size = max(1, int(input_size or 40))
 
-        from laue_portal.components.visualization.orientation_map import (
-            apply_selection_highlight,
-        )
-
         # Determine effective color mode and reference grain.
         effective_color = color_by or "cubic_ipf"
         ref_grain_index = None
         if pole_center and pole_center.get("grain_index") is not None:
             ref_grain_index = pole_center["grain_index"]
+
+        # Pole figure parameters for pole_hsv mode
+        pole_hkl = None
+        pole_center_xy = None
+        pole_rad = float(pole_color_rad_deg or 22.5)
+
+        if effective_color == "pole_hsv":
+            # Parse hkl from the pole figure selector
+            if pole_hkl_str:
+                pole_hkl = tuple(int(x) for x in pole_hkl_str.split(","))
+            else:
+                pole_hkl = (1, 0, 0)
+
+            # Use pole figure center if available
+            if pole_center:
+                pole_center_xy = (pole_center.get("x", 0.0), pole_center.get("y", 0.0))
+
+            # Use pole figure surface for consistency
+            if pole_surface:
+                surface = pole_surface
 
         if view_mode == "3d":
             fig = make_orientation_map_3d(
@@ -676,6 +716,9 @@ def update_orientation_map(xml_path, color_by, surface, input_size, view_mode, s
                 marker_size=marker_size,
                 surface=surface or "normal",
                 ref_grain_index=ref_grain_index,
+                pole_hkl=pole_hkl,
+                pole_center_xy=pole_center_xy,
+                pole_color_rad_deg=pole_rad,
             )
         else:
             fig = make_orientation_map(
@@ -684,6 +727,9 @@ def update_orientation_map(xml_path, color_by, surface, input_size, view_mode, s
                 marker_size=marker_size,
                 surface=surface or "normal",
                 ref_grain_index=ref_grain_index,
+                pole_hkl=pole_hkl,
+                pole_center_xy=pole_center_xy,
+                pole_color_rad_deg=pole_rad,
             )
 
         # Cross-plot highlighting: dim unselected points, ring selected ones
@@ -1041,7 +1087,7 @@ def handle_pole_figure_click(click_data, reset_clicks, current_center, xml_path,
         return None, _default_hint, _hide_btn, restore_color
 
     # Save the current color mode so we can restore it on reset
-    prev_color = current_color_by if current_color_by != "misorientation" else "cubic_ipf"
+    prev_color = current_color_by if current_color_by not in ("misorientation", "pole_hsv") else "cubic_ipf"
     new_center = {
         "x": float(x),
         "y": float(y),
@@ -1057,7 +1103,7 @@ def handle_pole_figure_click(click_data, reset_clicks, current_center, xml_path,
     )
     _show_btn = {"display": "inline-block"}
 
-    return new_center, info, _show_btn, "misorientation"
+    return new_center, info, _show_btn, "pole_hsv"
 
 
 # ---------------------------------------------------------------------------
