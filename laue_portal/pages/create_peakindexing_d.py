@@ -24,9 +24,17 @@ dash.register_page(__name__, path="/create-peakindexing-d")
 # ---------------------------------------------------------------------------
 
 
-def _cell(label_text, field_id, placeholder="", input_type="text", wide=False):
-    """Compact inline cell: fixed-width label | flexible input."""
-    cls = "pi-vd-cell pi-vd-cell--wide" if wide else "pi-vd-cell"
+def _cell(label_text, field_id, placeholder="", input_type="text", wide=False, compact=False):
+    """Compact inline cell: fixed-width label | flexible input.
+
+    Args:
+        compact: If True, cap input width for short numeric values.
+    """
+    cls = "pi-vd-cell"
+    if wide:
+        cls += " pi-vd-cell--wide"
+    if compact:
+        cls += " pi-vd-cell--compact"
     return html.Div(
         [
             html.Label(label_text),
@@ -36,8 +44,12 @@ def _cell(label_text, field_id, placeholder="", input_type="text", wide=False):
     )
 
 
-def _cell_select(label_text, field_id, options, placeholder="Select:", wide=False):
-    cls = "pi-vd-cell pi-vd-cell--wide" if wide else "pi-vd-cell"
+def _cell_select(label_text, field_id, options, placeholder="Select:", wide=False, compact=False):
+    cls = "pi-vd-cell"
+    if wide:
+        cls += " pi-vd-cell--wide"
+    if compact:
+        cls += " pi-vd-cell--compact"
     return html.Div(
         [
             html.Label(label_text),
@@ -76,18 +88,27 @@ def _file_row(label_text, field_id, btn_id=None, btn_label=None, placeholder="",
     return html.Div(children, className="pi-vd-file-row")
 
 
-def _section(title, icon_class="bi bi-circle", accent=""):
-    """Light-tinted section header strip with colored left accent."""
-    cls = "pi-vd-section-head"
-    if accent:
-        cls += f" pi-vd-section-head--{accent}"
+def _section_head(title, icon_class="bi bi-circle"):
+    """Section header strip (used as the title bar of a card)."""
     return html.Div(
         [
             html.I(className=f"pi-vd-section-icon {icon_class}"),
             html.H3(title),
         ],
-        className=cls,
+        className="pi-vd-section-head",
     )
+
+
+def _section_card(title, children, icon_class="bi bi-circle", accent="", anchor_id=None):
+    """Bordered section card: header bar + body content."""
+    cls = "pi-vd-section-card"
+    if accent:
+        cls += f" pi-vd-section-card--{accent}"
+    card_children = [_section_head(title, icon_class)] + list(children)
+    wrapper = [html.Div(card_children, className=cls)]
+    if anchor_id:
+        wrapper.insert(0, html.Div(id=anchor_id))
+    return html.Div(wrapper)
 
 
 def _action_row(*buttons):
@@ -147,145 +168,164 @@ main_content = html.Div(
     children=[
         # ── Validation ──
         html.Div(validation_alerts, className="pi-vd-validation"),
-        # ══════════════════════════════════════════════════════════════
-        # Section 1: Identity
-        # ══════════════════════════════════════════════════════════════
-        html.Div(id="sec-d-identity"),
-        _section("Identity", "bi bi-person-badge", "slate"),
-        html.Div(
-            className="pi-vd-grid",
-            children=[
-                _cell("ID Number", "IDnumber-vd", placeholder="SN123456 | WR1 | MR3 | PI4"),
-                _cell("Author", "author-vd", placeholder="Enter author or tag"),
-            ],
-        ),
-        _action_row(
-            dbc.Button(
-                [html.I(className="bi bi-arrow-repeat me-1"), "Update path fields"],
-                id="peakindex-update-path-fields-btn-vd",
-                color="secondary",
-                size="sm",
-                outline=True,
-            ),
-        ),
-        # ══════════════════════════════════════════════════════════════
-        # Section 2: File Paths
-        # ══════════════════════════════════════════════════════════════
-        html.Div(id="sec-d-files"),
-        _section("File Paths", "bi bi-folder2-open"),
-        html.Div(
-            className="pi-vd-grid pi-vd-grid--single",
-            children=[
-                _file_row("Root Path", "root_path-vd"),
-                _file_row("Folder Path", "data_path-vd"),
-            ],
-        ),
-        # ══════════════════════════════════════════════════════════════
-        # Section 3: Scan Data
-        # ══════════════════════════════════════════════════════════════
-        html.Div(id="sec-d-scan"),
-        _section("Scan Data", "bi bi-grid-3x3-gap", "blue"),
-        html.Div(
-            className="pi-vd-grid pi-vd-grid--single",
-            children=[
-                _file_row(
-                    "Filename",
-                    "filenamePrefix-vd",
-                    btn_id="peakindex-check-filenames-btn-vd",
-                    btn_label="Find files",
-                    placeholder="e.g. Si_%d.h5 or Si_*%d.h5",
-                    datalist_id="peakindex-filename-templates-vd",
+        # ── Section 1: Identity ──
+        _section_card(
+            "Identity",
+            [
+                html.Div(
+                    className="pi-vd-grid",
+                    children=[
+                        _cell("ID Number", "IDnumber-vd", placeholder="SN123456 | WR1 | MR3 | PI4"),
+                        _cell("Author", "author-vd", placeholder="Enter author or tag"),
+                    ],
+                ),
+                _action_row(
+                    dbc.Button(
+                        [html.I(className="bi bi-arrow-repeat me-1"), "Update path fields"],
+                        id="peakindex-update-path-fields-btn-vd",
+                        color="secondary",
+                        size="sm",
+                        outline=True,
+                    ),
                 ),
             ],
+            icon_class="bi bi-person-badge",
+            accent="slate",
+            anchor_id="sec-d-identity",
         ),
-        html.Div(
-            className="pi-vd-grid",
-            children=[
-                _cell("Scan Indices", "scanPoints-vd", placeholder="e.g. 1-10 or 1,5,8,9"),
-                _cell("Depth Indices", "depthRange-vd", placeholder="e.g. 1-10 or 1,5,8,9"),
-            ],
-        ),
-        _action_row(
-            dbc.Button(
-                [html.I(className="bi bi-file-earmark-arrow-up me-1"), "Load indices from file"],
-                id="peakindex-load-file-indices-btn-vd",
-                color="secondary",
-                size="sm",
-                outline=True,
-            ),
-        ),
-        # ══════════════════════════════════════════════════════════════
-        # Section 4: Geometry & Output
-        # ══════════════════════════════════════════════════════════════
-        html.Div(id="sec-d-geo"),
-        _section("Geometry & Output", "bi bi-bounding-box"),
-        html.Div(
-            className="pi-vd-grid pi-vd-grid--single",
-            children=[
-                _file_row("Geometry File", "geoFile-vd"),
-                _file_row("Crystal Structure", "crystFile-vd"),
-                _file_row("Output Path", "outputFolder-vd"),
-                _file_row("Output XML", "outputXML-vd", placeholder="e.g. output.xml"),
-                _file_row("Mask File", "maskFile-vd"),
-            ],
-        ),
-        # ══════════════════════════════════════════════════════════════
-        # Section 5: Peak Search Parameters
-        # ══════════════════════════════════════════════════════════════
-        html.Div(id="sec-d-peaks"),
-        _section("Peak Search Parameters", "bi bi-bullseye", "blue"),
-        html.Div(
-            className="pi-vd-grid",
-            children=[
-                _cell("Box Size [px]", "boxsize-vd"),
-                _cell("Max R-factor", "maxRfactor-vd"),
-                _cell("Threshold", "threshold-vd", placeholder="empty → auto"),
-                _cell("Threshold Ratio", "thresholdRatio-vd", placeholder="empty → auto"),
-                _cell("Min Spot Size [px]", "min_size-vd"),
-                _cell("Min Spot Sep. [px]", "min_separation-vd"),
-                _cell("Max No. Spots", "max_number-vd", placeholder="empty for all"),
-                _cell_select(
-                    "Peak Shape",
-                    "peakShape-vd",
-                    [
-                        {"label": "Lorentzian", "value": "Lorentzian"},
-                        {"label": "Gaussian", "value": "Gaussian"},
+        # ── Section 2: File Paths ──
+        _section_card(
+            "File Paths",
+            [
+                html.Div(
+                    className="pi-vd-grid pi-vd-grid--single",
+                    children=[
+                        _file_row("Root Path", "root_path-vd"),
+                        _file_row("Folder Path", "data_path-vd"),
                     ],
                 ),
             ],
+            icon_class="bi bi-folder2-open",
+            anchor_id="sec-d-files",
         ),
-        html.Div(
-            className="pi-vd-check-row",
-            children=[
-                dbc.Checkbox(id="smooth-vd", label="Smooth peak before fitting"),
-                dbc.Checkbox(id="cosmicFilter-vd", label="Cosmic Filter"),
+        # ── Section 3: Scan Data ──
+        _section_card(
+            "Scan Data",
+            [
+                html.Div(
+                    className="pi-vd-grid pi-vd-grid--single",
+                    children=[
+                        _file_row(
+                            "Filename",
+                            "filenamePrefix-vd",
+                            btn_id="peakindex-check-filenames-btn-vd",
+                            btn_label="Find files",
+                            placeholder="e.g. Si_%d.h5 or Si_*%d.h5",
+                            datalist_id="peakindex-filename-templates-vd",
+                        ),
+                    ],
+                ),
+                html.Div(
+                    className="pi-vd-grid",
+                    children=[
+                        _cell("Scan Indices", "scanPoints-vd", placeholder="e.g. 1-10 or 1,5,8,9"),
+                        _cell("Depth Indices", "depthRange-vd", placeholder="e.g. 1-10 or 1,5,8,9"),
+                    ],
+                ),
+                _action_row(
+                    dbc.Button(
+                        [html.I(className="bi bi-file-earmark-arrow-up me-1"), "Load indices from file"],
+                        id="peakindex-load-file-indices-btn-vd",
+                        color="secondary",
+                        size="sm",
+                        outline=True,
+                    ),
+                ),
             ],
+            icon_class="bi bi-grid-3x3-gap",
+            accent="blue",
+            anchor_id="sec-d-scan",
         ),
-        # ══════════════════════════════════════════════════════════════
-        # Section 6: Indexing Parameters
-        # ══════════════════════════════════════════════════════════════
-        html.Div(id="sec-d-index"),
-        _section("Indexing Parameters", "bi bi-diagram-3", "slate"),
-        html.Div(
-            className="pi-vd-grid",
-            children=[
-                _cell("Max Calc Energy [keV]", "indexKeVmaxCalc-vd"),
-                _cell("Max Test Energy [keV]", "indexKeVmaxTest-vd"),
-                _cell("Angle Tolerance [°]", "indexAngleTolerance-vd"),
-                _cell("Central HKL", "indexHKL-vd"),
-                _cell("Cone Angle [°]", "indexCone-vd"),
-                _cell("Max Spots", "max_peaks-vd", placeholder="empty: 200"),
-                _cell("Depth [µm]", "depth-vd", placeholder="empty → auto", wide=True),
+        # ── Section 4: Geometry & Output ──
+        _section_card(
+            "Geometry & Output",
+            [
+                html.Div(
+                    className="pi-vd-grid pi-vd-grid--single",
+                    children=[
+                        _file_row("Geometry File", "geoFile-vd"),
+                        _file_row("Crystal Structure", "crystFile-vd"),
+                        _file_row("Output Path", "outputFolder-vd"),
+                        _file_row("Output XML", "outputXML-vd", placeholder="e.g. output.xml"),
+                        _file_row("Mask File", "maskFile-vd"),
+                    ],
+                ),
             ],
+            icon_class="bi bi-bounding-box",
+            anchor_id="sec-d-geo",
         ),
-        # ══════════════════════════════════════════════════════════════
-        # Section 7: Notes
-        # ══════════════════════════════════════════════════════════════
-        html.Div(id="sec-d-notes"),
-        _section("Notes", "bi bi-journal-text", "warn"),
-        html.Div(
-            className="pi-vd-grid pi-vd-grid--single",
-            children=[
+        # ── Section 5: Peak Search Parameters ──
+        _section_card(
+            "Peak Search Parameters",
+            [
+                html.Div(
+                    className="pi-vd-grid",
+                    children=[
+                        _cell("Box Size [px]", "boxsize-vd", compact=True),
+                        _cell("Max R-factor", "maxRfactor-vd", compact=True),
+                        _cell("Threshold", "threshold-vd", placeholder="empty → auto", compact=True),
+                        _cell("Threshold Ratio", "thresholdRatio-vd", placeholder="empty → auto", compact=True),
+                        _cell("Min Spot Size [px]", "min_size-vd", compact=True),
+                        _cell("Min Spot Sep. [px]", "min_separation-vd", compact=True),
+                        _cell("Max No. Spots", "max_number-vd", placeholder="empty for all", compact=True),
+                        _cell_select(
+                            "Peak Shape",
+                            "peakShape-vd",
+                            [
+                                {"label": "Lorentzian", "value": "Lorentzian"},
+                                {"label": "Gaussian", "value": "Gaussian"},
+                            ],
+                            compact=True,
+                        ),
+                    ],
+                ),
+                html.Div(
+                    className="pi-vd-check-row",
+                    children=[
+                        dbc.Checkbox(id="smooth-vd", label="Smooth peak before fitting"),
+                        dbc.Checkbox(id="cosmicFilter-vd", label="Cosmic Filter"),
+                    ],
+                ),
+            ],
+            icon_class="bi bi-bullseye",
+            accent="blue",
+            anchor_id="sec-d-peaks",
+        ),
+        # ── Section 6: Indexing Parameters ──
+        _section_card(
+            "Indexing Parameters",
+            [
+                html.Div(
+                    className="pi-vd-grid",
+                    children=[
+                        _cell("Max Calc Energy [keV]", "indexKeVmaxCalc-vd", compact=True),
+                        _cell("Max Test Energy [keV]", "indexKeVmaxTest-vd", compact=True),
+                        _cell("Angle Tolerance [°]", "indexAngleTolerance-vd", compact=True),
+                        _cell("Central HKL", "indexHKL-vd", compact=True),
+                        _cell("Cone Angle [°]", "indexCone-vd", compact=True),
+                        _cell("Max Spots", "max_peaks-vd", placeholder="empty: 200", compact=True),
+                        _cell("Depth [µm]", "depth-vd", placeholder="empty → auto", compact=True),
+                    ],
+                ),
+            ],
+            icon_class="bi bi-diagram-3",
+            accent="slate",
+            anchor_id="sec-d-index",
+        ),
+        # ── Section 7: Notes ──
+        _section_card(
+            "Notes",
+            [
                 html.Div(
                     className="pi-vd-notes",
                     children=[
@@ -297,6 +337,9 @@ main_content = html.Div(
                     ],
                 ),
             ],
+            icon_class="bi bi-journal-text",
+            accent="warn",
+            anchor_id="sec-d-notes",
         ),
         # bottom spacer
         html.Div(style={"height": "2rem"}),
