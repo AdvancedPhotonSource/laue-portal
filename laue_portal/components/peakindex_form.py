@@ -411,7 +411,7 @@ peakindex_form = dbc.Row(
         ),
     ],
     className="g-0",
-    style={"width": "100%", "overflow-x": "auto"},
+    style={"width": "100%", "overflowX": "auto"},
 )
 
 

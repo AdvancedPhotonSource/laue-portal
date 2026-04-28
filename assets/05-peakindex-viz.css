@@ -1,0 +1,365 @@
+/* ==========================================================================
+   Peak Indexing — Visualization Sidebar & Page Styles
+   Controls for each visualization tab are housed in a left sidebar panel.
+   Follows the Flatly theme palette via shared CSS custom properties.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Design tokens (Flatly palette)
+   -------------------------------------------------------------------------- */
+:root {
+  --pi-slate:       #2c3e50;
+  --pi-slate-90:    #34495e;
+  --pi-teal:        #18bc9c;
+  --pi-teal-border: rgba(24, 188, 156, .25);
+  --pi-blue:        #3498db;
+  --pi-ash:         #95a5a6;
+  --pi-fog:         #ecf0f1;
+  --pi-white:       #ffffff;
+  --pi-text:        #2c3e50;
+  --pi-transition:  180ms ease;
+}
+
+/* ==========================================================================
+   Layout: sidebar + visualization
+   ========================================================================== */
+
+.pi-viz-layout {
+  display: flex;
+  min-height: 0;
+  height: calc(100vh - 170px);
+  max-height: calc(100vh - 170px);
+  gap: 0;
+  overflow: hidden;
+}
+
+/* ---- Sidebar panel ---- */
+
+.pi-viz-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--pi-fog);
+  border-right: 1px solid #b4bcc2;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+}
+@media (max-width: 768px) {
+  .pi-viz-sidebar { width: 200px; }
+}
+@media (max-width: 576px) {
+  .pi-viz-layout {
+    flex-direction: column;
+    height: auto;
+  }
+  .pi-viz-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #b4bcc2;
+    max-height: 280px;
+  }
+}
+
+/* Section groups */
+.pi-viz-sidebar-section {
+  border-bottom: 1px solid #dce1e3;
+}
+.pi-viz-sidebar-section:last-child {
+  border-bottom: none;
+}
+
+/* Section header */
+.pi-viz-sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .45rem .65rem;
+  background: #dce1e3;
+  border-bottom: 1px solid #b4bcc2;
+  margin: 0;
+}
+.pi-viz-sidebar-head .pi-viz-section-icon {
+  font-size: .78rem;
+  color: var(--pi-slate-90);
+  width: 1rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+.pi-viz-sidebar-head h4 {
+  margin: 0;
+  font-family: Lato, sans-serif;
+  font-weight: 700;
+  font-size: .72rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--pi-slate);
+}
+
+/* ---- Control rows ---- */
+
+.pi-viz-control {
+  display: flex;
+  align-items: center;
+  padding: .3rem .55rem;
+  gap: .35rem;
+  border-bottom: 1px solid #e8eced;
+  background: var(--pi-fog);
+  transition: background var(--pi-transition);
+}
+.pi-viz-control:last-child {
+  border-bottom: none;
+}
+.pi-viz-control:hover {
+  background: #e4e9ea;
+}
+
+/* Field label (direct child only — excludes labels inside toggles) */
+.pi-viz-control > label {
+  flex: 0 0 auto;
+  min-width: 80px;
+  font-family: Lato, sans-serif;
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--pi-slate);
+  white-space: nowrap;
+  margin: 0;
+  text-align: right;
+  padding-right: .35rem;
+}
+
+/* Text inputs & selects */
+.pi-viz-control .form-control,
+.pi-viz-control .form-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  font-size: .78rem;
+  border-radius: 3px;
+  border: 1px solid #b4bcc2;
+  background: var(--pi-white);
+  padding: .15rem .4rem;
+  transition: border-color var(--pi-transition), box-shadow var(--pi-transition);
+}
+.pi-viz-control .form-control:focus,
+.pi-viz-control .form-select:focus {
+  border-color: var(--pi-teal);
+  box-shadow: 0 0 0 2px var(--pi-teal-border);
+}
+
+/* Dropdown arrow (Bootstrap strips it when padding is overridden) */
+.pi-viz-control .form-select {
+  padding-right: 1.75rem;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right .4rem center;
+  background-size: 12px 9px;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+/* Number inputs — narrower */
+.pi-viz-control .form-control[type="number"] {
+  width: 60px;
+  flex: 0 0 auto;
+}
+
+/* Range slider */
+.pi-viz-control input[type="range"] {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 4px;
+  cursor: pointer;
+  accent-color: var(--pi-teal);
+}
+
+/* Checkbox / switch */
+.pi-viz-control .form-check {
+  margin: 0;
+  min-height: auto;
+}
+.pi-viz-control .form-check-label {
+  font-size: .78rem;
+  font-weight: 400;
+  color: var(--pi-text);
+}
+
+/* Button-toggle group (RadioItems with btn-check pattern) */
+.pi-viz-control .pi-viz-btn-toggle {
+  display: inline-flex;
+  gap: 0;
+}
+.pi-viz-control .pi-viz-btn-toggle .btn {
+  font-size: .72rem;
+  padding: .2rem .5rem;
+  line-height: 1.2;
+  border-radius: 0;
+}
+.pi-viz-control .pi-viz-btn-toggle .btn:first-of-type {
+  border-radius: 3px 0 0 3px;
+}
+.pi-viz-control .pi-viz-btn-toggle .btn:last-of-type {
+  border-radius: 0 3px 3px 0;
+}
+
+/* Dash RadioItems container */
+.pi-viz-control .dash-radioitems {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+/* Standalone buttons inside controls */
+.pi-viz-control .btn {
+  font-size: .72rem;
+  padding: .2rem .5rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Trailing unit text (e.g. "90°") */
+.pi-viz-control .pi-viz-unit {
+  font-size: .72rem;
+  color: var(--pi-ash);
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   Main visualization area
+   ========================================================================== */
+
+.pi-viz-main {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Pass height through dcc.Loading wrapper divs (but not .pi-viz-details) */
+.pi-viz-main > div:not(.pi-viz-details)  { height: 100%; }
+.pi-viz-main > div:not(.pi-viz-details) > div  { height: 100%; }
+.pi-viz-main > div:not(.pi-viz-details) > div > div { height: 100%; }
+
+/* Loading overlay text */
+.pi-viz-main .pi-viz-loading-text {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--pi-blue);
+}
+
+/* Details panel (absolute-positioned at bottom of graph) */
+.pi-viz-details {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: .4rem .75rem;
+  border-top: 1px solid #dce1e3;
+  background: rgba(255, 255, 255, .92);
+  max-height: 140px;
+  overflow-y: auto;
+}
+.pi-viz-details .card {
+  border: 1px solid #dce1e3;
+  border-radius: 4px;
+  box-shadow: none;
+}
+.pi-viz-details .card-body {
+  padding: .5rem .75rem;
+}
+.pi-viz-details .card-title {
+  font-family: Lato, sans-serif;
+  font-size: .78rem;
+  font-weight: 700;
+  color: var(--pi-slate);
+  margin-bottom: .25rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.pi-viz-details p {
+  font-size: .8rem;
+  margin-bottom: .15rem;
+  color: var(--pi-text);
+}
+
+/* ==========================================================================
+   Tabs & page header
+   ========================================================================== */
+
+.pi-viz-tabs .nav-tabs {
+  border-bottom: 2px solid var(--pi-fog);
+  padding: 0 .5rem;
+  background: var(--pi-white);
+}
+.pi-viz-tabs .nav-tabs .nav-link {
+  font-family: Lato, sans-serif;
+  font-size: .82rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--pi-ash);
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: .6rem 1rem;
+  margin-bottom: -2px;
+  transition: color var(--pi-transition), border-color var(--pi-transition);
+}
+.pi-viz-tabs .nav-tabs .nav-link:hover {
+  color: var(--pi-slate);
+  border-bottom-color: var(--pi-ash);
+}
+.pi-viz-tabs .nav-tabs .nav-link.active {
+  color: var(--pi-teal);
+  border-bottom-color: var(--pi-teal);
+  background: transparent;
+  font-weight: 700;
+}
+
+/* Page header */
+.pi-page-header {
+  display: flex;
+  align-items: baseline;
+  gap: .75rem;
+  flex-wrap: wrap;
+  padding: .75rem 1rem .5rem;
+  margin: 0;
+  background: var(--pi-white);
+  border-bottom: 1px solid var(--pi-fog);
+}
+.pi-page-header .pi-page-title {
+  font-family: Lato, sans-serif;
+  font-weight: 700;
+  font-size: 1.75rem;
+  color: var(--pi-slate);
+  margin: 0;
+}
+.pi-page-header .pi-page-links {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+.pi-page-header .pi-page-links a {
+  font-size: .78rem;
+  color: var(--pi-teal);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color var(--pi-transition);
+}
+.pi-page-header .pi-page-links a:hover {
+  color: var(--pi-blue);
+  text-decoration: underline;
+}
+.pi-page-header .pi-page-sep {
+  color: var(--pi-ash);
+  font-size: .72rem;
+}
+
+/* Peaks table tab */
+.pi-viz-table-wrap {
+  padding: .5rem;
+  height: calc(100vh - 170px);
+  overflow: auto;
+}

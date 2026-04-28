@@ -19,421 +19,482 @@ dash.register_page(__name__, path="/peakindexing")  # Simplified path
 
 
 # ---------------------------------------------------------------------------
-# Visualization tabs (shown when XML results are available)
+# Visualization helpers — sidebar control builders
 # ---------------------------------------------------------------------------
 
 
-def _marker_size_control(input_id, default_value=40):
-    """Reusable marker-size number input."""
-    return dbc.Col(
+def _viz_sidebar_head(title, icon_class="bi bi-sliders"):
+    """Section header inside a visualization sidebar."""
+    return html.Div(
         [
-            dbc.Label("Marker size:", className="me-2 mb-0", style={"whiteSpace": "nowrap"}),
-            dbc.Input(
-                id=input_id,
-                type="number",
-                min=1,
-                max=75,
-                step=1,
-                value=default_value,
-                size="sm",
-                style={"width": "60px"},
-            ),
+            html.I(className=f"pi-viz-section-icon {icon_class}"),
+            html.H4(title),
         ],
-        width="auto",
-        style={"display": "flex", "alignItems": "center"},
+        className="pi-viz-sidebar-head",
     )
 
+
+def _viz_control(label_text, *children):
+    """Single labelled control row inside a visualization sidebar."""
+    return html.Div(
+        [html.Label(label_text), *children],
+        className="pi-viz-control",
+    )
+
+
+def _viz_graph_with_loading(graph, target_id, text="Updating\u2026"):
+    """Wrap a dcc.Graph in a dcc.Loading overlay shown during callbacks."""
+    return dcc.Loading(
+        type="circle",
+        overlay_style={"visibility": "visible", "opacity": 1},
+        custom_spinner=html.Div(
+            [
+                dbc.Spinner(size="sm", color="secondary", spinner_class_name="me-2"),
+                html.Span(text, className="pi-viz-loading-text"),
+            ],
+            style={
+                "display": "flex",
+                "alignItems": "center",
+                "justifyContent": "center",
+                "padding": "2rem",
+            },
+        ),
+        children=[graph, html.Div(id=target_id)],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Visualization tabs — sidebar + main content layout
+# ---------------------------------------------------------------------------
 
 _viz_tabs = dbc.Tabs(
     id="peakindexing-viz-tabs",
     active_tab="tab-parameters",
-    className="mt-4",
+    className="pi-viz-tabs",
     children=[
+        # ==================================================================
+        # Tab: Parameters (unchanged — full-width accordion form)
+        # ==================================================================
         dbc.Tab(
             label="Parameters",
             tab_id="tab-parameters",
             children=[
-                html.Div(id="tab-parameters-content", className="pt-3", children=[peakindex_form]),
+                html.Div(id="tab-parameters-content", className="pt-3 px-2", children=[peakindex_form]),
             ],
         ),
+        # ==================================================================
+        # Tab: Orientation — sidebar + map
+        # ==================================================================
         dbc.Tab(
             label="Orientation",
             tab_id="tab-orientation",
             children=[
                 html.Div(
                     id="tab-orientation-content",
-                    className="pt-3",
+                    className="pi-viz-layout",
                     children=[
-                        # Controls row
-                        dbc.Row(
-                            [
-                                dbc.Col(
-                                    [
-                                        dbc.Label("Color by:", className="me-2"),
-                                        dbc.Select(
-                                            id="orientation-color-select",
-                                            options=[
-                                                {"label": "Cubic IPF", "value": "cubic_ipf"},
-                                                {"label": "Rodrigues RGB", "value": "rodrigues"},
-                                                {"label": "Misorientation", "value": "misorientation"},
-                                                {"label": "Pole Figure HSV", "value": "pole_hsv"},
-                                                {"label": "N Indexed", "value": "n_indexed"},
-                                                {"label": "Goodness", "value": "goodness"},
-                                                {"label": "RMS Error", "value": "rms_error"},
-                                                {"label": "N Patterns", "value": "n_patterns"},
-                                            ],
-                                            value="cubic_ipf",
-                                            style={"width": "180px", "display": "inline-block"},
+                        # ── Sidebar ──
+                        html.Div(
+                            className="pi-viz-sidebar",
+                            children=[
+                                html.Div(
+                                    className="pi-viz-sidebar-section",
+                                    children=[
+                                        _viz_sidebar_head("Color", "bi bi-palette"),
+                                        _viz_control(
+                                            "Color by",
+                                            dbc.Select(
+                                                id="orientation-color-select",
+                                                options=[
+                                                    {"label": "Cubic IPF", "value": "cubic_ipf"},
+                                                    {"label": "Rodrigues RGB", "value": "rodrigues"},
+                                                    {"label": "Misorientation", "value": "misorientation"},
+                                                    {"label": "Pole Figure HSV", "value": "pole_hsv"},
+                                                    {"label": "N Indexed", "value": "n_indexed"},
+                                                    {"label": "Goodness", "value": "goodness"},
+                                                    {"label": "RMS Error", "value": "rms_error"},
+                                                    {"label": "N Patterns", "value": "n_patterns"},
+                                                ],
+                                                value="cubic_ipf",
+                                                className="form-select",
+                                            ),
                                         ),
                                     ],
-                                    width="auto",
                                 ),
-                                dbc.Col(
-                                    [
-                                        dbc.Label("Surface:", className="me-2"),
-                                        dbc.Select(
-                                            id="orientation-surface-select",
-                                            options=[
-                                                {"label": "Normal", "value": "normal"},
-                                                {"label": "X", "value": "X"},
-                                                {"label": "H", "value": "H"},
-                                                {"label": "Y", "value": "Y"},
-                                                {"label": "Z", "value": "Z"},
-                                            ],
-                                            value="normal",
-                                            style={"width": "110px", "display": "inline-block"},
+                                html.Div(
+                                    className="pi-viz-sidebar-section",
+                                    children=[
+                                        _viz_sidebar_head("Projection", "bi bi-grid-3x3"),
+                                        _viz_control(
+                                            "Surface",
+                                            dbc.Select(
+                                                id="orientation-surface-select",
+                                                options=[
+                                                    {"label": "Normal", "value": "normal"},
+                                                    {"label": "X", "value": "X"},
+                                                    {"label": "H", "value": "H"},
+                                                    {"label": "Y", "value": "Y"},
+                                                    {"label": "Z", "value": "Z"},
+                                                ],
+                                                value="normal",
+                                                className="form-select",
+                                            ),
+                                        ),
+                                        _viz_control(
+                                            "View",
+                                            dbc.RadioItems(
+                                                id="orientation-view-toggle",
+                                                options=[
+                                                    {"label": "2D", "value": "2d"},
+                                                    {"label": "3D", "value": "3d"},
+                                                ],
+                                                value="2d",
+                                                inline=True,
+                                                className="pi-viz-btn-toggle",
+                                                inputClassName="btn-check",
+                                                labelClassName="btn btn-outline-secondary btn-sm",
+                                                labelCheckedClassName="btn btn-secondary btn-sm",
+                                            ),
                                         ),
                                     ],
-                                    width="auto",
                                 ),
-                                _marker_size_control("orientation-marker-size"),
-                                dbc.Col(
-                                    [
-                                        dbc.RadioItems(
-                                            id="orientation-view-toggle",
-                                            options=[
-                                                {"label": "2D", "value": "2d"},
-                                                {"label": "3D", "value": "3d"},
-                                            ],
-                                            value="2d",
-                                            inline=True,
-                                            className="mb-0",
+                                html.Div(
+                                    className="pi-viz-sidebar-section",
+                                    children=[
+                                        _viz_sidebar_head("Display", "bi bi-aspect-ratio"),
+                                        _viz_control(
+                                            "Marker",
+                                            dbc.Input(
+                                                id="orientation-marker-size",
+                                                type="number",
+                                                min=1,
+                                                max=75,
+                                                step=1,
+                                                value=40,
+                                                className="form-control",
+                                            ),
                                         ),
                                     ],
-                                    width="auto",
-                                ),
-                                dbc.Col(
-                                    dcc.Loading(
-                                        type="circle",
-                                        overlay_style={"visibility": "visible", "opacity": 1},
-                                        custom_spinner=html.Div(
-                                            [
-                                                dbc.Spinner(size="sm", color="secondary", spinner_class_name="me-2"),
-                                                html.Span(
-                                                    "Updating\u2026",
-                                                    style={
-                                                        "color": "#0d6efd",
-                                                        "fontSize": "1.05rem",
-                                                        "fontWeight": "700",
-                                                    },
-                                                ),
-                                            ],
-                                            style={"display": "flex", "alignItems": "center"},
-                                        ),
-                                        children=html.Div(id="orientation-loading-target"),
-                                    ),
-                                    width="auto",
-                                    style={"paddingLeft": "3.5rem"},
                                 ),
                             ],
-                            className="mb-3 align-items-center g-3",
                         ),
-                        # Plot
-                        dcc.Graph(
-                            id="orientation-map-graph",
-                            config={"displayModeBar": True, "scrollZoom": True},
-                            style={"height": "calc(100vh - 220px)", "minHeight": "400px"},
-                        ),
-                        # Selected point details
+                        # ── Main visualization ──
                         html.Div(
-                            id="orientation-point-details",
-                            className="mt-3",
-                            children=html.Small(
-                                "Click a point on the map to view details.",
-                                className="text-muted",
-                            ),
+                            className="pi-viz-main",
+                            children=[
+                                _viz_graph_with_loading(
+                                    dcc.Graph(
+                                        id="orientation-map-graph",
+                                        config={"displayModeBar": True, "scrollZoom": True},
+                                        style={"height": "100%", "minHeight": "400px"},
+                                    ),
+                                    "orientation-loading-target",
+                                ),
+                                html.Div(
+                                    id="orientation-point-details",
+                                    className="pi-viz-details",
+                                    children=html.Small(
+                                        "Click a point on the map to view details.",
+                                        className="text-muted",
+                                    ),
+                                ),
+                            ],
                         ),
                     ],
                 ),
             ],
         ),
+        # ==================================================================
+        # Tab: Pole Figure — sidebar + plot
+        # ==================================================================
         dbc.Tab(
             label="Pole Figure",
             tab_id="tab-poles",
             children=[
                 html.Div(
                     id="tab-poles-content",
-                    className="pt-3",
+                    className="pi-viz-layout",
                     children=[
-                        # Controls row
-                        dbc.Row(
-                            [
-                                dbc.Col(
-                                    [
-                                        dbc.Label("Pole {hkl}:", className="me-2"),
-                                        dbc.Select(
-                                            id="stereo-hkl-select",
-                                            options=[
-                                                {"label": "{100}", "value": "1,0,0"},
-                                                {"label": "{110}", "value": "1,1,0"},
-                                                {"label": "{111}", "value": "1,1,1"},
-                                                {"label": "{210}", "value": "2,1,0"},
-                                            ],
-                                            value="1,0,0",
-                                            style={"width": "120px", "display": "inline-block"},
+                        # ── Sidebar ──
+                        html.Div(
+                            className="pi-viz-sidebar",
+                            children=[
+                                html.Div(
+                                    className="pi-viz-sidebar-section",
+                                    children=[
+                                        _viz_sidebar_head("Pole", "bi bi-bullseye"),
+                                        _viz_control(
+                                            "{hkl}",
+                                            dbc.Select(
+                                                id="stereo-hkl-select",
+                                                options=[
+                                                    {"label": "{100}", "value": "1,0,0"},
+                                                    {"label": "{110}", "value": "1,1,0"},
+                                                    {"label": "{111}", "value": "1,1,1"},
+                                                    {"label": "{210}", "value": "2,1,0"},
+                                                ],
+                                                value="1,0,0",
+                                                className="form-select",
+                                            ),
+                                        ),
+                                        _viz_control(
+                                            "Surface",
+                                            dbc.Select(
+                                                id="stereo-surface-select",
+                                                options=[
+                                                    {"label": "Normal", "value": "normal"},
+                                                    {"label": "X", "value": "X"},
+                                                    {"label": "H", "value": "H"},
+                                                    {"label": "Y", "value": "Y"},
+                                                    {"label": "Z", "value": "Z"},
+                                                ],
+                                                value="normal",
+                                                className="form-select",
+                                            ),
                                         ),
                                     ],
-                                    width="auto",
                                 ),
-                                _marker_size_control("stereo-marker-size", default_value=12),
-                                dbc.Col(
-                                    [
-                                        dbc.Label("Color:", className="me-2"),
-                                        dbc.Select(
-                                            id="stereo-color-select",
-                                            options=[
-                                                {"label": "Position HSV", "value": "hsv_position"},
-                                                {"label": "Cubic IPF", "value": "ipf"},
-                                                {"label": "Uniform", "value": "uniform"},
-                                            ],
-                                            value="hsv_position",
-                                            style={"width": "150px", "display": "inline-block"},
+                                html.Div(
+                                    className="pi-viz-sidebar-section",
+                                    children=[
+                                        _viz_sidebar_head("Color", "bi bi-palette"),
+                                        _viz_control(
+                                            "Scheme",
+                                            dbc.Select(
+                                                id="stereo-color-select",
+                                                options=[
+                                                    {"label": "Position HSV", "value": "hsv_position"},
+                                                    {"label": "Cubic IPF", "value": "ipf"},
+                                                    {"label": "Uniform", "value": "uniform"},
+                                                ],
+                                                value="hsv_position",
+                                                className="form-select",
+                                            ),
                                         ),
-                                    ],
-                                    width="auto",
-                                ),
-                                dbc.Col(
-                                    [
-                                        dbc.Label(
-                                            "Color radius:", className="me-2 mb-0", style={"whiteSpace": "nowrap"}
-                                        ),
-                                        dbc.Input(
-                                            id="stereo-color-rad",
-                                            type="number",
-                                            min=0.1,
-                                            max=90,
-                                            step="any",
-                                            value=22.5,
-                                            size="sm",
-                                            style={"width": "75px"},
-                                        ),
-                                        html.Span("\u00b0", style={"marginLeft": "2px"}),
-                                    ],
-                                    id="stereo-color-rad-col",
-                                    width="auto",
-                                    style={"display": "flex", "alignItems": "center"},
-                                ),
-                                dbc.Col(
-                                    [
-                                        dbc.Label("Surface:", className="me-2"),
-                                        dbc.Select(
-                                            id="stereo-surface-select",
-                                            options=[
-                                                {"label": "Normal", "value": "normal"},
-                                                {"label": "X", "value": "X"},
-                                                {"label": "H", "value": "H"},
-                                                {"label": "Y", "value": "Y"},
-                                                {"label": "Z", "value": "Z"},
-                                            ],
-                                            value="normal",
-                                            style={"width": "110px", "display": "inline-block"},
-                                        ),
-                                    ],
-                                    width="auto",
-                                ),
-                                dbc.Col(
-                                    dcc.Loading(
-                                        type="circle",
-                                        overlay_style={"visibility": "visible", "opacity": 1},
-                                        custom_spinner=html.Div(
-                                            [
-                                                dbc.Spinner(size="sm", color="secondary", spinner_class_name="me-2"),
-                                                html.Span(
-                                                    "Updating\u2026",
-                                                    style={
-                                                        "color": "#0d6efd",
-                                                        "fontSize": "1.05rem",
-                                                        "fontWeight": "700",
-                                                    },
+                                        html.Div(
+                                            id="stereo-color-rad-col",
+                                            className="pi-viz-control",
+                                            children=[
+                                                html.Label("Radius"),
+                                                dbc.Input(
+                                                    id="stereo-color-rad",
+                                                    type="number",
+                                                    min=0.1,
+                                                    max=90,
+                                                    step="any",
+                                                    value=22.5,
+                                                    className="form-control",
                                                 ),
+                                                html.Span("\u00b0", className="pi-viz-unit"),
                                             ],
                                             style={"display": "flex", "alignItems": "center"},
                                         ),
-                                        children=html.Div(id="poles-loading-target"),
-                                    ),
-                                    width="auto",
-                                    style={"paddingLeft": "3.5rem"},
+                                        html.Div(
+                                            id="pole-figure-reset-col",
+                                            className="pi-viz-control",
+                                            style={"display": "none"},
+                                            children=[
+                                                html.Label(""),
+                                                dbc.Button(
+                                                    "Reset color center",
+                                                    id="pole-figure-reset-btn",
+                                                    color="secondary",
+                                                    size="sm",
+                                                ),
+                                            ],
+                                        ),
+                                    ],
                                 ),
-                                # Reset color center button (hidden until a center is set)
-                                dbc.Col(
-                                    dbc.Button(
-                                        "Reset color center",
-                                        id="pole-figure-reset-btn",
-                                        color="secondary",
-                                        size="sm",
-                                    ),
-                                    width="auto",
-                                    id="pole-figure-reset-col",
-                                    style={"display": "none"},
+                                html.Div(
+                                    className="pi-viz-sidebar-section",
+                                    children=[
+                                        _viz_sidebar_head("Display", "bi bi-aspect-ratio"),
+                                        _viz_control(
+                                            "Marker",
+                                            dbc.Input(
+                                                id="stereo-marker-size",
+                                                type="number",
+                                                min=1,
+                                                max=75,
+                                                step=1,
+                                                value=12,
+                                                className="form-control",
+                                            ),
+                                        ),
+                                    ],
                                 ),
                             ],
-                            className="mb-3 align-items-center g-3",
                         ),
-                        # Pole figure plot
-                        dcc.Graph(
-                            id="stereo-plot-graph",
-                            config={
-                                "displayModeBar": True,
-                                "scrollZoom": True,
-                                "modeBarButtonsToAdd": ["lasso2d", "select2d"],
-                            },
-                            style={"height": "calc(100vh - 220px)", "minHeight": "400px"},
-                        ),
-                        # Reference point info (click-to-recenter)
+                        # ── Main visualization ──
                         html.Div(
-                            id="pole-figure-center-info",
-                            className="mt-2",
-                            children=html.Small(
-                                "Click a point to set color center.",
-                                className="text-muted",
-                            ),
-                        ),
-                        # ROI selection info
-                        html.Div(
-                            id="stereo-selection-info",
-                            className="mt-1",
-                            children=html.Small(
-                                "Use lasso or box select on the pole figure to pick regions of interest.",
-                                className="text-muted",
-                            ),
+                            className="pi-viz-main",
+                            children=[
+                                _viz_graph_with_loading(
+                                    dcc.Graph(
+                                        id="stereo-plot-graph",
+                                        config={
+                                            "displayModeBar": True,
+                                            "scrollZoom": True,
+                                            "modeBarButtonsToAdd": ["lasso2d", "select2d"],
+                                        },
+                                        style={"height": "100%", "minHeight": "400px"},
+                                    ),
+                                    "poles-loading-target",
+                                ),
+                                html.Div(
+                                    className="pi-viz-details",
+                                    children=[
+                                        html.Div(
+                                            id="pole-figure-center-info",
+                                            children=html.Small(
+                                                "Click a point to set color center.",
+                                                className="text-muted",
+                                            ),
+                                        ),
+                                        html.Div(
+                                            id="stereo-selection-info",
+                                            children=html.Small(
+                                                "Use lasso or box select to pick regions of interest.",
+                                                className="text-muted",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ],
                         ),
                     ],
                 ),
             ],
         ),
+        # ==================================================================
+        # Tab: Stereographic — sidebar + plot
+        # ==================================================================
         dbc.Tab(
             label="Stereographic",
             tab_id="tab-stereo",
             children=[
                 html.Div(
                     id="tab-stereo-content",
-                    className="pt-3",
+                    className="pi-viz-layout",
                     children=[
-                        # Controls row
-                        dbc.Row(
-                            [
-                                dbc.Col(
-                                    [
-                                        dbc.Label("Zoom:", className="me-2 mb-0", style={"whiteSpace": "nowrap"}),
-                                        dcc.Input(
-                                            id="stereo-zoom-slider",
-                                            type="range",
-                                            min=5,
-                                            max=90,
-                                            step=5,
-                                            value=90,
-                                            style={"width": "160px"},
-                                        ),
-                                        html.Span(
-                                            id="stereo-zoom-label",
-                                            children="90\u00b0",
-                                            style={"marginLeft": "8px", "minWidth": "40px"},
-                                        ),
-                                    ],
-                                    width="auto",
-                                    style={"display": "flex", "alignItems": "center"},
-                                ),
-                                dbc.Col(
-                                    [
-                                        dbc.Checkbox(
-                                            id="stereo-wulff-toggle",
-                                            label="Wulff net",
-                                            value=True,
-                                        ),
-                                    ],
-                                    width="auto",
-                                ),
-                                dbc.Col(
-                                    [
-                                        dbc.Label("Wulff step:", className="me-2"),
-                                        dbc.Select(
-                                            id="stereo-wulff-step",
-                                            options=[
-                                                {"label": "5\u00b0", "value": "5"},
-                                                {"label": "10\u00b0", "value": "10"},
-                                                {"label": "20\u00b0", "value": "20"},
-                                            ],
-                                            value="10",
-                                            style={"width": "80px", "display": "inline-block"},
-                                        ),
-                                    ],
-                                    width="auto",
-                                ),
-                                _marker_size_control("stereoprojection-marker-size", default_value=12),
-                                dbc.Col(
-                                    [
-                                        dbc.Button(
-                                            "Render",
-                                            id="stereo-render-btn",
-                                            color="primary",
-                                            size="sm",
-                                        ),
-                                    ],
-                                    width="auto",
-                                ),
-                                dbc.Col(
-                                    dcc.Loading(
-                                        type="circle",
-                                        overlay_style={"visibility": "visible", "opacity": 1},
-                                        custom_spinner=html.Div(
-                                            [
-                                                dbc.Spinner(size="sm", color="secondary", spinner_class_name="me-2"),
+                        # ── Sidebar ──
+                        html.Div(
+                            className="pi-viz-sidebar",
+                            children=[
+                                html.Div(
+                                    className="pi-viz-sidebar-section",
+                                    children=[
+                                        _viz_sidebar_head("Zoom", "bi bi-zoom-in"),
+                                        html.Div(
+                                            className="pi-viz-control",
+                                            children=[
+                                                html.Label("Range"),
+                                                dcc.Input(
+                                                    id="stereo-zoom-slider",
+                                                    type="range",
+                                                    min=5,
+                                                    max=90,
+                                                    step=5,
+                                                    value=90,
+                                                ),
                                                 html.Span(
-                                                    "Rendering\u2026",
-                                                    style={
-                                                        "color": "#0d6efd",
-                                                        "fontSize": "1.05rem",
-                                                        "fontWeight": "700",
-                                                    },
+                                                    id="stereo-zoom-label",
+                                                    children="90\u00b0",
+                                                    className="pi-viz-unit",
                                                 ),
                                             ],
-                                            style={"display": "flex", "alignItems": "center"},
                                         ),
-                                        children=html.Div(id="stereo-loading-target"),
-                                    ),
-                                    width="auto",
-                                    style={"paddingLeft": "3.5rem"},
+                                    ],
+                                ),
+                                html.Div(
+                                    className="pi-viz-sidebar-section",
+                                    children=[
+                                        _viz_sidebar_head("Wulff Net", "bi bi-globe2"),
+                                        _viz_control(
+                                            "",
+                                            dbc.Checkbox(
+                                                id="stereo-wulff-toggle",
+                                                label="Show Wulff net",
+                                                value=True,
+                                            ),
+                                        ),
+                                        _viz_control(
+                                            "Step",
+                                            dbc.Select(
+                                                id="stereo-wulff-step",
+                                                options=[
+                                                    {"label": "5\u00b0", "value": "5"},
+                                                    {"label": "10\u00b0", "value": "10"},
+                                                    {"label": "20\u00b0", "value": "20"},
+                                                ],
+                                                value="10",
+                                                className="form-select",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                                html.Div(
+                                    className="pi-viz-sidebar-section",
+                                    children=[
+                                        _viz_sidebar_head("Display", "bi bi-aspect-ratio"),
+                                        _viz_control(
+                                            "Marker",
+                                            dbc.Input(
+                                                id="stereoprojection-marker-size",
+                                                type="number",
+                                                min=1,
+                                                max=75,
+                                                step=1,
+                                                value=12,
+                                                className="form-control",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                                html.Div(
+                                    className="pi-viz-sidebar-section",
+                                    style={"padding": ".4rem .55rem"},
+                                    children=[
+                                        dbc.Button(
+                                            [html.I(className="bi bi-play-fill me-1"), "Render"],
+                                            id="stereo-render-btn",
+                                            color="success",
+                                            size="sm",
+                                            style={"width": "100%"},
+                                        ),
+                                    ],
                                 ),
                             ],
-                            className="mb-3 align-items-center g-3",
                         ),
-                        # Stereographic projection plot
-                        dcc.Graph(
-                            id="stereo-projection-graph",
-                            config={"displayModeBar": True, "scrollZoom": True},
-                            style={"height": "calc(100vh - 220px)", "minHeight": "400px"},
+                        # ── Main visualization ──
+                        html.Div(
+                            className="pi-viz-main",
+                            children=[
+                                _viz_graph_with_loading(
+                                    dcc.Graph(
+                                        id="stereo-projection-graph",
+                                        config={"displayModeBar": True, "scrollZoom": True},
+                                        style={"height": "100%", "minHeight": "400px"},
+                                    ),
+                                    "stereo-loading-target",
+                                    text="Rendering\u2026",
+                                ),
+                            ],
                         ),
                     ],
                 ),
             ],
         ),
+        # ==================================================================
+        # Tab: Peaks — full-width table
+        # ==================================================================
         dbc.Tab(
             label="Peaks",
             tab_id="tab-peaks",
             children=[
                 html.Div(
                     id="tab-peaks-content",
-                    className="pt-3",
+                    className="pi-viz-table-wrap",
                     children=[
                         html.Div(id="peak-table-container"),
                     ],
@@ -454,28 +515,17 @@ layout = html.Div(
         dcc.Location(id="url-peakindexing-page", refresh=False),
         # Store parsed XML data path so visualization callbacks can load it
         dcc.Store(id="peakindexing-xml-path"),
-        # Store selected grain indices for cross-plot linking (Stage 3)
+        # Store selected grain indices for cross-plot linking
         dcc.Store(id="selected-grain-indices", data=[]),
         # Store pole figure color center: {x, y, grain_index} or None
         dcc.Store(id="pole-figure-center", data=None),
-        dbc.Container(
-            id="peakindexing-content-container",
-            fluid=True,
-            className="mt-4",
-            children=[
-                html.H1(
-                    id="peakindex-id-header",
-                    style={
-                        "display": "flex",
-                        "gap": "10px",
-                        "align-items": "baseline",
-                        "flexWrap": "wrap",
-                    },
-                    className="mb-4",
-                ),
-                _viz_tabs,
-            ],
+        # Page header
+        html.Div(
+            id="peakindex-id-header",
+            className="pi-page-header",
         ),
+        # Visualization tabs
+        _viz_tabs,
     ]
 )
 
@@ -605,26 +655,28 @@ def load_peakindexing_data(href):
                             )
                         )
 
-                    # Build header with links
-                    header_content = [html.Span(f"Peak Indexing ID: {peakindex_id}")]
+                    # Build header with links using modernised classes
+                    header_content = [
+                        html.Span(f"Peak Indexing ID: {peakindex_id}", className="pi-page-title"),
+                    ]
 
                     if related_links:
-                        # Add separator before links
-                        header_content.append(html.Span(" • ", className="mx-2", style={"color": "#6c757d"}))
-
-                        # Add each link with separators
+                        link_children = []
                         for i, link in enumerate(related_links):
                             if i > 0:
-                                header_content.append(html.Span(" | ", className="mx-2", style={"color": "#6c757d"}))
-                            header_content.append(html.Span(link, style={"fontSize": "0.7em"}))
+                                link_children.append(html.Span("|", className="pi-page-sep"))
+                            link_children.append(link)
+                        header_content.append(html.Span(link_children, className="pi-page-links"))
 
                     return header_content, xml_path
         except Exception as e:
             print(f"Error loading peak indexing data: {e}")
             traceback.print_exc()
-            return f"Error loading data for Peak Indexing ID: {peakindex_id}", None
+            return [
+                html.Span(f"Error loading data for Peak Indexing ID: {peakindex_id}", className="pi-page-title")
+            ], None
 
-    return "No Peak Indexing ID provided", None
+    return [html.Span("No Peak Indexing ID provided", className="pi-page-title")], None
 
 
 # ---------------------------------------------------------------------------
@@ -1101,7 +1153,7 @@ def handle_pole_figure_click(click_data, reset_clicks, current_center, xml_path,
             f"{grain_label} at ({x:.3f}, {y:.3f})",
         ]
     )
-    _show_btn = {"display": "inline-block"}
+    _show_btn = {"display": "flex", "alignItems": "center"}
 
     return new_center, info, _show_btn, "pole_hsv"
 

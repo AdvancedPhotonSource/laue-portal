@@ -170,3 +170,5 @@ config.yaml
 # External hosted resources
 assets/
 !assets/customAgGridFunctions.js
+!assets/05-peakindex-viz.css
+!assets/accordion.css
