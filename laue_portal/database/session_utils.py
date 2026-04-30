@@ -6,7 +6,7 @@ Assumptions:
 
 Responsibilities:
 - Create a single shared Engine using config.db_file
-- Enable SQLite foreign key enforcement via PRAGMA on connect
+- Enable low-risk SQLite PRAGMAs on connect
 - Provide a Session factory and helper to create sessions
 - Provide init_db() to create all tables using the shared Engine
 """
@@ -23,9 +23,10 @@ engine = None
 _engine_db_file = None
 
 
-def enable_sqlite_fks(dbapi_connection, connection_record):
+def enable_sqlite_pragmas(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute("PRAGMA busy_timeout=30000")
     cursor.close()
 
 
@@ -51,8 +52,8 @@ def get_engine():
                 pass
 
         engine = create_engine(f"sqlite:///{config.db_file}")
-        # Ensure SQLite enforces foreign keys for this engine
-        event.listen(engine, "connect", enable_sqlite_fks)
+        # Ensure SQLite enforces foreign keys and waits briefly on writer contention.
+        event.listen(engine, "connect", enable_sqlite_pragmas)
         # Bind Session factory to the (new) engine
         SessionLocal.configure(bind=engine)
         _engine_db_file = config.db_file

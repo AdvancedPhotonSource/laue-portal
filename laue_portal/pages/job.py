@@ -4,12 +4,13 @@ import dash
 import dash_bootstrap_components as dbc
 from dash import Input, Output, State, callback, dcc, html
 from dash.exceptions import PreventUpdate
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
-from laue_portal.processing.redis_utils import STATUS_MAPPING, cancel_batch_job
+from laue_portal.processing.redis_utils import STATUS_MAPPING, STATUS_REVERSE_MAPPING, cancel_batch_job
 
 dash.register_page(__name__, path="/job")
 
@@ -359,33 +360,73 @@ def load_job_data(href):
                                 header_content.append(html.Span(" • ", className="mx-2", style={"color": "#6c757d"}))
                             header_content.append(html.Span(link, style={"fontSize": "0.7em"}))
 
-                    # Get subjob messages for SubJob Output section
                     subjob_output = []
-                    subjobs_data = (
-                        session.query(db_schema.SubJob)
+                    subjob_counts = dict(
+                        session.query(db_schema.SubJob.status, func.count())
                         .filter(db_schema.SubJob.job_id == job_id)
-                        .order_by(db_schema.SubJob.subjob_id)
+                        .group_by(db_schema.SubJob.status)
                         .all()
                     )
+                    total_subjobs = sum(subjob_counts.values())
 
-                    if subjobs_data:
-                        for subjob in subjobs_data:
-                            # Format subjob status
+                    if total_subjobs:
+                        summary_items = [
+                            dbc.Badge(
+                                f"{STATUS_MAPPING.get(status, f'Unknown ({status})')}: {count}",
+                                color={0: "warning", 1: "info", 2: "success", 3: "danger", 4: "secondary"}.get(
+                                    status, "secondary"
+                                ),
+                                className="me-2 mb-2",
+                            )
+                            for status, count in sorted(subjob_counts.items())
+                        ]
+                        subjob_output.append(dbc.Alert(summary_items, color="light", className="py-2"))
+
+                        subjob_query = session.query(db_schema.SubJob).filter(db_schema.SubJob.job_id == job_id)
+                        important_statuses = [
+                            STATUS_REVERSE_MAPPING["Failed"],
+                            STATUS_REVERSE_MAPPING["Running"],
+                        ]
+                        important_subjobs = (
+                            subjob_query.filter(db_schema.SubJob.status.in_(important_statuses))
+                            .order_by(db_schema.SubJob.status.desc(), db_schema.SubJob.subjob_id)
+                            .all()
+                        )
+                        sample_limit = 25
+                        sample_subjobs = (
+                            subjob_query.filter(db_schema.SubJob.status.notin_(important_statuses))
+                            .order_by(db_schema.SubJob.subjob_id)
+                            .limit(sample_limit)
+                            .all()
+                        )
+                        shown_subjobs = important_subjobs + [
+                            subjob
+                            for subjob in sample_subjobs
+                            if subjob.subjob_id not in {important.subjob_id for important in important_subjobs}
+                        ]
+
+                        if len(shown_subjobs) < total_subjobs:
+                            subjob_output.append(
+                                dbc.Alert(
+                                    f"Showing {len(shown_subjobs)} of {total_subjobs} subjobs. Failed and running subjobs are shown first, followed by a sample.",
+                                    color="info",
+                                    className="py-2",
+                                )
+                            )
+
+                        for subjob in shown_subjobs:
                             subjob_status_text = STATUS_MAPPING.get(subjob.status, f"Unknown ({subjob.status})")
                             subjob_status_color = {
-                                0: "warning",  # Queued
-                                1: "info",  # Running
-                                2: "success",  # Finished
-                                3: "danger",  # Failed
-                                4: "secondary",  # Cancelled
+                                0: "warning",
+                                1: "info",
+                                2: "success",
+                                3: "danger",
+                                4: "secondary",
                             }.get(subjob.status, "secondary")
 
                             subjob_badge = dbc.Badge(subjob_status_text, color=subjob_status_color, className="me-2")
-
-                            # Build card body content
                             card_body_content = []
 
-                            # Add command section if available
                             if subjob.command:
                                 card_body_content.append(
                                     html.Div(
@@ -412,7 +453,6 @@ def load_job_data(href):
                                     )
                                 )
 
-                            # Add output section
                             card_body_content.append(
                                 html.Div(
                                     [
@@ -435,30 +475,30 @@ def load_job_data(href):
                                 )
                             )
 
-                            # Create subjob output card
-                            subjob_card = dbc.Card(
-                                [
-                                    dbc.CardHeader(
-                                        [
-                                            html.Span(
-                                                [
-                                                    html.Strong(f"SubJob {subjob.subjob_id}"),
-                                                    " - ",
-                                                    subjob_badge,
-                                                    html.Small(
-                                                        f"Computer: {subjob.computer_name}", className="text-muted ms-2"
-                                                    ),
-                                                ]
-                                            )
-                                        ],
-                                        className="py-2",
-                                    ),
-                                    dbc.CardBody(card_body_content, className="py-2"),
-                                ],
-                                className="mb-2",
+                            subjob_output.append(
+                                dbc.Card(
+                                    [
+                                        dbc.CardHeader(
+                                            [
+                                                html.Span(
+                                                    [
+                                                        html.Strong(f"SubJob {subjob.subjob_id}"),
+                                                        " - ",
+                                                        subjob_badge,
+                                                        html.Small(
+                                                            f"Computer: {subjob.computer_name}",
+                                                            className="text-muted ms-2",
+                                                        ),
+                                                    ]
+                                                )
+                                            ],
+                                            className="py-2",
+                                        ),
+                                        dbc.CardBody(card_body_content, className="py-2"),
+                                    ],
+                                    className="mb-2",
+                                )
                             )
-
-                            subjob_output.append(subjob_card)
                     else:
                         subjob_output = [html.P("No subjobs found for this job.", className="text-muted")]
 

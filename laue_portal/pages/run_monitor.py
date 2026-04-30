@@ -6,7 +6,7 @@ import dash_bootstrap_components as dbc
 import pandas as pd
 from dash import Input, Output, State, dcc, html
 from dash.exceptions import PreventUpdate
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session, aliased
 
 import laue_portal.components.navbar as navbar
@@ -178,38 +178,29 @@ def calculate_duration_display(start_time, finish_time, current_time):
 
 def _get_jobs():
     with Session(session_utils.get_engine()) as session:
-        # Query all subjobs once
-        subjobs = pd.read_sql(
-            session.query(db_schema.SubJob).order_by(db_schema.SubJob.subjob_id).statement, session.bind
-        )
-
         subjob_columns = ["total_subjobs", "completed_subjobs", "failed_subjobs", "running_subjobs", "queued_subjobs"]
 
-        # Calculate subjob statistics from the single query
-        subjob_stats_df = pd.DataFrame()
-        if not subjobs.empty:
-            # Calculate statistics using pandas
-            grouped_subjobs = subjobs.groupby("job_id")
-
-            # Create the stats dataframe manually to avoid MultiIndex issues
-            subjob_stats_df = pd.DataFrame(
-                {
-                    "job_id": list(grouped_subjobs.groups.keys()),
-                    "total_subjobs": grouped_subjobs.size().values,
-                    "completed_subjobs": grouped_subjobs["status"]
-                    .apply(lambda x: (x == STATUS_REVERSE_MAPPING["Finished"]).sum())
-                    .values,
-                    "failed_subjobs": grouped_subjobs["status"]
-                    .apply(lambda x: (x == STATUS_REVERSE_MAPPING["Failed"]).sum())
-                    .values,
-                    "running_subjobs": grouped_subjobs["status"]
-                    .apply(lambda x: (x == STATUS_REVERSE_MAPPING["Running"]).sum())
-                    .values,
-                    "queued_subjobs": grouped_subjobs["status"]
-                    .apply(lambda x: (x == STATUS_REVERSE_MAPPING["Queued"]).sum())
-                    .values,
-                }
+        subjob_stats_df = pd.read_sql(
+            session.query(
+                db_schema.SubJob.job_id,
+                func.count().label("total_subjobs"),
+                func.sum(case((db_schema.SubJob.status == STATUS_REVERSE_MAPPING["Finished"], 1), else_=0)).label(
+                    "completed_subjobs"
+                ),
+                func.sum(case((db_schema.SubJob.status == STATUS_REVERSE_MAPPING["Failed"], 1), else_=0)).label(
+                    "failed_subjobs"
+                ),
+                func.sum(case((db_schema.SubJob.status == STATUS_REVERSE_MAPPING["Running"], 1), else_=0)).label(
+                    "running_subjobs"
+                ),
+                func.sum(case((db_schema.SubJob.status == STATUS_REVERSE_MAPPING["Queued"], 1), else_=0)).label(
+                    "queued_subjobs"
+                ),
             )
+            .group_by(db_schema.SubJob.job_id)
+            .statement,
+            session.bind,
+        )
 
         catalog_calib = aliased(db_schema.Catalog)
         catalog_recon = aliased(db_schema.Catalog)

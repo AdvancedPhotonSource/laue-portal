@@ -62,6 +62,18 @@ STATUS_MAPPING = {0: "Queued", 1: "Running", 2: "Finished", 3: "Failed", 4: "Can
 # Reverse mapping for converting status names to integers
 STATUS_REVERSE_MAPPING = {v: k for k, v in STATUS_MAPPING.items()}
 
+PEAKINDEXING_QUEUE_BATCH_SIZE = max(1, int(os.environ.get("LAUE_PEAKINDEXING_QUEUE_BATCH_SIZE", "50")))
+WRITE_SUCCESS_SUBJOB_DETAILS = os.environ.get("LAUE_WRITE_SUCCESS_SUBJOB_DETAILS", "0").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+
+
+def _chunked(items: List[Any], chunk_size: int):
+    for start in range(0, len(items), chunk_size):
+        yield items[start : start + chunk_size]
+
 
 # Generic helper for enqueueing jobs
 def enqueue_job(
@@ -89,8 +101,9 @@ def enqueue_job(
     Returns:
         RQ job ID
     """
-    # Extract timeout from kwargs if present
-    timeout = kwargs.get("timeout", 7200)  # Default to 2 hours if not specified
+    # Extract queue-only options from kwargs before passing args to the worker function.
+    timeout = kwargs.pop("timeout", 7200)  # Default to 2 hours if not specified
+    rq_job_id = kwargs.pop("rq_job_id", None)
 
     # Add job metadata
     job_meta = {
@@ -111,7 +124,7 @@ def enqueue_job(
         job_id,  # First parameter for all execute functions
         *args,
         **kwargs,
-        job_id=f"{job_type}_{job_id}",
+        job_id=rq_job_id or f"{job_type}_{job_id}",
         meta=job_meta,
         at_front=at_front,
         depends_on=depends_on,
@@ -594,7 +607,9 @@ def enqueue_peakindexing(
     Returns:
         RQ job ID of the batch coordinator
     """
-    # Query for subjobs
+    queue_batch_size = int(kwargs.pop("queue_batch_size", PEAKINDEXING_QUEUE_BATCH_SIZE))
+    queue_batch_size = max(1, queue_batch_size)
+
     with Session(session_utils.get_engine()) as session:
         subjob_data = (
             session.query(db_schema.SubJob)
@@ -608,7 +623,6 @@ def enqueue_peakindexing(
                 f"No subjobs found for job_id {job_id}. peakindexing requires subjobs to be created first."
             )
 
-    # Validate file lists
     if len(input_files) != len(subjob_data):
         raise ValueError(
             f"Number of input files ({len(input_files)}) does not match number of subjobs ({len(subjob_data)})"
@@ -618,31 +632,36 @@ def enqueue_peakindexing(
             f"Number of output files ({len(output_files)}) does not match number of subjobs ({len(subjob_data)})"
         )
 
-    # All output directories should be the same for peakindexing
-    # (individual XML files go to output_dir/xml/, merged goes to output_dir)
     output_dir = output_files[0] if output_files else ""
+    subjob_specs = [
+        {"subjob_id": subjob.subjob_id, "input_file": input_files[i], "output_file": output_files[i]}
+        for i, subjob in enumerate(subjob_data)
+    ]
+    chunks = list(_chunked(subjob_specs, queue_batch_size))
+    rq_job_ids = [f"peakindexing_batch_{job_id}_{chunk_index}" for chunk_index in range(len(chunks))]
+    chunk_subjob_ids = [[spec["subjob_id"] for spec in chunk] for chunk in chunks]
 
-    # Set up the batch completion counter — coordinator will be enqueued
-    # automatically when all subjobs finish (O(1) per completion, not O(N^2))
     setup_batch_counter(
         job_id,
         len(subjob_data),
         "execute_peakindexing_batch_coordinator",
         coordinator_args=[output_dir, output_xml],
         job_type="peakindexing",
+        queue_mode="chunked",
+        rq_job_ids=rq_job_ids,
+        chunk_subjob_ids=chunk_subjob_ids,
+        chunk_size=queue_batch_size,
     )
 
-    # Enqueue each subjob in parallel (no dependencies between them)
-    for i, subjob in enumerate(subjob_data):
+    for chunk_index, chunk_specs in enumerate(chunks):
         enqueue_job(
-            subjob.subjob_id,
-            "peakindexing",
-            execute_peakindexing_job,
+            job_id,
+            "peakindexing_batch",
+            execute_peakindexing_chunk,
             at_front,
-            None,  # No dependencies - run in parallel
-            db_schema.SubJob,  # Specify SubJob table
-            input_files[i],
-            output_files[i],
+            None,
+            db_schema.Job,
+            chunk_specs,
             geometry_file,
             crystal_file,
             boxsize,
@@ -660,11 +679,16 @@ def enqueue_peakindexing(
             index_h,
             index_k,
             index_l,
+            rq_job_id=rq_job_ids[chunk_index],
             **kwargs,
         )
 
     logger.info(
-        f"Enqueued peakindexing batch job {job_id} with {len(subjob_data)} parallel subjobs, output_xml={output_xml}"
+        "Enqueued peakindexing batch job %s with %s subjobs in %s chunk(s), output_xml=%s",
+        job_id,
+        len(subjob_data),
+        len(chunks),
+        output_xml,
     )
     return f"batch_{job_id}"
 
@@ -849,6 +873,71 @@ def cancel_batch_job(db_job_id: int) -> Dict[str, Any]:
                 meta = json.loads(meta_raw)
                 job_type = meta.get("job_type") or None
 
+            if meta_raw and meta.get("queue_mode") == "chunked":
+                queued_chunk_subjob_ids = []
+                skipped_running_chunks = 0
+                for rq_job_id, chunk_subjob_ids in zip(
+                    meta.get("rq_job_ids", []), meta.get("chunk_subjob_ids", []), strict=False
+                ):
+                    try:
+                        rq_job = Job.fetch(rq_job_id, connection=redis_conn)
+                        if rq_job.is_queued:
+                            rq_job.cancel()
+                            queued_chunk_subjob_ids.extend(chunk_subjob_ids)
+                        elif rq_job.is_started:
+                            skipped_running_chunks += 1
+                    except Exception as e:
+                        logger.warning(f"Could not inspect chunk RQ job {rq_job_id}: {e}")
+
+                now = datetime.now()
+                if queued_chunk_subjob_ids:
+                    queued_subjobs = (
+                        session.query(db_schema.SubJob)
+                        .filter(db_schema.SubJob.subjob_id.in_(queued_chunk_subjob_ids))
+                        .filter(db_schema.SubJob.status == STATUS_REVERSE_MAPPING["Queued"])
+                        .all()
+                    )
+                    for subjob in queued_subjobs:
+                        subjob.status = STATUS_REVERSE_MAPPING["Cancelled"]
+                        subjob.finish_time = now
+                        subjob.messages = (
+                            f"{subjob.messages}\nCancelled by user" if subjob.messages else "Cancelled by user"
+                        )
+                    result["cancelled_count"] = len(queued_subjobs)
+
+                result["skipped_running"] = sum(
+                    1 for subjob in subjobs if subjob.status == STATUS_REVERSE_MAPPING["Running"]
+                )
+                if skipped_running_chunks and result["skipped_running"] == 0:
+                    result["skipped_running"] = skipped_running_chunks
+                result["already_done"] = sum(
+                    1
+                    for subjob in subjobs
+                    if subjob.status
+                    in [
+                        STATUS_REVERSE_MAPPING["Finished"],
+                        STATUS_REVERSE_MAPPING["Failed"],
+                        STATUS_REVERSE_MAPPING["Cancelled"],
+                    ]
+                )
+
+                job_data.status = STATUS_REVERSE_MAPPING["Cancelled"]
+                job_data.finish_time = now
+                msg = (
+                    f"Job cancelled by user. {result['cancelled_count']} queued subjob(s) cancelled, "
+                    f"{result['skipped_running']} running chunk/subjob(s) left to finish."
+                )
+                job_data.messages = f"{job_data.messages}\n{msg}" if job_data.messages else msg
+                session.commit()
+
+                if result["cancelled_count"]:
+                    notify_subjobs_completed(db_job_id, result["cancelled_count"])
+                publish_job_update(db_job_id, "cancelled", msg)
+                result["success"] = True
+                result["message"] = msg
+                logger.info(f"Cancelled chunked batch job {db_job_id}: {msg}")
+                return result
+
             # Fall back: probe RQ to find the job type prefix
             if job_type is None and subjobs:
                 for candidate_type in ["wire_reconstruction", "peakindexing", "reconstruction"]:
@@ -920,11 +1009,14 @@ def cancel_batch_job(db_job_id: int) -> Dict[str, Any]:
         # fires when running subjobs finish. If no running subjobs remain,
         # clean up the counter keys (coordinator is not needed).
         if has_running and cancelled_subjob_ids:
-            for _ in cancelled_subjob_ids:
-                notify_subjob_completed(db_job_id)
+            notify_subjobs_completed(db_job_id, len(cancelled_subjob_ids))
         else:
             # No running subjobs — clean up counter keys, coordinator not needed
-            redis_conn.delete(_batch_counter_key(db_job_id), _batch_meta_key(db_job_id))
+            redis_conn.delete(
+                _batch_counter_key(db_job_id),
+                _batch_meta_key(db_job_id),
+                _batch_coordinator_enqueued_key(db_job_id),
+            )
 
         publish_job_update(db_job_id, "cancelled", msg)
 
@@ -979,6 +1071,25 @@ def move_batch_to_front(db_job_id: int) -> Dict[str, Any]:
             if meta_raw:
                 meta = json.loads(meta_raw)
                 job_type = meta.get("job_type") or None
+
+            if meta_raw and meta.get("queue_mode") == "chunked":
+                for rq_job_id in reversed(meta.get("rq_job_ids", [])):
+                    try:
+                        rq_job = Job.fetch(rq_job_id, connection=redis_conn)
+                        if rq_job.is_queued:
+                            job_queue.remove(rq_job_id)
+                            job_queue.push_job_id(rq_job_id, at_front=True)
+                            result["moved_count"] += 1
+                    except Exception as e:
+                        logger.warning(f"Could not move chunk RQ job {rq_job_id} to front: {e}")
+
+                if result["moved_count"] > 0:
+                    result["success"] = True
+                    result["message"] = f"Moved {result['moved_count']} chunk job(s) to front of queue"
+                else:
+                    result["message"] = "No queued chunk jobs found to move"
+                logger.info(f"Move to front for chunked job {db_job_id}: {result['message']}")
+                return result
 
             # Fall back: probe RQ
             if job_type is None:
@@ -1075,8 +1186,18 @@ def _batch_meta_key(job_id: int) -> str:
     return f"laue:batch:{job_id}:meta"
 
 
+def _batch_coordinator_enqueued_key(job_id: int) -> str:
+    """Redis key guarding duplicate batch coordinator enqueue attempts."""
+    return f"laue:batch:{job_id}:coordinator_enqueued"
+
+
 def setup_batch_counter(
-    job_id: int, total_subjobs: int, coordinator_func_name: str, coordinator_args: list = None, job_type: str = ""
+    job_id: int,
+    total_subjobs: int,
+    coordinator_func_name: str,
+    coordinator_args: list = None,
+    job_type: str = "",
+    **metadata,
 ):
     """
     Set up a batch completion counter in Redis.
@@ -1089,36 +1210,34 @@ def setup_batch_counter(
             (e.g., 'execute_batch_coordinator' or 'execute_peakindexing_batch_coordinator')
         coordinator_args: Additional args to pass to the coordinator (beyond job_id)
         job_type: The RQ job type prefix (e.g., 'wire_reconstruction', 'peakindexing')
+        **metadata: Additional batch metadata for chunked queue controls.
     """
     meta = {
         "total": total_subjobs,
         "coordinator_func": coordinator_func_name,
         "coordinator_args": coordinator_args or [],
         "job_type": job_type,
+        **metadata,
     }
     redis_conn.set(_batch_meta_key(job_id), json.dumps(meta))
     redis_conn.set(_batch_counter_key(job_id), 0)
+    redis_conn.delete(_batch_coordinator_enqueued_key(job_id))
     logger.info(f"Set up batch counter for job {job_id}: {total_subjobs} subjobs, coordinator={coordinator_func_name}")
 
 
-def notify_subjob_completed(parent_job_id: int):
+def notify_subjobs_completed(parent_job_id: int, completed_count: int = 1):
     """
     Increment the batch completion counter for a parent job.
     If all subjobs are done, enqueue the coordinator job directly.
-
-    Called from execute_with_status_updates() after a subjob finishes, fails, or is cancelled.
-    This is O(1) per subjob — no dependency checking.
-
-    Args:
-        parent_job_id: Database job ID of the parent/batch job
     """
+    if completed_count <= 0:
+        return
+
     counter_key = _batch_counter_key(parent_job_id)
     meta_key = _batch_meta_key(parent_job_id)
 
-    # Atomic increment
-    completed = redis_conn.incr(counter_key)
+    completed = redis_conn.incrby(counter_key, completed_count)
 
-    # Read metadata to check total
     meta_raw = redis_conn.get(meta_key)
     if not meta_raw:
         logger.warning(f"No batch metadata found for job {parent_job_id}, skipping coordinator check")
@@ -1127,52 +1246,58 @@ def notify_subjob_completed(parent_job_id: int):
     meta = json.loads(meta_raw)
     total = meta["total"]
 
-    if completed >= total:
-        # All subjobs are done — enqueue the coordinator
-        coordinator_func_name = meta["coordinator_func"]
-        coordinator_args = meta.get("coordinator_args", [])
+    if completed < total:
+        return
 
-        # Look up the coordinator function by name
-        coordinator_funcs = {
-            "execute_batch_coordinator": execute_batch_coordinator,
-            "execute_peakindexing_batch_coordinator": execute_peakindexing_batch_coordinator,
-        }
-        coordinator_func = coordinator_funcs.get(coordinator_func_name)
+    if not redis_conn.set(_batch_coordinator_enqueued_key(parent_job_id), 1, nx=True, ex=86400):
+        logger.info(f"Coordinator already enqueued for batch job {parent_job_id}; skipping duplicate")
+        return
 
-        if coordinator_func is None:
-            logger.error(f"Unknown coordinator function: {coordinator_func_name}")
-            # Fall back: run the coordinator inline so the job doesn't hang
-            logger.info(f"Falling back to inline coordinator execution for job {parent_job_id}")
-            try:
-                execute_batch_coordinator(parent_job_id)
-            except Exception as e2:
-                logger.error(f"Inline coordinator also failed for job {parent_job_id}: {e2}")
-            redis_conn.delete(counter_key, meta_key)
-            return
+    coordinator_func_name = meta["coordinator_func"]
+    coordinator_args = meta.get("coordinator_args", [])
 
-        # Enqueue the coordinator directly (no Dependency needed)
+    coordinator_funcs = {
+        "execute_batch_coordinator": execute_batch_coordinator,
+        "execute_peakindexing_batch_coordinator": execute_peakindexing_batch_coordinator,
+    }
+    coordinator_func = coordinator_funcs.get(coordinator_func_name)
+
+    if coordinator_func is None:
+        logger.error(f"Unknown coordinator function: {coordinator_func_name}")
+        logger.info(f"Falling back to inline coordinator execution for job {parent_job_id}")
         try:
-            enqueue_job(
-                parent_job_id,
-                "batch_coordinator",
-                coordinator_func,
-                True,  # at_front — coordinator should run ASAP
-                None,  # no depends_on
-                db_schema.Job,
-                *coordinator_args,
-            )
-            logger.info(f"All {total} subjobs done for job {parent_job_id}, enqueued coordinator")
-        except Exception as e:
-            # If enqueue fails, run the coordinator inline so the job doesn't hang
-            logger.error(f"Failed to enqueue coordinator for job {parent_job_id}: {e}")
-            logger.info(f"Falling back to inline coordinator execution for job {parent_job_id}")
-            try:
-                coordinator_func(parent_job_id, *coordinator_args)
-            except Exception as e2:
-                logger.error(f"Inline coordinator also failed for job {parent_job_id}: {e2}")
-
-        # Clean up counter keys
+            execute_batch_coordinator(parent_job_id)
+        except Exception as e2:
+            logger.error(f"Inline coordinator also failed for job {parent_job_id}: {e2}")
         redis_conn.delete(counter_key, meta_key)
+        return
+
+    try:
+        enqueue_job(
+            parent_job_id,
+            "batch_coordinator",
+            coordinator_func,
+            True,  # at_front — coordinator should run ASAP
+            None,  # no depends_on
+            db_schema.Job,
+            *coordinator_args,
+        )
+        logger.info(f"All {total} subjobs done for job {parent_job_id}, enqueued coordinator")
+    except Exception as e:
+        # If enqueue fails, run the coordinator inline so the job doesn't hang.
+        logger.error(f"Failed to enqueue coordinator for job {parent_job_id}: {e}")
+        logger.info(f"Falling back to inline coordinator execution for job {parent_job_id}")
+        try:
+            coordinator_func(parent_job_id, *coordinator_args)
+        except Exception as e2:
+            logger.error(f"Inline coordinator also failed for job {parent_job_id}: {e2}")
+
+    redis_conn.delete(counter_key, meta_key)
+
+
+def notify_subjob_completed(parent_job_id: int):
+    """Compatibility wrapper for single-subjob completion notifications."""
+    return notify_subjobs_completed(parent_job_id, 1)
 
 
 # Helper function that wraps job execution with status updates
@@ -1331,6 +1456,108 @@ def execute_wire_reconstruction_job(
         _do_wire_reconstruction,
         db_schema.SubJob,  # This is called for subjobs
     )
+
+
+def execute_peakindexing_chunk(
+    job_id: int,
+    chunk_specs: List[Dict[str, Any]],
+    geometry_file: str,
+    crystal_file: str,
+    boxsize: int,
+    max_rfactor: float,
+    min_size: int,
+    min_separation: int,
+    threshold: int,
+    peak_shape: str,
+    max_peaks: int,
+    smooth: bool,
+    index_kev_max_calc: float,
+    index_kev_max_test: float,
+    index_angle_tolerance: float,
+    index_cone: float,
+    index_h: int,
+    index_k: int,
+    index_l: int,
+    **kwargs,
+):
+    """Execute a chunk of peak indexing subjobs with coalesced DB writes."""
+    if not chunk_specs:
+        return []
+
+    chunk_start_time = datetime.now()
+    with Session(session_utils.get_engine()) as session:
+        job_data = session.query(db_schema.Job).filter(db_schema.Job.job_id == job_id).first()
+        if job_data and job_data.status in [
+            STATUS_REVERSE_MAPPING["Finished"],
+            STATUS_REVERSE_MAPPING["Failed"],
+            STATUS_REVERSE_MAPPING["Cancelled"],
+        ]:
+            logger.info(f"Skipping peakindexing chunk for terminal job {job_id}")
+            return []
+        if job_data and job_data.status == STATUS_REVERSE_MAPPING["Queued"]:
+            job_data.status = STATUS_REVERSE_MAPPING["Running"]
+            job_data.start_time = chunk_start_time
+            session.commit()
+
+    results = []
+    for spec in chunk_specs:
+        subjob_id = spec["subjob_id"]
+        input_file = spec["input_file"]
+        output_dir = spec["output_file"]
+        try:
+            index_result = index(
+                input_image=input_file,
+                output_dir=output_dir,
+                geo_file=geometry_file,
+                crystal_file=crystal_file,
+                boxsize=boxsize,
+                max_rfactor=max_rfactor,
+                min_size=min_size,
+                min_separation=min_separation,
+                threshold=threshold,
+                peak_shape=peak_shape,
+                max_peaks=max_peaks,
+                smooth=smooth,
+                index_kev_max_calc=index_kev_max_calc,
+                index_kev_max_test=index_kev_max_test,
+                index_angle_tolerance=index_angle_tolerance,
+                index_cone=index_cone,
+                index_h=index_h,
+                index_k=index_k,
+                index_l=index_l,
+                **kwargs,
+            )
+
+            update = {
+                "subjob_id": subjob_id,
+                "status": STATUS_REVERSE_MAPPING["Finished"],
+                "start_time": chunk_start_time,
+                "finish_time": datetime.now(),
+            }
+            if WRITE_SUCCESS_SUBJOB_DETAILS:
+                if hasattr(index_result, "command_history") and index_result.command_history:
+                    update["command"] = "\n".join(index_result.command_history)
+                update["messages"] = str(index_result)
+            results.append(update)
+        except Exception as e:
+            logger.exception(f"Peakindexing subjob {subjob_id} failed inside chunk for job {job_id}")
+            results.append(
+                {
+                    "subjob_id": subjob_id,
+                    "status": STATUS_REVERSE_MAPPING["Failed"],
+                    "start_time": chunk_start_time,
+                    "finish_time": datetime.now(),
+                    "messages": f"Error: {str(e)}",
+                }
+            )
+
+    with Session(session_utils.get_engine()) as session:
+        session.bulk_update_mappings(db_schema.SubJob, results)
+        session.commit()
+
+    notify_subjobs_completed(job_id, len(results))
+    publish_job_update(job_id, "running", f"Peakindexing chunk completed {len(results)} subjob(s)")
+    return results
 
 
 def execute_peakindexing_job(
