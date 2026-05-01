@@ -36,7 +36,8 @@ from laue_portal.pages.callback_registrars import (
     register_load_file_indices_callback,
     register_update_path_fields_callback,
 )
-from laue_portal.processing.redis_utils import STATUS_REVERSE_MAPPING, enqueue_wire_reconstruction
+from laue_portal.processing.queue.core import STATUS_REVERSE_MAPPING
+from laue_portal.processing.queue.enqueue import enqueue_wire_reconstruction
 from laue_portal.services.validation import (
     add_validation_message,
     all_path_fields_are_absolute,

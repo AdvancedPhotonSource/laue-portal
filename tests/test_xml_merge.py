@@ -1,11 +1,11 @@
 """
-Unit tests for XML merge functionality in redis_utils.
+Unit tests for XML merge functionality.
 """
 
 import os
 import xml.etree.ElementTree as ET
 
-from laue_portal.processing.redis_utils import merge_xml_files
+from laue_portal.processing.xml_merge import merge_xml_files
 
 
 def create_test_xml(path: str, step_data: dict):

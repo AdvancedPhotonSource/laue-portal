@@ -19,7 +19,7 @@ import sys
 
 from rq import Worker
 
-from laue_portal.processing.redis_utils import job_queue, redis_conn
+from laue_portal.processing.queue.core import job_queue, redis_conn
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")

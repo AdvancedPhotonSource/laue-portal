@@ -1,7 +1,7 @@
 import dash_bootstrap_components as dbc
 from dash import Input, Output, State, callback, html
 
-from laue_portal.processing.redis_utils import REDIS_CONNECTED_AT_STARTUP
+from laue_portal.processing.queue.core import REDIS_CONNECTED_AT_STARTUP
 
 navbar = dbc.Navbar(
     dbc.Container(

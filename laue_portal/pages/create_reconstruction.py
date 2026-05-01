@@ -19,7 +19,8 @@ import laue_portal.database.session_utils as session_utils
 from laue_portal.components.recon_form import recon_form, set_recon_form_props
 from laue_portal.config import DEFAULT_VARIABLES
 from laue_portal.database.db_utils import remove_root_path_prefix
-from laue_portal.processing.redis_utils import STATUS_REVERSE_MAPPING, enqueue_reconstruction
+from laue_portal.processing.queue.core import STATUS_REVERSE_MAPPING
+from laue_portal.processing.queue.enqueue import enqueue_reconstruction
 
 JOB_DEFAULTS = {
     "computer_name": "example_computer",

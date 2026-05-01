@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
-from laue_portal.processing.redis_utils import STATUS_MAPPING, STATUS_REVERSE_MAPPING, cancel_batch_job
+from laue_portal.processing.queue.controls import cancel_batch_job
+from laue_portal.processing.queue.core import STATUS_MAPPING, STATUS_REVERSE_MAPPING
 
 dash.register_page(__name__, path="/job")
 

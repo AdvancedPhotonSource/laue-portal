@@ -7,7 +7,8 @@ from dash.dependencies import Input, Output
 
 import laue_portal.components.navbar as navbar
 from laue_portal import config
-from laue_portal.processing import redis_utils
+from laue_portal.processing.queue import core as queue_core
+from laue_portal.processing.queue.inspection import get_queue_stats, get_workers_info
 
 dash.register_page(__name__, path="/")
 
@@ -174,8 +175,8 @@ def update_connection_status(n):
     """Update the connection status card with current system information."""
 
     # Check Redis connection
-    redis_connected = redis_utils.check_redis_connection()
-    redis_startup_status = redis_utils.REDIS_CONNECTED_AT_STARTUP
+    redis_connected = queue_core.check_redis_connection()
+    redis_startup_status = queue_core.REDIS_CONNECTED_AT_STARTUP
 
     # Database path
     db_path = config.db_file
@@ -241,10 +242,10 @@ def update_system_resources(n):
 
     try:
         # Get queue statistics
-        queue_stats = redis_utils.get_queue_stats()
+        queue_stats = get_queue_stats()
 
         # Get worker information
-        workers_info = redis_utils.get_workers_info()
+        workers_info = get_workers_info()
 
         return [
             # Queue Statistics

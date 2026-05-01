@@ -1,11 +1,12 @@
 import datetime
+import importlib
 import json
 from types import SimpleNamespace
 
 import pytest
 
 from laue_portal.database import db_schema, session_utils
-from laue_portal.processing import redis_utils
+from laue_portal.processing.queue import batch, controls, core, enqueue, executors, lifecycle
 
 
 class FakeRedis:
@@ -67,7 +68,7 @@ def queue_db(tmp_path, monkeypatch):
 
 def add_job_with_subjobs(session, job_id=1, subjob_count=0, status=None):
     if status is None:
-        status = redis_utils.STATUS_REVERSE_MAPPING["Queued"]
+        status = core.STATUS_REVERSE_MAPPING["Queued"]
     session.add(
         db_schema.Job(
             job_id=job_id,
@@ -83,7 +84,7 @@ def add_job_with_subjobs(session, job_id=1, subjob_count=0, status=None):
                 subjob_id=job_id * 100 + i,
                 job_id=job_id,
                 computer_name="TEST",
-                status=redis_utils.STATUS_REVERSE_MAPPING["Queued"],
+                status=core.STATUS_REVERSE_MAPPING["Queued"],
                 priority=1,
             )
         )
@@ -112,14 +113,39 @@ def peakindex_args():
     }
 
 
+def test_queue_modules_are_importable_and_redis_utils_is_removed():
+    module_names = [
+        "laue_portal.processing.queue.core",
+        "laue_portal.processing.queue.enqueue",
+        "laue_portal.processing.queue.batch",
+        "laue_portal.processing.queue.executors",
+        "laue_portal.processing.queue.controls",
+        "laue_portal.processing.queue.inspection",
+        "laue_portal.processing.queue.lifecycle",
+        "laue_portal.processing.xml_merge",
+    ]
+
+    for module_name in module_names:
+        assert importlib.import_module(module_name)
+
+    assert hasattr(enqueue, "enqueue_peakindexing")
+    assert hasattr(batch, "notify_subjobs_completed")
+    assert hasattr(executors, "execute_peakindexing_chunk")
+    assert hasattr(controls, "cancel_batch_job")
+    assert hasattr(lifecycle, "execute_with_status_updates")
+
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("laue_portal.processing.redis_utils")
+
+
 def test_enqueue_job_supports_custom_rq_id_and_strips_queue_kwargs(monkeypatch):
     fake_queue = FakeQueue()
-    monkeypatch.setattr(redis_utils, "job_queue", fake_queue)
+    monkeypatch.setattr(enqueue, "job_queue", fake_queue)
 
     def worker(job_id, worker_option=None):
         return job_id, worker_option
 
-    rq_job_id = redis_utils.enqueue_job(
+    rq_job_id = enqueue.enqueue_job(
         7,
         "demo",
         worker,
@@ -142,13 +168,13 @@ def test_enqueue_job_supports_custom_rq_id_and_strips_queue_kwargs(monkeypatch):
 def test_enqueue_peakindexing_creates_chunk_jobs_and_metadata(queue_db, monkeypatch):
     fake_queue = FakeQueue()
     fake_redis = FakeRedis()
-    monkeypatch.setattr(redis_utils, "job_queue", fake_queue)
-    monkeypatch.setattr(redis_utils, "redis_conn", fake_redis)
+    monkeypatch.setattr(enqueue, "job_queue", fake_queue)
+    monkeypatch.setattr(batch, "redis_conn", fake_redis)
 
     with session_utils.get_session() as session:
         add_job_with_subjobs(session, job_id=1, subjob_count=10)
 
-    result = redis_utils.enqueue_peakindexing(
+    result = enqueue.enqueue_peakindexing(
         1,
         input_files=[f"input_{i}.tif" for i in range(10)],
         output_files=["/out"] * 10,
@@ -164,9 +190,9 @@ def test_enqueue_peakindexing_creates_chunk_jobs_and_metadata(queue_db, monkeypa
         "peakindexing_batch_1_3",
     ]
     assert [len(job["args"][0]) for job in fake_queue.enqueued] == [3, 3, 3, 1]
-    assert all(job["func"] is redis_utils.execute_peakindexing_chunk for job in fake_queue.enqueued)
+    assert all(job["func"] is executors.execute_peakindexing_chunk for job in fake_queue.enqueued)
 
-    meta = json.loads(fake_redis.values[redis_utils._batch_meta_key(1)])
+    meta = json.loads(fake_redis.values[batch._batch_meta_key(1)])
     assert meta["total"] == 10
     assert meta["queue_mode"] == "chunked"
     assert meta["rq_job_ids"] == [job["kwargs"]["job_id"] for job in fake_queue.enqueued]
@@ -176,23 +202,23 @@ def test_enqueue_peakindexing_creates_chunk_jobs_and_metadata(queue_db, monkeypa
 def test_notify_subjobs_completed_batches_and_enqueues_coordinator_once(monkeypatch):
     fake_redis = FakeRedis()
     enqueued = []
-    monkeypatch.setattr(redis_utils, "redis_conn", fake_redis)
+    monkeypatch.setattr(batch, "redis_conn", fake_redis)
     monkeypatch.setattr(
-        redis_utils, "enqueue_job", lambda *args, **kwargs: enqueued.append((args, kwargs)) or "coordinator"
+        enqueue, "enqueue_job", lambda *args, **kwargs: enqueued.append((args, kwargs)) or "coordinator"
     )
 
-    redis_utils.setup_batch_counter(42, 3, "execute_batch_coordinator", job_type="demo")
-    redis_utils.notify_subjobs_completed(42, 2)
+    batch.setup_batch_counter(42, 3, "execute_batch_coordinator", job_type="demo")
+    batch.notify_subjobs_completed(42, 2)
     assert enqueued == []
 
-    redis_utils.notify_subjobs_completed(42, 1)
-    redis_utils.notify_subjobs_completed(42, 1)
+    batch.notify_subjobs_completed(42, 1)
+    batch.notify_subjobs_completed(42, 1)
 
     assert len(enqueued) == 1
-    assert enqueued[0][0][0:3] == (42, "batch_coordinator", redis_utils.execute_batch_coordinator)
-    assert fake_redis.values[redis_utils._batch_coordinator_enqueued_key(42)] == 1
-    assert redis_utils._batch_counter_key(42) in fake_redis.deleted
-    assert redis_utils._batch_meta_key(42) in fake_redis.deleted
+    assert enqueued[0][0][0:3] == (42, "batch_coordinator", batch.execute_batch_coordinator)
+    assert fake_redis.values[batch._batch_coordinator_enqueued_key(42)] == 1
+    assert batch._batch_counter_key(42) in fake_redis.deleted
+    assert batch._batch_meta_key(42) in fake_redis.deleted
 
 
 def test_execute_peakindexing_chunk_bulk_updates_success_and_failure(queue_db, monkeypatch):
@@ -205,16 +231,16 @@ def test_execute_peakindexing_chunk_bulk_updates_success_and_failure(queue_db, m
             raise RuntimeError("index failed")
         return SimpleNamespace(command_history=[f"index {input_image}"])
 
-    monkeypatch.setattr(redis_utils, "index", fake_index)
+    monkeypatch.setattr(executors, "index", fake_index)
     monkeypatch.setattr(
-        redis_utils, "notify_subjobs_completed", lambda job_id, count: notifications.append((job_id, count))
+        executors, "notify_subjobs_completed", lambda job_id, count: notifications.append((job_id, count))
     )
-    monkeypatch.setattr(redis_utils, "redis_conn", FakeRedis())
+    monkeypatch.setattr(lifecycle, "redis_conn", FakeRedis())
 
     with session_utils.get_session() as session:
         add_job_with_subjobs(session, job_id=2, subjob_count=3)
 
-    result = redis_utils.execute_peakindexing_chunk(
+    result = executors.execute_peakindexing_chunk(
         2,
         [
             {"subjob_id": 200, "input_file": "good_a.tif", "output_file": "/out"},
@@ -231,10 +257,10 @@ def test_execute_peakindexing_chunk_bulk_updates_success_and_failure(queue_db, m
     with session_utils.get_session() as session:
         job = session.get(db_schema.Job, 2)
         subjobs = {subjob.subjob_id: subjob for subjob in session.query(db_schema.SubJob).all()}
-        assert job.status == redis_utils.STATUS_REVERSE_MAPPING["Running"]
-        assert subjobs[200].status == redis_utils.STATUS_REVERSE_MAPPING["Finished"]
-        assert subjobs[201].status == redis_utils.STATUS_REVERSE_MAPPING["Failed"]
-        assert subjobs[202].status == redis_utils.STATUS_REVERSE_MAPPING["Finished"]
+        assert job.status == core.STATUS_REVERSE_MAPPING["Running"]
+        assert subjobs[200].status == core.STATUS_REVERSE_MAPPING["Finished"]
+        assert subjobs[201].status == core.STATUS_REVERSE_MAPPING["Failed"]
+        assert subjobs[202].status == core.STATUS_REVERSE_MAPPING["Finished"]
         assert subjobs[200].messages is None
         assert subjobs[200].command is None
         assert "index failed" in subjobs[201].messages
@@ -246,16 +272,16 @@ def test_execute_peakindexing_chunk_marks_all_failed_without_raising(queue_db, m
     def fail_index(input_image, **kwargs):
         raise RuntimeError(f"failed {input_image}")
 
-    monkeypatch.setattr(redis_utils, "index", fail_index)
+    monkeypatch.setattr(executors, "index", fail_index)
     monkeypatch.setattr(
-        redis_utils, "notify_subjobs_completed", lambda job_id, count: notifications.append((job_id, count))
+        executors, "notify_subjobs_completed", lambda job_id, count: notifications.append((job_id, count))
     )
-    monkeypatch.setattr(redis_utils, "redis_conn", FakeRedis())
+    monkeypatch.setattr(lifecycle, "redis_conn", FakeRedis())
 
     with session_utils.get_session() as session:
         add_job_with_subjobs(session, job_id=3, subjob_count=2)
 
-    result = redis_utils.execute_peakindexing_chunk(
+    result = executors.execute_peakindexing_chunk(
         3,
         [
             {"subjob_id": 300, "input_file": "a.tif", "output_file": "/out"},
@@ -264,26 +290,26 @@ def test_execute_peakindexing_chunk_marks_all_failed_without_raising(queue_db, m
         **peakindex_args(),
     )
 
-    assert [item["status"] for item in result] == [redis_utils.STATUS_REVERSE_MAPPING["Failed"]] * 2
+    assert [item["status"] for item in result] == [core.STATUS_REVERSE_MAPPING["Failed"]] * 2
     assert notifications == [(3, 2)]
     with session_utils.get_session() as session:
         subjobs = session.query(db_schema.SubJob).order_by(db_schema.SubJob.subjob_id).all()
-        assert [subjob.status for subjob in subjobs] == [redis_utils.STATUS_REVERSE_MAPPING["Failed"]] * 2
+        assert [subjob.status for subjob in subjobs] == [core.STATUS_REVERSE_MAPPING["Failed"]] * 2
         assert all("failed" in subjob.messages for subjob in subjobs)
 
 
 def test_execute_peakindexing_chunk_skips_terminal_parent(queue_db, monkeypatch):
     calls = []
     notifications = []
-    monkeypatch.setattr(redis_utils, "index", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(executors, "index", lambda **kwargs: calls.append(kwargs))
     monkeypatch.setattr(
-        redis_utils, "notify_subjobs_completed", lambda job_id, count: notifications.append((job_id, count))
+        executors, "notify_subjobs_completed", lambda job_id, count: notifications.append((job_id, count))
     )
 
     with session_utils.get_session() as session:
-        add_job_with_subjobs(session, job_id=4, subjob_count=1, status=redis_utils.STATUS_REVERSE_MAPPING["Cancelled"])
+        add_job_with_subjobs(session, job_id=4, subjob_count=1, status=core.STATUS_REVERSE_MAPPING["Cancelled"])
 
-    result = redis_utils.execute_peakindexing_chunk(
+    result = executors.execute_peakindexing_chunk(
         4,
         [{"subjob_id": 400, "input_file": "a.tif", "output_file": "/out"}],
         **peakindex_args(),
@@ -293,20 +319,20 @@ def test_execute_peakindexing_chunk_skips_terminal_parent(queue_db, monkeypatch)
     assert calls == []
     assert notifications == []
     with session_utils.get_session() as session:
-        assert session.get(db_schema.SubJob, 400).status == redis_utils.STATUS_REVERSE_MAPPING["Queued"]
+        assert session.get(db_schema.SubJob, 400).status == core.STATUS_REVERSE_MAPPING["Queued"]
 
 
 def test_enqueue_peakindexing_rejects_mismatched_files_before_queueing(queue_db, monkeypatch):
     fake_queue = FakeQueue()
     fake_redis = FakeRedis()
-    monkeypatch.setattr(redis_utils, "job_queue", fake_queue)
-    monkeypatch.setattr(redis_utils, "redis_conn", fake_redis)
+    monkeypatch.setattr(enqueue, "job_queue", fake_queue)
+    monkeypatch.setattr(batch, "redis_conn", fake_redis)
 
     with session_utils.get_session() as session:
         add_job_with_subjobs(session, job_id=5, subjob_count=3)
 
     with pytest.raises(ValueError, match="Number of input files"):
-        redis_utils.enqueue_peakindexing(
+        enqueue.enqueue_peakindexing(
             5,
             input_files=["only-one.tif"],
             output_files=["/out"] * 3,
@@ -320,18 +346,16 @@ def test_enqueue_peakindexing_rejects_mismatched_files_before_queueing(queue_db,
 def test_notify_subjobs_completed_falls_back_inline_when_enqueue_fails(monkeypatch):
     fake_redis = FakeRedis()
     calls = []
-    monkeypatch.setattr(redis_utils, "redis_conn", fake_redis)
-    monkeypatch.setattr(
-        redis_utils, "enqueue_job", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("rq down"))
-    )
-    monkeypatch.setattr(redis_utils, "execute_batch_coordinator", lambda job_id: calls.append(job_id))
+    monkeypatch.setattr(batch, "redis_conn", fake_redis)
+    monkeypatch.setattr(enqueue, "enqueue_job", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("rq down")))
+    monkeypatch.setattr(batch, "execute_batch_coordinator", lambda job_id: calls.append(job_id))
 
-    redis_utils.setup_batch_counter(6, 1, "execute_batch_coordinator", job_type="demo")
-    redis_utils.notify_subjobs_completed(6, 1)
+    batch.setup_batch_counter(6, 1, "execute_batch_coordinator", job_type="demo")
+    batch.notify_subjobs_completed(6, 1)
 
     assert calls == [6]
-    assert redis_utils._batch_counter_key(6) in fake_redis.deleted
-    assert redis_utils._batch_meta_key(6) in fake_redis.deleted
+    assert batch._batch_counter_key(6) in fake_redis.deleted
+    assert batch._batch_meta_key(6) in fake_redis.deleted
 
 
 def test_cancel_batch_job_cancels_only_queued_chunks(queue_db, monkeypatch):
@@ -345,7 +369,7 @@ def test_cancel_batch_job_cancels_only_queued_chunks(queue_db, monkeypatch):
     notifications = []
 
     fake_redis.set(
-        redis_utils._batch_meta_key(7),
+        batch._batch_meta_key(7),
         json.dumps(
             {
                 "total": 4,
@@ -358,16 +382,16 @@ def test_cancel_batch_job_cancels_only_queued_chunks(queue_db, monkeypatch):
             }
         ),
     )
-    monkeypatch.setattr(redis_utils, "redis_conn", fake_redis)
-    monkeypatch.setattr(redis_utils.Job, "fetch", lambda rq_job_id, connection=None: rq_jobs[rq_job_id])
+    monkeypatch.setattr(controls, "redis_conn", fake_redis)
+    monkeypatch.setattr(controls.Job, "fetch", lambda rq_job_id, connection=None: rq_jobs[rq_job_id])
     monkeypatch.setattr(
-        redis_utils, "notify_subjobs_completed", lambda job_id, count: notifications.append((job_id, count))
+        controls, "notify_subjobs_completed", lambda job_id, count: notifications.append((job_id, count))
     )
 
     with session_utils.get_session() as session:
         add_job_with_subjobs(session, job_id=7, subjob_count=4)
 
-    result = redis_utils.cancel_batch_job(7)
+    result = controls.cancel_batch_job(7)
 
     assert result["success"] is True
     assert result["cancelled_count"] == 2
@@ -377,8 +401,62 @@ def test_cancel_batch_job_cancels_only_queued_chunks(queue_db, monkeypatch):
 
     with session_utils.get_session() as session:
         subjobs = {subjob.subjob_id: subjob for subjob in session.query(db_schema.SubJob).all()}
-        assert subjobs[700].status == redis_utils.STATUS_REVERSE_MAPPING["Cancelled"]
-        assert subjobs[701].status == redis_utils.STATUS_REVERSE_MAPPING["Cancelled"]
-        assert subjobs[702].status == redis_utils.STATUS_REVERSE_MAPPING["Queued"]
-        assert subjobs[703].status == redis_utils.STATUS_REVERSE_MAPPING["Queued"]
-        assert session.get(db_schema.Job, 7).status == redis_utils.STATUS_REVERSE_MAPPING["Cancelled"]
+        assert subjobs[700].status == core.STATUS_REVERSE_MAPPING["Cancelled"]
+        assert subjobs[701].status == core.STATUS_REVERSE_MAPPING["Cancelled"]
+        assert subjobs[702].status == core.STATUS_REVERSE_MAPPING["Queued"]
+        assert subjobs[703].status == core.STATUS_REVERSE_MAPPING["Queued"]
+        assert session.get(db_schema.Job, 7).status == core.STATUS_REVERSE_MAPPING["Cancelled"]
+
+
+def test_execute_with_status_updates_failure_marks_subjob_and_notifies_parent(queue_db, monkeypatch):
+    notifications = []
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(lifecycle, "redis_conn", fake_redis)
+    monkeypatch.setattr(batch, "notify_subjob_completed", lambda job_id: notifications.append(job_id))
+
+    with session_utils.get_session() as session:
+        add_job_with_subjobs(session, job_id=8, subjob_count=1)
+
+    def fail_job():
+        raise RuntimeError("worker exploded")
+
+    with pytest.raises(RuntimeError, match="worker exploded"):
+        lifecycle.execute_with_status_updates(
+            800,
+            "Demo subjob",
+            fail_job,
+            db_schema.SubJob,
+        )
+
+    assert notifications == [8]
+    assert fake_redis.published[-1][0] == "laue:job_updates"
+
+    with session_utils.get_session() as session:
+        subjob = session.get(db_schema.SubJob, 800)
+        parent = session.get(db_schema.Job, 8)
+        assert subjob.status == core.STATUS_REVERSE_MAPPING["Failed"]
+        assert subjob.messages == "Error: worker exploded"
+        assert parent.status == core.STATUS_REVERSE_MAPPING["Running"]
+
+
+def test_batch_coordinator_preserves_cancelled_parent_status(queue_db, monkeypatch):
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(lifecycle, "redis_conn", fake_redis)
+
+    with session_utils.get_session() as session:
+        add_job_with_subjobs(session, job_id=9, subjob_count=2, status=core.STATUS_REVERSE_MAPPING["Cancelled"])
+        job = session.get(db_schema.Job, 9)
+        original_finish_time = datetime.datetime(2026, 1, 2, 12, 0, 0)
+        job.finish_time = original_finish_time
+        subjobs = session.query(db_schema.SubJob).order_by(db_schema.SubJob.subjob_id).all()
+        subjobs[0].status = core.STATUS_REVERSE_MAPPING["Finished"]
+        subjobs[1].status = core.STATUS_REVERSE_MAPPING["Cancelled"]
+        session.commit()
+
+    batch.execute_batch_coordinator(9)
+
+    with session_utils.get_session() as session:
+        job = session.get(db_schema.Job, 9)
+        assert job.status == core.STATUS_REVERSE_MAPPING["Cancelled"]
+        assert job.finish_time == original_finish_time
+        assert "Batch final: 1 cancelled, 1 succeeded, 0 failed" in job.messages

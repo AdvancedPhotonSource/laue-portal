@@ -5,7 +5,7 @@ import dash
 
 from laue_portal import config
 from laue_portal.database.session_utils import init_db
-from laue_portal.processing.redis_utils import init_redis_status
+from laue_portal.processing.queue.core import init_redis_status
 
 
 def ensure_database_exists():

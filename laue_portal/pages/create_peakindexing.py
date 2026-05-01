@@ -35,7 +35,8 @@ from laue_portal.pages.callback_registrars import (
     register_load_file_indices_callback,
     register_update_path_fields_callback,
 )
-from laue_portal.processing.redis_utils import STATUS_REVERSE_MAPPING, enqueue_peakindexing
+from laue_portal.processing.queue.core import STATUS_REVERSE_MAPPING
+from laue_portal.processing.queue.enqueue import enqueue_peakindexing
 from laue_portal.services.validation import PEAKINDEX_FIELD_IDS, get_num_inputs_from_fields, validate_peakindexing
 from laue_portal.utilities.hkl_parse import str2hkl
 from laue_portal.utilities.srange import srange
