@@ -1,7 +1,6 @@
 """RQ worker execution functions for Laue processing jobs."""
 
 import logging
-import time
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -23,10 +22,7 @@ def execute_reconstruction_job(job_id: int, config_dict: Dict[str, Any]):
     """Execute a reconstruction job (subjob)."""
 
     def _do_reconstruction():
-        # return analysis_recon.run_analysis(config_dict)
-        # Testing: sleep for 5 seconds instead
-        time.sleep(5)
-        return {"status": "test_completed", "message": "Slept for 5 seconds instead of running analysis"}
+        raise NotImplementedError("CA reconstruction jobs are deprecated and are not currently supported")
 
     return execute_with_status_updates(
         job_id,
@@ -87,6 +83,7 @@ def execute_peakindexing_chunk(
             STATUS_REVERSE_MAPPING["Cancelled"],
         ]:
             logger.info(f"Skipping peakindexing chunk for terminal job {job_id}")
+            notify_subjobs_completed(job_id, len(chunk_specs))
             return []
         if job_data and job_data.status == STATUS_REVERSE_MAPPING["Queued"]:
             job_data.status = STATUS_REVERSE_MAPPING["Running"]

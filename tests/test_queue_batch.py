@@ -298,7 +298,7 @@ def test_execute_peakindexing_chunk_marks_all_failed_without_raising(queue_db, m
         assert all("failed" in subjob.messages for subjob in subjobs)
 
 
-def test_execute_peakindexing_chunk_skips_terminal_parent(queue_db, monkeypatch):
+def test_execute_peakindexing_chunk_skips_terminal_parent_and_notifies_counter(queue_db, monkeypatch):
     calls = []
     notifications = []
     monkeypatch.setattr(executors, "index", lambda **kwargs: calls.append(kwargs))
@@ -317,7 +317,7 @@ def test_execute_peakindexing_chunk_skips_terminal_parent(queue_db, monkeypatch)
 
     assert result == []
     assert calls == []
-    assert notifications == []
+    assert notifications == [(4, 1)]
     with session_utils.get_session() as session:
         assert session.get(db_schema.SubJob, 400).status == core.STATUS_REVERSE_MAPPING["Queued"]
 
@@ -406,6 +406,49 @@ def test_cancel_batch_job_cancels_only_queued_chunks(queue_db, monkeypatch):
         assert subjobs[702].status == core.STATUS_REVERSE_MAPPING["Queued"]
         assert subjobs[703].status == core.STATUS_REVERSE_MAPPING["Queued"]
         assert session.get(db_schema.Job, 7).status == core.STATUS_REVERSE_MAPPING["Cancelled"]
+
+
+def test_execute_reconstruction_job_fails_explicitly_for_deprecated_path(queue_db, monkeypatch):
+    fake_redis = FakeRedis()
+    notifications = []
+    monkeypatch.setattr(lifecycle, "redis_conn", fake_redis)
+    monkeypatch.setattr(batch, "notify_subjob_completed", lambda job_id: notifications.append(job_id))
+
+    with session_utils.get_session() as session:
+        add_job_with_subjobs(session, job_id=8, subjob_count=1)
+
+    with pytest.raises(NotImplementedError, match="deprecated"):
+        executors.execute_reconstruction_job(800, {"demo": "config"})
+
+    assert notifications == [8]
+    with session_utils.get_session() as session:
+        subjob = session.get(db_schema.SubJob, 800)
+        assert subjob.status == core.STATUS_REVERSE_MAPPING["Failed"]
+        assert "CA reconstruction jobs are deprecated" in subjob.messages
+
+
+def test_execute_with_status_updates_skips_terminal_job_before_running(queue_db):
+    calls = []
+
+    with session_utils.get_session() as session:
+        add_job_with_subjobs(session, job_id=10, subjob_count=1)
+        subjob = session.get(db_schema.SubJob, 1000)
+        subjob.status = core.STATUS_REVERSE_MAPPING["Cancelled"]
+        session.commit()
+
+    result = lifecycle.execute_with_status_updates(
+        1000,
+        "Demo subjob",
+        lambda: calls.append("ran"),
+        db_schema.SubJob,
+    )
+
+    assert result is None
+    assert calls == []
+    with session_utils.get_session() as session:
+        subjob = session.get(db_schema.SubJob, 1000)
+        assert subjob.status == core.STATUS_REVERSE_MAPPING["Cancelled"]
+        assert subjob.start_time is None
 
 
 def test_execute_with_status_updates_failure_marks_subjob_and_notifies_parent(queue_db, monkeypatch):

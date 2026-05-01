@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 import laue_portal.database.session_utils as session_utils
 from laue_portal.database import db_schema
-from laue_portal.processing.queue.core import STATUS_REVERSE_MAPPING, redis_conn
+from laue_portal.processing.queue.core import STATUS_MAPPING, STATUS_REVERSE_MAPPING, redis_conn
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +28,11 @@ def publish_job_update(job_id: int, status: str, message: str = None):
     if message:
         update_data["message"] = message
 
-    # Publish to Redis pub/sub channel
-    redis_conn.publish("laue:job_updates", json.dumps(update_data))
+    # Publish notifications are best-effort; job state is already persisted in the database.
+    try:
+        redis_conn.publish("laue:job_updates", json.dumps(update_data))
+    except Exception as e:
+        logger.warning(f"Failed to publish job update for job {job_id}: {e}")
 
 
 def update_job_progress(rq_job_id: str, progress: int, message: str = None):
@@ -81,6 +84,19 @@ def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_s
             # Query using the primary key
             job_data = session.query(table).filter(pk_col == job_id).first()
             if job_data:
+                if job_data.status in {
+                    STATUS_REVERSE_MAPPING["Finished"],
+                    STATUS_REVERSE_MAPPING["Failed"],
+                    STATUS_REVERSE_MAPPING["Cancelled"],
+                }:
+                    logger.info(
+                        "Skipping %s job %s because it is already %s",
+                        job_type,
+                        job_id,
+                        STATUS_MAPPING.get(job_data.status, f"Unknown ({job_data.status})"),
+                    )
+                    return None
+
                 job_data.status = STATUS_REVERSE_MAPPING["Running"]
                 job_start_time = datetime.now()
                 job_data.start_time = job_start_time
