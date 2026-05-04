@@ -1,7 +1,7 @@
 """
 Test suite for metadata log parsing and database input functionality.
 
-This test exercises the XML parsing and database ORM functions in db_utils.py
+This test exercises the XML parsing and database ORM functions in scan_import.py
 using the test_log.xml file.
 """
 
@@ -21,7 +21,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 import laue_portal.database.db_schema as db_schema
-import laue_portal.database.db_utils as db_utils
+from laue_portal.services import scan_import
 
 # Global test XML paths - shared between all test classes
 TEST_XML_PATH = os.path.join(os.path.dirname(__file__), "scan_logs", "test_log.xml")
@@ -65,7 +65,7 @@ class TestMetadataParsing:
     def test_parse_metadata_basic_functionality(self, test_xml_data):
         """Test basic functionality of parse_metadata function."""
         # Test with the first scan (scan_no=0)
-        log_dict, scan_dims_list = db_utils.parse_metadata(test_xml_data, scan_no=2)
+        log_dict, scan_dims_list = scan_import.parse_metadata(test_xml_data, scan_no=2)
 
         # Verify log_dict structure
         assert isinstance(log_dict, dict)
@@ -120,7 +120,7 @@ class TestMetadataParsing:
         # Test scanning through different scan indices
         for scan_no in range(2, 5):  # Test first 5 scans
             try:
-                log_dict, scan_dims_list = db_utils.parse_metadata(test_xml_data, scan_no=scan_no)
+                log_dict, scan_dims_list = scan_import.parse_metadata(test_xml_data, scan_no=scan_no)
 
                 # Verify each scan has a valid scanNumber
                 assert "scanNumber" in log_dict
@@ -136,7 +136,7 @@ class TestMetadataParsing:
 
     def test_parse_metadata_data_types(self, test_xml_data):
         """Test that numeric fields are properly converted to correct data types."""
-        log_dict, scan_dims_list = db_utils.parse_metadata(test_xml_data, scan_no=2)
+        log_dict, scan_dims_list = scan_import.parse_metadata(test_xml_data, scan_no=2)
 
         # Test numeric fields are None or numeric types
         numeric_fields = [
@@ -163,7 +163,7 @@ class TestMetadataParsing:
 
     def test_parse_metadata_scan_dimensions(self, test_xml_data):
         """Test parsing of scan dimension data."""
-        log_dict, scan_dims_list = db_utils.parse_metadata(test_xml_data, scan_no=2)
+        log_dict, scan_dims_list = scan_import.parse_metadata(test_xml_data, scan_no=2)
 
         # Verify scan dimensions structure
         assert len(scan_dims_list) > 0
@@ -181,7 +181,7 @@ class TestMetadataParsing:
     def test_parse_metadata_multidimensional_scan(self, test_xml_data):
         """Test parsing of multidimensional scans (scan with nested scan elements)."""
         # Test scan_no=5 which should be the 4D scan (scan number 276993)
-        log_dict, scan_dims_list = db_utils.parse_metadata(test_xml_data, scan_no=5)
+        log_dict, scan_dims_list = scan_import.parse_metadata(test_xml_data, scan_no=5)
 
         assert log_dict["scanNumber"] == "276993"
 
@@ -199,7 +199,7 @@ class TestMetadataParsing:
         # Test scanning through different scan indices in test_log_2.xml
         for scan_no in range(2, 9):  # Test scans in test_log_2.xml
             try:
-                log_dict, scan_dims_list = db_utils.parse_metadata(test_xml_data_2, scan_no=scan_no)
+                log_dict, scan_dims_list = scan_import.parse_metadata(test_xml_data_2, scan_no=scan_no)
 
                 # Verify each scan has a valid scanNumber
                 assert "scanNumber" in log_dict
@@ -239,10 +239,10 @@ class TestDatabaseIntegration:
         engine, temp_db_path = temp_database
 
         # Parse metadata from XML
-        log_dict, scan_dims_list = db_utils.parse_metadata(test_xml_data, scan_no=2)
+        log_dict, scan_dims_list = scan_import.parse_metadata(test_xml_data, scan_no=2)
 
         # Create metadata row
-        metadata_row = db_utils.import_metadata_row(log_dict)
+        metadata_row = scan_import.import_metadata_row(log_dict)
 
         # Verify the metadata row is a valid ORM object
         assert isinstance(metadata_row, db_schema.Metadata)
@@ -273,12 +273,12 @@ class TestDatabaseIntegration:
         engine, temp_db_path = temp_database
 
         # Parse metadata from XML
-        log_dict, scan_dims_list = db_utils.parse_metadata(test_xml_data, scan_no=2)
+        log_dict, scan_dims_list = scan_import.parse_metadata(test_xml_data, scan_no=2)
 
         # Create scan rows
         scan_rows = []
         for scan_dict in scan_dims_list:
-            scan_row = db_utils.import_scan_row(scan_dict)
+            scan_row = scan_import.import_scan_row(scan_dict)
             assert isinstance(scan_row, db_schema.Scan)
             scan_rows.append(scan_row)
 
@@ -300,15 +300,15 @@ class TestDatabaseIntegration:
         # Mock the config to use our test database
         with patch("laue_portal.database.session_utils.get_engine", lambda: engine):
             # Parse metadata from XML (test the first scan)
-            log_dict, scan_dims_list = db_utils.parse_metadata(test_xml_data, scan_no=2)
+            log_dict, scan_dims_list = scan_import.parse_metadata(test_xml_data, scan_no=2)
 
             # Create metadata row
-            metadata_row = db_utils.import_metadata_row(log_dict)
+            metadata_row = scan_import.import_metadata_row(log_dict)
 
             # Create scan rows
             scan_rows = []
             for scan_dict in scan_dims_list:
-                scan_row = db_utils.import_scan_row(scan_dict)
+                scan_row = scan_import.import_scan_row(scan_dict)
                 scan_rows.append(scan_row)
 
             # Simulate the workflow from create_scan.py
@@ -353,10 +353,10 @@ class TestDatabaseIntegration:
                 for scan_index in range(2, 5):  # Use indices 2, 3, 4
                     try:
                         # Parse metadata from XML
-                        log_dict, scan_dims_list = db_utils.parse_metadata(test_xml_data, scan_no=scan_index)
+                        log_dict, scan_dims_list = scan_import.parse_metadata(test_xml_data, scan_no=scan_index)
 
                         # Create and insert metadata row
-                        metadata_row = db_utils.import_metadata_row(log_dict)
+                        metadata_row = scan_import.import_metadata_row(log_dict)
                         metadata_row.date = datetime(2023, 2, 25)
                         metadata_row.commit_id = f"test_commit_{scan_index}"
                         metadata_row.calib_id = 1
@@ -369,7 +369,7 @@ class TestDatabaseIntegration:
 
                         # Create and insert scan rows
                         for scan_dict in scan_dims_list:
-                            scan_row = db_utils.import_scan_row(scan_dict)
+                            scan_row = scan_import.import_scan_row(scan_dict)
                             scan_row.id = scan_row_count + 1
                             scan_row_count += 1
                             session.add(scan_row)
@@ -399,10 +399,10 @@ class TestDatabaseIntegration:
                 for scan_index in range(2, 9):  # Test all scans in test_log_2.xml
                     try:
                         # Parse metadata from XML
-                        log_dict, scan_dims_list = db_utils.parse_metadata(test_xml_data_2, scan_no=scan_index)
+                        log_dict, scan_dims_list = scan_import.parse_metadata(test_xml_data_2, scan_no=scan_index)
 
                         # Create and insert metadata row
-                        metadata_row = db_utils.import_metadata_row(log_dict)
+                        metadata_row = scan_import.import_metadata_row(log_dict)
                         metadata_row.date = datetime(2022, 4, 19)
                         metadata_row.commit_id = f"test_commit_2_{scan_index}"
                         metadata_row.calib_id = 1
@@ -415,7 +415,7 @@ class TestDatabaseIntegration:
 
                         # Create and insert scan rows
                         for scan_dict in scan_dims_list:
-                            scan_row = db_utils.import_scan_row(scan_dict)
+                            scan_row = scan_import.import_scan_row(scan_dict)
                             scan_row.id = scan_row_count + 1
                             scan_row_count += 1
                             session.add(scan_row)

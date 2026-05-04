@@ -13,12 +13,13 @@ from dash.exceptions import PreventUpdate
 from sqlalchemy.orm import Session
 
 import laue_portal.components.navbar as navbar
-import laue_portal.database.db_utils as db_utils
 import laue_portal.database.session_utils as session_utils
 from laue_portal.components.catalog_form import catalog_form, set_catalog_form_props
 from laue_portal.components.form_base import _stack
 from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, set_scan_accordions
+from laue_portal.config import MOTOR_GROUPS
 from laue_portal.database import db_schema
+from laue_portal.services.scan_import import find_motor_group, update_motor_group_totals
 
 dash.register_page(__name__, path="/scan")
 
@@ -1010,7 +1011,7 @@ def build_technique_strings(scans, none="none"):
             if attr_name.startswith("scan_positioner") and attr_name.endswith("_PV"):
                 pv_value = getattr(scan, attr_name, None)
                 if pv_value:
-                    motor_group = db_utils.find_motor_group(pv_value)
+                    motor_group = find_motor_group(pv_value)
                     motor_groups.append(motor_group)
 
     all_motors_str = "; ".join(motor_groups) if motor_groups else none
@@ -1066,7 +1067,7 @@ def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
     motor_group_totals = {}
     if scans:
         for _, scan in enumerate(scans):
-            motor_group_totals = db_utils.update_motor_group_totals(motor_group_totals, scan)
+            motor_group_totals = update_motor_group_totals(motor_group_totals, scan)
 
             table_rows = []
             for PV_i in range(1, 5):
@@ -1074,7 +1075,7 @@ def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
                 pos_attr = f"scan_positioner{PV_i}"
 
                 if getattr(scan, pv_attr, None):
-                    motor_group = db_utils.find_motor_group(getattr(scan, pv_attr))
+                    motor_group = find_motor_group(getattr(scan, pv_attr))
                     start_val, stop_val, step_val = getattr(scan, pos_attr, "  ").split()
 
                     table_rows.append(
@@ -1119,7 +1120,7 @@ def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
                     pos_attr = f"scan_positioner{PV_i}"
 
                     if getattr(scan, pv_attr, None):
-                        motor_group = db_utils.find_motor_group(getattr(scan, pv_attr))
+                        motor_group = find_motor_group(getattr(scan, pv_attr))
                         start_val, stop_val, step_val = getattr(scan, pos_attr, "  ").split()
 
                         data_rows.append(
@@ -1145,7 +1146,7 @@ def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):
                 positioner_info.append(html.Div([header_row] + data_rows, className="mb-2"))
 
     total_points_fields = []
-    for motor_group in db_utils.MOTOR_GROUPS:
+    for motor_group in MOTOR_GROUPS:
         db_points = getattr(metadata, f"motorGroup_{motor_group}_npts_total", None)
         db_completed = getattr(metadata, f"motorGroup_{motor_group}_cpt_total", None)
 

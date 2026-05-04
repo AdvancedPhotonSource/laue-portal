@@ -7,7 +7,7 @@ import dash_bootstrap_components as dbc
 from dash import Input, Output, State, dcc, html
 
 import laue_portal.components.navbar as navbar
-import laue_portal.database.db_utils as db_utils
+from laue_portal.services import scan_import
 
 dash.register_page(__name__)
 
@@ -313,7 +313,7 @@ def upload_and_parse(contents):
 
     # Parse all scans
     try:
-        parsed = db_utils.parse_all_scans_from_xml(xml_bytes)
+        parsed = scan_import.parse_all_scans_from_xml(xml_bytes)
     except Exception as e:
         return (
             [],
@@ -344,7 +344,7 @@ def upload_and_parse(contents):
 
     # Check which scan numbers already exist in the DB
     all_scan_numbers = [p["scanNumber"] for p in parsed]
-    existing = db_utils.check_existing_scan_numbers(all_scan_numbers)
+    existing = scan_import.check_existing_scan_numbers(all_scan_numbers)
 
     # Build AG Grid row data
     row_data = []
@@ -495,7 +495,7 @@ def import_selected_scans(
     }
 
     # Do the bulk import
-    results = db_utils.bulk_import_scans(scans_to_import, catalog_defaults)
+    results = scan_import.bulk_import_scans(scans_to_import, catalog_defaults)
 
     # Update row data with new statuses
     updated_rows = []

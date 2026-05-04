@@ -4,7 +4,7 @@ import dash_bootstrap_components as dbc
 from dash import html, set_props
 
 from laue_portal.components.form_base import _field, _stack
-from laue_portal.database.db_utils import find_motor_group
+from laue_portal.services.scan_import import find_motor_group
 
 metadata_form = dbc.Row(
     [
