@@ -17,7 +17,7 @@ ignore = [
 "tests/*.py" = ["E402"]                        # sys.path manipulation before imports
 "laue_portal/recon/analysis_recon.py" = ["E402"] # warnings.filterwarnings before imports
 "laue_portal/pages/create_reconstruction.py" = ["E402"] # logger setup between import groups
-"polaris_workflow/**/*.py" = ["E402", "B018"]   # standalone scripts
+"scripts/polaris_workflow/**/*.py" = ["E402", "B018"]   # standalone scripts
 
 [tool.ruff.lint.isort]
 known-first-party = ["laue_portal"]

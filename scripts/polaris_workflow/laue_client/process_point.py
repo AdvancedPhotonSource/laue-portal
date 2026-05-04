@@ -6,12 +6,13 @@ from pprint import pprint
 
 ##Base Gladier imports
 from gladier import GladierBaseClient, generate_flow_definition
-from tools.downlink_index import DownlinkIndex
-from tools.downlink_transfer import DownlinkTransfer
-from tools.run_laue import QSubLaunch
+
+from scripts.polaris_workflow.laue_client.tools.downlink_index import DownlinkIndex
+from scripts.polaris_workflow.laue_client.tools.downlink_transfer import DownlinkTransfer
+from scripts.polaris_workflow.laue_client.tools.run_laue import QSubLaunch
 
 ##Import tools that will be used on the flow definition
-from tools.uplink_transfer import UplinkTransfer
+from scripts.polaris_workflow.laue_client.tools.uplink_transfer import UplinkTransfer
 
 
 ##Generate flow based on the collection of `gladier_tools`
