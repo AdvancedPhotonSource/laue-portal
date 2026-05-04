@@ -213,6 +213,35 @@ class TestMetadataParsing:
                 logging.info(f"No more scans available at index {scan_no}")
                 break
 
+    def test_parse_all_scans_from_xml(self, test_xml_data):
+        """Test parsing all scans from a log file for the bulk import workflow."""
+        parsed = scan_import.parse_all_scans_from_xml(test_xml_data)
+
+        assert len(parsed) > 0
+        assert parsed[0]["scanNumber"] == "276990"
+        assert parsed[0]["scan_index"] == 2
+        assert parsed[0]["log"]["scanNumber"] == "276990"
+        assert len(parsed[0]["scans"]) == parsed[0]["num_dims"]
+
+    def test_parse_all_scans_from_xml_logs_skipped_scans(self, test_xml_data, monkeypatch, caplog):
+        """Test parse failures for individual scans are logged instead of silently disappearing."""
+        original_parse_metadata = scan_import.parse_metadata
+
+        def fail_first_scan(xml, xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog", scan_no=2, empty="\n\t\t"):
+            if scan_no == 2:
+                raise ValueError("bad scan")
+            return original_parse_metadata(xml, xmlns=xmlns, scan_no=scan_no, empty=empty)
+
+        monkeypatch.setattr(scan_import, "parse_metadata", fail_first_scan)
+
+        with caplog.at_level(logging.ERROR, logger="laue_portal.services.scan_import"):
+            parsed = scan_import.parse_all_scans_from_xml(test_xml_data)
+
+        assert parsed
+        assert all(scan["scan_index"] != 2 for scan in parsed)
+        assert "Skipping scan at XML index 2 after parse failure" in caplog.text
+        assert "bad scan" in caplog.text
+
 
 class TestDatabaseIntegration:
     """Test class for database integration functionality."""
@@ -432,6 +461,73 @@ class TestDatabaseIntegration:
 
                 all_scans = session.query(db_schema.Scan).all()
                 assert len(all_scans) > 0
+
+    def test_bulk_import_scans_imports_metadata_scans_and_catalog(self, test_xml_data, temp_database):
+        """Test the bulk import service imports all rows for a selected scan."""
+        engine, temp_db_path = temp_database
+        parsed_scan = scan_import.parse_all_scans_from_xml(test_xml_data)[0]
+        catalog_defaults = {
+            "filefolder": "/data/scans",
+            "filenamePrefix": ["scan_"],
+            "aperture": "wire",
+            "sample_name": "Si",
+            "notes": "bulk import test",
+        }
+
+        with patch("laue_portal.database.session_utils.get_engine", lambda: engine):
+            results = scan_import.bulk_import_scans([parsed_scan], catalog_defaults)
+
+            assert results == {
+                parsed_scan["scanNumber"]: {
+                    "status": "success",
+                    "message": f"Scan {parsed_scan['scanNumber']} imported successfully",
+                }
+            }
+
+            with Session(engine) as session:
+                metadata = session.query(db_schema.Metadata).filter_by(scanNumber=int(parsed_scan["scanNumber"])).one()
+                scans = session.query(db_schema.Scan).filter_by(scanNumber=int(parsed_scan["scanNumber"])).all()
+                catalog = session.query(db_schema.Catalog).filter_by(scanNumber=int(parsed_scan["scanNumber"])).one()
+
+                assert metadata.user_name == parsed_scan["log"]["user_name"]
+                assert len(scans) == len(parsed_scan["scans"])
+                assert catalog.filefolder == "/data/scans"
+                assert catalog.filenamePrefix == ["scan_"]
+                assert catalog.aperture == "wire"
+                assert catalog.sample_name == "Si"
+                assert catalog.notes == "bulk import test"
+
+    def test_bulk_import_scans_skips_existing_scans(self, test_xml_data, temp_database):
+        """Test the bulk import service reports existing scans without duplicating rows."""
+        engine, temp_db_path = temp_database
+        parsed_scan = scan_import.parse_all_scans_from_xml(test_xml_data)[0]
+        catalog_defaults = {
+            "filefolder": "/data/scans",
+            "filenamePrefix": ["scan_"],
+            "aperture": "wire",
+            "sample_name": "Si",
+            "notes": "bulk import test",
+        }
+
+        with patch("laue_portal.database.session_utils.get_engine", lambda: engine):
+            first_results = scan_import.bulk_import_scans([parsed_scan], catalog_defaults)
+            second_results = scan_import.bulk_import_scans([parsed_scan], catalog_defaults)
+
+            assert first_results[parsed_scan["scanNumber"]]["status"] == "success"
+            assert second_results == {
+                parsed_scan["scanNumber"]: {
+                    "status": "skipped",
+                    "message": f"Scan {parsed_scan['scanNumber']} already exists",
+                }
+            }
+
+            with Session(engine) as session:
+                assert (
+                    session.query(db_schema.Metadata).filter_by(scanNumber=int(parsed_scan["scanNumber"])).count() == 1
+                )
+                assert (
+                    session.query(db_schema.Catalog).filter_by(scanNumber=int(parsed_scan["scanNumber"])).count() == 1
+                )
 
 
 if __name__ == "__main__":

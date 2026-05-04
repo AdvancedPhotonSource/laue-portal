@@ -1,5 +1,6 @@
 """Scan XML parsing and database import services."""
 
+import logging
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
@@ -8,6 +9,8 @@ from sqlalchemy.orm import Session
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
 from laue_portal.config import MOTOR_GROUPS
+
+logger = logging.getLogger(__name__)
 
 
 def parse_metadata(xml, xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog", scan_no=2, empty="\n\t\t"):
@@ -358,7 +361,8 @@ def parse_all_scans_from_xml(xml_bytes):
                     }
                 )
             except Exception:
-                # Skip scans that fail to parse
+                # TODO: Surface skipped scan parse errors in the upload UI instead of only server logs.
+                logger.exception("Skipping scan at XML index %s after parse failure", i)
                 continue
 
     return results
