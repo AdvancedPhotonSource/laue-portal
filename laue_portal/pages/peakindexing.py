@@ -12,6 +12,10 @@ import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
 from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
+from laue_portal.components.visualization.ipf_legend import (
+    orientation_color_key,
+    stereo_color_key,
+)
 from laue_portal.config import DEFAULT_VARIABLES
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix
 
@@ -118,6 +122,16 @@ _viz_tabs = dbc.Tabs(
                                                 value="cubic_ipf",
                                                 className="form-select",
                                             ),
+                                        ),
+                                    ],
+                                ),
+                                html.Div(
+                                    className="pi-viz-sidebar-section",
+                                    children=[
+                                        _viz_sidebar_head("Color Key", "bi bi-triangle"),
+                                        html.Div(
+                                            id="orientation-color-key",
+                                            children=orientation_color_key("cubic_ipf", "normal"),
                                         ),
                                     ],
                                 ),
@@ -302,6 +316,16 @@ _viz_tabs = dbc.Tabs(
                                                     size="sm",
                                                 ),
                                             ],
+                                        ),
+                                    ],
+                                ),
+                                html.Div(
+                                    className="pi-viz-sidebar-section",
+                                    children=[
+                                        _viz_sidebar_head("Color Key", "bi bi-triangle"),
+                                        html.Div(
+                                            id="stereo-color-key",
+                                            children=stereo_color_key("hsv_position"),
                                         ),
                                     ],
                                 ),
@@ -1311,6 +1335,30 @@ def handle_pole_selection(selected_data, xml_path, hkl_str):
     )
 
     return selected, summary
+
+
+# ---------------------------------------------------------------------------
+# Callbacks: color-key (IPF triangle / HSV hexagon) sidebar widgets
+# ---------------------------------------------------------------------------
+
+
+@callback(
+    Output("orientation-color-key", "children"),
+    Input("orientation-color-select", "value"),
+    Input("orientation-surface-select", "value"),
+)
+def update_orientation_color_key(color_mode, surface):
+    """Refresh the IPF/HSV reference legend when mode or surface changes."""
+    return orientation_color_key(color_mode, surface)
+
+
+@callback(
+    Output("stereo-color-key", "children"),
+    Input("stereo-color-select", "value"),
+)
+def update_stereo_color_key(color_mode):
+    """Refresh the pole-figure reference legend when scheme changes."""
+    return stereo_color_key(color_mode)
 
 
 # ---------------------------------------------------------------------------

@@ -363,3 +363,108 @@
   height: calc(100vh - 170px);
   overflow: auto;
 }
+
+/* ==========================================================================
+   IPF / color-key legend (sidebar widget)
+   ========================================================================== */
+
+.pi-ipf-legend {
+  padding: .55rem .55rem .65rem;
+  background: var(--pi-fog);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .35rem;
+}
+
+.pi-ipf-legend--empty {
+  padding: .5rem .65rem;
+  align-items: flex-start;
+}
+
+/* Square frame that contains the image + corner labels.
+   Width derived from sidebar (240 px) minus padding; clamps for narrow sidebars. */
+.pi-ipf-legend-frame {
+  position: relative;
+  width: 100%;
+  max-width: 200px;
+  aspect-ratio: 1 / 1;
+  user-select: none;
+}
+
+.pi-ipf-legend-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* Pixel art interpolation to keep the IPF triangle crisp at small sizes */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+.pi-ipf-legend-img--circle {
+  border-radius: 50%;
+}
+
+/* Corner labels for {001}, {101}, {111}.
+   Coordinates match the geometry of make_cubic_ipf_triangle: triangle
+   vertices live at the bottom-left (001), the right edge (101), and
+   the top-right (111) corners of the square image. */
+.pi-ipf-corner-label {
+  position: absolute;
+  font-family: Lato, sans-serif;
+  font-size: .68rem;
+  font-weight: 700;
+  color: var(--pi-slate);
+  background: rgba(255, 255, 255, .85);
+  padding: 1px 4px;
+  border-radius: 2px;
+  line-height: 1;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.pi-ipf-corner-001 { left: -2px;  bottom: -2px; }
+.pi-ipf-corner-101 { right: -2px; bottom: -2px; }
+.pi-ipf-corner-111 { right: -2px; top: -2px; }
+
+/* HSV color-wheel axis labels.
+   The wheel is a circle inscribed in the square frame; labels sit just
+   outside the circle at the cardinal/diagonal compass directions.
+   Layout: +X right, -X left, +Y top-left, -Y bottom-right,
+           +Z bottom-left, -Z top-right (no labels on the vertical poles). */
+.pi-hsv-axis-label {
+  position: absolute;
+  font-family: Lato, sans-serif;
+  font-size: .65rem;
+  font-weight: 700;
+  color: var(--pi-slate);
+  background: rgba(255, 255, 255, .85);
+  padding: 1px 3px;
+  border-radius: 2px;
+  line-height: 1;
+  pointer-events: none;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+}
+/* Cardinal axes (X) — sit on the circle's horizontal extremes */
+.pi-hsv-axis-px { left: 100%; top: 50%; transform: translate(-90%, -50%); }
+.pi-hsv-axis-nx { left: 0%;   top: 50%; transform: translate(-10%, -50%); }
+/* Diagonals (Y, Z) — sit at ~45° on the circle.
+   Inscribed-circle edge at 45° hits ~85.4% of half-frame; we nudge
+   inward slightly to keep labels visually attached to the wheel. */
+.pi-hsv-axis-py { left: 14%;  top: 14%; }   /* upper-left   = +Y */
+.pi-hsv-axis-ny { left: 86%;  top: 86%; }   /* lower-right  = -Y */
+.pi-hsv-axis-pz { left: 14%;  top: 86%; }   /* lower-left   = +Z */
+.pi-hsv-axis-nz { left: 86%;  top: 14%; }   /* upper-right  = -Z */
+
+.pi-ipf-caption {
+  font-family: Lato, sans-serif;
+  font-size: .7rem;
+  color: var(--pi-slate-90);
+  text-align: center;
+  line-height: 1.25;
+  max-width: 100%;
+  word-wrap: break-word;
+}
+
+@media (max-width: 768px) {
+  .pi-ipf-legend-frame { max-width: 170px; }
+}
