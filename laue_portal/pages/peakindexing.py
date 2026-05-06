@@ -13,7 +13,15 @@ import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
 from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
 from laue_portal.components.visualization.ipf_legend import (
+    DEFAULT_PALETTE,
+    SCALAR_MAX_ID,
+    SCALAR_MIN_ID,
+    SCALAR_PALETTE_ID,
+    SCALAR_RESET_ID,
+    SCALAR_REVERSE_ID,
     orientation_color_key,
+    scalar_color_controls,
+    scalar_controls_visible,
     stereo_color_key,
 )
 from laue_portal.config import DEFAULT_VARIABLES
@@ -128,10 +136,22 @@ _viz_tabs = dbc.Tabs(
                                 html.Div(
                                     className="pi-viz-sidebar-section",
                                     children=[
-                                        _viz_sidebar_head("Color Key", "bi bi-triangle"),
+                                        _viz_sidebar_head("Color Scale", "bi bi-palette2"),
+                                        # Legend image (IPF triangle / HSV hexagon /
+                                        # empty placeholder).  Children are swapped
+                                        # by the dispatcher callback per color mode.
                                         html.Div(
                                             id="orientation-color-key",
                                             children=orientation_color_key("cubic_ipf", "normal"),
+                                        ),
+                                        # Scalar-mode controls (palette + min/max +
+                                        # reset).  Always mounted so callbacks can
+                                        # reference their stable IDs; visibility
+                                        # toggled via the ``style`` output.
+                                        html.Div(
+                                            id="orientation-color-controls-wrap",
+                                            style=scalar_controls_visible("cubic_ipf"),
+                                            children=scalar_color_controls(),
                                         ),
                                     ],
                                 ),
@@ -185,6 +205,7 @@ _viz_tabs = dbc.Tabs(
                                                 max=75,
                                                 step=1,
                                                 value=40,
+                                                debounce=True,
                                                 className="form-control",
                                             ),
                                         ),
@@ -297,6 +318,7 @@ _viz_tabs = dbc.Tabs(
                                                     max=90,
                                                     step="any",
                                                     value=22.5,
+                                                    debounce=True,
                                                     className="form-control",
                                                 ),
                                                 html.Span("\u00b0", className="pi-viz-unit"),
@@ -342,6 +364,7 @@ _viz_tabs = dbc.Tabs(
                                                 max=75,
                                                 step=1,
                                                 value=12,
+                                                debounce=True,
                                                 className="form-control",
                                             ),
                                         ),
@@ -470,6 +493,7 @@ _viz_tabs = dbc.Tabs(
                                                 max=75,
                                                 step=1,
                                                 value=12,
+                                                debounce=True,
                                                 className="form-control",
                                             ),
                                         ),
@@ -543,6 +567,11 @@ layout = html.Div(
         dcc.Store(id="selected-grain-indices", data=[]),
         # Store pole figure color center: {x, y, grain_index} or None
         dcc.Store(id="pole-figure-center", data=None),
+        # Store auto-computed (min, max) for the current scalar color mode.
+        # Written by the orientation-map figure callback whenever the data
+        # or color mode changes; read by the reset/auto callback that
+        # populates the Min/Max inputs.
+        dcc.Store(id="orientation-color-auto-range", data=None),
         # Page header
         html.Div(
             id="peakindex-id-header",
@@ -722,6 +751,10 @@ def load_peakindexing_data(href):
     Input("stereo-hkl-select", "value"),
     Input("stereo-color-rad", "value"),
     Input("stereo-surface-select", "value"),
+    Input(SCALAR_PALETTE_ID, "value"),
+    Input(SCALAR_REVERSE_ID, "value"),
+    Input(SCALAR_MIN_ID, "value"),
+    Input(SCALAR_MAX_ID, "value"),
     prevent_initial_call=True,
 )
 def update_orientation_map(
@@ -735,6 +768,10 @@ def update_orientation_map(
     pole_hkl_str,
     pole_color_rad_deg,
     pole_surface,
+    palette,
+    reverse_palette,
+    user_vmin,
+    user_vmax,
 ):
     if not xml_path:
         raise PreventUpdate
@@ -747,10 +784,22 @@ def update_orientation_map(
     if triggered in _POLE_ONLY_TRIGGERS and (color_by or "cubic_ipf") != "pole_hsv":
         raise PreventUpdate
 
+    # Skip when scalar-only controls (palette/reverse/min/max) change but
+    # the orientation map isn't in a scalar mode -- those settings have
+    # no visible effect on per-point RGB modes.
+    _SCALAR_ONLY_TRIGGERS = {SCALAR_PALETTE_ID, SCALAR_REVERSE_ID, SCALAR_MIN_ID, SCALAR_MAX_ID}
+    effective_color = color_by or "cubic_ipf"
+    if triggered in _SCALAR_ONLY_TRIGGERS:
+        from laue_portal.components.visualization.orientation_map import is_scalar_mode
+
+        if not is_scalar_mode(effective_color):
+            raise PreventUpdate
+
     try:
         from laue_portal.analysis.xml_parser import parse_indexing_xml
         from laue_portal.components.visualization.orientation_map import (
             apply_selection_highlight,
+            get_scalar_auto_range,
             make_orientation_map,
             make_orientation_map_3d,
         )
@@ -760,7 +809,6 @@ def update_orientation_map(
         marker_size = max(1, int(input_size or 40))
 
         # Determine effective color mode and reference grain.
-        effective_color = color_by or "cubic_ipf"
         ref_grain_index = None
         if pole_center and pole_center.get("grain_index") is not None:
             ref_grain_index = pole_center["grain_index"]
@@ -785,6 +833,19 @@ def update_orientation_map(
             if pole_surface:
                 surface = pole_surface
 
+        # ── Scalar color settings ──
+        # If the user hasn't set Min/Max, fall back to the data range so
+        # Plotly's colorbar matches what's actually visible.  The Min/Max
+        # Inputs are populated by the dedicated reset callback (see
+        # compute_orientation_auto_range / reset_scalar_color_range)
+        # whenever the mode or data changes; we don't write to the Store
+        # here so the figure callback stays out of the auto-range
+        # dependency chain (otherwise Dash sees a cycle:
+        # Min/Max -> figure -> Store -> Min/Max).
+        auto_vmin, auto_vmax = get_scalar_auto_range(parsed, effective_color)
+        cmin = user_vmin if (user_vmin is not None and user_vmin != "") else auto_vmin
+        cmax = user_vmax if (user_vmax is not None and user_vmax != "") else auto_vmax
+
         if view_mode == "3d":
             fig = make_orientation_map_3d(
                 parsed,
@@ -795,6 +856,10 @@ def update_orientation_map(
                 pole_hkl=pole_hkl,
                 pole_center_xy=pole_center_xy,
                 pole_color_rad_deg=pole_rad,
+                palette=palette or DEFAULT_PALETTE,
+                reverse_palette=bool(reverse_palette),
+                cmin=cmin,
+                cmax=cmax,
             )
         else:
             fig = make_orientation_map(
@@ -806,6 +871,10 @@ def update_orientation_map(
                 pole_hkl=pole_hkl,
                 pole_center_xy=pole_center_xy,
                 pole_color_rad_deg=pole_rad,
+                palette=palette or DEFAULT_PALETTE,
+                reverse_palette=bool(reverse_palette),
+                cmin=cmin,
+                cmax=cmax,
             )
 
         # Cross-plot highlighting: dim unselected points, ring selected ones
@@ -1338,18 +1407,128 @@ def handle_pole_selection(selected_data, xml_path, hkl_str):
 
 
 # ---------------------------------------------------------------------------
+# Callbacks: scalar color-range auto-fill
+#
+# The flow is:
+#   compute_orientation_auto_range
+#       (color_mode, xml_path) -> orientation-color-auto-range Store
+#   reset_scalar_color_range
+#       (Store changed OR Reset clicked) -> Min/Max input values
+#   update_orientation_map (figure)
+#       (Min/Max as Inputs) -> orientation-map-graph.figure
+#
+# Crucially, the figure callback does NOT write to the auto-range Store.
+# That keeps Dash's dependency graph acyclic (otherwise we'd close the
+# loop: Min -> figure -> Store -> Min).
+# ---------------------------------------------------------------------------
+
+
+@callback(
+    Output("orientation-color-auto-range", "data"),
+    Input("orientation-color-select", "value"),
+    Input("peakindexing-xml-path", "data"),
+    prevent_initial_call=True,
+)
+def compute_orientation_auto_range(color_mode, xml_path):
+    """
+    Recompute the data-driven (vmin, vmax) for the current scalar color
+    mode and publish to the auto-range Store.  Fires only on the events
+    that should reset the user's manual Min/Max values: color-mode
+    change or new XML load.
+    """
+    if not xml_path:
+        raise PreventUpdate
+
+    from laue_portal.components.visualization.orientation_map import is_scalar_mode
+
+    effective_color = color_mode or "cubic_ipf"
+    if not is_scalar_mode(effective_color):
+        # Non-scalar mode: clear the Store so the reset callback blanks
+        # the Min/Max inputs.
+        return None
+
+    # Only parse XML when we actually need a scalar range.
+    try:
+        from laue_portal.analysis.xml_parser import parse_indexing_xml
+        from laue_portal.components.visualization.orientation_map import (
+            get_scalar_auto_range,
+        )
+
+        parsed = parse_indexing_xml(xml_path)
+        auto_vmin, auto_vmax = get_scalar_auto_range(parsed, effective_color)
+        return {"mode": effective_color, "min": auto_vmin, "max": auto_vmax}
+    except Exception as e:
+        print(f"Error computing scalar auto-range: {e}")
+        traceback.print_exc()
+        return None
+
+
+@callback(
+    Output(SCALAR_MIN_ID, "value"),
+    Output(SCALAR_MAX_ID, "value"),
+    Input("orientation-color-auto-range", "data"),
+    Input(SCALAR_RESET_ID, "n_clicks"),
+    State("orientation-color-select", "value"),
+    prevent_initial_call=True,
+)
+def reset_scalar_color_range(auto_range, _reset_clicks, color_mode):
+    """
+    Populate the Min/Max inputs from the auto-computed data range.
+
+    Triggers:
+      * The figure callback wrote a new ``orientation-color-auto-range``
+        Store value -- this happens whenever the data, color mode, or
+        any other figure input changes.  We only act when the *mode*
+        component of the payload differs from the prior write (or the
+        store transitioned to non-None), which corresponds to a real
+        mode/data change as opposed to incidental redraws.
+      * The user clicked the Reset button -- recompute from the current
+        store value.
+
+    User edits to the palette / reverse / Min / Max inputs do NOT fire
+    this callback, so typed values stay put.
+    """
+    triggered = dash.ctx.triggered_id
+
+    # Reset button: re-apply the most recent auto range, whatever it is.
+    if triggered == SCALAR_RESET_ID:
+        if auto_range and auto_range.get("mode") == (color_mode or ""):
+            return auto_range.get("min"), auto_range.get("max")
+        # No auto range available -> blank the fields so the figure
+        # callback falls back to its own auto detection.
+        return None, None
+
+    # Store change path: only act when the store payload describes the
+    # currently-selected scalar mode.  For non-scalar modes the figure
+    # callback writes ``None``; we clear the inputs so stale values
+    # don't bleed into a future scalar-mode switch.
+    if not auto_range:
+        return None, None
+    if auto_range.get("mode") != (color_mode or ""):
+        # Figure hasn't caught up yet (rare) or the user is on an
+        # orientation mode -- nothing useful to write.
+        raise PreventUpdate
+
+    return auto_range.get("min"), auto_range.get("max")
+
+
+# ---------------------------------------------------------------------------
 # Callbacks: color-key (IPF triangle / HSV hexagon) sidebar widgets
 # ---------------------------------------------------------------------------
 
 
 @callback(
     Output("orientation-color-key", "children"),
+    Output("orientation-color-controls-wrap", "style"),
     Input("orientation-color-select", "value"),
     Input("orientation-surface-select", "value"),
 )
 def update_orientation_color_key(color_mode, surface):
-    """Refresh the IPF/HSV reference legend when mode or surface changes."""
-    return orientation_color_key(color_mode, surface)
+    """Refresh the IPF/HSV reference legend and toggle scalar-controls visibility."""
+    return (
+        orientation_color_key(color_mode, surface),
+        scalar_controls_visible(color_mode),
+    )
 
 
 @callback(

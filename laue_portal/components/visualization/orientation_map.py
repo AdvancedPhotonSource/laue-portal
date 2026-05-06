@@ -54,6 +54,10 @@ def make_orientation_map(
     pole_hkl: tuple = None,
     pole_center_xy: tuple = None,
     pole_color_rad_deg: float = 22.5,
+    palette: str = "Viridis",
+    reverse_palette: bool = False,
+    cmin: float = None,
+    cmax: float = None,
 ) -> go.Figure:
     """
     Create a 2D orientation scatter plot.
@@ -81,6 +85,16 @@ def make_orientation_map(
     pole_color_rad_deg : float
         Angular color-saturation radius in degrees for ``"pole_hsv"`` mode.
         Default 22.5.
+    palette : str
+        Plotly colorscale name for scalar modes (e.g. ``"Viridis"``,
+        ``"Jet"``, ``"Plasma"``).  Ignored for orientation modes.
+    reverse_palette : bool
+        Reverse the colorscale (Plotly ``_r`` convention).  Ignored for
+        orientation modes.
+    cmin, cmax : float, optional
+        Manual lower/upper bounds for the scalar colorscale.  When
+        ``None`` Plotly auto-selects from the data range.  Ignored for
+        orientation modes.
 
     Returns
     -------
@@ -105,6 +119,10 @@ def make_orientation_map(
         pole_hkl=pole_hkl,
         pole_center_xy=pole_center_xy,
         pole_color_rad_deg=pole_color_rad_deg,
+        palette=palette,
+        reverse_palette=reverse_palette,
+        cmin=cmin,
+        cmax=cmax,
     )
 
     fig.add_trace(
@@ -154,6 +172,10 @@ def make_orientation_map_3d(
     pole_hkl: tuple = None,
     pole_center_xy: tuple = None,
     pole_color_rad_deg: float = 22.5,
+    palette: str = "Viridis",
+    reverse_palette: bool = False,
+    cmin: float = None,
+    cmax: float = None,
 ) -> go.Figure:
     """
     Create a 3D orientation scatter plot using all three sample coordinates.
@@ -178,6 +200,8 @@ def make_orientation_map_3d(
         ``(x0, y0)`` center for ``"pole_hsv"`` HSV coloring.
     pole_color_rad_deg : float
         Angular color-saturation radius in degrees for ``"pole_hsv"`` mode.
+    palette, reverse_palette, cmin, cmax
+        See :func:`make_orientation_map`.  Apply only to scalar modes.
 
     Returns
     -------
@@ -196,6 +220,10 @@ def make_orientation_map_3d(
         pole_hkl=pole_hkl,
         pole_center_xy=pole_center_xy,
         pole_color_rad_deg=pole_color_rad_deg,
+        palette=palette,
+        reverse_palette=reverse_palette,
+        cmin=cmin,
+        cmax=cmax,
     )
 
     fig.add_trace(
@@ -250,6 +278,10 @@ def _build_marker_dict(
     pole_hkl=None,
     pole_center_xy=None,
     pole_color_rad_deg=22.5,
+    palette="Viridis",
+    reverse_palette=False,
+    cmin=None,
+    cmax=None,
 ):
     """Build Plotly marker dict for the given coloring mode."""
     base = dict(
@@ -274,8 +306,17 @@ def _build_marker_dict(
     else:
         color_vals, color_label = _get_scalar_color_values(parsed, color_by)
         base["color"] = color_vals
-        base["colorscale"] = "Viridis"
+        # Apply user-selected palette + optional reverse (Plotly _r convention).
+        scale = palette or "Viridis"
+        if reverse_palette and not scale.endswith("_r"):
+            scale = f"{scale}_r"
+        base["colorscale"] = scale
         base["colorbar"] = dict(title=color_label)
+        # Manual color range; leave Plotly to auto-pick when None.
+        if cmin is not None:
+            base["cmin"] = float(cmin)
+        if cmax is not None:
+            base["cmax"] = float(cmax)
 
     return base
 
@@ -343,6 +384,29 @@ def _get_scalar_color_values(parsed, color_by):
         return parsed["n_patterns"].astype(float), "N Patterns"
     else:
         return parsed["n_indexed"].astype(float), "N Indexed"
+
+
+def is_scalar_mode(color_by: str) -> bool:
+    """Return True if ``color_by`` is one of the scalar/colorbar modes."""
+    return color_by in _SCALAR_MODES
+
+
+def get_scalar_auto_range(parsed: dict, color_by: str):
+    """
+    Return ``(vmin, vmax)`` from the data for a scalar coloring mode.
+
+    Returns ``(None, None)`` if ``color_by`` is not a scalar mode or if
+    the data is empty / all NaN.
+    """
+    if not is_scalar_mode(color_by):
+        return (None, None)
+
+    values, _ = _get_scalar_color_values(parsed, color_by)
+    arr = np.asarray(values, dtype=float)
+    finite = arr[np.isfinite(arr)]
+    if finite.size == 0:
+        return (None, None)
+    return (float(finite.min()), float(finite.max()))
 
 
 def _get_orientation_colors(

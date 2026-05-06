@@ -26,6 +26,7 @@ import base64
 import io
 from typing import Optional
 
+import dash_bootstrap_components as dbc
 from dash import html
 from PIL import Image
 
@@ -33,6 +34,30 @@ from laue_portal.analysis.coloring import (
     make_color_hexagon,
     make_cubic_ipf_triangle,
 )
+
+# ---------------------------------------------------------------------------
+# Palette options (Plotly built-in colorscale names)
+# ---------------------------------------------------------------------------
+
+#: Palettes offered to the user for scalar color modes on the orientation
+#: tab.  Values must match Plotly's built-in colorscale names (case
+#: insensitive).  ``Viridis`` is the default; ``Jet`` and ``Rainbow`` are
+#: included on request despite being perceptually non-uniform.
+PALETTE_OPTIONS = [
+    {"label": "Viridis", "value": "Viridis"},
+    {"label": "Plasma", "value": "Plasma"},
+    {"label": "Inferno", "value": "Inferno"},
+    {"label": "Magma", "value": "Magma"},
+    {"label": "Jet", "value": "Jet"},
+    {"label": "Rainbow", "value": "Rainbow"},
+    {"label": "Terrain", "value": "Earth"},
+]
+
+# Note: Plotly does not ship a built-in named "terrain" colorscale, but
+# its "Earth" colorscale is the conventional analogue (greens -> browns
+# -> whites). We expose it under the user-facing label "Terrain".
+
+DEFAULT_PALETTE = "Viridis"
 
 # ---------------------------------------------------------------------------
 # Pre-rendered color-key images (computed once at import)
@@ -171,13 +196,124 @@ def _empty_key(text: str = "No reference key for this color mode.") -> html.Div:
 
 
 # ---------------------------------------------------------------------------
+# Scalar-mode controls (palette + manual vmin/vmax)
+# ---------------------------------------------------------------------------
+
+# Stable IDs for the scalar control widgets.  The page callbacks read
+# these as Inputs/States so they need to be addressable even when the
+# section is rendered dynamically by the dispatcher.
+SCALAR_PALETTE_ID = "orientation-color-palette"
+SCALAR_REVERSE_ID = "orientation-color-reverse"
+SCALAR_MIN_ID = "orientation-color-min"
+SCALAR_MAX_ID = "orientation-color-max"
+SCALAR_RESET_ID = "orientation-color-reset-btn"
+
+
+def scalar_color_controls(
+    palette: str = DEFAULT_PALETTE,
+    reverse: bool = False,
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+) -> html.Div:
+    """
+    Build the palette + min/max + reset controls shown for scalar
+    coloring modes (``n_indexed``, ``goodness``, ``rms_error``,
+    ``n_patterns``).
+
+    All inputs use stable IDs (see ``SCALAR_*_ID`` constants) so the
+    page-side callbacks can read them as ``State`` even though this
+    fragment is rendered dynamically by
+    :func:`orientation_color_key`.
+    """
+    return html.Div(
+        className="pi-color-controls",
+        children=[
+            # ── Palette select ──
+            html.Div(
+                className="pi-color-controls-row",
+                children=[
+                    html.Label("Palette", className="pi-color-controls-label"),
+                    dbc.Select(
+                        id=SCALAR_PALETTE_ID,
+                        options=PALETTE_OPTIONS,
+                        value=palette or DEFAULT_PALETTE,
+                        className="form-select",
+                    ),
+                ],
+            ),
+            # ── Reverse checkbox ──
+            html.Div(
+                className="pi-color-controls-row",
+                children=[
+                    html.Label("", className="pi-color-controls-label"),
+                    dbc.Checkbox(
+                        id=SCALAR_REVERSE_ID,
+                        label="Reverse",
+                        value=bool(reverse),
+                        className="pi-color-controls-check",
+                    ),
+                ],
+            ),
+            # ── Min / Max numeric inputs ──
+            html.Div(
+                className="pi-color-controls-row pi-color-controls-row--pair",
+                children=[
+                    html.Label("Min", className="pi-color-controls-label"),
+                    dbc.Input(
+                        id=SCALAR_MIN_ID,
+                        type="number",
+                        step="any",
+                        value=vmin,
+                        debounce=True,
+                        className="form-control pi-color-controls-num",
+                    ),
+                ],
+            ),
+            html.Div(
+                className="pi-color-controls-row pi-color-controls-row--pair",
+                children=[
+                    html.Label("Max", className="pi-color-controls-label"),
+                    dbc.Input(
+                        id=SCALAR_MAX_ID,
+                        type="number",
+                        step="any",
+                        value=vmax,
+                        debounce=True,
+                        className="form-control pi-color-controls-num",
+                    ),
+                ],
+            ),
+            # ── Reset to auto range ──
+            html.Div(
+                className="pi-color-controls-row pi-color-controls-row--reset",
+                children=[
+                    dbc.Button(
+                        [html.I(className="bi bi-arrow-counterclockwise me-1"), "Reset range"],
+                        id=SCALAR_RESET_ID,
+                        color="secondary",
+                        outline=True,
+                        size="sm",
+                    ),
+                ],
+            ),
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
 # Dispatchers used by page callbacks
 # ---------------------------------------------------------------------------
 
 
 def orientation_color_key(color_mode: Optional[str], surface: Optional[str]) -> html.Div:
     """
-    Return the appropriate color-key widget for the *Orientation* tab.
+    Return the legend (image) portion of the orientation color-key slot.
+
+    The scalar mode controls (palette/min/max/reset) are mounted once in
+    the static page layout via :func:`scalar_color_controls` and
+    show/hide via :func:`scalar_controls_visible` rather than being
+    re-created here.  This keeps the control IDs available to Dash
+    callbacks regardless of the current color mode.
 
     Parameters
     ----------
@@ -196,7 +332,20 @@ def orientation_color_key(color_mode: Optional[str], surface: Optional[str]) -> 
         return hsv_hexagon_legend(
             caption=f"{surf.capitalize()} direction in stereographic HSV",
         )
+    if color_mode in {"n_indexed", "goodness", "rms_error", "n_patterns"}:
+        # Scalar modes: the controls themselves carry the visual feedback
+        # (the colorbar lives inside the Plotly figure).  Keep this slot
+        # empty so the controls below sit flush against the section head.
+        return html.Div()
     return _empty_key()
+
+
+def scalar_controls_visible(color_mode: Optional[str]) -> dict:
+    """Return a CSS ``style`` dict that hides the scalar controls block
+    for non-scalar coloring modes."""
+    if color_mode in {"n_indexed", "goodness", "rms_error", "n_patterns"}:
+        return {"display": "block"}
+    return {"display": "none"}
 
 
 def stereo_color_key(color_mode: Optional[str]) -> html.Div:
