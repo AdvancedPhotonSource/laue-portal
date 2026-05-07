@@ -949,7 +949,7 @@ def show_point_details(click_data, xml_path):
         detail_card = dbc.Card(
             dbc.CardBody(
                 [
-                    html.H6("Selected Point Details", className="card-title"),
+                    html.H6("Clicked Point Details", className="card-title"),
                     html.P(
                         [
                             html.Strong(f"Step #{step_idx}"),

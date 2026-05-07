@@ -487,6 +487,30 @@ def make_pole_figure(
         )
     )
 
+    # Crosshair (+) at the global pole-figure center (origin), matching the
+    # style/size of the selected-point crosshair below.
+    _origin_arm = pole_figure_color_radius(0.0, 0.0, color_rad_deg) * 0.1
+    fig.add_trace(
+        go.Scattergl(
+            x=[-_origin_arm, _origin_arm],
+            y=[0.0, 0.0],
+            mode="lines",
+            line=dict(color="black", width=2),
+            showlegend=False,
+            hoverinfo="skip",
+        )
+    )
+    fig.add_trace(
+        go.Scattergl(
+            x=[0.0, 0.0],
+            y=[-_origin_arm, _origin_arm],
+            mode="lines",
+            line=dict(color="black", width=2),
+            showlegend=False,
+            hoverinfo="skip",
+        )
+    )
+
     # Crosshair (+) on the selected reference point, scaled to color radius
     if center_xy is not None:
         cx, cy = float(center_xy[0]), float(center_xy[1])
@@ -536,7 +560,6 @@ def make_pole_figure(
         paper_bgcolor="white",
         margin=dict(l=40, r=40, t=40, b=40),
         autosize=True,
-        title=f"Pole Figure: {{{_format_hkl(*hkl)}}}",
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
         dragmode="lasso",  # enable lasso select for ROI picking (Stage 3)

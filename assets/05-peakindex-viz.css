@@ -232,13 +232,23 @@
 .pi-viz-main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   height: 100%;
-  position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
-/* Pass height through dcc.Loading wrapper divs (but not .pi-viz-details) */
-.pi-viz-main > div:not(.pi-viz-details)  { height: 100%; }
+/* Graph wrapper: the dcc.Loading wrapper around the dcc.Graph is the only
+   non-details child of .pi-viz-main.  It must flex to fill remaining space
+   so the bottom .pi-viz-details panel never overlaps the plot. */
+.pi-viz-main > div:not(.pi-viz-details) {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+/* Pass height through dcc.Loading's nested wrapper divs so the Plotly
+   figure can fill the flex item. */
 .pi-viz-main > div:not(.pi-viz-details) > div  { height: 100%; }
 .pi-viz-main > div:not(.pi-viz-details) > div > div { height: 100%; }
 
@@ -249,16 +259,12 @@
   color: var(--pi-blue);
 }
 
-/* Details panel (absolute-positioned at bottom of graph) */
+/* Details panel (normal flow, bottom of the visualization column) */
 .pi-viz-details {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 10;
+  flex: 0 0 auto;
   padding: .4rem .75rem;
   border-top: 1px solid #dce1e3;
-  background: rgba(255, 255, 255, .92);
+  background: var(--pi-white);
   max-height: 140px;
   overflow-y: auto;
 }
