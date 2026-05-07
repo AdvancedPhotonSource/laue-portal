@@ -52,6 +52,20 @@ _SURFACE_MATRICES = {
         "roll": np.array([0.0, 1.0, 0.0]),
         "normal": np.array([0.0, 0.0, 1.0]),
     },
+    "F": {  # 34ID-E "F surface" -- alias for the default "normal" frame.
+        # Igor's xmlMultiIndex.ipf:423 uses {tilt=X, roll=-H, normal=-F}
+        # as the canonical 34ID-E sample-surface frame and labels it
+        # "the usual"; F is the surface-normal axis with the OUTWARD
+        # normal pointing in the -F direction (= (Y-Z)/sqrt(2)).  This
+        # entry exists as an explicit user-facing label so scientists
+        # asking for the "F surface" get Igor's convention rather than
+        # the geometrically-natural +F (which would mirror their pole
+        # figures relative to LaueGo).  Identical to "normal" by
+        # construction.
+        "tilt": np.array([1.0, 0.0, 0.0]),
+        "roll": np.array([0.0, -_ir2, -_ir2]),
+        "normal": np.array([0.0, _ir2, -_ir2]),
+    },
 }
 
 
@@ -62,7 +76,8 @@ def get_surface_vectors(surface="normal"):
     Parameters
     ----------
     surface : str
-        One of ``"normal"`` (default), ``"X"``, ``"H"``, ``"Y"``, ``"Z"``.
+        One of ``"normal"`` (default), ``"X"``, ``"H"``, ``"Y"``, ``"Z"``,
+        ``"F"``.
 
     Returns
     -------

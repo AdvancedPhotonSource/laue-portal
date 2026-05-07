@@ -44,6 +44,61 @@ _ORIENTATION_MODES = {"cubic_ipf", "rodrigues", "misorientation", "pole_hsv"}
 # Scalar color modes (use Viridis colorscale + colorbar)
 _SCALAR_MODES = {"n_indexed", "goodness", "rms_error", "n_patterns"}
 
+# ---------------------------------------------------------------------------
+# Axis selection
+# ---------------------------------------------------------------------------
+# Names accepted by ``_resolve_axis``.  X/Y/Z come straight from the XML;
+# H/F are rotated sample-frame coordinates pre-computed by
+# ``xml_parser.parse_indexing_xml`` (see ``yz_to_hf``).  ``depth`` exposes
+# the per-step depth field (NaN-padded if absent).  ``auto`` defers to the
+# Igor-style heuristic in ``_select_axes_auto``.
+_AXIS_CHOICES = ("auto", "X", "Y", "Z", "H", "F", "depth")
+
+_AXIS_LABELS = {
+    "X": "X (um)",
+    "Y": "Y (um)",
+    "Z": "Z (um)",
+    "H": "H (um)",
+    "F": "F (um)",
+    "depth": "depth (um)",
+}
+
+
+def _resolve_axis(parsed, axis_name):
+    """
+    Return ``(values, label)`` for a named axis.
+
+    Recognised names: ``"X"``, ``"Y"``, ``"Z"``, ``"H"``, ``"F"``,
+    ``"depth"``.  Unknown names fall back to X.
+    """
+    positions = parsed["positions"]
+    if axis_name == "X":
+        return positions[:, 0], _AXIS_LABELS["X"]
+    if axis_name == "Y":
+        return positions[:, 1], _AXIS_LABELS["Y"]
+    if axis_name == "Z":
+        return positions[:, 2], _AXIS_LABELS["Z"]
+    if axis_name == "H":
+        # ``positions_hf`` is added by xml_parser; fall back to a runtime
+        # compute if an old cached dict is missing it.
+        hf = parsed.get("positions_hf")
+        if hf is None:
+            from laue_portal.analysis.xml_parser import positions_hf as _compute_hf
+
+            hf = _compute_hf(positions)
+        return hf[:, 0], _AXIS_LABELS["H"]
+    if axis_name == "F":
+        hf = parsed.get("positions_hf")
+        if hf is None:
+            from laue_portal.analysis.xml_parser import positions_hf as _compute_hf
+
+            hf = _compute_hf(positions)
+        return hf[:, 1], _AXIS_LABELS["F"]
+    if axis_name == "depth":
+        return parsed["depths"], _AXIS_LABELS["depth"]
+    # Unknown -- fall back to X
+    return positions[:, 0], _AXIS_LABELS["X"]
+
 
 def make_orientation_map(
     parsed: dict,
@@ -58,6 +113,8 @@ def make_orientation_map(
     reverse_palette: bool = False,
     cmin: float = None,
     cmax: float = None,
+    x_axis: str = "auto",
+    y_axis: str = "auto",
 ) -> go.Figure:
     """
     Create a 2D orientation scatter plot.
@@ -95,6 +152,11 @@ def make_orientation_map(
         Manual lower/upper bounds for the scalar colorscale.  When
         ``None`` Plotly auto-selects from the data range.  Ignored for
         orientation modes.
+    x_axis, y_axis : str, optional
+        Names of the axes to plot.  One of ``"auto"`` (Igor-style
+        heuristic, default), ``"X"``, ``"Y"``, ``"Z"``, ``"H"``, ``"F"``,
+        or ``"depth"``.  H and F are wire-frame coordinates rotated from
+        ``(Y, Z)`` (see ``xml_parser.yz_to_hf``).
 
     Returns
     -------
@@ -104,7 +166,9 @@ def make_orientation_map(
     depths = parsed["depths"]
     has_depth = not np.all(np.isnan(depths))
 
-    x_vals, y_vals, x_label, y_label = _select_axes(positions, depths, has_depth)
+    x_vals, y_vals, x_label, y_label = _select_axes(
+        positions, depths, has_depth, x_axis=x_axis, y_axis=y_axis, parsed=parsed
+    )
     marker_symbol = "diamond" if has_depth else "square"
 
     fig = go.Figure()
@@ -176,6 +240,9 @@ def make_orientation_map_3d(
     reverse_palette: bool = False,
     cmin: float = None,
     cmax: float = None,
+    x_axis: str = "X",
+    y_axis: str = "Y",
+    z_axis: str = "Z",
 ) -> go.Figure:
     """
     Create a 3D orientation scatter plot using all three sample coordinates.
@@ -202,12 +269,18 @@ def make_orientation_map_3d(
         Angular color-saturation radius in degrees for ``"pole_hsv"`` mode.
     palette, reverse_palette, cmin, cmax
         See :func:`make_orientation_map`.  Apply only to scalar modes.
+    x_axis, y_axis, z_axis : str, optional
+        Names of the three axes.  Each is one of ``"X"``, ``"Y"``, ``"Z"``,
+        ``"H"``, ``"F"``, or ``"depth"``.  Defaults reproduce the legacy
+        X / Y / Z Cartesian layout.
 
     Returns
     -------
     go.Figure
     """
-    positions = parsed["positions"]
+    x_vals, x_label = _resolve_axis(parsed, x_axis or "X")
+    y_vals, y_label = _resolve_axis(parsed, y_axis or "Y")
+    z_vals, z_label = _resolve_axis(parsed, z_axis or "Z")
 
     fig = go.Figure()
 
@@ -228,9 +301,9 @@ def make_orientation_map_3d(
 
     fig.add_trace(
         go.Scatter3d(
-            x=positions[:, 0],
-            y=positions[:, 1],
-            z=positions[:, 2],
+            x=x_vals,
+            y=y_vals,
+            z=z_vals,
             mode="markers",
             marker=marker_dict,
             hovertemplate=(
@@ -248,9 +321,9 @@ def make_orientation_map_3d(
 
     fig.update_layout(
         scene=dict(
-            xaxis_title="X (um)",
-            yaxis_title="Y (um)",
-            zaxis_title="Z (um)",
+            xaxis_title=x_label,
+            yaxis_title=y_label,
+            zaxis_title=z_label,
             aspectmode="data",
             bgcolor=_GRAY_BG,
         ),
@@ -339,37 +412,61 @@ def _build_customdata(parsed):
     )
 
 
-def _select_axes(positions, depths, has_depth):
+def _select_axes(positions, depths, has_depth, x_axis="auto", y_axis="auto", parsed=None):
     """
-    Select X/Y axes following Igor convention.
+    Select X/Y axes for the 2-D orientation map.
+
+    When *x_axis* / *y_axis* are ``"auto"`` (default) the choice follows the
+    Igor convention:
 
     - Wire scan at constant X: X=Zsample, Y=Ysample
     - Wire scan with varying X: X=Xsample, Y=Zsample
     - Non-wire scan: X=Xsample, Y=Ysample
+
+    Otherwise each axis is resolved individually via :func:`_resolve_axis`,
+    which accepts ``"X"``, ``"Y"``, ``"Z"``, ``"H"``, ``"F"``, ``"depth"``.
+    A *parsed* dict is required when either axis is non-auto so the H/F
+    columns can be looked up.
     """
-    if has_depth:
-        x_range = np.nanmax(positions[:, 0]) - np.nanmin(positions[:, 0])
-        if x_range < 1.0:
-            return (
-                positions[:, 2],
-                positions[:, 1],
-                "Z (um)",
-                "Y (um)",
-            )
+    auto_pair = (x_axis in (None, "auto")) and (y_axis in (None, "auto"))
+
+    if auto_pair:
+        if has_depth:
+            x_range = np.nanmax(positions[:, 0]) - np.nanmin(positions[:, 0])
+            if x_range < 1.0:
+                return (
+                    positions[:, 2],
+                    positions[:, 1],
+                    _AXIS_LABELS["Z"],
+                    _AXIS_LABELS["Y"],
+                )
+            else:
+                return (
+                    positions[:, 0],
+                    positions[:, 2],
+                    _AXIS_LABELS["X"],
+                    _AXIS_LABELS["Z"],
+                )
         else:
             return (
                 positions[:, 0],
-                positions[:, 2],
-                "X (um)",
-                "Z (um)",
+                positions[:, 1],
+                _AXIS_LABELS["X"],
+                _AXIS_LABELS["Y"],
             )
-    else:
-        return (
-            positions[:, 0],
-            positions[:, 1],
-            "X (um)",
-            "Y (um)",
-        )
+
+    # User-selected axes.  Build a minimal parsed-like dict if the caller
+    # didn't supply one (legacy callers passed only positions/depths).
+    if parsed is None:
+        parsed = {"positions": positions, "depths": depths}
+
+    # Resolve "auto" on a per-axis basis by defaulting to X / Y.
+    x_choice = "X" if x_axis in (None, "auto") else x_axis
+    y_choice = "Y" if y_axis in (None, "auto") else y_axis
+
+    x_vals, x_label = _resolve_axis(parsed, x_choice)
+    y_vals, y_label = _resolve_axis(parsed, y_choice)
+    return x_vals, y_vals, x_label, y_label
 
 
 def _get_scalar_color_values(parsed, color_by):
@@ -554,7 +651,16 @@ def _compute_pole_hsv_colors(
 # ---------------------------------------------------------------------------
 
 
-def apply_selection_highlight(fig, parsed, selected_grains, marker_size, is_3d=False):
+def apply_selection_highlight(
+    fig,
+    parsed,
+    selected_grains,
+    marker_size,
+    is_3d=False,
+    x_axis="auto",
+    y_axis="auto",
+    z_axis="Z",
+):
     """
     Modify a figure in-place to highlight selected grains.
 
@@ -574,6 +680,10 @@ def apply_selection_highlight(fig, parsed, selected_grains, marker_size, is_3d=F
         Current marker size (highlight ring will be larger).
     is_3d : bool
         Whether the figure is a 3D scatter plot.
+    x_axis, y_axis, z_axis : str
+        Axis selections, must match what was passed to the figure builder
+        so the highlight ring lands on the correct points.  ``z_axis`` is
+        only used in 3-D mode.
     """
     if not fig.data or not selected_grains:
         return
@@ -660,11 +770,14 @@ def apply_selection_highlight(fig, parsed, selected_grains, marker_size, is_3d=F
     highlight_uid = main_uid.replace("-main", "-highlight")
 
     if is_3d:
+        x_vals_3d, _ = _resolve_axis(parsed, x_axis or "X")
+        y_vals_3d, _ = _resolve_axis(parsed, y_axis or "Y")
+        z_vals_3d, _ = _resolve_axis(parsed, z_axis or "Z")
         fig.add_trace(
             go.Scatter3d(
-                x=positions[sel_mask, 0],
-                y=positions[sel_mask, 1],
-                z=positions[sel_mask, 2],
+                x=np.asarray(x_vals_3d)[sel_mask],
+                y=np.asarray(y_vals_3d)[sel_mask],
+                z=np.asarray(z_vals_3d)[sel_mask],
                 mode="markers",
                 marker=dict(
                     size=max(3, highlight_size // 3),
@@ -681,7 +794,9 @@ def apply_selection_highlight(fig, parsed, selected_grains, marker_size, is_3d=F
     else:
         depths = parsed["depths"]
         has_depth = not np.all(np.isnan(depths))
-        x_vals, y_vals, _, _ = _select_axes(positions, depths, has_depth)
+        x_vals, y_vals, _, _ = _select_axes(positions, depths, has_depth, x_axis=x_axis, y_axis=y_axis, parsed=parsed)
+        x_vals = np.asarray(x_vals)
+        y_vals = np.asarray(y_vals)
 
         fig.add_trace(
             go.Scattergl(

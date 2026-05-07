@@ -15,6 +15,7 @@ sys.path.insert(0, project_root)
 
 from laue_portal.analysis.projection import (
     cubic_hkl_family,
+    get_surface_vectors,
     pole_figure_points,
     project_q_vectors,
     stereographic_project,
@@ -297,3 +298,95 @@ class TestProjectQVectors:
         q_vecs = np.array([[0, 0, 0.0]])
         sx, sy, lower = project_q_vectors(q_vecs)
         np.testing.assert_allclose(sx[0], 0.0, atol=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# Surface frame matrices (X / Y / Z / H / F / normal)
+# ---------------------------------------------------------------------------
+
+
+class TestSurfaceFrames:
+    """
+    Pin the surface-frame matrices against Igor's
+    ``xmlMultiIndex.ipf:419-434`` definitions.  Each Igor entry is a 3x3
+    matrix whose **columns** are ``{tilt, roll, normal}``; we verify all
+    fifteen vectors directly.
+
+    The ``"F"`` entry is a Python-only alias for ``"normal"`` (Igor has
+    no explicit F surface).  It uses the SAME -F outward normal as
+    Igor's "normal" surface (xmlMultiIndex.ipf:423 comment:
+    ``// {tilt=X, roll-H, normal-F}, the usual``) so scientists picking
+    "F" get Igor's 34ID-E convention rather than the mirrored +F frame.
+    """
+
+    _IR2 = 1.0 / np.sqrt(2.0)
+
+    def _assert_orthonormal(self, normal, roll, tilt):
+        for v in (normal, roll, tilt):
+            np.testing.assert_allclose(np.linalg.norm(v), 1.0, atol=1e-12)
+        np.testing.assert_allclose(np.dot(normal, roll), 0.0, atol=1e-12)
+        np.testing.assert_allclose(np.dot(normal, tilt), 0.0, atol=1e-12)
+        np.testing.assert_allclose(np.dot(roll, tilt), 0.0, atol=1e-12)
+        # Right-handed: tilt x roll == normal
+        np.testing.assert_allclose(np.cross(tilt, roll), normal, atol=1e-12)
+
+    def test_f_frame_is_orthonormal(self):
+        normal, roll, tilt = get_surface_vectors("F")
+        self._assert_orthonormal(normal, roll, tilt)
+
+    def test_f_matches_igor_normal_surface(self):
+        # "F" is an alias for Igor's "normal" frame so user expectations
+        # match LaueGo conventions.  All three vectors must be identical.
+        f_normal, f_roll, f_tilt = get_surface_vectors("F")
+        n_normal, n_roll, n_tilt = get_surface_vectors("normal")
+        np.testing.assert_allclose(f_normal, n_normal, atol=1e-12)
+        np.testing.assert_allclose(f_roll, n_roll, atol=1e-12)
+        np.testing.assert_allclose(f_tilt, n_tilt, atol=1e-12)
+        # Explicit values: Igor xmlMultiIndex.ipf:423.
+        np.testing.assert_allclose(f_tilt, [1.0, 0.0, 0.0], atol=1e-12)
+        np.testing.assert_allclose(f_roll, [0.0, -self._IR2, -self._IR2], atol=1e-12)
+        np.testing.assert_allclose(f_normal, [0.0, self._IR2, -self._IR2], atol=1e-12)
+
+    def test_all_surface_frames_orthonormal(self):
+        # Cheap regression on every entry in case future edits break one.
+        for name in ("normal", "X", "H", "Y", "Z", "F"):
+            normal, roll, tilt = get_surface_vectors(name)
+            self._assert_orthonormal(normal, roll, tilt)
+
+    def test_surface_frames_match_igor(self):
+        # Pin every (tilt, roll, normal) triplet against the Igor source
+        # at xmlMultiIndex.ipf:419-431.  Igor stores each as columns of
+        # a 3x3 matrix; we list them as plain triples here.
+        ir2 = self._IR2
+        igor_frames = {
+            "normal": (
+                (1, 0, 0),  # tilt = X
+                (0, -ir2, -ir2),  # roll = -H
+                (0, ir2, -ir2),  # normal = -F  ("the usual" 34ID-E)
+            ),
+            "X": (
+                (0, -ir2, -ir2),
+                (0, ir2, -ir2),
+                (1, 0, 0),
+            ),
+            "H": (
+                (1, 0, 0),
+                (0, ir2, -ir2),
+                (0, ir2, ir2),
+            ),
+            "Y": (
+                (0, 0, 1),
+                (1, 0, 0),
+                (0, 1, 0),
+            ),
+            "Z": (
+                (1, 0, 0),
+                (0, 1, 0),
+                (0, 0, 1),
+            ),
+        }
+        for name, (exp_tilt, exp_roll, exp_normal) in igor_frames.items():
+            normal, roll, tilt = get_surface_vectors(name)
+            np.testing.assert_allclose(tilt, exp_tilt, atol=1e-12, err_msg=f"{name} tilt")
+            np.testing.assert_allclose(roll, exp_roll, atol=1e-12, err_msg=f"{name} roll")
+            np.testing.assert_allclose(normal, exp_normal, atol=1e-12, err_msg=f"{name} normal")

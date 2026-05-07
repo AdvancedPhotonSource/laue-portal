@@ -17,6 +17,8 @@ from laue_portal.analysis.xml_parser import (
     get_all_indexed_peaks,
     get_step_peaks,
     parse_indexing_xml,
+    positions_hf,
+    yz_to_hf,
 )
 
 FIXTURE_XML = os.path.join(os.path.dirname(__file__), "fixtures", "test_indexing.xml")
@@ -216,3 +218,73 @@ class TestEdgeCases:
     def test_all_steps_parseable(self, parsed):
         for i in range(len(parsed["positions"])):
             assert get_step_peaks(parsed, i) is not None, f"Step {i} returned None"
+
+
+# ---------------------------------------------------------------------------
+# H / F wire-frame coordinates
+# ---------------------------------------------------------------------------
+
+
+class TestHFCoordinates:
+    """
+    Pin Igor Pro's wire-frame rotation formulas.
+
+    From ``LaueGo/micro/microGeometry.ipf:319-342`` with the 34ID-E
+    default ``thetaWire = π/4``::
+
+        H = Y * sin(theta) + Z * cos(theta)
+        F = -Y * cos(theta) + Z * sin(theta)
+
+    A silent sign error here would render plots in a flipped/rotated
+    orientation that's hard to catch by eye, so the formula is asserted
+    explicitly against canonical (Y, Z) inputs.
+    """
+
+    _IR2 = 1.0 / np.sqrt(2.0)
+
+    def test_yz_to_hf_unit_z(self):
+        # (Y=0, Z=1) -> H=+1/sqrt(2), F=+1/sqrt(2)
+        h, f = yz_to_hf(0.0, 1.0)
+        assert abs(h - self._IR2) < 1e-9
+        assert abs(f - self._IR2) < 1e-9
+
+    def test_yz_to_hf_unit_y(self):
+        # (Y=1, Z=0) -> H=+1/sqrt(2), F=-1/sqrt(2)
+        h, f = yz_to_hf(1.0, 0.0)
+        assert abs(h - self._IR2) < 1e-9
+        assert abs(f - (-self._IR2)) < 1e-9
+
+    def test_yz_to_hf_vectorized(self):
+        # Vectorized inputs preserve shape and per-element formula.
+        y = np.array([0.0, 1.0, 2.0])
+        z = np.array([1.0, 0.0, 0.0])
+        h, f = yz_to_hf(y, z)
+        assert h.shape == (3,) and f.shape == (3,)
+        assert np.allclose(h, [self._IR2, self._IR2, 2 * self._IR2])
+        assert np.allclose(f, [self._IR2, -self._IR2, -2 * self._IR2])
+
+    def test_yz_to_hf_inverse(self):
+        # Sanity: applying Igor's inverse rotation recovers (Y, Z).
+        y0, z0 = 3.7, -1.2
+        h, f = yz_to_hf(y0, z0)
+        cos_t = np.cos(np.pi / 4)
+        sin_t = np.sin(np.pi / 4)
+        y_back = h * sin_t - f * cos_t
+        z_back = h * cos_t + f * sin_t
+        assert abs(y_back - y0) < 1e-9
+        assert abs(z_back - z0) < 1e-9
+
+    def test_positions_hf_in_parsed_dict(self, parsed):
+        # Regression guard: parser must populate positions_hf.
+        assert "positions_hf" in parsed
+        hf = parsed["positions_hf"]
+        assert hf.shape == (len(parsed["positions"]), 2)
+        # Cross-check first row against direct compute.
+        exp_h, exp_f = yz_to_hf(parsed["positions"][0, 1], parsed["positions"][0, 2])
+        assert abs(hf[0, 0] - exp_h) < 1e-9
+        assert abs(hf[0, 1] - exp_f) < 1e-9
+
+    def test_positions_hf_helper_matches_parsed(self, parsed):
+        # ``positions_hf`` helper and the parser-cached array must agree.
+        recomputed = positions_hf(parsed["positions"])
+        assert np.allclose(recomputed, parsed["positions_hf"])

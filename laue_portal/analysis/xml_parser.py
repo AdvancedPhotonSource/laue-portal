@@ -12,6 +12,39 @@ import xml.etree.ElementTree as ET
 import numpy as np
 
 # ---------------------------------------------------------------------------
+# 34ID-E wire-rotation angle (theta_wire)
+# ---------------------------------------------------------------------------
+# H and F are wire-frame sample coordinates rotated from beamline (Y, Z)
+# by the wire angle.  Physically theta_wire is the angle of the wire's
+# motion direction above the horizontal Y-axis in the beamline YZ plane
+# (microGeometry.ipf:24 comment: "angle wire moves, usually 45 degrees").
+# The H axis points along the wire-motion direction; F is perpendicular,
+# in the YZ plane.
+#
+# The XML files written by laueanalysis.indexing do NOT include this
+# angle.  Igor's ``YZ2H`` / ``YZ2F`` (microGeometry.ipf:319-330) read it
+# from the package globals ``root:Packages:geometry:cosThetaWire`` /
+# ``:sinThetaWire``, but those globals are NEVER assigned anywhere in the
+# LaueGo source tree -- Igor always falls back to its own ``cos(PI/4)`` /
+# ``sin(PI/4)`` defaults.  So the 45° hardcode here is faithful to Igor's
+# actual runtime behaviour, not just its documented default.  If a future
+# XML schema exposes the angle, plumb it through ``yz_to_hf`` instead of
+# using this default.
+#
+# CAVEAT for any future non-45° support:
+#   Igor itself contains TWO non-equivalent formulations of the YZ -> HF
+#   rotation.  ``YZ2H`` / ``YZ2F`` (microGeometry.ipf:325/319) -- the
+#   formulas implemented below -- and a separate MatrixOp form at
+#   xmlMultiIndex.ipf:4263-4278 that builds RH/RF from RX/RY/RZ.  The
+#   two differ by swapping sin <-> cos (equivalent to using theta' =
+#   pi/2 - theta) and only coincide at theta = pi/4.  We deliberately
+#   port ``YZ2H`` / ``YZ2F`` because that is what Igor calls at the data-
+#   loading site (xmlMultiIndex.ipf:4636-4637) to populate Hsample /
+#   Fsample.  If anyone later adds an XML-driven wire angle, confirm
+#   which physical convention applies before reusing this helper.
+_THETA_WIRE_DEFAULT = np.pi / 4.0
+
+# ---------------------------------------------------------------------------
 # Caching layer
 # ---------------------------------------------------------------------------
 # NOTE: This in-process lru_cache works for single-worker deployments
@@ -20,6 +53,58 @@ import numpy as np
 # backend such as flask_caching + diskcache so that all workers share parsed
 # results instead of each maintaining an independent copy.
 # ---------------------------------------------------------------------------
+
+
+def yz_to_hf(y, z, theta=_THETA_WIRE_DEFAULT):
+    """
+    Rotate beamline (Y, Z) sample coordinates into the wire-frame (H, F).
+
+    Ported from LaueGo ``microGeometry.ipf:319-330``::
+
+        H = Y * sin(theta) + Z * cos(theta)
+        F = -Y * cos(theta) + Z * sin(theta)
+
+    where ``theta`` is the 34ID-E wire-motion angle above the horizontal
+    Y-axis in the beamline YZ plane (default π/4 = 45°).  H runs along
+    the wire-motion direction; F is perpendicular, in the YZ plane.
+    Inverses are ``Y = H sin θ − F cos θ`` and ``Z = H cos θ + F sin θ``.
+
+    See the module-level comment on ``_THETA_WIRE_DEFAULT`` for caveats
+    on the angle source and the alternate Igor MatrixOp formulation.
+
+    Parameters
+    ----------
+    y, z : float or array-like
+        Sample-Y and sample-Z coordinates (beamline frame).
+    theta : float, optional
+        Wire angle in radians.  Defaults to π/4 (45°), the 34ID-E value.
+
+    Returns
+    -------
+    h, f : ndarray
+        Wire-frame coordinates with the same shape as ``y`` / ``z``.
+    """
+    y = np.asarray(y, dtype=float)
+    z = np.asarray(z, dtype=float)
+    cos_t = np.cos(theta)
+    sin_t = np.sin(theta)
+    h = y * sin_t + z * cos_t
+    f = -y * cos_t + z * sin_t
+    return h, f
+
+
+def positions_hf(positions, theta=_THETA_WIRE_DEFAULT):
+    """
+    Compute (H, F) columns from a (N, 3) ``positions`` array (X, Y, Z).
+
+    Returns
+    -------
+    ndarray (N, 2)
+        Columns ``[H, F]``.
+    """
+    positions = np.asarray(positions, dtype=float)
+    h, f = yz_to_hf(positions[:, 1], positions[:, 2], theta=theta)
+    return np.column_stack([h, f])
 
 
 @functools.lru_cache(maxsize=4)
@@ -49,6 +134,7 @@ def parse_indexing_xml(xml_path: str) -> dict:
     -------
     dict with keys:
         positions : ndarray (N, 3) -- Xsample, Ysample, Zsample
+        positions_hf : ndarray (N, 2) -- H, F (computed from Y, Z)
         depths : ndarray (N,) -- depth values (may contain NaN)
         energies : ndarray (N,) -- beam energy in keV
         scan_nums : ndarray (N,) -- scan numbers
@@ -175,8 +261,15 @@ def _parse_indexing_xml_impl(xml_path: str) -> dict:
 
         step_data_list.append(step_peaks)
 
+    # Derived wire-frame coordinates (H, F) computed from (Y, Z).
+    # H and F are NOT in the XML -- they are rotated sample-frame axes
+    # (see ``yz_to_hf``).  Computed once here so plot/coloring code can
+    # treat them on equal footing with X/Y/Z.
+    pos_hf = positions_hf(positions)
+
     return {
         "positions": positions,
+        "positions_hf": pos_hf,
         "depths": depths,
         "energies": energies,
         "scan_nums": scan_nums,

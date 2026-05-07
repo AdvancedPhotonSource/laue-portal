@@ -109,6 +109,7 @@ _SURFACE_LABELS = {
     "H": "sample H",
     "Y": "sample Y",
     "Z": "sample Z",
+    "F": "sample F",
 }
 
 
