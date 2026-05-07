@@ -83,8 +83,12 @@ def test_pole_figure_creates_figure():
 
 def test_pole_figure_100():
     fig = make_pole_figure(_parsed(), hkl=(1, 0, 0))
-    assert fig.layout.title.text is not None
-    assert "100" in fig.layout.title.text
+    # The {hkl} identifier moved from the figure title to the data trace's
+    # legend name when the title was removed (it was being clipped at the
+    # top of the rendered figure).
+    data_trace = fig.data[0]
+    assert data_trace.name is not None
+    assert "100" in data_trace.name
 
 
 def test_pole_figure_110():
