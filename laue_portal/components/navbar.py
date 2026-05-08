@@ -32,6 +32,7 @@ navbar = dbc.Navbar(
                                 dbc.DropdownMenuItem("New CA Reconstruction", href="/create-reconstruction"),
                                 dbc.DropdownMenuItem("New Wire Reconstruction", href="/create-wire-reconstruction"),
                                 dbc.DropdownMenuItem("New LaueGo Indexation", href="/create-peakindexing"),
+                                dbc.DropdownMenuItem("New LaueMatching Indexation", href="/create-lauematching"),
                                 dbc.DropdownMenuItem(divider=True),
                                 # dbc.DropdownMenuItem("Update Current DB", id="update-db"),
                                 # dbc.DropdownMenuItem("Save as New DB", id="save-new-db"),
