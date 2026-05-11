@@ -165,21 +165,31 @@ def test_enqueue_job_supports_custom_rq_id_and_strips_queue_kwargs(monkeypatch):
     assert "rq_job_id" not in queued_kwargs
 
 
-def test_enqueue_peakindexing_creates_chunk_jobs_and_metadata(queue_db, monkeypatch):
+def test_enqueue_peakindexing_creates_chunk_jobs_and_metadata(queue_db, monkeypatch, tmp_path):
     fake_queue = FakeQueue()
     fake_redis = FakeRedis()
     monkeypatch.setattr(enqueue, "job_queue", fake_queue)
     monkeypatch.setattr(batch, "redis_conn", fake_redis)
 
+    geometry_file = tmp_path / "geo.xml"
+    crystal_file = tmp_path / "crystal.xtal"
+    output_dir = tmp_path / "out"
+    geometry_file.write_text("geo", encoding="utf-8")
+    crystal_file.write_text("crystal", encoding="utf-8")
+
     with session_utils.get_session() as session:
         add_job_with_subjobs(session, job_id=1, subjob_count=10)
+
+    args = peakindex_args()
+    args["geometry_file"] = str(geometry_file)
+    args["crystal_file"] = str(crystal_file)
 
     result = enqueue.enqueue_peakindexing(
         1,
         input_files=[f"input_{i}.tif" for i in range(10)],
-        output_files=["/out"] * 10,
+        output_files=[str(output_dir)] * 10,
         queue_batch_size=3,
-        **peakindex_args(),
+        **args,
     )
 
     assert result == "batch_1"
@@ -197,6 +207,8 @@ def test_enqueue_peakindexing_creates_chunk_jobs_and_metadata(queue_db, monkeypa
     assert meta["queue_mode"] == "chunked"
     assert meta["rq_job_ids"] == [job["kwargs"]["job_id"] for job in fake_queue.enqueued]
     assert meta["chunk_subjob_ids"] == [[100, 101, 102], [103, 104, 105], [106, 107, 108], [109]]
+    assert (output_dir / "params" / geometry_file.name).read_text(encoding="utf-8") == "geo"
+    assert (output_dir / "params" / crystal_file.name).read_text(encoding="utf-8") == "crystal"
 
 
 def test_notify_subjobs_completed_batches_and_enqueues_coordinator_once(monkeypatch):

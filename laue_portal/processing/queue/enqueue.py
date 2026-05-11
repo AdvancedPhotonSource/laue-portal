@@ -1,6 +1,8 @@
 """RQ enqueue APIs for Laue processing jobs."""
 
 import logging
+import os
+import shutil
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -316,6 +318,12 @@ def enqueue_peakindexing(
         )
 
     output_dir = output_files[0] if output_files else ""
+    if output_dir:
+        params_dir = os.path.join(output_dir, "params")
+        os.makedirs(params_dir, exist_ok=True)
+        shutil.copy2(geometry_file, params_dir)
+        shutil.copy2(crystal_file, params_dir)
+
     subjob_specs = [
         {"subjob_id": subjob.subjob_id, "input_file": input_files[i], "output_file": output_files[i]}
         for i, subjob in enumerate(subjob_data)
