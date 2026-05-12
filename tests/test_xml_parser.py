@@ -242,6 +242,17 @@ class TestGetAllIndexedPeaks:
             "qz",
             "rms_error",
             "goodness",
+            "n_peaks",
+            "energy",
+            "q_magnitude",
+            "hwhm_x",
+            "hwhm_y",
+            "aspect_ratio",
+            "tilt",
+            "chisq",
+            "input_image",
+            "pattern_n_indexed",
+            "pattern_indexed_fraction",
         ]
         for key in expected:
             assert key in rows[0], f"Missing key: {key}"
@@ -263,6 +274,20 @@ class TestGetAllIndexedPeaks:
             if row["x_pixel"] is not None:
                 assert 0 <= row["x_pixel"] <= 2048
                 assert 0 <= row["y_pixel"] <= 2048
+
+    def test_optional_peak_fields(self, parsed):
+        row = get_all_indexed_peaks(parsed)[0]
+        assert row["n_peaks"] == 12
+        assert abs(row["energy"] - 20.0) < 0.01
+        assert abs(row["q_magnitude"] - 1.003245) < 0.0001
+        assert row["hwhm_x"] is None
+        assert row["hwhm_y"] is None
+        assert row["aspect_ratio"] is None
+        assert row["tilt"] is None
+        assert row["chisq"] is None
+        assert row["input_image"] == "test/image_001.h5"
+        assert row["pattern_n_indexed"] == 9
+        assert abs(row["pattern_indexed_fraction"] - 0.75) < 0.001
 
 
 # ---------------------------------------------------------------------------

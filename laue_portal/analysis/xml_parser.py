@@ -335,6 +335,10 @@ def get_step_peaks(parsed: dict, step_index: int) -> dict | None:
     qz = _float_array_from_el(peaks_el, "Qz")
     intens = _float_array_from_el(peaks_el, "Intens")
     integral = _float_array_from_el(peaks_el, "Integral")
+    hwhm_x = _float_array_from_el(peaks_el, "hwhmX")
+    hwhm_y = _float_array_from_el(peaks_el, "hwhmY")
+    tilt = _float_array_from_el(peaks_el, "tilt")
+    chisq = _float_array_from_el(peaks_el, "chisq")
 
     n_peaks = int(peaks_el.get("Npeaks", "0"))
 
@@ -386,7 +390,13 @@ def get_step_peaks(parsed: dict, step_index: int) -> dict | None:
         "q_vectors": q_vectors,
         "intensities": intens,
         "integrals": integral,
+        "hwhm_x": hwhm_x,
+        "hwhm_y": hwhm_y,
+        "tilt": tilt,
+        "chisq": chisq,
         "n_peaks": n_peaks,
+        "peak_attrs": dict(peaks_el.attrib),
+        "input_image": _text(detector_el, "inputImage"),
         "patterns": patterns,
     }
 
@@ -516,6 +526,9 @@ def get_all_indexed_peaks(parsed: dict) -> list[dict]:
             continue
 
         scan_num = int(parsed["scan_nums"][si])
+        n_peaks = step_peaks["n_peaks"]
+        peak_attrs = step_peaks.get("peak_attrs", {})
+        energy = _safe_float(parsed["energies"][si])
 
         for pat in step_peaks["patterns"]:
             if pat["hkl"] is None or pat["peak_indices"] is None:
@@ -558,13 +571,41 @@ def get_all_indexed_peaks(parsed: dict) -> list[dict]:
                     row["integral"] = None
 
                 if step_peaks["q_vectors"] is not None and pk_i < len(step_peaks["q_vectors"]):
-                    row["qx"] = float(step_peaks["q_vectors"][pk_i, 0])
-                    row["qy"] = float(step_peaks["q_vectors"][pk_i, 1])
-                    row["qz"] = float(step_peaks["q_vectors"][pk_i, 2])
+                    qx_val = float(step_peaks["q_vectors"][pk_i, 0])
+                    qy_val = float(step_peaks["q_vectors"][pk_i, 1])
+                    qz_val = float(step_peaks["q_vectors"][pk_i, 2])
+                    row["qx"] = qx_val
+                    row["qy"] = qy_val
+                    row["qz"] = qz_val
+                    row["q_magnitude"] = float(np.sqrt(qx_val**2 + qy_val**2 + qz_val**2))
                 else:
                     row["qx"] = None
                     row["qy"] = None
                     row["qz"] = None
+                    row["q_magnitude"] = None
+
+                row["hwhm_x"] = _array_value(step_peaks.get("hwhm_x"), pk_i)
+                row["hwhm_y"] = _array_value(step_peaks.get("hwhm_y"), pk_i)
+                row["tilt"] = _array_value(step_peaks.get("tilt"), pk_i)
+                row["chisq"] = _array_value(step_peaks.get("chisq"), pk_i)
+                if row["hwhm_x"] is not None and row["hwhm_y"] not in (None, 0):
+                    row["aspect_ratio"] = row["hwhm_x"] / row["hwhm_y"]
+                else:
+                    row["aspect_ratio"] = None
+
+                row["n_peaks"] = n_peaks
+                row["energy"] = energy
+                row["input_image"] = step_peaks.get("input_image")
+                row["peak_shape"] = peak_attrs.get("peakShape")
+                row["boxsize"] = _safe_float(peak_attrs.get("boxsize"))
+                row["min_width"] = _safe_float(peak_attrs.get("minwidth"))
+                row["max_width"] = _safe_float(peak_attrs.get("maxwidth"))
+                row["min_separation"] = _safe_float(peak_attrs.get("min_separation"))
+                row["pattern_n_indexed"] = pat["n_indexed"]
+                if n_peaks:
+                    row["pattern_indexed_fraction"] = pat["n_indexed"] / n_peaks
+                else:
+                    row["pattern_indexed_fraction"] = None
 
                 rows.append(row)
 
@@ -604,6 +645,13 @@ def _float_array(parent, tag: str) -> np.ndarray | None:
         return np.fromstring(text, sep=" ")
     except ValueError:
         return None
+
+
+def _array_value(values, index: int) -> float | None:
+    """Return one optional numeric value from a parsed XML array."""
+    if values is None or index >= len(values):
+        return None
+    return _safe_float(values[index])
 
 
 def _safe_float(value) -> float | None:

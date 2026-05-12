@@ -108,6 +108,22 @@ def test_peak_table_creates_div():
     assert hasattr(table, "children")
 
 
+def test_peak_table_has_column_picker_and_hidden_options():
+    peaks = get_all_indexed_peaks(_parsed())
+    table = make_peak_table(peaks)
+    layout = table.to_plotly_json()
+    table_children = layout["props"]["children"]
+    content = table_children[1]
+    selector, grid_wrap = content.to_plotly_json()["props"]["children"]
+    assert selector.to_plotly_json()["props"]["children"][0].to_plotly_json()["props"]["children"] == "Columns"
+
+    grid = grid_wrap.to_plotly_json()["props"]["children"]
+    cols = {col["field"]: col for col in grid.columnDefs}
+    assert cols["hwhm_x"]["hide"] is True
+    assert cols["q_magnitude"]["hide"] is True
+    assert cols["step_index"].get("hide") is False
+
+
 def test_pattern_table_creates_div():
     patterns = get_all_patterns(_parsed())
     table = make_pattern_table(patterns)

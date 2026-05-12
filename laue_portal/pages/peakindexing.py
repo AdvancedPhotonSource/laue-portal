@@ -1288,6 +1288,39 @@ def update_pattern_table(xml_path):
 
 
 # ---------------------------------------------------------------------------
+# Callback: show/hide indexed peak table columns
+# ---------------------------------------------------------------------------
+
+
+@callback(
+    Output("indexed-peaks-grid", "columnDefs"),
+    Input("peak-columns-default", "value"),
+    Input("peak-columns-geometry", "value"),
+    Input("peak-columns-fit", "value"),
+    Input("peak-columns-search", "value"),
+    Input("peak-columns-indexing", "value"),
+    State("indexed-peaks-grid", "columnDefs"),
+    prevent_initial_call=True,
+)
+def update_peak_columns(default_cols, geometry_cols, fit_cols, search_cols, indexing_cols, column_defs):
+    if not column_defs:
+        raise PreventUpdate
+
+    visible = set(default_cols or [])
+    visible.update(geometry_cols or [])
+    visible.update(fit_cols or [])
+    visible.update(search_cols or [])
+    visible.update(indexing_cols or [])
+
+    for col_def in column_defs:
+        field = col_def.get("field")
+        if field:
+            col_def["hide"] = field not in visible
+
+    return column_defs
+
+
+# ---------------------------------------------------------------------------
 # Callback: show/hide indexed pattern table columns
 # ---------------------------------------------------------------------------
 
