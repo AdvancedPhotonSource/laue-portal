@@ -8,12 +8,14 @@ sys.path.insert(0, project_root)
 
 from laue_portal.analysis.xml_parser import (
     get_all_indexed_peaks,
+    get_all_patterns,
     parse_indexing_xml,
 )
 from laue_portal.components.visualization.orientation_map import (
     make_orientation_map,
     make_orientation_map_3d,
 )
+from laue_portal.components.visualization.pattern_table import make_pattern_table
 from laue_portal.components.visualization.peak_table import make_peak_table
 from laue_portal.components.visualization.quality_map import (
     make_quality_map,
@@ -102,5 +104,12 @@ def test_quality_map_3d_all_metrics():
 def test_peak_table_creates_div():
     peaks = get_all_indexed_peaks(_parsed())
     table = make_peak_table(peaks)
+    assert table is not None
+    assert hasattr(table, "children")
+
+
+def test_pattern_table_creates_div():
+    patterns = get_all_patterns(_parsed())
+    table = make_pattern_table(patterns)
     assert table is not None
     assert hasattr(table, "children")

@@ -15,6 +15,7 @@ sys.path.insert(0, project_root)
 
 from laue_portal.analysis.xml_parser import (
     get_all_indexed_peaks,
+    get_all_patterns,
     get_step_peaks,
     parse_indexing_xml,
     positions_hf,
@@ -151,6 +152,65 @@ class TestGetStepPeaks:
 
     def test_negative_index_returns_none(self, parsed):
         assert get_step_peaks(parsed, -1) is None
+
+
+# ---------------------------------------------------------------------------
+# get_all_patterns tests
+# ---------------------------------------------------------------------------
+
+
+class TestGetAllPatterns:
+    def test_returns_list(self, parsed):
+        assert isinstance(get_all_patterns(parsed), list)
+
+    def test_total_rows(self, parsed):
+        rows = get_all_patterns(parsed)
+        assert len(rows) == 5
+
+    def test_has_expected_keys(self, parsed):
+        rows = get_all_patterns(parsed)
+        expected = [
+            "step_index",
+            "step_scan_num",
+            "pattern_num",
+            "rank",
+            "n_indexed",
+            "n_peaks",
+            "indexed_fraction",
+            "rms_error",
+            "goodness",
+            "n_patterns",
+            "x_sample",
+            "y_sample",
+            "z_sample",
+            "h_sample",
+            "f_sample",
+            "depth",
+            "astar",
+            "bstar",
+            "cstar",
+            "structure",
+            "space_group",
+        ]
+        for key in expected:
+            assert key in rows[0], f"Missing key: {key}"
+
+    def test_pattern_quality_values(self, parsed):
+        row = get_all_patterns(parsed)[0]
+        assert row["step_index"] == 0
+        assert row["step_scan_num"] == 1001
+        assert row["pattern_num"] == 0
+        assert row["n_indexed"] == 9
+        assert row["n_peaks"] == 12
+        assert abs(row["indexed_fraction"] - 0.75) < 0.001
+        assert abs(row["rms_error"] - 0.005) < 0.0001
+        assert abs(row["goodness"] - 150.0) < 0.01
+
+    def test_recip_lattice_vectors_are_formatted(self, parsed):
+        row = get_all_patterns(parsed)[0]
+        assert row["astar"] == "(-10, 5, -6)"
+        assert row["bstar"] == "(-15, -2, -1)"
+        assert row["cstar"] == "(-2, 13, 8)"
 
 
 # ---------------------------------------------------------------------------

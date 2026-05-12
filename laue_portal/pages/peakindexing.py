@@ -598,7 +598,7 @@ _viz_tabs = dbc.Tabs(
             ],
         ),
         # ==================================================================
-        # Tab: Peaks — full-width table
+        # Tab: Peaks - full-width table
         # ==================================================================
         dbc.Tab(
             label="Peaks",
@@ -609,6 +609,22 @@ _viz_tabs = dbc.Tabs(
                     className="pi-viz-table-wrap",
                     children=[
                         html.Div(id="peak-table-container"),
+                    ],
+                ),
+            ],
+        ),
+        # ==================================================================
+        # Tab: Patterns - full-width table
+        # ==================================================================
+        dbc.Tab(
+            label="Patterns",
+            tab_id="tab-patterns",
+            children=[
+                html.Div(
+                    id="tab-patterns-content",
+                    className="pi-viz-table-wrap",
+                    children=[
+                        html.Div(id="pattern-table-container"),
                     ],
                 ),
             ],
@@ -1240,6 +1256,66 @@ def update_peak_table(xml_path):
         return html.Div(
             dbc.Alert(f"Could not load peak table: {e}", color="warning"),
         )
+
+
+# ---------------------------------------------------------------------------
+# Callback: populate indexed patterns table when XML is available
+# ---------------------------------------------------------------------------
+
+
+@callback(
+    Output("pattern-table-container", "children"),
+    Input("peakindexing-xml-path", "data"),
+    prevent_initial_call=True,
+)
+def update_pattern_table(xml_path):
+    if not xml_path:
+        raise PreventUpdate
+
+    try:
+        from laue_portal.analysis.xml_parser import get_all_patterns, parse_indexing_xml
+        from laue_portal.components.visualization.pattern_table import make_pattern_table
+
+        parsed = parse_indexing_xml(xml_path)
+        patterns = get_all_patterns(parsed)
+        return make_pattern_table(patterns)
+    except Exception as e:
+        print(f"Error creating pattern table: {e}")
+        traceback.print_exc()
+        return html.Div(
+            dbc.Alert(f"Could not load pattern table: {e}", color="warning"),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Callback: show/hide indexed pattern table columns
+# ---------------------------------------------------------------------------
+
+
+@callback(
+    Output("indexed-patterns-grid", "columnDefs"),
+    Input("pattern-columns-default", "value"),
+    Input("pattern-columns-position", "value"),
+    Input("pattern-columns-run", "value"),
+    Input("pattern-columns-detail", "value"),
+    State("indexed-patterns-grid", "columnDefs"),
+    prevent_initial_call=True,
+)
+def update_pattern_columns(default_cols, position_cols, run_cols, detail_cols, column_defs):
+    if not column_defs:
+        raise PreventUpdate
+
+    visible = set(default_cols or [])
+    visible.update(position_cols or [])
+    visible.update(run_cols or [])
+    visible.update(detail_cols or [])
+
+    for col_def in column_defs:
+        field = col_def.get("field")
+        if field:
+            col_def["hide"] = field not in visible
+
+    return column_defs
 
 
 # ---------------------------------------------------------------------------

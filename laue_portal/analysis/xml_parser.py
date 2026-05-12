@@ -368,6 +368,17 @@ def get_step_peaks(parsed: dict, step_index: int) -> dict | None:
                     pat_info["hkl"] = np.column_stack([h, k, l])
                 if pk_idx is not None:
                     pat_info["peak_indices"] = pk_idx
+            recip_el = pat_el.find("recip_lattice")
+            if recip_el is not None:
+                astar = _float_array(recip_el, "astar")
+                bstar = _float_array(recip_el, "bstar")
+                cstar = _float_array(recip_el, "cstar")
+                if astar is not None and bstar is not None and cstar is not None:
+                    pat_info["recip_lattice"] = np.array([astar, bstar, cstar])
+                else:
+                    pat_info["recip_lattice"] = None
+            else:
+                pat_info["recip_lattice"] = None
             patterns.append(pat_info)
 
     return {
@@ -378,6 +389,109 @@ def get_step_peaks(parsed: dict, step_index: int) -> dict | None:
         "n_peaks": n_peaks,
         "patterns": patterns,
     }
+
+
+def get_all_patterns(parsed: dict) -> list[dict]:
+    """
+    Build a flat list of indexed pattern/grain solutions across all steps.
+
+    Useful for a pattern-level table where each row summarizes one indexed
+    solution rather than one indexed peak.
+    """
+    rows = []
+    n_steps = len(parsed["_steps"])
+    pos_hf = parsed.get("positions_hf")
+
+    for si in range(n_steps):
+        step_info = parsed["_steps"][si]
+        indexing_el = step_info.get("indexing_el")
+        if indexing_el is None:
+            continue
+
+        patterns = indexing_el.findall("pattern")
+        if not patterns:
+            continue
+
+        scan_num = int(parsed["scan_nums"][si])
+        n_patterns = _safe_int(indexing_el.get("Npatterns"))
+        n_peaks = _safe_int(indexing_el.get("Npeaks"))
+        parent_n_indexed = _safe_int(indexing_el.get("Nindexed"))
+        energy = _safe_float(parsed["energies"][si])
+        depth = _safe_float(parsed["depths"][si])
+        x_pos = _safe_float(parsed["positions"][si, 0])
+        y_pos = _safe_float(parsed["positions"][si, 1])
+        z_pos = _safe_float(parsed["positions"][si, 2])
+        h_pos = _safe_float(pos_hf[si, 0]) if pos_hf is not None else None
+        f_pos = _safe_float(pos_hf[si, 1]) if pos_hf is not None else None
+
+        detector_el = step_info.get("detector_el")
+        input_image = _text(detector_el, "inputImage") if detector_el is not None else None
+
+        for rank, pat_el in enumerate(patterns):
+            pat_n_indexed = _safe_int(pat_el.get("Nindexed"))
+            indexed_fraction = None
+            if pat_n_indexed is not None and n_peaks not in (None, 0):
+                indexed_fraction = pat_n_indexed / n_peaks
+
+            row = {
+                "step_index": si,
+                "step_scan_num": scan_num,
+                "pattern_num": _safe_int(pat_el.get("num")),
+                "rank": rank,
+                "n_indexed": pat_n_indexed,
+                "n_peaks": n_peaks,
+                "indexed_fraction": indexed_fraction,
+                "rms_error": _safe_float(pat_el.get("rms_error")),
+                "goodness": _safe_float(pat_el.get("goodness")),
+                "n_patterns": n_patterns,
+                "parent_n_indexed": parent_n_indexed,
+                "x_sample": x_pos,
+                "y_sample": y_pos,
+                "z_sample": z_pos,
+                "h_sample": h_pos,
+                "f_sample": f_pos,
+                "depth": depth,
+                "energy": energy,
+                "structure": parsed.get("structure_desc") or None,
+                "space_group": parsed.get("space_group") or None,
+                "index_program": indexing_el.get("indexProgram"),
+                "kev_max_calc": _safe_float(indexing_el.get("keVmaxCalc")),
+                "kev_max_test": _safe_float(indexing_el.get("keVmaxTest")),
+                "angle_tolerance": _safe_float(indexing_el.get("angleTolerance")),
+                "cone": _safe_float(indexing_el.get("cone")),
+                "hkl_prefer": indexing_el.get("hklPrefer"),
+                "execution_time": _safe_float(indexing_el.get("executionTime")),
+                "input_image": input_image,
+            }
+
+            recip_el = pat_el.find("recip_lattice")
+            if recip_el is not None:
+                row["astar"] = _format_vector(_float_array(recip_el, "astar"))
+                row["bstar"] = _format_vector(_float_array(recip_el, "bstar"))
+                row["cstar"] = _format_vector(_float_array(recip_el, "cstar"))
+            else:
+                row["astar"] = None
+                row["bstar"] = None
+                row["cstar"] = None
+
+            hkl_el = pat_el.find("hkl_s")
+            if hkl_el is not None:
+                pk_idx = _int_array(hkl_el, "PkIndex")
+                h = _int_array(hkl_el, "h")
+                k = _int_array(hkl_el, "k")
+                l = _int_array(hkl_el, "l")
+                row["indexed_peak_ids"] = " ".join(str(int(v)) for v in pk_idx) if pk_idx is not None else None
+                if h is not None and k is not None and l is not None:
+                    row["hkl_count"] = int(min(len(h), len(k), len(l)))
+                else:
+                    row["hkl_count"] = None
+            else:
+                row["indexed_peak_ids"] = None
+                row["hkl_count"] = None
+
+            rows.append(row)
+
+    return rows
 
 
 def get_all_indexed_peaks(parsed: dict) -> list[dict]:
@@ -490,6 +604,32 @@ def _float_array(parent, tag: str) -> np.ndarray | None:
         return np.fromstring(text, sep=" ")
     except ValueError:
         return None
+
+
+def _safe_float(value) -> float | None:
+    """Parse optional floats, treating NaN/None-ish values as missing."""
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if np.isnan(parsed):
+        return None
+    return parsed
+
+
+def _safe_int(value) -> int | None:
+    """Parse optional ints from XML attributes."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _format_vector(values: np.ndarray | None) -> str | None:
+    """Format a 3-vector compactly for table display."""
+    if values is None or len(values) == 0:
+        return None
+    return "(" + ", ".join(f"{float(v):.4g}" for v in values) + ")"
 
 
 def _float_array_from_el(parent, tag: str) -> np.ndarray | None:
