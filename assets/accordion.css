@@ -1,3 +1,33 @@
+:root {
+  --bs-primary: #172733;
+  --bs-primary-rgb: 23, 39, 51;
+  --bs-primary-text-emphasis: #172733;
+  --bs-primary-bg-subtle: #d1d4d6;
+  --bs-primary-border-subtle: #a2a9ad;
+}
+
+.bg-primary,
+.navbar.bg-primary {
+  --bs-bg-opacity: 1;
+  background-color: rgba(var(--bs-primary-rgb), var(--bs-bg-opacity)) !important;
+}
+
+.btn-primary {
+  --bs-btn-bg: #172733;
+  --bs-btn-border-color: #172733;
+  --bs-btn-hover-bg: #203644;
+  --bs-btn-hover-border-color: #203644;
+  --bs-btn-active-bg: #0f1a22;
+  --bs-btn-active-border-color: #0f1a22;
+  --bs-btn-disabled-bg: #172733;
+  --bs-btn-disabled-border-color: #172733;
+}
+
+.text-primary {
+  --bs-text-opacity: 1;
+  color: rgba(var(--bs-primary-rgb), var(--bs-text-opacity)) !important;
+}
+
 /* When the item is OPEN (not .collapsed), remove the header's bottom line */
 .accordion-item.no-border-bottom > .accordion-header > .accordion-button:not(.collapsed) {
   box-shadow: none !important;      /* this is the “line” you see */

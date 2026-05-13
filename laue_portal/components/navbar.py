@@ -6,7 +6,15 @@ from laue_portal.processing.queue.core import REDIS_CONNECTED_AT_STARTUP
 navbar = dbc.Navbar(
     dbc.Container(
         [
-            dbc.NavbarBrand("3DMN Portal", href="/", id="navbar-brand"),
+            dbc.NavbarBrand(
+                [
+                    html.Img(src="/assets/portal_icon.svg", height="45", className="me-2"),
+                    "3DMN Portal",
+                ],
+                href="/",
+                id="navbar-brand",
+                className="d-flex align-items-center",
+            ),
             html.Div(
                 [
                     html.I(
@@ -35,8 +43,6 @@ navbar = dbc.Navbar(
                                 dbc.DropdownMenuItem("New CA Reconstruction", href="/create-reconstruction"),
                                 dbc.DropdownMenuItem("New Wire Reconstruction", href="/create-wire-reconstruction"),
                                 dbc.DropdownMenuItem("New LaueGo Indexation", href="/create-peakindexing"),
-                                dbc.DropdownMenuItem(divider=True),
-                                dbc.DropdownMenuItem("Activate Admin Mode", id="activate-admin"),
                             ],
                         ),
                     ],
@@ -50,7 +56,7 @@ navbar = dbc.Navbar(
         ],
         fluid=True,
     ),
-    className="py-3",
+    className="py-2",
     color="primary",
     dark=True,
 )

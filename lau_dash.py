@@ -34,7 +34,7 @@ def ensure_database_exists():
 # This ensures the status is set before pages (and navbar) are imported
 init_redis_status()
 
-# Stylesheets (Bootstrap Flatly, DBC templates, Bootstrap Icons) are served
+# Stylesheets (Bootstrap Zephyr, DBC templates, Bootstrap Icons) are served
 # locally from the assets/ directory for air-gapped deployment.  Run
 # ``python scripts/download_assets.py`` to populate them from CDNs.
 app = dash.Dash(
@@ -43,7 +43,6 @@ app = dash.Dash(
     suppress_callback_exceptions=True,
     pages_folder="laue_portal/pages",
 )
-
 
 app.layout = dash.page_container
 
