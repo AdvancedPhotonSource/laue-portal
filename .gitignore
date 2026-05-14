@@ -168,8 +168,10 @@ modified/
 config.yaml
 
 # External hosted resources
-assets/
+assets/*
 !assets/customAgGridFunctions.js
+!assets/04-form-layout.css
+!assets/04-form-layout.js
 !assets/05-peakindex-viz.css
 !assets/accordion.css
 !assets/favicon.ico

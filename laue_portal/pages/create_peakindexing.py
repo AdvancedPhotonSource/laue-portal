@@ -14,7 +14,6 @@ import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.session_utils as session_utils
-from laue_portal.components.form_base import _field
 from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
 from laue_portal.components.validation_alerts import (
     apply_validation_highlights,
@@ -32,7 +31,6 @@ from laue_portal.database.db_utils import (
 from laue_portal.pages.callback_registrars import (
     _merge_field_values,
     register_check_filenames_callback,
-    register_load_file_indices_callback,
     register_update_path_fields_callback,
 )
 from laue_portal.processing.queue.core import STATUS_REVERSE_MAPPING
@@ -191,7 +189,8 @@ dash.register_page(__name__)
 layout = dbc.Container(
     [
         html.Div(
-            [
+            className="lp-form-page",
+            children=[
                 navbar.navbar,
                 dcc.Location(id="url-create-peakindexing", refresh=False),
                 dbc.Alert(
@@ -213,77 +212,40 @@ layout = dbc.Container(
                     is_open=False,
                     color="success",
                 ),
-                html.Hr(),
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            html.H3(id="peakindex-title", children="New Peak Indexing"),
-                            width="auto",  # shrink to content
+                html.Div(
+                    className="lp-form-masthead",
+                    children=[
+                        html.Div(
+                            [
+                                html.Div("Indexations / New", className="lp-form-breadcrumb"),
+                                html.H2(id="peakindex-title", children="New Peak Indexing"),
+                            ]
                         ),
-                        dbc.Col(
-                            dbc.Button(
-                                "Set from ...",
-                                id="upload-peakindexing-config",
-                                color="secondary",
-                                style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
-                            ),
-                            width="auto",
-                            className="ms-3",  # small gap from title
-                        ),
-                        dbc.Col(
-                            dbc.Button(
-                                "Validate",
-                                id="peakindex-validate-btn",
-                                color="secondary",
-                                style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
-                            ),
-                            width="auto",
-                            className="ms-3",  # small gap from title
-                        ),
-                        dbc.Col(
-                            dbc.Button(
-                                "Submit",
-                                id="submit_peakindexing",
-                                color="primary",
-                                style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
-                            ),
-                            width="auto",
-                            className="ms-2",
+                        html.Div(
+                            className="lp-form-actions",
+                            children=[
+                                dbc.Button(
+                                    [html.I(className="bi bi-check2-circle me-1"), "Validate"],
+                                    id="peakindex-validate-btn",
+                                    color="primary",
+                                    outline=True,
+                                ),
+                                dbc.Button(
+                                    [html.I(className="bi bi-send me-1"), "Submit"],
+                                    id="submit_peakindexing",
+                                    color="success",
+                                ),
+                            ],
                         ),
                     ],
-                    className="g-2",  # gutter between cols
-                    justify="center",  # CENTER horizontally
-                    align="center",  # CENTER vertically
                 ),
-                html.Hr(),
-                validation_alerts,
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            _field(
-                                "Author",
-                                "author",
-                                kwargs={
-                                    "type": "text",
-                                    "placeholder": "Required! Enter author or Tag for the reconstruction",
-                                },
-                            ),
-                            md=12,
-                            xs=12,  # full row on small, wide on medium+
-                            width="auto",
-                            style={"minWidth": "300px"},
-                        ),
-                    ],
-                    justify="center",
-                    className="mb-3",
-                    align="center",
-                ),
+                html.Div(validation_alerts, className="lp-form-validation"),
                 peakindex_form,
                 dcc.Store(id="peakindex-data-loaded-signal"),
             ],
         )
     ],
-    className="dbc",
+    className="dbc px-0",
     fluid=True,
 )
 
@@ -977,6 +939,70 @@ def submit_parameters(
             )
 
 
+@dash.callback(
+    Output("boxsize", "value"),
+    Output("maxRfactor", "value"),
+    Output("threshold", "value"),
+    Output("thresholdRatio", "value"),
+    Output("min_size", "value"),
+    Output("min_separation", "value"),
+    Output("max_number", "value"),
+    Output("peakShape", "value"),
+    Output("smooth", "value"),
+    Output("cosmicFilter", "value"),
+    Input("peakindex-set-default-peak-search-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def set_peak_search_defaults(n_clicks):
+    if not n_clicks:
+        raise PreventUpdate
+    return (
+        PEAKINDEX_DEFAULTS.get("boxsize"),
+        PEAKINDEX_DEFAULTS.get("maxRfactor"),
+        PEAKINDEX_DEFAULTS.get("threshold"),
+        PEAKINDEX_DEFAULTS.get("thresholdRatio"),
+        PEAKINDEX_DEFAULTS.get("min_size"),
+        PEAKINDEX_DEFAULTS.get("min_separation"),
+        PEAKINDEX_DEFAULTS.get("max_number"),
+        PEAKINDEX_DEFAULTS.get("peakShape"),
+        PEAKINDEX_DEFAULTS.get("smooth"),
+        PEAKINDEX_DEFAULTS.get("cosmicFilter"),
+    )
+
+
+@dash.callback(
+    Output("indexKeVmaxCalc", "value"),
+    Output("indexKeVmaxTest", "value"),
+    Output("indexAngleTolerance", "value"),
+    Output("indexHKL", "value"),
+    Output("indexCone", "value"),
+    Output("max_peaks", "value"),
+    Output("depth", "value"),
+    Input("peakindex-set-default-indexing-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def set_indexing_defaults(n_clicks):
+    if not n_clicks:
+        raise PreventUpdate
+    return (
+        PEAKINDEX_DEFAULTS.get("indexKeVmaxCalc"),
+        PEAKINDEX_DEFAULTS.get("indexKeVmaxTest"),
+        PEAKINDEX_DEFAULTS.get("indexAngleTolerance"),
+        "".join(
+            str(value)
+            for value in [
+                PEAKINDEX_DEFAULTS.get("indexH"),
+                PEAKINDEX_DEFAULTS.get("indexK"),
+                PEAKINDEX_DEFAULTS.get("indexL"),
+            ]
+            if value is not None
+        ),
+        PEAKINDEX_DEFAULTS.get("indexCone"),
+        PEAKINDEX_DEFAULTS.get("max_peaks"),
+        PEAKINDEX_DEFAULTS.get("depth"),
+    )
+
+
 # Register shared callbacks
 register_update_path_fields_callback(
     update_paths_id="peakindex-update-path-fields-btn",
@@ -990,17 +1016,6 @@ register_update_path_fields_callback(
     output_folder_id="outputFolder",
     build_template_func=build_output_folder_template,
     context="peakindex",
-)
-
-register_load_file_indices_callback(
-    button_id="peakindex-load-file-indices-btn",
-    data_loaded_signal_id="peakindex-data-loaded-signal",
-    data_path_id="data_path",
-    filename_prefix_id="filenamePrefix",
-    scan_points_id="scanPoints",
-    depth_range_id="depthRange",  # Peak indexing uses depth range
-    alert_id="alert-scan-loaded",
-    num_indices=2,
 )
 
 register_check_filenames_callback(

@@ -1,418 +1,232 @@
 import dash_bootstrap_components as dbc
 from dash import html, set_props
 
-from laue_portal.components.form_base import _ckbx, _field, _select, _stack
+from laue_portal.components.form_layout import (
+    form_check_row,
+    form_checkbox,
+    form_field,
+    form_field_with_button,
+    form_layout,
+    form_select,
+    form_textarea,
+    section_card,
+    section_sidebar,
+)
 from laue_portal.database.db_utils import make_IDnumber
 
-peakindex_form = dbc.Row(
-    [
-        dbc.Col(
-            dbc.Accordion(
-                [
-                    dbc.AccordionItem(
-                        [
-                            dbc.Row(
-                                [
-                                    dbc.Col(
-                                        _field(
-                                            "ID Number: SN# | WR# | MR# | PI#",
-                                            "IDnumber",
-                                            kwargs={
-                                                "type": "text",
-                                                "placeholder": "e.g. SN123456 or WR1 or MR3 or PI4",
-                                            },
-                                        ),
-                                        className="flex-grow-1",
-                                        style={"minWidth": 0},
-                                    ),
-                                    dbc.Col(
-                                        dbc.Button(
-                                            "Update path fields",
-                                            id="peakindex-update-path-fields-btn",
-                                            color="secondary",
-                                            size="md",
-                                            style={"minWidth": "220px", "whiteSpace": "nowrap"},
-                                        ),
-                                        width="auto",
-                                        className="d-flex justify-content-end",
-                                    ),
-                                ],
-                                className="mb-3",
-                                align="center",
-                            ),
-                            _field("Root Path", "root_path"),
-                            _field("Folder Path", "data_path"),
-                            dbc.Card(
-                                dbc.CardBody(
-                                    [
-                                        _stack(
-                                            [
-                                                dbc.Switch(
-                                                    id="files switch-switch",
-                                                    label="All Files",
-                                                    value=False,
-                                                ),
-                                            ]
-                                        ),
-                                        dbc.Row(
-                                            [
-                                                dbc.Col(
-                                                    html.Div(
-                                                        [
-                                                            _field(
-                                                                "Filename",
-                                                                "filenamePrefix",
-                                                                kwargs={
-                                                                    "type": "text",
-                                                                    "placeholder": "e.g. Si_%d.h5 or Si_*%d.h5",
-                                                                    "list": "peakindex-filename-templates",
-                                                                },
-                                                            ),
-                                                            html.Datalist(
-                                                                id="peakindex-filename-templates", children=[]
-                                                            ),
-                                                        ]
-                                                    ),
-                                                    className="flex-grow-1",
-                                                    style={"minWidth": 0},
-                                                ),
-                                                dbc.Col(
-                                                    dbc.Button(
-                                                        "Find file names",
-                                                        id="peakindex-check-filenames-btn",
-                                                        color="secondary",
-                                                        size="md",
-                                                        style={"minWidth": "220px", "whiteSpace": "nowrap"},
-                                                    ),
-                                                    width="auto",
-                                                    className="d-flex justify-content-end",
-                                                ),
-                                            ],
-                                            className="mb-3",
-                                            align="center",
-                                        ),
-                                        dbc.Row(
-                                            [
-                                                dbc.Col(
-                                                    _field(
-                                                        "Scan indices",
-                                                        "scanPoints",
-                                                        size="md",
-                                                        kwargs={
-                                                            "type": "text",
-                                                            "placeholder": "e.g. 1-10 or 1,5,8,9 or 1-4,10-21",
-                                                        },
-                                                    ),
-                                                    className="flex-grow-1",
-                                                    style={"minWidth": 0},
-                                                ),
-                                                dbc.Col(
-                                                    _field(
-                                                        "Depth indices",
-                                                        "depthRange",
-                                                        size="md",
-                                                        kwargs={
-                                                            "type": "text",
-                                                            "placeholder": "e.g. 1-10 or 1,5,8,9 or 1-4,10-21",
-                                                        },
-                                                    ),
-                                                    className="flex-grow-1",
-                                                    style={"minWidth": 0},
-                                                ),
-                                                dbc.Col(
-                                                    dbc.Button(
-                                                        "Load indices from file",
-                                                        id="peakindex-load-file-indices-btn",
-                                                        color="secondary",
-                                                        size="md",
-                                                        style={"minWidth": "220px", "whiteSpace": "nowrap"},
-                                                    ),
-                                                    width="auto",
-                                                    className="d-flex justify-content-end",
-                                                ),
-                                            ],
-                                            className="mb-2",
-                                            align="center",
-                                        ),
-                                    ],
-                                    className="p-2",
-                                ),
-                                className="mb-3",
-                            ),
-                            dbc.Row(
-                                [
-                                    dbc.Col(
-                                        _field(
-                                            "Geometry File",
-                                            "geoFile",
-                                            kwargs={
-                                                "type": "text",
-                                                "placeholder": "",
-                                            },
-                                        ),
-                                        className="flex-grow-1",
-                                        style={"minWidth": 0},
-                                    ),
-                                    dbc.Col(
-                                        dbc.Row(
-                                            [
-                                                dbc.Col(
-                                                    dbc.Button(
-                                                        "Load default",
-                                                        id="peakindex-load-default-geo-btn",
-                                                        color="secondary",
-                                                        size="md",
-                                                        style={"minWidth": "120px", "whiteSpace": "nowrap"},
-                                                    ),
-                                                    width="auto",
-                                                ),
-                                                dbc.Col(
-                                                    dbc.Button(
-                                                        "Load...",
-                                                        id="peakindex-load-from-geo-btn",
-                                                        color="secondary",
-                                                        size="md",
-                                                        style={"minWidth": "120px", "whiteSpace": "nowrap"},
-                                                    ),
-                                                    width="auto",
-                                                ),
-                                                dbc.Col(
-                                                    dbc.Button(
-                                                        "Edit",
-                                                        id="peakindex-edit-modify-params-btn",
-                                                        color="secondary",
-                                                        size="md",
-                                                        style={"minWidth": "120px", "whiteSpace": "nowrap"},
-                                                    ),
-                                                    width="auto",
-                                                ),
-                                            ],
-                                            className="g-2 justify-content-end",
-                                        ),
-                                        xs=12,
-                                        md="auto",
-                                        className="mb-3",
-                                    ),
-                                ],
-                                className="mb-3 g-2",
-                                align="center",
-                            ),
-                            _field("Output Path", "outputFolder"),
-                            _field(
-                                "Output XML",
-                                "outputXML",
-                                kwargs={
-                                    "type": "text",
-                                    "placeholder": "e.g. output.xml or /absolute/path/output.xml",
-                                },
-                            ),
-                        ],
-                        title="Files",
-                        item_id="item-1",
-                    ),
-                    dbc.AccordionItem(
-                        [
-                            html.Div(
-                                dbc.Row(
-                                    [
-                                        dbc.Col(
-                                            dbc.Button("Set to defaults", size="sm", color="light"),
-                                            width="auto",
-                                        ),
-                                        dbc.Col(
-                                            dbc.Button("Set from ...", size="sm", color="light"),
-                                            width="auto",
-                                        ),
-                                    ],
-                                    className="g-2 align-items-center",
-                                ),
-                                style={
-                                    "background": "var(--bs-accordion-active-bg)",
-                                    "padding": ".5rem 1rem",
-                                    "margin": "-1rem -1.25rem 1rem",
-                                    "borderTop": "none",
-                                    "borderBottom": "1px solid var(--bs-accordion-border-color)",
-                                },
-                            ),
-                            _stack(
-                                [
-                                    _field("Box Size [pixels]", "boxsize", size="md"),
-                                    _field("Max R-factor", "maxRfactor", size="md"),
-                                    _field("Threshold (empty -> auto)", "threshold", size="md"),
-                                    _field("Threshold Ratio (empty -> auto)", "thresholdRatio", size="md"),
-                                ]
-                            ),
-                            _stack(
-                                [
-                                    _field("Min Spot Size [pixels]", "min_size", size="md"),
-                                    _field("Min Spot Separation [pixels]", "min_separation", size="md"),
-                                    _field("Max No. of Spots (empty for all)", "max_number", size="md"),
-                                ]
-                            ),
-                            _stack(
-                                [
-                                    _select(
-                                        "Peak Shape",
-                                        "peakShape",
-                                        [
-                                            {"label": "Lorentzian", "value": "Lorentzian"},
-                                            {"label": "Gaussian", "value": "Gaussian"},
-                                        ],
-                                        size="md",
-                                        kwargs={"placeholder": "Select:"},
-                                    ),
-                                    _ckbx("Smooth peak before fitting", "smooth", size="md"),
-                                    _ckbx("Cosmic Filter", "cosmicFilter", size="md"),
-                                ]
-                            ),
-                            dbc.Row(
-                                [
-                                    dbc.Col(
-                                        _field(
-                                            "Mask File",
-                                            "maskFile",
-                                            kwargs={
-                                                "type": "text",
-                                                "placeholder": "",
-                                            },
-                                        ),
-                                        className="flex-grow-1",
-                                        style={"minWidth": 0},
-                                    ),
-                                    dbc.Col(
-                                        dbc.Button(
-                                            "Load...",
-                                            id="peakindex-load-mask-file-btn",
-                                            color="secondary",
-                                            size="md",
-                                            style={"minWidth": "220px", "whiteSpace": "nowrap"},
-                                        ),
-                                        width="auto",
-                                        className="d-flex justify-content-end",
-                                    ),
-                                ],
-                                className="mb-3",
-                                align="center",
-                            ),
-                        ],
-                        title="Peak Search Parameters",
-                        item_id="item-2",
-                        className="no-border-bottom",
-                    ),
-                    dbc.AccordionItem(
-                        [
-                            html.Div(
-                                dbc.Row(
-                                    [
-                                        dbc.Col(
-                                            dbc.Button("Set to defaults", size="sm", color="light"),
-                                            width="auto",
-                                        ),
-                                        dbc.Col(
-                                            dbc.Button("Set from ...", size="sm", color="light"),
-                                            width="auto",
-                                        ),
-                                    ],
-                                    className="g-2 align-items-center",
-                                ),
-                                style={
-                                    "background": "var(--bs-accordion-active-bg)",
-                                    "padding": ".5rem 1rem",
-                                    "margin": "-1rem -1.25rem 1rem",
-                                    "borderTop": "none",
-                                    "borderBottom": "1px solid var(--bs-accordion-border-color)",
-                                },
-                            ),
-                            dbc.Row(
-                                [
-                                    dbc.Col(
-                                        _field(
-                                            "Crystal Structure File",
-                                            "crystFile",
-                                            kwargs={
-                                                "type": "text",
-                                                "placeholder": "",
-                                            },
-                                        ),
-                                        className="flex-grow-1",
-                                        style={"minWidth": 0},
-                                    ),
-                                    dbc.Col(
-                                        dbc.Button(
-                                            "Load...",
-                                            id="peakindex-load-cryst-file-btn",
-                                            color="secondary",
-                                            size="md",
-                                            style={"minWidth": "220px", "whiteSpace": "nowrap"},
-                                        ),
-                                        width="auto",
-                                        className="d-flex justify-content-end",
-                                    ),
-                                ],
-                                className="mb-3",
-                                align="center",
-                            ),
-                            _stack(
-                                [
-                                    _field("Max Calc Energy [keV]", "indexKeVmaxCalc", size="md"),
-                                    _field("Max Test Energy [keV]", "indexKeVmaxTest", size="md"),
-                                    _field("Angle Tolerance [deg]", "indexAngleTolerance", size="md"),
-                                ]
-                            ),
-                            _stack(
-                                [
-                                    _field("Central HKL", "indexHKL", size="md"),
-                                    _field("Cone Angle [deg]", "indexCone", size="md"),
-                                    _field("Max no. of Spots (empty: 200)", "max_peaks", size="md"),
-                                ]
-                            ),
-                            _stack(
-                                [
-                                    _field("Depth [µm] (empty -> auto)", "depth", size="md"),
-                                ]
-                            ),
-                        ],
-                        title="Indexing Parameters",
-                        item_id="item-3",
-                        className="no-border-bottom",
-                    ),
-                    dbc.AccordionItem(
-                        [
-                            dbc.Row(
-                                [
-                                    dbc.Col(
-                                        [
-                                            html.P(html.Strong("Notes:")),
-                                        ],
-                                        width="auto",
-                                        align="start",
-                                    ),
-                                    dbc.Col(
-                                        dbc.Textarea(
-                                            id="notes",
-                                            style={"width": "100%", "minHeight": "100px"},
-                                        )
-                                    ),
-                                ],
-                                className="mb-3",
-                                align="start",
-                            )
-                        ],
-                        title="User Text",
-                        item_id="item-4",
-                    ),
-                ],
-                always_open=True,
-                start_collapsed=False,
-                active_item=["item-1", "item-2", "item-3", "item-4"],
+PEAKINDEX_SECTIONS = [
+    (
+        "Configuration",
+        [
+            ("Identity", "bi bi-person-badge", "#peakindex-sec-identity"),
+            ("File Paths", "bi bi-folder2-open", "#peakindex-sec-files"),
+            ("Scan Configuration", "bi bi-grid-3x3-gap", "#peakindex-sec-scan"),
+        ],
+    ),
+    (
+        "Parameters",
+        [
+            ("Peak Search", "bi bi-bullseye", "#peakindex-sec-peaks"),
+            ("Indexing", "bi bi-diagram-3", "#peakindex-sec-index"),
+        ],
+    ),
+    ("Other", [("Notes", "bi bi-journal-text", "#peakindex-sec-notes")]),
+]
+
+
+def build_peakindex_form(readonly=False, show_actions=True):
+    return form_layout(
+        section_sidebar(PEAKINDEX_SECTIONS),
+        [
+            section_card(
+                "Identity",
+                html.Div(
+                    className="lp-form-field-grid",
+                    children=[
+                        form_field_with_button(
+                            "ID Number",
+                            "IDnumber",
+                            "peakindex-update-path-fields-btn",
+                            "Update Paths",
+                            placeholder="SN123456 | WR1 | MR3 | PI4",
+                            readonly=readonly,
+                            show_button=show_actions,
+                        ),
+                        form_field(
+                            "Author",
+                            "author",
+                            placeholder="Required! Enter author or tag",
+                            wide=True,
+                            readonly=readonly,
+                        ),
+                    ],
+                ),
+                accent="slate",
+                icon_class="bi bi-person-badge",
+                anchor_id="peakindex-sec-identity",
             ),
-            xs=12,
-            className="px-0",
-        ),
-    ],
-    className="g-0",
-    style={"width": "100%", "overflowX": "auto"},
-)
+            section_card(
+                "File Paths",
+                html.Div(
+                    className="lp-form-field-grid",
+                    children=[
+                        form_field("Root Path", "root_path", wide=True, readonly=readonly),
+                        form_field("Folder Path", "data_path", wide=True, readonly=readonly),
+                        form_field("Geometry File", "geoFile", wide=True, readonly=readonly),
+                        form_field("Crystal Structure File", "crystFile", wide=True, readonly=readonly),
+                        form_field("Output Path", "outputFolder", wide=True, readonly=readonly),
+                        form_field(
+                            "Output XML",
+                            "outputXML",
+                            placeholder="e.g. output.xml or /absolute/path/output.xml",
+                            readonly=readonly,
+                        ),
+                        form_field("Mask File", "maskFile", readonly=readonly),
+                    ],
+                ),
+                accent="teal",
+                icon_class="bi bi-folder2-open",
+                anchor_id="peakindex-sec-files",
+            ),
+            section_card(
+                "Scan Configuration",
+                html.Div(
+                    className="lp-form-field-grid",
+                    children=[
+                        form_field_with_button(
+                            "Filename",
+                            "filenamePrefix",
+                            "peakindex-check-filenames-btn",
+                            "Find Matching Files",
+                            placeholder="e.g. Si_%d.h5 or Si_*%d.h5",
+                            datalist_id="peakindex-filename-templates",
+                            readonly=readonly,
+                            show_button=show_actions,
+                        ),
+                        form_field(
+                            "Scan Indices",
+                            "scanPoints",
+                            placeholder="e.g. 1-10 or 1,5,8,9 or 1-4,10-21",
+                            readonly=readonly,
+                        ),
+                        form_field(
+                            "Depth Indices",
+                            "depthRange",
+                            placeholder="e.g. 1-10 or 1,5,8,9 or 1-4,10-21",
+                            readonly=readonly,
+                        ),
+                    ],
+                ),
+                accent="blue",
+                icon_class="bi bi-grid-3x3-gap",
+                anchor_id="peakindex-sec-scan",
+            ),
+            section_card(
+                "Peak Search Parameters",
+                html.Div(
+                    className="lp-form-field-grid--three",
+                    children=[
+                        form_field("Box Size [px]", "boxsize", readonly=readonly),
+                        form_field("Max R-factor", "maxRfactor", readonly=readonly),
+                        form_field("Threshold", "threshold", placeholder="empty -> auto", readonly=readonly),
+                        form_field(
+                            "Threshold Ratio",
+                            "thresholdRatio",
+                            placeholder="empty -> auto",
+                            readonly=readonly,
+                        ),
+                        form_field("Min Spot Size [px]", "min_size", readonly=readonly),
+                        form_field("Min Spot Sep. [px]", "min_separation", readonly=readonly),
+                        form_field(
+                            "Max No. of Spots",
+                            "max_number",
+                            placeholder="empty for all",
+                            readonly=readonly,
+                        ),
+                        form_select(
+                            "Peak Shape",
+                            "peakShape",
+                            [
+                                {"label": "Lorentzian", "value": "Lorentzian"},
+                                {"label": "Gaussian", "value": "Gaussian"},
+                            ],
+                            disabled=readonly,
+                        ),
+                        html.Div(),
+                        form_check_row(
+                            form_checkbox("Smooth peak before fitting", "smooth", disabled=readonly),
+                            form_checkbox("Cosmic Filter", "cosmicFilter", disabled=readonly),
+                        ),
+                    ],
+                ),
+                accent="purple",
+                icon_class="bi bi-bullseye",
+                anchor_id="peakindex-sec-peaks",
+                header_actions=(
+                    dbc.Button(
+                        "Restore Default",
+                        id="peakindex-set-default-peak-search-btn",
+                        color="primary",
+                        outline=True,
+                        size="sm",
+                    )
+                    if show_actions
+                    else None
+                ),
+            ),
+            section_card(
+                "Indexing Parameters",
+                html.Div(
+                    className="lp-form-field-grid--three",
+                    children=[
+                        form_field("Max Calc Energy [keV]", "indexKeVmaxCalc", readonly=readonly),
+                        form_field("Max Test Energy [keV]", "indexKeVmaxTest", readonly=readonly),
+                        form_field("Angle Tolerance [deg]", "indexAngleTolerance", readonly=readonly),
+                        form_field("Central HKL", "indexHKL", readonly=readonly),
+                        form_field("Cone Angle [deg]", "indexCone", readonly=readonly),
+                        form_field("Max No. of Spots", "max_peaks", placeholder="empty: 200", readonly=readonly),
+                        form_field("Depth [um]", "depth", placeholder="empty -> auto", readonly=readonly),
+                    ],
+                ),
+                accent="rose",
+                icon_class="bi bi-diagram-3",
+                anchor_id="peakindex-sec-index",
+                header_actions=(
+                    dbc.Button(
+                        "Restore Default",
+                        id="peakindex-set-default-indexing-btn",
+                        color="primary",
+                        outline=True,
+                        size="sm",
+                    )
+                    if show_actions
+                    else None
+                ),
+            ),
+            section_card(
+                "Notes",
+                html.Div(
+                    className="lp-form-field-grid",
+                    children=[
+                        form_textarea(
+                            "Notes",
+                            "notes",
+                            placeholder="Optional notes about this indexing run...",
+                            readonly=readonly,
+                        )
+                    ],
+                ),
+                accent="gold",
+                icon_class="bi bi-journal-text",
+                anchor_id="peakindex-sec-notes",
+            ),
+            html.Div(style={"height": "3rem"}),
+        ],
+    )
+
+
+peakindex_form = build_peakindex_form()
+peakindex_readonly_form = build_peakindex_form(readonly=True, show_actions=False)
 
 
 def set_peakindex_form_props(peakindex, read_only=False):

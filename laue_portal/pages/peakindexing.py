@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
-from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
+from laue_portal.components.peakindex_form import peakindex_readonly_form, set_peakindex_form_props
 from laue_portal.components.visualization.ipf_legend import (
     DEFAULT_PALETTE,
     SCALAR_MAX_ID,
@@ -91,7 +91,7 @@ _viz_tabs = dbc.Tabs(
             label="Parameters",
             tab_id="tab-parameters",
             children=[
-                html.Div(id="tab-parameters-content", className="pt-3 px-2", children=[peakindex_form]),
+                html.Div(id="tab-parameters-content", className="pt-3 px-2", children=[peakindex_readonly_form]),
             ],
         ),
         # ==================================================================
