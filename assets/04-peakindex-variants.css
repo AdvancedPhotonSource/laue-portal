@@ -1,0 +1,1066 @@
+/* ==========================================================================
+   Peak Indexing Form Variants — Shared CSS
+   Follows the Flatly theme palette:
+     --bs-primary:   #2c3e50
+     --bs-success:   #18bc9c
+     --bs-info:      #3498db
+     --bs-warning:   #f39c12
+     --bs-danger:    #e74c3c
+     --bs-light:     #ecf0f1
+     --bs-secondary: #95a5a6
+   Font: Lato (already loaded)
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Common tokens used across all three variants
+   -------------------------------------------------------------------------- */
+:root {
+  --pi-slate:       #2c3e50;
+  --pi-slate-90:    #34495e;
+  --pi-slate-80:    #3d566e;
+  --pi-teal:        #18bc9c;
+  --pi-teal-light:  rgba(24, 188, 156, .08);
+  --pi-teal-border: rgba(24, 188, 156, .25);
+  --pi-blue:        #3498db;
+  --pi-blue-light:  rgba(52, 152, 219, .07);
+  --pi-warn:        #f39c12;
+  --pi-danger:      #e74c3c;
+  --pi-ash:         #95a5a6;
+  --pi-fog:         #ecf0f1;
+  --pi-bg:          #f7f8fa;
+  --pi-white:       #ffffff;
+  --pi-text:        #2c3e50;
+  --pi-text-muted:  #7b8a8b;
+  --pi-radius:      6px;
+  --pi-radius-lg:   10px;
+  --pi-shadow-sm:   0 1px 3px rgba(44, 62, 80, .06);
+  --pi-shadow-md:   0 2px 8px rgba(44, 62, 80, .08);
+  --pi-shadow-lg:   0 4px 20px rgba(44, 62, 80, .10);
+  --pi-transition:  180ms ease;
+}
+
+/* ==========================================================================
+   VARIANT A — "Instrument Console"
+   Dense, utilitarian data-entry. Two-column CSS grid with compact
+   inline-labelled fields. Inspired by scientific instrument panels:
+   tight spacing, monospace accents, high information density.
+   ========================================================================== */
+
+.pi-variant-a {
+  background: var(--pi-bg);
+  min-height: 100vh;
+}
+
+/* ---- page header ---- */
+.pi-va-header {
+  background: linear-gradient(135deg, var(--pi-slate) 0%, var(--pi-slate-90) 100%);
+  padding: 1.25rem 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 12px rgba(44, 62, 80, .18);
+}
+.pi-va-header h2 {
+  margin: 0;
+  font-family: Lato, sans-serif;
+  font-weight: 700;
+  font-size: 1.2rem;
+  letter-spacing: .04em;
+  color: var(--pi-white);
+  text-transform: uppercase;
+}
+.pi-va-header .pi-subtitle {
+  font-size: .78rem;
+  color: var(--pi-teal);
+  font-weight: 400;
+  letter-spacing: .02em;
+  text-transform: none;
+}
+.pi-va-header .pi-actions {
+  display: flex;
+  gap: .5rem;
+}
+.pi-va-header .btn { font-size: .82rem; }
+
+/* ---- section strips ---- */
+.pi-va-section-label {
+  font-family: Lato, sans-serif;
+  font-weight: 700;
+  font-size: .7rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--pi-teal);
+  padding: .5rem 1rem;
+  background: var(--pi-slate);
+  border-left: 3px solid var(--pi-teal);
+  margin: 0;
+}
+
+/* ---- grid body ---- */
+.pi-va-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  padding: 0 1rem;
+}
+@media (max-width: 768px) {
+  .pi-va-grid { grid-template-columns: 1fr; }
+}
+.pi-va-grid.pi-va-grid--single {
+  grid-template-columns: 1fr;
+}
+
+/* ---- field cell ---- */
+.pi-va-cell {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--pi-fog);
+  padding: .35rem .5rem;
+  gap: .5rem;
+  background: var(--pi-white);
+  transition: background var(--pi-transition);
+}
+.pi-va-cell:hover {
+  background: var(--pi-teal-light);
+}
+.pi-va-cell label {
+  flex: 0 0 auto;
+  min-width: 160px;
+  max-width: 200px;
+  font-family: Lato, sans-serif;
+  font-size: .78rem;
+  font-weight: 700;
+  color: var(--pi-slate);
+  letter-spacing: .02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+  padding-right: .5rem;
+}
+.pi-va-cell .form-control,
+.pi-va-cell .form-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  font-size: .82rem;
+  border-radius: 4px;
+  border-color: var(--pi-fog);
+  background: var(--pi-white);
+  transition: border-color var(--pi-transition), box-shadow var(--pi-transition);
+}
+.pi-va-cell .form-control:focus,
+.pi-va-cell .form-select:focus {
+  border-color: var(--pi-teal);
+  box-shadow: 0 0 0 2px var(--pi-teal-border);
+}
+.pi-va-cell .form-check { margin: 0; }
+.pi-va-cell .form-check-label { font-size: .82rem; }
+
+/* cell that spans full width */
+.pi-va-cell--wide { grid-column: 1 / -1; }
+
+/* ---- file-row with action button ---- */
+.pi-va-file-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .35rem .5rem;
+  border-bottom: 1px solid var(--pi-fog);
+  background: var(--pi-white);
+}
+.pi-va-file-row label { min-width: 160px; max-width: 200px; }
+.pi-va-file-row .form-control { flex: 1; }
+.pi-va-file-row .btn { flex-shrink: 0; font-size: .78rem; }
+
+/* ---- notes area ---- */
+.pi-va-notes {
+  grid-column: 1 / -1;
+  padding: .5rem .5rem;
+  background: var(--pi-white);
+}
+.pi-va-notes textarea {
+  font-size: .82rem;
+  min-height: 72px;
+  border-color: var(--pi-fog);
+  border-radius: 4px;
+}
+
+/* ---- validation bar ---- */
+.pi-va-validation {
+  padding: .5rem 1rem;
+  background: var(--pi-white);
+  border-bottom: 2px solid var(--pi-fog);
+}
+
+/* ==========================================================================
+   VARIANT B — "Blueprint Panels"
+   Card-based layout with clear visual hierarchy. Each section is a
+   self-contained panel with a tinted left-border accent. Fields use a
+   two-column grid within each card. Clean whitespace, soft shadows.
+   ========================================================================== */
+
+.pi-variant-b {
+  background: var(--pi-bg);
+  min-height: 100vh;
+  padding-bottom: 3rem;
+}
+
+.pi-vb-body {
+  display: flex;
+  align-items: flex-start;
+  min-height: 0;
+}
+
+.pi-vb-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.pi-vb-section-anchor {
+  scroll-margin-top: 1rem;
+}
+
+/* ---- page masthead ---- */
+.pi-vb-masthead {
+  background: var(--pi-white);
+  border-bottom: 1px solid var(--pi-fog);
+  padding: 1.5rem 2rem 1.25rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.pi-vb-masthead h2 {
+  margin: 0;
+  font-family: Lato, sans-serif;
+  font-weight: 700;
+  font-size: 1.5rem;
+  color: var(--pi-slate);
+}
+.pi-vb-masthead .pi-breadcrumb {
+  font-size: .78rem;
+  color: var(--pi-ash);
+  margin-bottom: .25rem;
+}
+.pi-vb-masthead .pi-actions {
+  display: flex;
+  gap: .5rem;
+}
+
+/* ---- collapsible section sidebar ---- */
+.pi-vb-sidebar {
+  width: 220px;
+  flex: 0 0 220px;
+  background: var(--pi-white);
+  border-right: 1px solid var(--pi-fog);
+  box-shadow: 1px 0 8px rgba(44, 62, 80, .04);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: .75rem 0;
+  transition: flex-basis var(--pi-transition), width var(--pi-transition);
+}
+.pi-vb-sidebar:not([open]) {
+  width: 48px;
+  flex-basis: 48px;
+  overflow: hidden;
+}
+.pi-vb-sidebar-toggle {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .45rem 1rem;
+  margin-bottom: .35rem;
+  color: var(--pi-slate);
+  cursor: pointer;
+  font-family: Lato, sans-serif;
+  font-size: .78rem;
+  font-weight: 700;
+  list-style: none;
+  user-select: none;
+}
+.pi-vb-sidebar-toggle::-webkit-details-marker {
+  display: none;
+}
+.pi-vb-sidebar-toggle::after {
+  content: "\F284";
+  font-family: bootstrap-icons;
+  margin-left: auto;
+  font-size: .7rem;
+  color: var(--pi-ash);
+}
+.pi-vb-sidebar:not([open]) .pi-vb-sidebar-toggle {
+  justify-content: center;
+  padding-inline: 0;
+}
+.pi-vb-sidebar:not([open]) .pi-vb-sidebar-toggle span,
+.pi-vb-sidebar:not([open]) .pi-vb-sidebar-toggle::after,
+.pi-vb-sidebar:not([open]) .pi-vb-sidebar-content {
+  display: none;
+}
+.pi-vb-nav-group {
+  margin-bottom: .35rem;
+}
+.pi-vb-nav-heading {
+  font-family: Lato, sans-serif;
+  font-size: .6rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--pi-ash);
+  padding: .35rem 1rem .15rem;
+  margin: 0;
+}
+.pi-vb-nav-link {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .45rem 1rem;
+  font-family: Lato, sans-serif;
+  font-size: .8rem;
+  color: var(--pi-text);
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  transition: background var(--pi-transition), color var(--pi-transition), border-color var(--pi-transition);
+}
+.pi-vb-nav-link:hover {
+  background: var(--pi-teal-light);
+  color: var(--pi-teal);
+}
+.pi-vb-nav-icon {
+  font-size: .85rem;
+  width: 1.1rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .pi-vb-sidebar {
+    width: 48px;
+    flex-basis: 48px;
+    overflow: hidden;
+  }
+  .pi-vb-sidebar .pi-vb-sidebar-toggle {
+    justify-content: center;
+    padding-inline: 0;
+  }
+  .pi-vb-sidebar .pi-vb-sidebar-toggle span,
+  .pi-vb-sidebar .pi-vb-sidebar-toggle::after,
+  .pi-vb-sidebar .pi-vb-sidebar-content {
+    display: none;
+  }
+}
+
+/* ---- section card ---- */
+.pi-vb-card {
+  background: var(--pi-white);
+  border: 1px solid var(--pi-fog);
+  border-radius: var(--pi-radius-lg);
+  margin: 1rem 1.5rem;
+  box-shadow: var(--pi-shadow-sm);
+  overflow: hidden;
+  transition: box-shadow var(--pi-transition);
+}
+.pi-vb-card:hover {
+  box-shadow: var(--pi-shadow-md);
+}
+.pi-vb-card--slate  { border-left: 4px solid var(--pi-slate); }
+.pi-vb-card--teal   { border-left: 4px solid var(--pi-teal); }
+.pi-vb-card--blue   { border-left: 4px solid var(--pi-blue); }
+.pi-vb-card--purple { border-left: 4px solid #8e44ad; }
+.pi-vb-card--rose   { border-left: 4px solid #e74c3c; }
+.pi-vb-card--gold   { border-left: 4px solid #f39c12; }
+.pi-vb-card--warn   { border-left: 4px solid var(--pi-warn); }
+
+.pi-vb-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .85rem 1.25rem;
+  border-bottom: 1px solid var(--pi-fog);
+}
+.pi-vb-card-title {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  min-width: 0;
+}
+.pi-vb-section-icon {
+  font-size: .95rem;
+  width: 1.15rem;
+  text-align: center;
+  color: var(--pi-slate-90);
+  flex-shrink: 0;
+}
+.pi-vb-card-head h3 {
+  margin: 0;
+  font-family: Lato, sans-serif;
+  font-weight: 700;
+  font-size: .95rem;
+  color: var(--pi-slate);
+}
+.pi-vb-card-head .pi-card-badge {
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: .2rem .6rem;
+  border-radius: 3px;
+  background: var(--pi-teal-light);
+  color: var(--pi-teal);
+}
+.pi-vb-card-body {
+  padding: 1rem 1.25rem;
+}
+
+/* field grid inside cards */
+.pi-vb-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .75rem 1.25rem;
+}
+@media (max-width: 768px) {
+  .pi-vb-field-grid { grid-template-columns: 1fr; }
+}
+.pi-vb-field-grid--three {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+@media (max-width: 992px) {
+  .pi-vb-field-grid--three { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 576px) {
+  .pi-vb-field-grid--three { grid-template-columns: 1fr; }
+}
+.pi-vb-field-wide { grid-column: 1 / -1; }
+
+/* ---- field block ---- */
+.pi-vb-field {
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+}
+.pi-vb-field label {
+  font-family: Lato, sans-serif;
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--pi-ash);
+  margin: 0;
+}
+.pi-vb-field .form-control,
+.pi-vb-field .form-select {
+  font-size: .85rem;
+  height: 36px;
+  border-radius: var(--pi-radius);
+  border-color: #dce1e3;
+  transition: border-color var(--pi-transition), box-shadow var(--pi-transition);
+}
+.pi-vb-field .form-control:focus,
+.pi-vb-field .form-select:focus {
+  border-color: var(--pi-teal);
+  box-shadow: 0 0 0 3px var(--pi-teal-border);
+}
+.pi-vb-field .form-check { margin-top: .3rem; }
+.pi-vb-field .form-check-label { font-size: .85rem; color: var(--pi-text); text-transform: none; letter-spacing: 0; font-weight: 400; }
+.pi-vb-field textarea.form-control {
+  height: auto;
+  min-height: 80px;
+}
+
+/* ---- inline field with button ---- */
+.pi-vb-field-inline {
+  display: flex;
+  align-items: flex-end;
+  gap: .5rem;
+}
+.pi-vb-field-inline .pi-vb-field { flex: 1; }
+.pi-vb-field-inline .btn { height: 36px; white-space: nowrap; font-size: .82rem; flex-shrink: 0; }
+
+/* ---- validation panel ---- */
+.pi-vb-validation {
+  margin: 0 1.5rem;
+}
+
+/* ---- author row ---- */
+.pi-vb-author {
+  margin: 1rem 1.5rem 0;
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+}
+.pi-vb-author .pi-vb-field { flex: 1; }
+
+/* ==========================================================================
+   VARIANT C — "Sidebar Stepper"
+   Left sidebar with step navigation, main content area on the right.
+   Each step/section is always visible (scrollable), with the sidebar
+   highlighting the current section as you scroll. Inspired by IDE
+   settings panels with a professional, tool-like feel.
+   ========================================================================== */
+
+.pi-variant-c {
+  background: var(--pi-bg);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* top bar */
+.pi-vc-topbar {
+  background: var(--pi-slate);
+  padding: .75rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  box-shadow: 0 1px 6px rgba(44, 62, 80, .15);
+  z-index: 50;
+}
+.pi-vc-topbar h2 {
+  margin: 0;
+  font-family: Lato, sans-serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--pi-white);
+}
+.pi-vc-topbar .pi-actions { display: flex; gap: .5rem; }
+
+/* ---- body wrapper ---- */
+.pi-vc-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---- sidebar ---- */
+.pi-vc-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--pi-white);
+  border-right: 1px solid var(--pi-fog);
+  padding: 1rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+@media (max-width: 768px) {
+  .pi-vc-sidebar { display: none; }
+}
+
+.pi-vc-sidebar .pi-vc-nav-group {
+  margin-bottom: .5rem;
+}
+.pi-vc-sidebar .pi-vc-nav-group-title {
+  font-family: Lato, sans-serif;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--pi-ash);
+  padding: .4rem 1.25rem .2rem;
+  margin: 0;
+}
+.pi-vc-sidebar .pi-vc-nav-item {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .5rem 1.25rem;
+  font-family: Lato, sans-serif;
+  font-size: .82rem;
+  color: var(--pi-text);
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  transition: all var(--pi-transition);
+  cursor: pointer;
+}
+.pi-vc-sidebar .pi-vc-nav-item:hover {
+  background: var(--pi-teal-light);
+  color: var(--pi-teal);
+}
+.pi-vc-sidebar .pi-vc-nav-item.active {
+  border-left-color: var(--pi-teal);
+  color: var(--pi-teal);
+  font-weight: 700;
+  background: var(--pi-teal-light);
+}
+.pi-vc-sidebar .pi-vc-nav-icon {
+  font-size: .9rem;
+  width: 1.2rem;
+  text-align: center;
+}
+
+/* ---- main content ---- */
+.pi-vc-main {
+  flex: 1;
+  min-width: 0;
+  padding: 1.5rem 2rem 3rem;
+  overflow-y: auto;
+}
+@media (max-width: 768px) {
+  .pi-vc-main { padding: 1rem; }
+}
+
+/* ---- section ---- */
+.pi-vc-section {
+  margin-bottom: 2rem;
+}
+.pi-vc-section-head {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: .75rem;
+  padding-bottom: .5rem;
+  border-bottom: 2px solid var(--pi-fog);
+}
+.pi-vc-section-head .pi-vc-section-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .85rem;
+  color: var(--pi-white);
+  flex-shrink: 0;
+}
+.pi-vc-section-head .pi-vc-section-icon--teal  { background: var(--pi-teal); }
+.pi-vc-section-head .pi-vc-section-icon--blue  { background: var(--pi-blue); }
+.pi-vc-section-head .pi-vc-section-icon--slate { background: var(--pi-slate); }
+.pi-vc-section-head .pi-vc-section-icon--warn  { background: var(--pi-warn); }
+
+.pi-vc-section-head h3 {
+  margin: 0;
+  font-family: Lato, sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--pi-slate);
+}
+
+/* field grid */
+.pi-vc-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .6rem 1.25rem;
+}
+@media (max-width: 992px) {
+  .pi-vc-field-grid { grid-template-columns: 1fr; }
+}
+.pi-vc-field-grid--three {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+@media (max-width: 992px) {
+  .pi-vc-field-grid--three { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 576px) {
+  .pi-vc-field-grid--three { grid-template-columns: 1fr; }
+}
+.pi-vc-field-wide { grid-column: 1 / -1; }
+
+/* ---- field ---- */
+.pi-vc-field {
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+}
+.pi-vc-field label {
+  font-family: Lato, sans-serif;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--pi-text-muted);
+  margin: 0;
+}
+.pi-vc-field .form-control,
+.pi-vc-field .form-select {
+  font-size: .85rem;
+  height: 34px;
+  border-radius: var(--pi-radius);
+  border: 1px solid #dce1e3;
+  background: var(--pi-white);
+  transition: border-color var(--pi-transition), box-shadow var(--pi-transition);
+}
+.pi-vc-field .form-control:focus,
+.pi-vc-field .form-select:focus {
+  border-color: var(--pi-teal);
+  box-shadow: 0 0 0 2px var(--pi-teal-border);
+}
+.pi-vc-field .form-check-label {
+  font-size: .85rem;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  color: var(--pi-text);
+}
+.pi-vc-field textarea.form-control {
+  height: auto;
+  min-height: 80px;
+}
+
+/* ---- inline field + button ---- */
+.pi-vc-field-inline {
+  display: flex;
+  align-items: flex-end;
+  gap: .5rem;
+  grid-column: 1 / -1;
+}
+.pi-vc-field-inline .pi-vc-field { flex: 1; }
+.pi-vc-field-inline .btn { height: 34px; font-size: .8rem; white-space: nowrap; flex-shrink: 0; }
+
+/* ---- validation panel ---- */
+.pi-vc-validation {
+  margin-bottom: 1rem;
+}
+
+/* ---- checkbox row ---- */
+.pi-vc-check-row {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  grid-column: 1 / -1;
+  padding: .25rem 0;
+}
+.pi-vb-check-row {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  grid-column: 1 / -1;
+  padding: .25rem 0;
+}
+
+/* ==========================================================================
+   VARIANT D — "Console + Navigator"
+   Hybrid of A's dense inline-label rows with C's sidebar navigation.
+   Section headers are redesigned: light-tinted strips with a subtle left
+   accent and dark text for readability (no green-on-dark contrast issue).
+   ========================================================================== */
+
+.pi-variant-d {
+  background: var(--pi-bg);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- top bar ---- */
+.pi-vd-topbar {
+  background: var(--pi-slate);
+  padding: .65rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  box-shadow: 0 1px 6px rgba(44, 62, 80, .15);
+  z-index: 100;
+}
+.pi-vd-topbar h2 {
+  margin: 0;
+  font-family: Lato, sans-serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--pi-white);
+  letter-spacing: .02em;
+}
+.pi-vd-topbar .pi-vd-actions {
+  display: flex;
+  gap: .5rem;
+}
+.pi-vd-topbar .btn { font-size: .8rem; }
+
+/* ---- body: sidebar + main ---- */
+.pi-vd-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---- sidebar ---- */
+.pi-vd-sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  background: var(--pi-white);
+  border-right: 1px solid var(--pi-fog);
+  padding: .75rem 0;
+  position: sticky;
+  top: 0;
+  height: calc(100vh - 46px);  /* minus topbar */
+  overflow-y: auto;
+}
+@media (max-width: 768px) {
+  .pi-vd-sidebar { display: none; }
+}
+
+.pi-vd-sidebar .pi-vd-nav-group {
+  margin-bottom: .35rem;
+}
+.pi-vd-sidebar .pi-vd-nav-heading {
+  font-family: Lato, sans-serif;
+  font-size: .6rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--pi-ash);
+  padding: .35rem 1rem .15rem;
+  margin: 0;
+}
+.pi-vd-sidebar .pi-vd-nav-link {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .4rem 1rem;
+  font-family: Lato, sans-serif;
+  font-size: .78rem;
+  color: var(--pi-text);
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  transition: all var(--pi-transition);
+  cursor: pointer;
+}
+.pi-vd-sidebar .pi-vd-nav-link:hover {
+  background: var(--pi-teal-light);
+  color: var(--pi-teal);
+}
+.pi-vd-sidebar .pi-vd-nav-link.active {
+  border-left-color: var(--pi-teal);
+  color: var(--pi-teal);
+  font-weight: 700;
+  background: var(--pi-teal-light);
+}
+.pi-vd-sidebar .pi-vd-nav-icon {
+  font-size: .82rem;
+  width: 1.1rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* ---- main content ---- */
+.pi-vd-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+/* ---- validation strip ---- */
+.pi-vd-validation {
+  padding: .4rem .75rem;
+  background: var(--pi-white);
+  border-bottom: 1px solid var(--pi-fog);
+}
+
+/* ---- section card ----
+   Bordered container that groups the header + fields into a visible panel. */
+.pi-vd-section-card {
+  border: 1px solid #b4bcc2;
+  border-left: 3px solid var(--pi-teal);
+  border-radius: 4px;
+  margin: .5rem .5rem 0;
+  overflow: hidden;
+  background: var(--pi-fog);
+}
+.pi-vd-section-card--blue  { border-left-color: var(--pi-blue); }
+.pi-vd-section-card--slate { border-left-color: var(--pi-slate); }
+.pi-vd-section-card--warn  { border-left-color: var(--pi-warn); }
+
+/* section header (title bar of the card) */
+.pi-vd-section-head {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .55rem .75rem;
+  margin: 0;
+  background: #dce1e3;
+  border-bottom: 1px solid #b4bcc2;
+}
+
+/* Remove grid side padding when inside a card (card border provides the edge) */
+.pi-vd-section-card .pi-vd-grid {
+  padding: 0;
+}
+/* Remove last child's bottom border inside a card (card border provides it) */
+.pi-vd-section-card .pi-vd-cell:last-child,
+.pi-vd-section-card .pi-vd-file-row:last-child,
+.pi-vd-section-card .pi-vd-action-row:last-child,
+.pi-vd-section-card .pi-vd-check-row:last-child {
+  border-bottom: none;
+}
+
+.pi-vd-section-head .pi-vd-section-icon {
+  font-size: .88rem;
+  color: var(--pi-slate-90);
+  width: 1.1rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+.pi-vd-section-head h3 {
+  margin: 0;
+  font-family: Lato, sans-serif;
+  font-weight: 700;
+  font-size: .82rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--pi-slate);
+}
+
+/* ---- dense field grid (A-style) ---- */
+.pi-vd-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  padding: 0 .75rem;
+}
+@media (max-width: 768px) {
+  .pi-vd-grid { grid-template-columns: 1fr; }
+}
+.pi-vd-grid--single { grid-template-columns: 1fr; }
+
+/* ---- field cell (A-style inline label|input) ---- */
+.pi-vd-cell {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #dce1e3;
+  padding: .3rem .4rem;
+  gap: .4rem;
+  background: var(--pi-fog);
+  transition: background var(--pi-transition);
+}
+.pi-vd-cell:hover {
+  background: #e4e9ea;
+}
+.pi-vd-cell label {
+  flex: 0 0 auto;
+  min-width: 160px;
+  max-width: 200px;
+  font-family: Lato, sans-serif;
+  font-size: .82rem;
+  font-weight: 700;
+  color: var(--pi-slate);
+  letter-spacing: .01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+  padding-right: .4rem;
+  text-align: right;
+}
+.pi-vd-cell .form-control,
+.pi-vd-cell .form-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 30px;
+  font-size: .8rem;
+  border-radius: 4px;
+  border: 1px solid #b4bcc2;
+  background: var(--pi-white);
+  transition: border-color var(--pi-transition), box-shadow var(--pi-transition);
+}
+.pi-vd-cell .form-control:focus,
+.pi-vd-cell .form-select:focus {
+  border-color: var(--pi-teal);
+  box-shadow: 0 0 0 2px var(--pi-teal-border);
+}
+.pi-vd-cell .form-check { margin: 0; }
+.pi-vd-cell .form-check-label { font-size: .8rem; }
+
+.pi-vd-cell--wide { grid-column: 1 / -1; }
+
+/* compact cell: input capped at a short width for numeric values */
+.pi-vd-cell--compact .form-control,
+.pi-vd-cell--compact .form-select {
+  flex: 0 0 auto;
+  width: 140px;
+}
+
+/* ---- file row (full width with optional button) ---- */
+.pi-vd-file-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .3rem .4rem;
+  border-bottom: 1px solid #dce1e3;
+  background: var(--pi-fog);
+  transition: background var(--pi-transition);
+}
+.pi-vd-file-row:hover { background: #e4e9ea; }
+.pi-vd-file-row label {
+  min-width: 160px;
+  max-width: 200px;
+  font-family: Lato, sans-serif;
+  font-size: .82rem;
+  font-weight: 700;
+  color: var(--pi-slate);
+  white-space: nowrap;
+  margin: 0;
+  text-align: right;
+  padding-right: .4rem;
+}
+.pi-vd-file-row .form-control {
+  flex: 1;
+  height: 30px;
+  font-size: .8rem;
+  border-radius: 4px;
+  border: 1px solid #b4bcc2;
+  background: var(--pi-white);
+}
+.pi-vd-file-row .form-control:focus {
+  border-color: var(--pi-teal);
+  box-shadow: 0 0 0 2px var(--pi-teal-border);
+}
+.pi-vd-file-row .btn { flex-shrink: 0; font-size: .74rem; }
+
+/* ---- action row (right-aligned buttons) ---- */
+.pi-vd-action-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: .4rem;
+  padding: .2rem .4rem;
+  background: var(--pi-fog);
+  border-bottom: 1px solid #dce1e3;
+}
+.pi-vd-action-row .btn { font-size: .74rem; }
+
+/* ---- notes ---- */
+.pi-vd-notes {
+  grid-column: 1 / -1;
+  padding: .4rem .4rem;
+  background: var(--pi-fog);
+}
+.pi-vd-notes textarea {
+  font-size: .8rem;
+  min-height: 68px;
+  border: 1px solid #b4bcc2;
+  border-radius: 4px;
+  width: 100%;
+  background: var(--pi-white);
+}
+.pi-vd-notes textarea:focus {
+  border-color: var(--pi-teal);
+  box-shadow: 0 0 0 2px var(--pi-teal-border);
+}
+
+/* ---- checkbox row inside grid ---- */
+.pi-vd-check-row {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  align-items: center;
+  grid-column: 1 / -1;
+  padding: .2rem .4rem .2rem .75rem;
+  background: var(--pi-fog);
+  border-bottom: 1px solid #dce1e3;
+}
+.pi-vd-check-row .form-check { margin: 0; }
+.pi-vd-check-row .form-check-label { font-size: .8rem; }
