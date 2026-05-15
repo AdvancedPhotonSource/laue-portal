@@ -2,7 +2,7 @@
 Table for sub-jobs within a computation jobs.
 """
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from laue_portal.database.base import Base
@@ -10,6 +10,10 @@ from laue_portal.database.base import Base
 
 class SubJob(Base):
     __tablename__ = "subjob"
+    __table_args__ = (
+        # Speeds progress aggregates by job/status; stored counters are the next step if this becomes insufficient.
+        Index("ix_subjob_job_id_status", "job_id", "status"),
+    )
 
     subjob_id: Mapped[int] = mapped_column(primary_key=True)
     job_id: Mapped[int] = mapped_column(ForeignKey("job.job_id"))

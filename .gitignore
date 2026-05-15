@@ -153,6 +153,7 @@ laue-portal_conda-requirements.txt
 
 cold
 deps
+dev_docs/
 
 # Supervisor generated files
 supervisor/supervisord.conf
