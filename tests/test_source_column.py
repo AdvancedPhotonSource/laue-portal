@@ -276,6 +276,68 @@ class TestSourceColumnRowData:
         records = self._get_records(engine, db_path)
         assert records == []
 
+    def test_running_status_progress_row_data(self, empty_test_database):
+        from sqlalchemy.orm import Session
+
+        import laue_portal.database.db_schema as db_schema
+        from laue_portal.processing.queue.core import STATUS_REVERSE_MAPPING
+        from tests.conftest import create_test_job, create_test_metadata
+
+        engine, db_path = empty_test_database
+        with Session(engine) as session:
+            meta = create_test_metadata(scan_number=5)
+            job = create_test_job(scan_number=5)
+            pi = _create_peakindex_with_wirerecon(scan_number=5, wirerecon_id=None, job_id=5)
+            subjobs = [
+                db_schema.SubJob(
+                    job_id=5,
+                    computer_name="TEST_COMPUTER",
+                    status=status,
+                    priority=5,
+                )
+                for status in [
+                    STATUS_REVERSE_MAPPING["Finished"],
+                    STATUS_REVERSE_MAPPING["Finished"],
+                    STATUS_REVERSE_MAPPING["Running"],
+                ]
+            ]
+            session.add_all([meta, job, pi, *subjobs])
+            session.commit()
+
+        records = self._get_records(engine, db_path)
+        assert len(records) == 1
+        assert records[0]["completed_subjobs"] == 2
+        assert records[0]["total_subjobs"] == 3
+        assert records[0]["status_progress"] == "2/3"
+
+    def test_finished_status_has_no_progress_text(self, empty_test_database):
+        from sqlalchemy.orm import Session
+
+        import laue_portal.database.db_schema as db_schema
+        from laue_portal.processing.queue.core import STATUS_REVERSE_MAPPING
+        from tests.conftest import create_test_job, create_test_metadata
+
+        engine, db_path = empty_test_database
+        with Session(engine) as session:
+            meta = create_test_metadata(scan_number=6)
+            job = create_test_job(scan_number=6)
+            job.status = STATUS_REVERSE_MAPPING["Finished"]
+            pi = _create_peakindex_with_wirerecon(scan_number=6, wirerecon_id=None, job_id=6)
+            subjob = db_schema.SubJob(
+                job_id=6,
+                computer_name="TEST_COMPUTER",
+                status=STATUS_REVERSE_MAPPING["Finished"],
+                priority=5,
+            )
+            session.add_all([meta, job, pi, subjob])
+            session.commit()
+
+        records = self._get_records(engine, db_path)
+        assert len(records) == 1
+        assert records[0]["completed_subjobs"] == 0
+        assert records[0]["total_subjobs"] == 0
+        assert records[0]["status_progress"] is None
+
 
 # ---------------------------------------------------------------------------
 # 3. valueGetter expression correctness (evaluated in Python as proxy)
@@ -376,6 +438,22 @@ class TestSourceLinksRendererJS:
 
     def test_unlinked_fallback(self):
         assert "'Unlinked'" in self.js_content
+
+
+class TestStatusRendererJS:
+    """Static checks for shared status badge rendering."""
+
+    JS_PATH = os.path.join(project_root, "assets", "customAgGridFunctions.js")
+
+    @pytest.fixture(autouse=True)
+    def _load_js(self):
+        with open(self.JS_PATH) as f:
+            self.js_content = f.read()
+
+    def test_cancelled_badge_uses_readable_gray_style(self):
+        assert "const isCancelled = props.value === 4" in self.js_content
+        assert "var(--bs-gray-200)" in self.js_content
+        assert "var(--bs-gray-700)" in self.js_content
 
 
 # ---------------------------------------------------------------------------

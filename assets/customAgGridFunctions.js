@@ -208,15 +208,22 @@ dagcomponentfuncs.StatusRenderer = function (props) {
     };
     
     const statusInfo = statusMapping[props.value] || { text: `Unknown (${props.value})`, color: "secondary" };
+    const progressText = props.value === 1 && props.data && props.data.status_progress ? ` ${props.data.status_progress}` : '';
+    const isCancelled = props.value === 4;
     
     // Create a Bootstrap badge
     return React.createElement(
         window.dash_bootstrap_components.Badge,
         {
             color: statusInfo.color,
-            className: 'text-white'
+            className: isCancelled ? '' : 'text-white',
+            style: isCancelled ? {
+                backgroundColor: 'var(--bs-gray-200)',
+                border: '1px solid var(--bs-gray-400)',
+                color: 'var(--bs-gray-700)'
+            } : undefined
         },
-        statusInfo.text
+        statusInfo.text + progressText
     );
 };
 

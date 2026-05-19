@@ -4,12 +4,13 @@ import dash_bootstrap_components as dbc
 import pandas as pd
 from dash import Input, Output, State, dcc, html
 from dash.exceptions import PreventUpdate
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session, aliased
 
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
+from laue_portal.processing.queue.core import STATUS_REVERSE_MAPPING
 
 dash.register_page(__name__, path="/peakindexings")
 
@@ -106,18 +107,47 @@ def _get_peakindexings():
     with Session(session_utils.get_engine()) as session:
         catalog_recon = aliased(db_schema.Catalog)
         catalog_wirerecon = aliased(db_schema.Catalog)
+        running_status = STATUS_REVERSE_MAPPING["Running"]
+        finished_status = STATUS_REVERSE_MAPPING["Finished"]
+
+        subjob_progress = (
+            session.query(
+                db_schema.SubJob.job_id.label("job_id"),
+                func.count(db_schema.SubJob.subjob_id).label("total_subjobs"),
+                func.sum(case((db_schema.SubJob.status == finished_status, 1), else_=0)).label("completed_subjobs"),
+            )
+            .join(db_schema.Job, db_schema.SubJob.job_id == db_schema.Job.job_id)
+            .join(db_schema.PeakIndex, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
+            .filter(db_schema.Job.status == running_status)
+            .group_by(db_schema.SubJob.job_id)
+            .subquery()
+        )
 
         peakindexings = pd.read_sql(
             session.query(
-                *VISIBLE_COLS, func.coalesce(catalog_recon.aperture, catalog_wirerecon.aperture).label("aperture")
+                *VISIBLE_COLS,
+                func.coalesce(catalog_recon.aperture, catalog_wirerecon.aperture).label("aperture"),
+                func.coalesce(subjob_progress.c.completed_subjobs, 0).label("completed_subjobs"),
+                func.coalesce(subjob_progress.c.total_subjobs, 0).label("total_subjobs"),
             )
             .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
+            .outerjoin(subjob_progress, db_schema.Job.job_id == subjob_progress.c.job_id)
             .outerjoin(db_schema.Recon, db_schema.PeakIndex.recon_id == db_schema.Recon.recon_id)
             .outerjoin(db_schema.WireRecon, db_schema.PeakIndex.wirerecon_id == db_schema.WireRecon.wirerecon_id)
             .outerjoin(catalog_recon, db_schema.Recon.scanNumber == catalog_recon.scanNumber)
             .outerjoin(catalog_wirerecon, db_schema.WireRecon.scanNumber == catalog_wirerecon.scanNumber)
             .statement,
             session.bind,
+        )
+
+        progress_cols = ["completed_subjobs", "total_subjobs"]
+        peakindexings[progress_cols] = peakindexings[progress_cols].fillna(0).astype(int)
+        peakindexings["status_progress"] = None
+        running_rows = (peakindexings["status"] == running_status) & (peakindexings["total_subjobs"] > 0)
+        peakindexings.loc[running_rows, "status_progress"] = (
+            peakindexings.loc[running_rows, "completed_subjobs"].astype(str)
+            + "/"
+            + peakindexings.loc[running_rows, "total_subjobs"].astype(str)
         )
 
     cols = []
