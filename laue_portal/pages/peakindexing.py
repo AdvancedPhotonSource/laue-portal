@@ -598,6 +598,151 @@ _viz_tabs = dbc.Tabs(
             ],
         ),
         # ==================================================================
+        # Tab: Detector View — sidebar + Plotly back-projection figure
+        # ==================================================================
+        dbc.Tab(
+            label="Detector View",
+            tab_id="tab-detector",
+            children=[
+                html.Div(
+                    id="tab-detector-content",
+                    className="pi-viz-layout",
+                    children=[
+                        # ── Sidebar ──
+                        html.Div(
+                            className="pi-viz-sidebar",
+                            children=[
+                                html.Div(
+                                    className="pi-viz-sidebar-section",
+                                    children=[
+                                        _viz_sidebar_head("Step", "bi bi-list-ol"),
+                                        _viz_control(
+                                            "Step #",
+                                            dbc.Select(
+                                                id="detector-step-select",
+                                                options=[],
+                                                value=None,
+                                                className="form-select",
+                                            ),
+                                        ),
+                                        _viz_control(
+                                            "",
+                                            dbc.Button(
+                                                [
+                                                    html.I(className="bi bi-shuffle me-1"),
+                                                    "Next indexed step",
+                                                ],
+                                                id="detector-next-indexed-btn",
+                                                color="secondary",
+                                                size="sm",
+                                                style={"width": "100%"},
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                                html.Div(
+                                    className="pi-viz-sidebar-section",
+                                    children=[
+                                        _viz_sidebar_head("Display", "bi bi-eye"),
+                                        _viz_control(
+                                            "",
+                                            dbc.Checkbox(
+                                                id="detector-show-predicted",
+                                                label="Show predicted (back-projected)",
+                                                value=True,
+                                            ),
+                                        ),
+                                        _viz_control(
+                                            "",
+                                            dbc.Checkbox(
+                                                id="detector-show-hkl",
+                                                label="Show hkl labels",
+                                                value=True,
+                                            ),
+                                        ),
+                                        _viz_control(
+                                            "",
+                                            dbc.Checkbox(
+                                                id="detector-show-unindexed",
+                                                label="Show un-indexed peaks",
+                                                value=True,
+                                            ),
+                                        ),
+                                        _viz_control(
+                                            "Marker",
+                                            dbc.Input(
+                                                id="detector-marker-size",
+                                                type="number",
+                                                min=1,
+                                                max=40,
+                                                step=1,
+                                                value=10,
+                                                debounce=True,
+                                                className="form-control",
+                                            ),
+                                        ),
+                                        _viz_control(
+                                            "Label size",
+                                            dbc.Input(
+                                                id="detector-label-size",
+                                                type="number",
+                                                min=6,
+                                                max=24,
+                                                step=1,
+                                                value=10,
+                                                debounce=True,
+                                                className="form-control",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                                html.Div(
+                                    className="pi-viz-sidebar-section",
+                                    children=[
+                                        _viz_sidebar_head("Patterns", "bi bi-collection"),
+                                        # Per-step pattern checklist is populated
+                                        # dynamically; empty list at startup.
+                                        html.Div(
+                                            id="detector-pattern-checklist-wrap",
+                                            children=dbc.Checklist(
+                                                id="detector-pattern-checklist",
+                                                options=[],
+                                                value=[],
+                                                inline=False,
+                                                className="small",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        ),
+                        # ── Main visualization ──
+                        html.Div(
+                            className="pi-viz-main",
+                            children=[
+                                _viz_graph_with_loading(
+                                    dcc.Graph(
+                                        id="detector-view-graph",
+                                        config={"displayModeBar": True, "scrollZoom": True},
+                                        style={"height": "100%", "minHeight": "500px"},
+                                    ),
+                                    "detector-loading-target",
+                                ),
+                                html.Div(
+                                    id="detector-step-summary",
+                                    className="pi-viz-details",
+                                    children=html.Small(
+                                        "Pick a step from the sidebar to view its detector overlay.",
+                                        className="text-muted",
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+            ],
+        ),
+        # ==================================================================
         # Tab: Peaks - full-width table
         # ==================================================================
         dbc.Tab(
@@ -1752,6 +1897,244 @@ def update_orientation_color_key(color_mode, surface):
 def update_stereo_color_key(color_mode):
     """Refresh the pole-figure reference legend when scheme changes."""
     return stereo_color_key(color_mode)
+
+
+# ---------------------------------------------------------------------------
+# Detector view tab — callbacks
+# ---------------------------------------------------------------------------
+
+
+@callback(
+    Output("detector-step-select", "options"),
+    Output("detector-step-select", "value"),
+    Input("peakindexing-xml-path", "data"),
+    prevent_initial_call=True,
+)
+def populate_detector_step_options(xml_path):
+    """
+    Populate the step selector from the parsed XML.
+
+    Each option shows ``Step N — Nindexed/Npeaks``.  The first step with
+    any indexed reflections is pre-selected so users see something useful
+    immediately.
+    """
+    if not xml_path:
+        raise PreventUpdate
+    try:
+        from laue_portal.analysis.xml_parser import parse_indexing_xml
+    except Exception:
+        raise PreventUpdate from None
+
+    try:
+        parsed = parse_indexing_xml(xml_path)
+    except Exception as e:
+        print(f"Error parsing XML for detector tab: {e}")
+        raise PreventUpdate from None
+
+    n_indexed = parsed["n_indexed"]
+    n_steps = len(parsed["positions"])
+
+    options = []
+    default_value = None
+    for i in range(n_steps):
+        ni = int(n_indexed[i])
+        label = f"Step {i}" + (f"  ({ni} indexed)" if ni else "")
+        options.append({"label": label, "value": str(i)})
+        if default_value is None and ni > 0:
+            default_value = str(i)
+
+    if default_value is None and options:
+        default_value = options[0]["value"]
+
+    return options, default_value
+
+
+@callback(
+    Output("detector-step-select", "value", allow_duplicate=True),
+    Input("detector-next-indexed-btn", "n_clicks"),
+    State("detector-step-select", "value"),
+    State("peakindexing-xml-path", "data"),
+    prevent_initial_call=True,
+)
+def jump_to_next_indexed_step(n_clicks, current_value, xml_path):
+    """Skip to the next step that contains at least one indexed reflection."""
+    if not n_clicks or not xml_path:
+        raise PreventUpdate
+    try:
+        from laue_portal.analysis.xml_parser import parse_indexing_xml
+    except Exception:
+        raise PreventUpdate from None
+
+    parsed = parse_indexing_xml(xml_path)
+    n_indexed = parsed["n_indexed"]
+    n_steps = len(parsed["positions"])
+
+    try:
+        start = int(current_value) if current_value is not None else -1
+    except (TypeError, ValueError):
+        start = -1
+
+    for offset in range(1, n_steps + 1):
+        i = (start + offset) % n_steps
+        if int(n_indexed[i]) > 0:
+            return str(i)
+    raise PreventUpdate
+
+
+@callback(
+    Output("detector-pattern-checklist", "options"),
+    Output("detector-pattern-checklist", "value"),
+    Input("peakindexing-xml-path", "data"),
+    Input("detector-step-select", "value"),
+    prevent_initial_call=True,
+)
+def populate_detector_pattern_checklist(xml_path, step_value):
+    """Refresh the pattern checklist whenever the step changes."""
+    if not xml_path or step_value is None:
+        return [], []
+    try:
+        from laue_portal.analysis.xml_parser import get_step_peaks, parse_indexing_xml
+    except Exception:
+        return [], []
+
+    try:
+        parsed = parse_indexing_xml(xml_path)
+        step_idx = int(step_value)
+        step_peaks = get_step_peaks(parsed, step_idx)
+    except Exception:
+        return [], []
+
+    if step_peaks is None:
+        return [], []
+
+    options = []
+    values = []
+    for pat in step_peaks.get("patterns", []):
+        num = int(pat.get("pattern_num", 0))
+        label = f"Pattern {num}"
+        n_idx = pat.get("n_indexed")
+        if n_idx:
+            label += f" ({int(n_idx)} indexed)"
+        options.append({"label": label, "value": num})
+        values.append(num)
+    return options, values
+
+
+@callback(
+    Output("detector-view-graph", "figure"),
+    Output("detector-step-summary", "children"),
+    Output("detector-loading-target", "children"),
+    Input("peakindexing-xml-path", "data"),
+    Input("detector-step-select", "value"),
+    Input("detector-show-predicted", "value"),
+    Input("detector-show-hkl", "value"),
+    Input("detector-show-unindexed", "value"),
+    Input("detector-marker-size", "value"),
+    Input("detector-label-size", "value"),
+    Input("detector-pattern-checklist", "value"),
+    prevent_initial_call=True,
+)
+def update_detector_view(
+    xml_path,
+    step_value,
+    show_predicted,
+    show_hkl,
+    show_unindexed,
+    marker_size,
+    label_size,
+    selected_patterns,
+):
+    """Re-render the detector overlay whenever the user changes any control."""
+    if not xml_path or step_value is None:
+        raise PreventUpdate
+
+    try:
+        from laue_portal.analysis.back_projection import (
+            build_step_overlay,
+            overlay_statistics,
+        )
+        from laue_portal.analysis.geometry import resolve_geometry_for_indexing
+        from laue_portal.analysis.xml_parser import parse_indexing_xml
+        from laue_portal.components.visualization.detector_view import make_detector_view
+
+        parsed = parse_indexing_xml(xml_path)
+        step_idx = int(step_value)
+
+        geometry = resolve_geometry_for_indexing(xml_path)
+        if geometry is None or not geometry.detectors:
+            fig = make_detector_view(None)
+            summary = dbc.Alert(
+                "Could not resolve detector geometry from the indexed XML "
+                "or from the linked geometry file. Back-projection cannot "
+                "be computed.",
+                color="warning",
+                className="mb-0",
+            )
+            return fig, summary, ""
+
+        overlay = build_step_overlay(parsed, step_idx, geometry)
+
+        fig = make_detector_view(
+            overlay,
+            show_predicted=bool(show_predicted),
+            show_unindexed=bool(show_unindexed),
+            show_hkl_labels=bool(show_hkl),
+            marker_size=max(1, int(marker_size or 10)),
+            label_size=max(6, int(label_size or 10)),
+            selected_patterns=list(selected_patterns) if selected_patterns else None,
+        )
+
+        summary_children = _detector_step_summary(parsed, step_idx, overlay, overlay_statistics)
+        return fig, summary_children, ""
+
+    except PreventUpdate:
+        raise
+    except Exception as e:
+        print(f"Error rendering detector view: {e}")
+        traceback.print_exc()
+        return (
+            dash.no_update,
+            dbc.Alert(f"Could not render detector view: {e}", color="danger", className="mb-0"),
+            "",
+        )
+
+
+def _detector_step_summary(parsed, step_idx, overlay, overlay_statistics):
+    """Compose the small summary card shown beneath the detector graph."""
+    if overlay is None:
+        return html.Small("No detector data for this step.", className="text-muted")
+
+    stats = overlay_statistics(overlay)
+    x_pos = float(parsed["positions"][step_idx, 0])
+    y_pos = float(parsed["positions"][step_idx, 1])
+    z_pos = float(parsed["positions"][step_idx, 2])
+
+    header_bits = [
+        html.Strong(f"Step #{step_idx}"),
+        f"  Position: ({x_pos:.1f}, {y_pos:.1f}, {z_pos:.1f})",
+        html.Br(),
+        f"Detector: {overlay.detector_id or '?'}  |  ",
+        f"Measured: {stats['n_measured']}  |  ",
+        f"Indexed: {stats['n_indexed']} ({stats['indexed_fraction'] * 100:.0f}%)",
+    ]
+    pattern_rows = []
+    for p in stats["patterns"]:
+        med = p["median_match_dist_px"]
+        med_txt = f"{med:.2f} px" if med == med else "n/a"  # NaN-aware
+        pattern_rows.append(
+            html.Li(
+                f"Pattern {p['pattern_num']}: "
+                f"{p['n_matched']}/{p['n_predicted_on_detector']} matched (on-detector), "
+                f"RMS={p['rms_error']:.4f}\u00b0, "
+                f"goodness={p['goodness']:.1f}, "
+                f"median match={med_txt}"
+            )
+        )
+
+    body = [html.P(header_bits, className="mb-1")]
+    if pattern_rows:
+        body.append(html.Ul(pattern_rows, className="mb-0 small"))
+    return dbc.Card(dbc.CardBody(body), className="mt-2")
 
 
 # ---------------------------------------------------------------------------
