@@ -95,10 +95,11 @@ _viz_tabs = dbc.Tabs(
             ],
         ),
         # ==================================================================
-        # Tab: Orientation — sidebar + map
+        # Tab: Color Map — sidebar + map
         # ==================================================================
         dbc.Tab(
-            label="Orientation",
+            # This tab used to be called "Orientation"; IDs/functions keep that name for now.
+            label="Color Map",
             tab_id="tab-orientation",
             children=[
                 html.Div(
@@ -193,65 +194,98 @@ _viz_tabs = dbc.Tabs(
                                         ),
                                         # Custom plot axes.  H and F are wire-frame
                                         # coords rotated from (Y, Z); see
-                                        # ``xml_parser.yz_to_hf``.  ``auto`` defers
-                                        # to the Igor-style heuristic in
-                                        # ``orientation_map._select_axes``.
-                                        _viz_control(
-                                            "X axis",
-                                            dbc.Select(
-                                                id="orientation-x-axis-select",
-                                                options=[
-                                                    {"label": "Auto", "value": "auto"},
-                                                    {"label": "X", "value": "X"},
-                                                    {"label": "Y", "value": "Y"},
-                                                    {"label": "Z", "value": "Z"},
-                                                    {"label": "H", "value": "H"},
-                                                    {"label": "F", "value": "F"},
-                                                    {"label": "Depth", "value": "depth"},
-                                                ],
-                                                value="auto",
-                                                className="form-select",
-                                            ),
-                                        ),
-                                        _viz_control(
-                                            "Y axis",
-                                            dbc.Select(
-                                                id="orientation-y-axis-select",
-                                                options=[
-                                                    {"label": "Auto", "value": "auto"},
-                                                    {"label": "X", "value": "X"},
-                                                    {"label": "Y", "value": "Y"},
-                                                    {"label": "Z", "value": "Z"},
-                                                    {"label": "H", "value": "H"},
-                                                    {"label": "F", "value": "F"},
-                                                    {"label": "Depth", "value": "depth"},
-                                                ],
-                                                value="H",
-                                                className="form-select",
-                                            ),
-                                        ),
-                                        # Z-axis is only relevant in 3-D mode;
-                                        # the wrapper visibility is toggled by a
-                                        # callback below.
+                                        # ``xml_parser.yz_to_hf``.  Defaults are X/H
+                                        # in 2-D and X/Y/Z in 3-D.
                                         html.Div(
-                                            id="orientation-z-axis-wrap",
-                                            style={"display": "none"},
-                                            children=_viz_control(
-                                                "Z axis",
-                                                dbc.Select(
-                                                    id="orientation-z-axis-select",
-                                                    options=[
-                                                        {"label": "X", "value": "X"},
-                                                        {"label": "Y", "value": "Y"},
-                                                        {"label": "Z", "value": "Z"},
-                                                        {"label": "H", "value": "H"},
-                                                        {"label": "F", "value": "F"},
-                                                        {"label": "Depth", "value": "depth"},
-                                                    ],
-                                                    value="Z",
-                                                    className="form-select",
+                                            id="orientation-2d-axis-wrap",
+                                            children=[
+                                                _viz_control(
+                                                    "X axis",
+                                                    dbc.Select(
+                                                        id="orientation-x-axis-select",
+                                                        options=[
+                                                            {"label": "X", "value": "X"},
+                                                            {"label": "Y", "value": "Y"},
+                                                            {"label": "Z", "value": "Z"},
+                                                            {"label": "H", "value": "H"},
+                                                            {"label": "F", "value": "F"},
+                                                            {"label": "Depth", "value": "depth"},
+                                                        ],
+                                                        value="X",
+                                                        className="form-select",
+                                                    ),
                                                 ),
-                                            ),
+                                                _viz_control(
+                                                    "Y axis",
+                                                    dbc.Select(
+                                                        id="orientation-y-axis-select",
+                                                        options=[
+                                                            {"label": "X", "value": "X"},
+                                                            {"label": "Y", "value": "Y"},
+                                                            {"label": "Z", "value": "Z"},
+                                                            {"label": "H", "value": "H"},
+                                                            {"label": "F", "value": "F"},
+                                                            {"label": "Depth", "value": "depth"},
+                                                        ],
+                                                        value="H",
+                                                        className="form-select",
+                                                    ),
+                                                ),
+                                            ],
+                                        ),
+                                        html.Div(
+                                            id="orientation-3d-axis-wrap",
+                                            style={"display": "none"},
+                                            children=[
+                                                _viz_control(
+                                                    "X axis",
+                                                    dbc.Select(
+                                                        id="orientation-3d-x-axis-select",
+                                                        options=[
+                                                            {"label": "X", "value": "X"},
+                                                            {"label": "Y", "value": "Y"},
+                                                            {"label": "Z", "value": "Z"},
+                                                            {"label": "H", "value": "H"},
+                                                            {"label": "F", "value": "F"},
+                                                            {"label": "Depth", "value": "depth"},
+                                                        ],
+                                                        value="X",
+                                                        className="form-select",
+                                                    ),
+                                                ),
+                                                _viz_control(
+                                                    "Y axis",
+                                                    dbc.Select(
+                                                        id="orientation-3d-y-axis-select",
+                                                        options=[
+                                                            {"label": "X", "value": "X"},
+                                                            {"label": "Y", "value": "Y"},
+                                                            {"label": "Z", "value": "Z"},
+                                                            {"label": "H", "value": "H"},
+                                                            {"label": "F", "value": "F"},
+                                                            {"label": "Depth", "value": "depth"},
+                                                        ],
+                                                        value="Y",
+                                                        className="form-select",
+                                                    ),
+                                                ),
+                                                _viz_control(
+                                                    "Z axis",
+                                                    dbc.Select(
+                                                        id="orientation-z-axis-select",
+                                                        options=[
+                                                            {"label": "X", "value": "X"},
+                                                            {"label": "Y", "value": "Y"},
+                                                            {"label": "Z", "value": "Z"},
+                                                            {"label": "H", "value": "H"},
+                                                            {"label": "F", "value": "F"},
+                                                            {"label": "Depth", "value": "depth"},
+                                                        ],
+                                                        value="Z",
+                                                        className="form-select",
+                                                    ),
+                                                ),
+                                            ],
                                         ),
                                     ],
                                 ),
@@ -862,6 +896,8 @@ def load_peakindexing_data(href):
     Input(SCALAR_MAX_ID, "value"),
     Input("orientation-x-axis-select", "value"),
     Input("orientation-y-axis-select", "value"),
+    Input("orientation-3d-x-axis-select", "value"),
+    Input("orientation-3d-y-axis-select", "value"),
     Input("orientation-z-axis-select", "value"),
     prevent_initial_call=True,
 )
@@ -882,6 +918,8 @@ def update_orientation_map(
     user_vmax,
     x_axis,
     y_axis,
+    x_axis_3d,
+    y_axis_3d,
     z_axis,
 ):
     if not xml_path:
@@ -957,13 +995,14 @@ def update_orientation_map(
         cmin = user_vmin if (user_vmin is not None and user_vmin != "") else auto_vmin
         cmax = user_vmax if (user_vmax is not None and user_vmax != "") else auto_vmax
 
-        # Resolve axis selections.  Empty/None falls back to defaults.
-        # In 3-D mode the explicit X/Y/Z choices override "auto".
-        x_axis_val = x_axis or "auto"
-        y_axis_val = y_axis or "auto"
+        # Resolve axis selections.  2-D and 3-D controls are separate so each
+        # view retains its own axis state when users toggle modes.
+        is_3d_view = str(view_mode).lower() == "3d"
+        plot_x_axis = (x_axis_3d or "X") if is_3d_view else (x_axis or "X")
+        plot_y_axis = (y_axis_3d or "Y") if is_3d_view else (y_axis or "H")
         z_axis_val = z_axis or "Z"
 
-        if view_mode == "3d":
+        if is_3d_view:
             fig = make_orientation_map_3d(
                 parsed,
                 color_by=effective_color,
@@ -977,8 +1016,8 @@ def update_orientation_map(
                 reverse_palette=bool(reverse_palette),
                 cmin=cmin,
                 cmax=cmax,
-                x_axis=x_axis_val if x_axis_val != "auto" else "X",
-                y_axis=y_axis_val if y_axis_val != "auto" else "Y",
+                x_axis=plot_x_axis,
+                y_axis=plot_y_axis,
                 z_axis=z_axis_val,
             )
         else:
@@ -995,8 +1034,8 @@ def update_orientation_map(
                 reverse_palette=bool(reverse_palette),
                 cmin=cmin,
                 cmax=cmax,
-                x_axis=x_axis_val,
-                y_axis=y_axis_val,
+                x_axis=plot_x_axis,
+                y_axis=plot_y_axis,
             )
 
         # Cross-plot highlighting: dim unselected points, ring selected ones
@@ -1006,9 +1045,9 @@ def update_orientation_map(
                 parsed,
                 selected_grains,
                 marker_size,
-                is_3d=(view_mode == "3d"),
-                x_axis=(x_axis_val if (view_mode != "3d" or x_axis_val != "auto") else "X"),
-                y_axis=(y_axis_val if (view_mode != "3d" or y_axis_val != "auto") else "Y"),
+                is_3d=is_3d_view,
+                x_axis=plot_x_axis,
+                y_axis=plot_y_axis,
                 z_axis=z_axis_val,
             )
 
@@ -1022,18 +1061,19 @@ def update_orientation_map(
 
 
 # ---------------------------------------------------------------------------
-# Callback: toggle Z-axis dropdown visibility based on 2-D / 3-D view mode
+# Callback: toggle axis dropdown visibility based on 2-D / 3-D view mode
 # ---------------------------------------------------------------------------
 
 
 @callback(
-    Output("orientation-z-axis-wrap", "style"),
+    Output("orientation-2d-axis-wrap", "style"),
+    Output("orientation-3d-axis-wrap", "style"),
     Input("orientation-view-toggle", "value"),
 )
-def toggle_z_axis_visibility(view_mode):
-    if view_mode == "3d":
-        return {"display": "block"}
-    return {"display": "none"}
+def toggle_axis_visibility(view_mode):
+    if str(view_mode).lower() == "3d":
+        return {"display": "none"}, {"display": "block"}
+    return {"display": "block"}, {"display": "none"}
 
 
 # ---------------------------------------------------------------------------

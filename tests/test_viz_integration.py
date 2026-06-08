@@ -35,6 +35,19 @@ def test_orientation_map_creates_figure():
     assert fig.data[0].type == "scattergl"
 
 
+def test_orientation_map_xh_axes():
+    fig = make_orientation_map(_parsed(), color_by="n_indexed", x_axis="X", y_axis="H")
+    assert fig.layout.xaxis.title.text == "X (um)"
+    assert fig.layout.yaxis.title.text == "H (um)"
+
+
+def test_orientation_map_3d_xyz_axes():
+    fig = make_orientation_map_3d(_parsed(), color_by="n_indexed", x_axis="X", y_axis="Y", z_axis="Z")
+    assert fig.layout.scene.xaxis.title.text == "X (um)"
+    assert fig.layout.scene.yaxis.title.text == "Y (um)"
+    assert fig.layout.scene.zaxis.title.text == "Z (um)"
+
+
 def test_orientation_map_all_color_modes():
     parsed = _parsed()
     for mode in ("n_indexed", "goodness", "rms_error", "n_patterns"):
