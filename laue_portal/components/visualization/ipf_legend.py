@@ -360,5 +360,5 @@ def stereo_color_key(color_mode: Optional[str]) -> html.Div:
     if color_mode == "ipf":
         return ipf_triangle_legend(caption="Cubic IPF (m\u20133m)")
     if color_mode == "hsv_position":
-        return hsv_hexagon_legend(caption="Stereographic position (HSV)")
+        return hsv_hexagon_legend(caption="Pole position (HSV)")
     return _empty_key()

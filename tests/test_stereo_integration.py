@@ -1,7 +1,7 @@
 """
 Integration tests for Stage 2 visualization components.
 
-Tests stereo_plot and updated orientation_map with real XML fixture data.
+Tests pole figure and updated orientation_map with real XML fixture data.
 """
 
 import os
@@ -15,59 +15,13 @@ from laue_portal.components.visualization.orientation_map import (
     make_orientation_map,
     make_orientation_map_3d,
 )
-from laue_portal.components.visualization.stereo_plot import (
-    make_pole_figure,
-    make_stereo_plot,
-)
+from laue_portal.components.visualization.stereo_plot import make_pole_figure
 
 FIXTURE_XML = os.path.join(os.path.dirname(__file__), "fixtures", "test_indexing.xml")
 
 
 def _parsed():
     return parse_indexing_xml(FIXTURE_XML)
-
-
-# ---------------------------------------------------------------------------
-# Stereo plot
-# ---------------------------------------------------------------------------
-
-
-def test_stereo_plot_creates_figure():
-    fig = make_stereo_plot(_parsed())
-    assert fig is not None
-    # Should have at least the unit circle trace
-    assert len(fig.data) >= 1
-
-
-def test_stereo_plot_with_wulff_net():
-    fig = make_stereo_plot(_parsed(), show_wulff=True, wulff_step_deg=10)
-    # Wulff net adds many traces
-    assert len(fig.data) > 3
-
-
-def test_stereo_plot_without_wulff_net():
-    fig = make_stereo_plot(_parsed(), show_wulff=False)
-    # Fewer traces without Wulff net
-    fig_with = make_stereo_plot(_parsed(), show_wulff=True)
-    assert len(fig.data) < len(fig_with.data)
-
-
-def test_stereo_plot_single_step():
-    fig = make_stereo_plot(_parsed(), step_index=0)
-    assert fig is not None
-
-
-def test_stereo_plot_zoom():
-    fig_90 = make_stereo_plot(_parsed(), zoom_deg=90)
-    fig_45 = make_stereo_plot(_parsed(), zoom_deg=45)
-    # Both should create valid figures
-    assert fig_90 is not None
-    assert fig_45 is not None
-
-
-def test_stereo_plot_marker_size():
-    fig = make_stereo_plot(_parsed(), marker_size=10)
-    assert fig is not None
 
 
 # ---------------------------------------------------------------------------

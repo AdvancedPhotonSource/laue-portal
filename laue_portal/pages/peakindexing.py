@@ -478,126 +478,6 @@ _viz_tabs = dbc.Tabs(
             ],
         ),
         # ==================================================================
-        # Tab: Stereographic — sidebar + plot
-        # ==================================================================
-        dbc.Tab(
-            label="Stereographic",
-            tab_id="tab-stereo",
-            children=[
-                html.Div(
-                    id="tab-stereo-content",
-                    className="pi-viz-layout",
-                    children=[
-                        # ── Sidebar ──
-                        html.Div(
-                            className="pi-viz-sidebar",
-                            children=[
-                                html.Div(
-                                    className="pi-viz-sidebar-section",
-                                    children=[
-                                        _viz_sidebar_head("Zoom", "bi bi-zoom-in"),
-                                        html.Div(
-                                            className="pi-viz-control",
-                                            children=[
-                                                html.Label("Range"),
-                                                dcc.Input(
-                                                    id="stereo-zoom-slider",
-                                                    type="range",
-                                                    min=5,
-                                                    max=90,
-                                                    step=5,
-                                                    value=90,
-                                                ),
-                                                html.Span(
-                                                    id="stereo-zoom-label",
-                                                    children="90\u00b0",
-                                                    className="pi-viz-unit",
-                                                ),
-                                            ],
-                                        ),
-                                    ],
-                                ),
-                                html.Div(
-                                    className="pi-viz-sidebar-section",
-                                    children=[
-                                        _viz_sidebar_head("Wulff Net", "bi bi-globe2"),
-                                        _viz_control(
-                                            "",
-                                            dbc.Checkbox(
-                                                id="stereo-wulff-toggle",
-                                                label="Show Wulff net",
-                                                value=True,
-                                            ),
-                                        ),
-                                        _viz_control(
-                                            "Step",
-                                            dbc.Select(
-                                                id="stereo-wulff-step",
-                                                options=[
-                                                    {"label": "5\u00b0", "value": "5"},
-                                                    {"label": "10\u00b0", "value": "10"},
-                                                    {"label": "20\u00b0", "value": "20"},
-                                                ],
-                                                value="10",
-                                                className="form-select",
-                                            ),
-                                        ),
-                                    ],
-                                ),
-                                html.Div(
-                                    className="pi-viz-sidebar-section",
-                                    children=[
-                                        _viz_sidebar_head("Display", "bi bi-aspect-ratio"),
-                                        _viz_control(
-                                            "Marker",
-                                            dbc.Input(
-                                                id="stereoprojection-marker-size",
-                                                type="number",
-                                                min=1,
-                                                max=75,
-                                                step=1,
-                                                value=12,
-                                                debounce=True,
-                                                className="form-control",
-                                            ),
-                                        ),
-                                    ],
-                                ),
-                                html.Div(
-                                    className="pi-viz-sidebar-section",
-                                    style={"padding": ".4rem .55rem"},
-                                    children=[
-                                        dbc.Button(
-                                            [html.I(className="bi bi-play-fill me-1"), "Render"],
-                                            id="stereo-render-btn",
-                                            color="success",
-                                            size="sm",
-                                            style={"width": "100%"},
-                                        ),
-                                    ],
-                                ),
-                            ],
-                        ),
-                        # ── Main visualization ──
-                        html.Div(
-                            className="pi-viz-main",
-                            children=[
-                                _viz_graph_with_loading(
-                                    dcc.Graph(
-                                        id="stereo-projection-graph",
-                                        config={"displayModeBar": True, "scrollZoom": True},
-                                        style={"height": "100%", "minHeight": "400px"},
-                                    ),
-                                    "stereo-loading-target",
-                                    text="Rendering\u2026",
-                                ),
-                            ],
-                        ),
-                    ],
-                ),
-            ],
-        ),
-        # ==================================================================
         # Tab: Detector View — sidebar + Plotly back-projection figure
         # ==================================================================
         dbc.Tab(
@@ -1315,66 +1195,6 @@ def update_pole_figure(
 
 
 # ---------------------------------------------------------------------------
-# Callback: render stereographic projection (on-demand via button click)
-# ---------------------------------------------------------------------------
-
-
-@callback(
-    Output("stereo-projection-graph", "figure"),
-    Output("stereoprojection-marker-size", "value"),
-    Output("stereo-zoom-label", "children"),
-    Output("stereo-loading-target", "children"),
-    Input("stereo-render-btn", "n_clicks"),
-    State("peakindexing-xml-path", "data"),
-    State("stereo-zoom-slider", "value"),
-    State("stereo-wulff-toggle", "value"),
-    State("stereo-wulff-step", "value"),
-    State("stereoprojection-marker-size", "value"),
-    prevent_initial_call=True,
-)
-def render_stereo_projection(
-    n_clicks,
-    xml_path,
-    zoom_deg,
-    show_wulff,
-    wulff_step,
-    input_size,
-):
-    if not xml_path:
-        raise PreventUpdate
-
-    try:
-        from laue_portal.analysis.xml_parser import parse_indexing_xml
-        from laue_portal.components.visualization.stereo_plot import (
-            make_stereo_plot,
-        )
-
-        parsed = parse_indexing_xml(xml_path)
-
-        marker_size = max(1, int(input_size or 12))
-        zoom = int(zoom_deg) if zoom_deg else 90
-        wulff_step_int = int(wulff_step) if wulff_step else 10
-        zoom_label = f"{zoom}\u00b0"
-
-        fig = make_stereo_plot(
-            parsed,
-            step_index=None,
-            zoom_deg=zoom,
-            show_wulff=bool(show_wulff),
-            wulff_step_deg=wulff_step_int,
-            marker_size=marker_size,
-        )
-
-        return fig, marker_size, zoom_label, ""
-    except PreventUpdate:
-        raise
-    except Exception as e:
-        print(f"Error creating stereo projection: {e}")
-        traceback.print_exc()
-        raise PreventUpdate from None
-
-
-# ---------------------------------------------------------------------------
 # Callback: populate indexed peaks table when XML is available
 # ---------------------------------------------------------------------------
 
@@ -1621,9 +1441,10 @@ def handle_pole_figure_click(click_data, reset_clicks, current_center, xml_path,
     Input("stereo-plot-graph", "selectedData"),
     State("peakindexing-xml-path", "data"),
     State("stereo-hkl-select", "value"),
+    State("stereo-surface-select", "value"),
     prevent_initial_call=True,
 )
-def handle_pole_selection(selected_data, xml_path, hkl_str):
+def handle_pole_selection(selected_data, xml_path, hkl_str, surface):
     """Process lasso/box selection on the pole figure to extract grain indices."""
     # If selection is cleared (double-click to deselect), reset
     if not selected_data or not selected_data.get("points"):
@@ -1659,6 +1480,7 @@ def handle_pole_selection(selected_data, xml_path, hkl_str):
 
             from laue_portal.analysis.projection import (
                 cubic_hkl_family,
+                get_surface_vectors,
                 pole_figure_points,
             )
             from laue_portal.analysis.xml_parser import parse_indexing_xml
@@ -1667,9 +1489,13 @@ def handle_pole_selection(selected_data, xml_path, hkl_str):
 
             hkl = tuple(int(x) for x in hkl_str.split(","))
             family = cubic_hkl_family(*hkl)
+            surf_normal, surf_roll, surf_tilt = get_surface_vectors(surface or "normal")
             points, grain_indices = pole_figure_points(
                 parsed["recip_lattices"],
                 family,
+                surface_normal=surf_normal,
+                surface_roll=surf_roll,
+                surface_tilt=surf_tilt,
             )
 
             # Apply same NaN filter as make_pole_figure so point indices
