@@ -35,7 +35,12 @@ from laue_portal.pages.callback_registrars import (
 )
 from laue_portal.processing.queue.core import STATUS_REVERSE_MAPPING
 from laue_portal.processing.queue.enqueue import enqueue_peakindexing
-from laue_portal.services.validation import PEAKINDEX_FIELD_IDS, get_num_inputs_from_fields, validate_peakindexing
+from laue_portal.services.validation import (
+    PEAKINDEX_FIELD_IDS,
+    effective_data_path,
+    get_num_inputs_from_fields,
+    validate_peakindexing,
+)
 from laue_portal.utilities.hkl_parse import str2hkl
 from laue_portal.utilities.srange import srange
 
@@ -747,8 +752,8 @@ def submit_parameters(
                 current_filename_prefix = (
                     [s.strip() for s in current_filename_prefix_str.split(",")] if current_filename_prefix_str else []
                 )
-                # Build full path
-                current_full_data_path = resolve_path_with_root(current_data_path, root_path)
+                # Build full path.  Blank Folder Path means Root Path is the data directory.
+                current_full_data_path = effective_data_path(current_data_path, root_path)
 
                 # Determine outputXML value, using default if not provided
                 current_outputXML = outputXML or PEAKINDEX_DEFAULTS.get("outputXML", "output.xml")

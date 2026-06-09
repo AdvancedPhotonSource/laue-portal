@@ -230,6 +230,18 @@ def safe_int(value):
         return None
 
 
+def is_data_root_mode(root_path, data_path):
+    """Return True when Root Path itself is the data directory."""
+    return bool(root_path) and not data_path
+
+
+def effective_data_path(data_path, root_path):
+    """Resolve the data directory, allowing blank Folder Path to mean Root Path."""
+    if is_data_root_mode(root_path, data_path):
+        return root_path
+    return resolve_path_with_root(data_path, root_path)
+
+
 def all_path_fields_are_absolute(all_fields, path_field_names):
     """Return True when all listed semicolon-aware path fields are absolute."""
     for field_name in path_field_names:
@@ -291,6 +303,7 @@ def validate_peakindexing(fields, catalog_defaults=None):
     num_inputs = get_num_inputs_from_fields(all_fields)
     root_path = all_fields.get("root_path", "")
     IDnumber = all_fields.get("IDnumber", "")
+    data_root_mode = is_data_root_mode(root_path, all_fields.get("data_path", ""))
 
     root_path_dependent_fields = ["data_path", "outputFolder", "geoFile", "crystFile"]
     if not root_path:
@@ -335,6 +348,14 @@ def validate_peakindexing(fields, catalog_defaults=None):
     else:
         parsed_fields["root_path"] = root_path
         add_validation_message(validation_result, "successes", "root_path")
+        if data_root_mode:
+            parsed_fields["data_path"] = parse_parameter("", num_inputs)
+            add_validation_message(
+                validation_result,
+                "successes",
+                "data_path",
+                custom_message="Folder Path is blank; Root Path will be used as the data directory",
+            )
 
     parsed_fields["IDnumber"] = IDnumber
 
@@ -486,9 +507,9 @@ def validate_peakindexing(fields, catalog_defaults=None):
                         )
 
             if "root_path" not in validation_result["errors"]:
-                current_data_path = validate_field("data_path")
-                if current_data_path is not None:
-                    if os.path.isabs(current_data_path):
+                current_data_path = validate_field("data_path", required=not data_root_mode)
+                if current_data_path is not None or data_root_mode:
+                    if current_data_path and os.path.isabs(current_data_path):
                         add_validation_message(
                             validation_result,
                             "warnings",
@@ -497,7 +518,7 @@ def validate_peakindexing(fields, catalog_defaults=None):
                             custom_message="Data Path is absolute - Root Path will be ignored",
                         )
 
-                    current_full_data_path = resolve_path_with_root(current_data_path, root_path)
+                    current_full_data_path = effective_data_path(current_data_path, root_path)
 
                     if not os.path.exists(current_full_data_path):
                         add_validation_message(
@@ -809,7 +830,15 @@ def validate_peakindexing(fields, catalog_defaults=None):
             current_outputFolder = validate_field("outputFolder", display_name="Output Folder")
             if current_outputFolder is not None:
                 if "root_path" not in validation_result["errors"]:
-                    if os.path.isabs(current_outputFolder):
+                    if data_root_mode and not os.path.isabs(current_outputFolder):
+                        add_validation_message(
+                            validation_result,
+                            "warnings",
+                            "outputFolder",
+                            input_prefix,
+                            custom_message="Output Folder is relative while Folder Path is blank; use an absolute output path if results should not be written under the data root",
+                        )
+                    elif os.path.isabs(current_outputFolder) and not data_root_mode:
                         add_validation_message(
                             validation_result,
                             "warnings",
@@ -832,7 +861,7 @@ def validate_peakindexing(fields, catalog_defaults=None):
             current_geoFile = validate_field("geoFile", display_name="Geometry File")
             if current_geoFile is not None:
                 if "root_path" not in validation_result["errors"]:
-                    if os.path.isabs(current_geoFile):
+                    if os.path.isabs(current_geoFile) and not data_root_mode:
                         add_validation_message(
                             validation_result,
                             "warnings",
@@ -854,7 +883,7 @@ def validate_peakindexing(fields, catalog_defaults=None):
             current_crystFile = validate_field("crystFile", display_name="Crystal File")
             if current_crystFile is not None:
                 if "root_path" not in validation_result["errors"]:
-                    if os.path.isabs(current_crystFile):
+                    if os.path.isabs(current_crystFile) and not data_root_mode:
                         add_validation_message(
                             validation_result,
                             "warnings",

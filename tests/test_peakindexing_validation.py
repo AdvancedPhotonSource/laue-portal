@@ -10,7 +10,8 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 from laue_portal.database import session_utils
-from laue_portal.services.validation import validate_peakindexing
+from laue_portal.pages.callback_registrars import _effective_data_paths, _resolve_effective_data_path
+from laue_portal.services.validation import effective_data_path, validate_peakindexing
 
 
 @pytest.fixture
@@ -104,6 +105,56 @@ def test_relative_paths_are_valid_when_root_path_exists(tmp_path, isolated_db):
     assert result["errors"] == {}
     for field_name in ["data_path", "geoFile", "crystFile", "outputFolder"]:
         assert field_name not in result["warnings"]
+
+
+def test_blank_folder_path_uses_root_as_data_directory(tmp_path, isolated_db):
+    fields = valid_peakindex_fields(tmp_path)
+    fields.update(
+        {
+            "root_path": str(tmp_path / "data"),
+            "data_path": "",
+            "geoFile": str(tmp_path / "geo.yml"),
+            "crystFile": str(tmp_path / "crystal.yml"),
+            "outputFolder": str(tmp_path / "out"),
+        }
+    )
+
+    result = validate_peakindexing(fields)
+
+    assert result["errors"] == {}
+    assert "data_path" not in result["warnings"]
+    assert "outputFolder" not in result["warnings"]
+    assert "geoFile" not in result["warnings"]
+    assert "crystFile" not in result["warnings"]
+    assert "Folder Path is blank; Root Path will be used as the data directory" in result["successes"]["data_path"]
+
+
+def test_blank_folder_path_warns_for_relative_output(tmp_path, isolated_db):
+    fields = valid_peakindex_fields(tmp_path)
+    fields.update(
+        {
+            "root_path": str(tmp_path / "data"),
+            "data_path": "",
+            "geoFile": str(tmp_path / "geo.yml"),
+            "crystFile": str(tmp_path / "crystal.yml"),
+            "outputFolder": "out",
+        }
+    )
+
+    result = validate_peakindexing(fields)
+
+    assert result["errors"] == {}
+    assert "outputFolder" in result["warnings"]
+    assert "Folder Path is blank" in result["warnings"]["outputFolder"][0]
+
+
+def test_blank_folder_path_resolves_to_root_for_submission_and_file_matching(tmp_path):
+    root = str(tmp_path / "data")
+
+    assert effective_data_path("", root) == root
+    assert effective_data_path(None, root) == root
+    assert _effective_data_paths("", root) == [root]
+    assert _resolve_effective_data_path("", root) == root
 
 
 def test_numeric_and_detector_crop_errors(tmp_path, isolated_db):

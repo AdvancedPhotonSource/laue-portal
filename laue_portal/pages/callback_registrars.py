@@ -42,6 +42,20 @@ from laue_portal.utilities.srange import srange
 logger = logging.getLogger(__name__)
 
 
+def _effective_data_paths(data_path, root_path):
+    """Return data paths, allowing blank Folder Path to mean Root Path."""
+    if root_path and not data_path:
+        return [root_path]
+    return parse_parameter(data_path)
+
+
+def _resolve_effective_data_path(data_path, root_path):
+    """Resolve a data path, allowing blank Folder Path to mean Root Path."""
+    if root_path and not data_path:
+        return root_path
+    return resolve_path_with_root(data_path, root_path)
+
+
 def _merge_field_values(field_values, delimiter=";"):
     """
     Merge multiple field values, handling list types properly.
@@ -280,7 +294,7 @@ def register_load_file_indices_callback(
     def load_file_indices(n_clicks, data_loaded_signal, data_path, filenamePrefix, root_path_value):
         """Scan directory and populate scanPoints (and optionally depthRange) fields."""
 
-        if not data_path:
+        if not data_path and not root_path_value:
             set_props(alert_id, {"is_open": True, "children": "Please specify a data path first.", "color": "warning"})
             raise PreventUpdate
 
@@ -293,15 +307,15 @@ def register_load_file_indices_callback(
         root_path = root_path_value or DEFAULT_VARIABLES.get("root_path", "")
 
         try:
-            # Parse data_path
-            data_path_list = parse_parameter(data_path)
+            # Parse data_path; blank Folder Path means Root Path is the data directory.
+            data_path_list = _effective_data_paths(data_path, root_path)
 
             # Track indices separately per data path (not merged)
             scanpoint_indices_per_path = []  # List of sets, one per data path
             depth_indices_per_path = []  # List of sets, one per data path
 
             for current_data_path in data_path_list:
-                current_full_data_path = resolve_path_with_root(current_data_path, root_path)
+                current_full_data_path = _resolve_effective_data_path(current_data_path, root_path)
 
                 # Initialize sets for this path
                 path_scanpoint_indices = set()
@@ -466,17 +480,17 @@ def register_check_filenames_callback(
     def check_filenames(n_check, data_path, current_filename, root_path_value, delimiter=";"):
         """Scan directory and suggest common filename patterns with smart context-aware dropdown."""
 
-        if not data_path:
+        root_path = root_path_value or DEFAULT_VARIABLES.get("root_path", "")
+        if not data_path and not root_path:
             return [html.Option(value="", label="No data path provided")], dash.no_update
 
-        data_path_list = parse_parameter(data_path)
+        data_path_list = _effective_data_paths(data_path, root_path)
         num_paths = len(data_path_list)
-        root_path = root_path_value or DEFAULT_VARIABLES.get("root_path", "")
 
         # Scan each path independently
         patterns_by_path = {}
         for i, current_data_path in enumerate(data_path_list):
-            full_path = resolve_path_with_root(current_data_path, root_path)
+            full_path = _resolve_effective_data_path(current_data_path, root_path)
             patterns_by_path[i] = scan_directory_patterns(full_path, VALID_HDF_EXTENSIONS, num_indices)
 
         if not any(patterns_by_path.values()):
