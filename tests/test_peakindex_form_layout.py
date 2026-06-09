@@ -91,3 +91,21 @@ def test_peakindex_readonly_form_contains_fields_without_actions():
 
     assert REQUIRED_FIELD_IDS <= ids
     assert ids.isdisjoint(EDIT_ONLY_ACTION_IDS)
+
+
+def test_peakindex_file_fields_keep_scan_inputs_before_geometry():
+    expected_order = ["data_path", "filenamePrefix", "scanPoints", "depthRange", "geoFile"]
+
+    for component in (peakindex_form, peakindex_readonly_form):
+        ids = collect_ids(component)
+        positions = [ids.index(component_id) for component_id in expected_order]
+        assert positions == sorted(positions)
+
+
+def test_peakindex_mask_file_is_before_peak_search_checkboxes():
+    expected_order = ["peakShape", "maskFile", "smooth", "cosmicFilter"]
+
+    for component in (peakindex_form, peakindex_readonly_form):
+        ids = collect_ids(component)
+        positions = [ids.index(component_id) for component_id in expected_order]
+        assert positions == sorted(positions)

@@ -20,7 +20,6 @@ PEAKINDEX_SECTIONS = [
         [
             ("Identity", "bi bi-person-badge", "#peakindex-sec-identity"),
             ("File Paths", "bi bi-folder2-open", "#peakindex-sec-files"),
-            ("Scan Configuration", "bi bi-grid-3x3-gap", "#peakindex-sec-scan"),
         ],
     ),
     (
@@ -72,27 +71,6 @@ def build_peakindex_form(readonly=False, show_actions=True):
                     children=[
                         form_field("Root Path", "root_path", wide=True, readonly=readonly),
                         form_field("Folder Path", "data_path", wide=True, readonly=readonly),
-                        form_field("Geometry File", "geoFile", wide=True, readonly=readonly),
-                        form_field("Crystal Structure File", "crystFile", wide=True, readonly=readonly),
-                        form_field("Output Path", "outputFolder", wide=True, readonly=readonly),
-                        form_field(
-                            "Output XML",
-                            "outputXML",
-                            placeholder="e.g. output.xml or /absolute/path/output.xml",
-                            readonly=readonly,
-                        ),
-                        form_field("Mask File", "maskFile", readonly=readonly),
-                    ],
-                ),
-                accent="teal",
-                icon_class="bi bi-folder2-open",
-                anchor_id="peakindex-sec-files",
-            ),
-            section_card(
-                "Scan Configuration",
-                html.Div(
-                    className="lp-form-field-grid",
-                    children=[
                         form_field_with_button(
                             "Filename",
                             "filenamePrefix",
@@ -115,11 +93,20 @@ def build_peakindex_form(readonly=False, show_actions=True):
                             placeholder="e.g. 1-10 or 1,5,8,9 or 1-4,10-21",
                             readonly=readonly,
                         ),
+                        form_field("Geometry File", "geoFile", wide=True, readonly=readonly),
+                        form_field("Crystal Structure File", "crystFile", wide=True, readonly=readonly),
+                        form_field("Output Path", "outputFolder", wide=True, readonly=readonly),
+                        form_field(
+                            "Output XML",
+                            "outputXML",
+                            placeholder="e.g. output.xml or /absolute/path/output.xml",
+                            readonly=readonly,
+                        ),
                     ],
                 ),
-                accent="blue",
-                icon_class="bi bi-grid-3x3-gap",
-                anchor_id="peakindex-sec-scan",
+                accent="teal",
+                icon_class="bi bi-folder2-open",
+                anchor_id="peakindex-sec-files",
             ),
             section_card(
                 "Peak Search Parameters",
@@ -152,7 +139,7 @@ def build_peakindex_form(readonly=False, show_actions=True):
                             ],
                             disabled=readonly,
                         ),
-                        html.Div(),
+                        form_field("Mask File", "maskFile", wide=True, readonly=readonly),
                         form_check_row(
                             form_checkbox("Smooth peak before fitting", "smooth", disabled=readonly),
                             form_checkbox("Cosmic Filter", "cosmicFilter", disabled=readonly),

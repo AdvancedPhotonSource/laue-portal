@@ -165,6 +165,36 @@ def test_enqueue_job_supports_custom_rq_id_and_strips_queue_kwargs(monkeypatch):
     assert "rq_job_id" not in queued_kwargs
 
 
+def test_enqueue_peakindexing_forwards_mask_file_to_chunks(queue_db, monkeypatch, tmp_path):
+    fake_queue = FakeQueue()
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(enqueue, "job_queue", fake_queue)
+    monkeypatch.setattr(batch, "redis_conn", fake_redis)
+
+    geometry_file = tmp_path / "geo.xml"
+    crystal_file = tmp_path / "crystal.xtal"
+    output_dir = tmp_path / "out"
+    geometry_file.write_text("geo", encoding="utf-8")
+    crystal_file.write_text("crystal", encoding="utf-8")
+
+    with session_utils.get_session() as session:
+        add_job_with_subjobs(session, job_id=11, subjob_count=1)
+
+    args = peakindex_args()
+    args["geometry_file"] = str(geometry_file)
+    args["crystal_file"] = str(crystal_file)
+
+    enqueue.enqueue_peakindexing(
+        11,
+        input_files=["input.tif"],
+        output_files=[str(output_dir)],
+        mask_file="mask.tif",
+        **args,
+    )
+
+    assert fake_queue.enqueued[0]["kwargs"]["mask_file"] == "mask.tif"
+
+
 def test_enqueue_peakindexing_creates_chunk_jobs_and_metadata(queue_db, monkeypatch, tmp_path):
     fake_queue = FakeQueue()
     fake_redis = FakeRedis()
@@ -238,7 +268,7 @@ def test_execute_peakindexing_chunk_bulk_updates_success_and_failure(queue_db, m
     calls = []
 
     def fake_index(input_image, **kwargs):
-        calls.append(input_image)
+        calls.append((input_image, kwargs.get("mask_file")))
         if input_image == "bad.tif":
             raise RuntimeError("index failed")
         return SimpleNamespace(command_history=[f"index {input_image}"])
@@ -259,10 +289,11 @@ def test_execute_peakindexing_chunk_bulk_updates_success_and_failure(queue_db, m
             {"subjob_id": 201, "input_file": "bad.tif", "output_file": "/out"},
             {"subjob_id": 202, "input_file": "good_b.tif", "output_file": "/out"},
         ],
+        mask_file="mask.tif",
         **peakindex_args(),
     )
 
-    assert calls == ["good_a.tif", "bad.tif", "good_b.tif"]
+    assert calls == [("good_a.tif", "mask.tif"), ("bad.tif", "mask.tif"), ("good_b.tif", "mask.tif")]
     assert len(result) == 3
     assert notifications == [(2, 3)]
 

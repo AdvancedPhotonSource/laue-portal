@@ -825,6 +825,7 @@ def submit_parameters(
                         "peakShape": peakShape_list[i],
                         "max_peaks": max_peaks_list[i],
                         "smooth": smooth_list[i],
+                        "maskFile": maskFile_list[i],
                         "indexKeVmaxCalc": indexKeVmaxCalc_list[i],
                         "indexKeVmaxTest": indexKeVmaxTest_list[i],
                         "indexAngleTolerance": indexAngleTolerance_list[i],
@@ -886,6 +887,12 @@ def submit_parameters(
 
             # Create output directory list matching input_files length
             output_dirs = [spec["outputFolder"] for _ in input_files]
+            mask_file = spec.get("maskFile")
+            if isinstance(mask_file, str):
+                mask_file = mask_file.strip() or None
+                if mask_file and mask_file.lower() == "none":
+                    mask_file = None
+            mask_file = resolve_path_with_root(mask_file, root_path) if mask_file else None
 
             # Enqueue the batch job with all files
             rq_job_id = enqueue_peakindexing(
@@ -910,6 +917,7 @@ def submit_parameters(
                 index_k=spec["indexK"],
                 index_l=spec["indexL"],
                 output_xml=spec["outputXML"],
+                mask_file=mask_file,
             )
 
             logger.info(
