@@ -3,10 +3,12 @@ from collections import Counter
 from dash.development.base_component import Component
 
 from laue_portal.components.peakindex_form import peakindex_form, peakindex_readonly_form
+from laue_portal.pages import callback_registrars
 
 EDIT_ONLY_ACTION_IDS = {
     "peakindex-update-path-fields-btn",
     "peakindex-check-filenames-btn",
+    "peakindex-find-indices-btn",
     "peakindex-set-default-peak-search-btn",
     "peakindex-set-default-indexing-btn",
 }
@@ -109,3 +111,52 @@ def test_peakindex_mask_file_is_before_peak_search_checkboxes():
         ids = collect_ids(component)
         positions = [ids.index(component_id) for component_id in expected_order]
         assert positions == sorted(positions)
+
+
+def make_find_indices_callback(monkeypatch):
+    updates = {}
+    monkeypatch.setattr(
+        callback_registrars, "set_props", lambda component_id, props: updates.update({component_id: props})
+    )
+    callback = callback_registrars.register_find_indices_callback(
+        button_id="test-find-indices-btn",
+        data_path_id="data_path",
+        filename_prefix_id="filenamePrefix",
+        scan_points_id="scanPoints",
+        depth_range_id="depthRange",
+        num_indices=2,
+    )
+    return callback, updates
+
+
+def test_find_indices_callback_populates_scan_and_depth_ranges(tmp_path, monkeypatch):
+    callback, updates = make_find_indices_callback(monkeypatch)
+    (tmp_path / "sample_1_1.h5").write_text("", encoding="utf-8")
+    (tmp_path / "sample_2_1.h5").write_text("", encoding="utf-8")
+    (tmp_path / "sample_2_2.h5").write_text("", encoding="utf-8")
+
+    callback(1, str(tmp_path), "sample_%d_%d.h5", "")
+
+    assert updates["scanPoints"] == {"value": "1,2"}
+    assert updates["depthRange"] == {"value": "1,2"}
+
+
+def test_find_indices_callback_clears_indices_when_no_files_match(tmp_path, monkeypatch):
+    callback, updates = make_find_indices_callback(monkeypatch)
+    (tmp_path / "sample_1_1.h5").write_text("", encoding="utf-8")
+
+    callback(1, str(tmp_path), "missing_%d_%d.h5", "")
+
+    assert updates["scanPoints"] == {"value": ""}
+    assert updates["depthRange"] == {"value": ""}
+
+
+def test_find_indices_callback_clears_depth_for_one_dimensional_pattern(tmp_path, monkeypatch):
+    callback, updates = make_find_indices_callback(monkeypatch)
+    (tmp_path / "sample_1.h5").write_text("", encoding="utf-8")
+    (tmp_path / "sample_2.h5").write_text("", encoding="utf-8")
+
+    callback(1, str(tmp_path), "sample_%d.h5", "")
+
+    assert updates["scanPoints"] == {"value": "1,2"}
+    assert updates["depthRange"] == {"value": ""}

@@ -31,6 +31,7 @@ from laue_portal.database.db_utils import (
 from laue_portal.pages.callback_registrars import (
     _merge_field_values,
     register_check_filenames_callback,
+    register_find_indices_callback,
     register_update_path_fields_callback,
 )
 from laue_portal.processing.queue.core import STATUS_REVERSE_MAPPING
@@ -1039,6 +1040,16 @@ register_check_filenames_callback(
     root_path_id="root_path",
     num_indices=2,
     scan_points_id="scanPoints",
+    depth_range_id="depthRange",
+)
+
+register_find_indices_callback(
+    button_id="peakindex-find-indices-btn",
+    data_path_id="data_path",
+    filename_prefix_id="filenamePrefix",
+    scan_points_id="scanPoints",
+    root_path_id="root_path",
+    num_indices=2,
     depth_range_id="depthRange",
 )
 

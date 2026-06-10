@@ -108,6 +108,24 @@ def form_field_with_button(
     return html.Div(children, className="lp-form-field-inline lp-form-field-wide")
 
 
+def form_fields_with_button(
+    *fields, button_id, button_label, show_button=True, button_color="success", button_outline=False
+):
+    children = list(fields)
+    if show_button:
+        children.append(
+            dbc.Button(
+                button_label,
+                id=button_id,
+                color=button_color,
+                outline=button_outline,
+                size="sm",
+                className="lp-form-inline-button",
+            )
+        )
+    return html.Div(children, className="lp-form-field-inline lp-form-field-wide")
+
+
 def form_check_row(*checkboxes):
     return html.Div(list(checkboxes), className="lp-form-check-row")
 

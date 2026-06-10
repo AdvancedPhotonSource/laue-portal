@@ -19,8 +19,10 @@ Usage:
     )
 """
 
+import fnmatch
 import logging
 import os
+import re
 
 import dash
 import dash_bootstrap_components as dbc
@@ -427,6 +429,96 @@ def register_load_file_indices_callback(
     return load_file_indices
 
 
+def _extract_indices_for_filename_pattern(directory_path, filename_pattern, num_indices):
+    """Return numeric indices from files matching a %d filename pattern."""
+    if not filename_pattern or "%d" not in filename_pattern:
+        return []
+
+    try:
+        files = filter_files_by_extension(directory_path, VALID_HDF_EXTENSIONS)
+    except Exception as e:
+        logger.error(f"Error reading directory {directory_path}: {e}")
+        return []
+
+    placeholder = "\x00"
+    protected_pattern = filename_pattern.replace("%d", placeholder)
+    regex = "^" + re.escape(protected_pattern).replace(re.escape(placeholder), r"(\d+)") + "$"
+    matcher = re.compile(regex)
+    max_groups = min(filename_pattern.count("%d"), num_indices)
+
+    indices = []
+    for filename in files:
+        if not fnmatch.fnmatch(filename, filename_pattern.replace("%d", "*")):
+            continue
+        match = matcher.match(filename)
+        if match:
+            indices.append([int(match.group(i)) for i in range(1, max_groups + 1)])
+    return indices
+
+
+def register_find_indices_callback(
+    button_id: str,
+    data_path_id: str,
+    filename_prefix_id: str,
+    scan_points_id: str,
+    root_path_id: str = "root_path",
+    num_indices: int = 1,
+    depth_range_id: str = None,
+):
+    """Register a callback that populates index ranges for the current filename pattern."""
+
+    @dash.callback(
+        Input(button_id, "n_clicks"),
+        State(data_path_id, "value"),
+        State(filename_prefix_id, "value"),
+        State(root_path_id, "value"),
+        running=[
+            (Output(button_id, "disabled"), True, False),
+            (
+                Output(button_id, "children"),
+                [dbc.Spinner(size="sm", spinner_class_name="me-2"), "Scanning..."],
+                "Find Indices",
+            ),
+        ],
+        prevent_initial_call=True,
+    )
+    def find_indices(_n_clicks, data_path, current_filename, root_path_value, delimiter=";"):
+        root_path = root_path_value or DEFAULT_VARIABLES.get("root_path", "")
+        if not current_filename or "%d" not in str(current_filename):
+            set_props(scan_points_id, {"value": ""})
+            if depth_range_id:
+                set_props(depth_range_id, {"value": ""})
+            raise PreventUpdate
+
+        data_path_list = _effective_data_paths(data_path, root_path)
+        num_paths = len(data_path_list)
+        current_filename = (
+            _merge_field_values(current_filename, delimiter) if isinstance(current_filename, list) else current_filename
+        )
+        current_parts = [s.strip() for s in (current_filename or "").split(delimiter)]
+        while len(current_parts) < num_paths:
+            current_parts.append(current_parts[-1] if current_parts else "")
+
+        matched_indices = []
+        found_any = False
+        for i, current_data_path in enumerate(data_path_list):
+            full_path = _resolve_effective_data_path(current_data_path, root_path)
+            part = current_parts[i] if i < len(current_parts) else ""
+            indices_list = _extract_indices_for_filename_pattern(full_path, part, num_indices)
+            if indices_list:
+                found_any = True
+            matched_indices.append(indices_list)
+
+        if found_any:
+            _populate_index_fields(matched_indices, num_paths, delimiter, scan_points_id, depth_range_id)
+        else:
+            set_props(scan_points_id, {"value": ""})
+            if depth_range_id:
+                set_props(depth_range_id, {"value": ""})
+
+    return find_indices
+
+
 def register_check_filenames_callback(
     find_filenames_id: str,
     data_path_id: str,
@@ -573,8 +665,7 @@ def _populate_index_fields(pattern_indices_per_path, num_paths, delimiter, scan_
 
     if depth_range_id:
         depth_str = _merge_field_values(depth_ranges, delimiter)
-        if depth_str:
-            set_props(depth_range_id, {"value": depth_str})
+        set_props(depth_range_id, {"value": depth_str or ""})
 
 
 def _find_matched_indices(patterns_by_path, num_paths, current_parts):
