@@ -242,7 +242,14 @@ def batch_orientations(recip_lattices, lattice_params):
     return orientations
 
 
-def batch_rodrigues(recip_lattices, lattice_params, symmetry_ops=None):
+def batch_rodrigues(
+    recip_lattices,
+    lattice_params,
+    symmetry_ops=None,
+    reference_index=None,
+    reference_recip=None,
+    return_valid=False,
+):
     """
     Compute Rodrigues vectors for an array of reciprocal lattice matrices.
 
@@ -257,22 +264,64 @@ def batch_rodrigues(recip_lattices, lattice_params, symmetry_ops=None):
         is symmetry-reduced to the smallest rotation from the reference before
         conversion to a Rodrigues vector, matching LaueGo's
         ``symReducedRecipLattice`` path.
+    reference_index : int, optional
+        Index of the grain/step to use as the reference orientation.  ``None``
+        uses the standard lab-system orientation from the lattice parameters.
+    reference_recip : ndarray (3, 3), optional
+        Custom reference reciprocal lattice with rows ``[astar; bstar; cstar]``.
+        Takes precedence over ``reference_index`` when valid.
+    return_valid : bool
+        If True, also return a mask for points with valid reciprocal lattices.
 
     Returns
     -------
-    ndarray (N, 3)
-        Rodrigues vectors, zeros where computation fails.
+    ndarray (N, 3) or tuple
+        Rodrigues vectors, zeros where computation fails.  If
+        ``return_valid`` is True, returns ``(rodrigues, valid_mask)``.
     """
     orientations = batch_orientations(recip_lattices, lattice_params)
     N = len(orientations)
     rodrigues = np.zeros((N, 3))
+    valid = np.zeros(N, dtype=bool)
+
+    ref_orientation = None
+    if reference_recip is not None:
+        ref_rl = np.asarray(reference_recip, dtype=float)
+        if ref_rl.shape == (3, 3) and not (np.any(np.isnan(ref_rl)) or np.allclose(ref_rl, 0.0)):
+            try:
+                ref_recip = lattice_params_to_reciprocal(*lattice_params)
+                ref_orientation = recip_to_orientation(ref_rl, ref_recip)
+            except np.linalg.LinAlgError:
+                ref_orientation = None
+
+    if ref_orientation is None and reference_index is not None:
+        try:
+            ref_idx = int(reference_index)
+        except (TypeError, ValueError):
+            ref_idx = -1
+        if 0 <= ref_idx < N:
+            ref_rl = recip_lattices[ref_idx]
+            if not (np.any(np.isnan(ref_rl)) or np.allclose(ref_rl, 0.0)):
+                ref_orientation = orientations[ref_idx]
 
     for i in range(N):
-        R = orientations[i]
-        if symmetry_ops is not None:
-            R = symmetry_reduce_orientation(R, symmetry_ops=symmetry_ops)
-        rodrigues[i] = orientation_to_rodrigues(R)
+        rl = recip_lattices[i]
+        if np.any(np.isnan(rl)) or np.allclose(rl, 0.0):
+            continue
 
+        try:
+            R = orientations[i]
+            if symmetry_ops is not None:
+                R = symmetry_reduce_orientation(R, reference=ref_orientation, symmetry_ops=symmetry_ops)
+            elif ref_orientation is not None:
+                R = R @ np.linalg.inv(ref_orientation)
+            rodrigues[i] = orientation_to_rodrigues(R)
+            valid[i] = True
+        except np.linalg.LinAlgError:
+            continue
+
+    if return_valid:
+        return rodrigues, valid
     return rodrigues
 
 

@@ -55,8 +55,36 @@ def _viz_control(label_text, *children, help_text=None):
 
 
 def _rgb_symmetry_controls_visible(color_mode):
-    """Show Rodrigues RGB symmetry controls only for Rodrigues coloring."""
+    """Show Rodrigues RGB controls only for Rodrigues coloring."""
     return {} if color_mode == "rodrigues" else {"display": "none"}
+
+
+def _rgb_reference_step_visible(color_mode, reference_mode):
+    """Show reference-step input only when Rodrigues uses a step reference."""
+    return {} if color_mode == "rodrigues" and reference_mode == "step" else {"display": "none"}
+
+
+def _rgb_reference_matrix_visible(color_mode, reference_mode):
+    """Show custom G_ref matrix only for Rodrigues custom-reference mode."""
+    return {} if color_mode == "rodrigues" and reference_mode == "custom" else {"display": "none"}
+
+
+def _rgb_reference_matrix_inputs():
+    """Compact 3x3 input grid for G_ref rows = [astar; bstar; cstar]."""
+    rows = []
+    for row_label, row_name in (("a*", "a"), ("b*", "b"), ("c*", "c")):
+        rows.append(html.Div(row_label, className="pi-matrix-row-label"))
+        for col in range(3):
+            rows.append(
+                dbc.Input(
+                    id=f"orientation-rgb-reference-{row_name}{col}",
+                    type="number",
+                    step="any",
+                    debounce=True,
+                    size="sm",
+                )
+            )
+    return html.Div(rows, className="pi-matrix-input")
 
 
 def _viz_graph_with_loading(graph, target_id, text="Updating\u2026"):
@@ -142,7 +170,7 @@ _viz_tabs = dbc.Tabs(
                                 html.Div(
                                     className="pi-viz-sidebar-section",
                                     children=[
-                                        _viz_sidebar_head("Color Scale", "bi bi-palette2"),
+                                        _viz_sidebar_head("Color", "bi bi-palette2"),
                                         # Legend image (IPF triangle / HSV hexagon /
                                         # empty placeholder).  Children are swapped
                                         # by the dispatcher callback per color mode.
@@ -162,19 +190,57 @@ _viz_tabs = dbc.Tabs(
                                         html.Div(
                                             id="orientation-rgb-symmetry-wrap",
                                             style={"display": "none"},
-                                            children=_viz_control(
-                                                "RGB symmetry",
-                                                dbc.Select(
-                                                    id="orientation-rgb-symmetry-select",
-                                                    options=[
-                                                        {"label": "XML Auto", "value": "auto"},
-                                                        {"label": "Cubic", "value": "cubic"},
-                                                        {"label": "Hexagonal", "value": "hexagonal"},
-                                                    ],
-                                                    value="auto",
-                                                    className="form-select",
+                                            children=[
+                                                _viz_control(
+                                                    "RGB symmetry",
+                                                    dbc.Select(
+                                                        id="orientation-rgb-symmetry-select",
+                                                        options=[
+                                                            {"label": "XML Auto", "value": "auto"},
+                                                            {"label": "Cubic", "value": "cubic"},
+                                                            {"label": "Hexagonal", "value": "hexagonal"},
+                                                        ],
+                                                        value="auto",
+                                                        className="form-select",
+                                                    ),
                                                 ),
-                                            ),
+                                                _viz_control(
+                                                    "Reference",
+                                                    dbc.Select(
+                                                        id="orientation-rgb-reference-select",
+                                                        options=[
+                                                            {"label": "Lab system", "value": "lab"},
+                                                            {"label": "Step #", "value": "step"},
+                                                            {"label": "Custom G_ref", "value": "custom"},
+                                                        ],
+                                                        value="lab",
+                                                        className="form-select",
+                                                    ),
+                                                ),
+                                                html.Div(
+                                                    id="orientation-rgb-reference-step-wrap",
+                                                    style={"display": "none"},
+                                                    children=_viz_control(
+                                                        "Ref step",
+                                                        dbc.Input(
+                                                            id="orientation-rgb-reference-step",
+                                                            type="number",
+                                                            min=0,
+                                                            step=1,
+                                                            value=0,
+                                                            debounce=True,
+                                                        ),
+                                                    ),
+                                                ),
+                                                html.Div(
+                                                    id="orientation-rgb-reference-matrix-wrap",
+                                                    style={"display": "none"},
+                                                    children=_viz_control(
+                                                        "G_ref rows",
+                                                        _rgb_reference_matrix_inputs(),
+                                                    ),
+                                                ),
+                                            ],
                                         ),
                                     ],
                                 ),
@@ -905,6 +971,17 @@ def load_peakindexing_data(href):
     Input("peakindexing-xml-path", "data"),
     Input("orientation-color-select", "value"),
     Input("orientation-rgb-symmetry-select", "value"),
+    Input("orientation-rgb-reference-select", "value"),
+    Input("orientation-rgb-reference-step", "value"),
+    Input("orientation-rgb-reference-a0", "value"),
+    Input("orientation-rgb-reference-a1", "value"),
+    Input("orientation-rgb-reference-a2", "value"),
+    Input("orientation-rgb-reference-b0", "value"),
+    Input("orientation-rgb-reference-b1", "value"),
+    Input("orientation-rgb-reference-b2", "value"),
+    Input("orientation-rgb-reference-c0", "value"),
+    Input("orientation-rgb-reference-c1", "value"),
+    Input("orientation-rgb-reference-c2", "value"),
     Input("orientation-surface-select", "value"),
     Input("orientation-marker-size", "value"),
     Input("orientation-view-toggle", "value"),
@@ -928,6 +1005,17 @@ def update_orientation_map(
     xml_path,
     color_by,
     rgb_symmetry,
+    rgb_reference_mode,
+    rgb_reference_step,
+    ref_a0,
+    ref_a1,
+    ref_a2,
+    ref_b0,
+    ref_b1,
+    ref_b2,
+    ref_c0,
+    ref_c1,
+    ref_c2,
     surface,
     input_size,
     view_mode,
@@ -1019,6 +1107,19 @@ def update_orientation_map(
         cmin = user_vmin if (user_vmin is not None and user_vmin != "") else auto_vmin
         cmax = user_vmax if (user_vmax is not None and user_vmax != "") else auto_vmax
 
+        rgb_reference_matrix = None
+        if rgb_reference_mode == "custom":
+            custom_ref_values = [ref_a0, ref_a1, ref_a2, ref_b0, ref_b1, ref_b2, ref_c0, ref_c1, ref_c2]
+            if all(v is not None and v != "" for v in custom_ref_values):
+                try:
+                    rgb_reference_matrix = [
+                        [float(ref_a0), float(ref_a1), float(ref_a2)],
+                        [float(ref_b0), float(ref_b1), float(ref_b2)],
+                        [float(ref_c0), float(ref_c1), float(ref_c2)],
+                    ]
+                except (TypeError, ValueError):
+                    rgb_reference_matrix = None
+
         # Resolve axis selections.  2-D and 3-D controls are separate so each
         # view retains its own axis state when users toggle modes.
         is_3d_view = str(view_mode).lower() == "3d"
@@ -1044,6 +1145,9 @@ def update_orientation_map(
                 y_axis=plot_y_axis,
                 z_axis=z_axis_val,
                 rgb_symmetry=rgb_symmetry or "auto",
+                rgb_reference_mode=rgb_reference_mode or "lab",
+                rgb_reference_step=rgb_reference_step,
+                rgb_reference_matrix=rgb_reference_matrix,
             )
         else:
             fig = make_orientation_map(
@@ -1062,6 +1166,9 @@ def update_orientation_map(
                 x_axis=plot_x_axis,
                 y_axis=plot_y_axis,
                 rgb_symmetry=rgb_symmetry or "auto",
+                rgb_reference_mode=rgb_reference_mode or "lab",
+                rgb_reference_step=rgb_reference_step,
+                rgb_reference_matrix=rgb_reference_matrix,
             )
 
         # Cross-plot highlighting: dim unselected points, ring selected ones
@@ -1772,15 +1879,20 @@ def reset_scalar_color_range(auto_range, _reset_clicks, color_mode):
     Output("orientation-color-key", "children"),
     Output("orientation-color-controls-wrap", "style"),
     Output("orientation-rgb-symmetry-wrap", "style"),
+    Output("orientation-rgb-reference-step-wrap", "style"),
+    Output("orientation-rgb-reference-matrix-wrap", "style"),
     Input("orientation-color-select", "value"),
     Input("orientation-surface-select", "value"),
+    Input("orientation-rgb-reference-select", "value"),
 )
-def update_orientation_color_key(color_mode, surface):
+def update_orientation_color_key(color_mode, surface, reference_mode):
     """Refresh the orientation legend and mode-specific color controls."""
     return (
         orientation_color_key(color_mode, surface),
         scalar_controls_visible(color_mode),
         _rgb_symmetry_controls_visible(color_mode),
+        _rgb_reference_step_visible(color_mode, reference_mode),
+        _rgb_reference_matrix_visible(color_mode, reference_mode),
     )
 
 

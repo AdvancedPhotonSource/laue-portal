@@ -408,15 +408,16 @@ def batch_rodrigues_rgb(rodrigues_vecs, max_angle_deg=None):
     return rodrigues_rgb(rodrigues_vecs, max_angle_deg=max_angle_deg)
 
 
-def rgb_to_plotly_colors(rgb_array):
+def rgb_to_plotly_colors(rgb_array, alpha=None):
     """
-    Convert an (N, 3) float RGB array to a list of 'rgb(r,g,b)' strings
-    for use with Plotly marker colors.
+    Convert an (N, 3) float RGB array to Plotly color strings.
 
     Parameters
     ----------
     rgb_array : ndarray (N, 3)
         RGB values in [0, 1].
+    alpha : float or ndarray (N,), optional
+        If supplied, emit ``rgba(r,g,b,a)`` strings instead of opaque RGB.
 
     Returns
     -------
@@ -424,11 +425,22 @@ def rgb_to_plotly_colors(rgb_array):
         Plotly-compatible color strings.
     """
     colors = []
+    if alpha is None:
+        alpha_vals = None
+    else:
+        alpha_vals = np.asarray(alpha, dtype=float)
+        if alpha_vals.ndim == 0:
+            alpha_vals = np.full(len(rgb_array), float(alpha_vals))
+
     for i in range(len(rgb_array)):
         r = int(np.clip(rgb_array[i, 0] * 255, 0, 255))
         g = int(np.clip(rgb_array[i, 1] * 255, 0, 255))
         b = int(np.clip(rgb_array[i, 2] * 255, 0, 255))
-        colors.append(f"rgb({r},{g},{b})")
+        if alpha_vals is None:
+            colors.append(f"rgb({r},{g},{b})")
+        else:
+            a = float(np.clip(alpha_vals[i], 0.0, 1.0))
+            colors.append(f"rgba({r},{g},{b},{a:g})")
     return colors
 
 

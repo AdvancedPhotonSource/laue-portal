@@ -284,6 +284,24 @@ class TestBatchOperations:
         rodrigues = batch_rodrigues(recip_lattices, lattice_params)
         np.testing.assert_allclose(rodrigues[0], [0, 0, 0], atol=1e-10)
 
+    def test_batch_rodrigues_reference_index(self, cubic_data):
+        recip_lattices, lattice_params = cubic_data
+        rodrigues = batch_rodrigues(recip_lattices, lattice_params, reference_index=1)
+        np.testing.assert_allclose(rodrigues[1], [0, 0, 0], atol=1e-10)
+
+    def test_batch_rodrigues_reference_recip_matches_reference_index(self, cubic_data):
+        recip_lattices, lattice_params = cubic_data
+        by_index = batch_rodrigues(recip_lattices, lattice_params, reference_index=1)
+        by_recip = batch_rodrigues(recip_lattices, lattice_params, reference_recip=recip_lattices[1])
+        np.testing.assert_allclose(by_recip, by_index, atol=1e-10)
+
+    def test_batch_rodrigues_valid_mask(self):
+        recip_lattices = np.zeros((2, 3, 3))
+        lattice_params = np.array([0.40495, 0.40495, 0.40495, 90, 90, 90])
+        recip_lattices[1] = lattice_params_to_reciprocal(*lattice_params)
+        _, valid = batch_rodrigues(recip_lattices, lattice_params, return_valid=True)
+        np.testing.assert_array_equal(valid, [False, True])
+
     def test_batch_handles_zero_recip(self):
         """Steps with zero reciprocal lattices should produce NaN/zero."""
         recip_lattices = np.zeros((2, 3, 3))

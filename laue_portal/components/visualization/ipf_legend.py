@@ -333,10 +333,9 @@ def orientation_color_key(color_mode: Optional[str], surface: Optional[str]) -> 
         return hsv_hexagon_legend(
             caption=f"{surf.capitalize()} direction in stereographic HSV",
         )
-    if color_mode in {"n_indexed", "goodness", "rms_error", "n_patterns"}:
-        # Scalar modes: the controls themselves carry the visual feedback
-        # (the colorbar lives inside the Plotly figure).  Keep this slot
-        # empty so the controls below sit flush against the section head.
+    if color_mode in {"rodrigues", "n_indexed", "goodness", "rms_error", "n_patterns"}:
+        # These modes carry their visual feedback in the figure or controls.
+        # Keep this slot empty so controls sit flush against the section head.
         return html.Div()
     return _empty_key()
 

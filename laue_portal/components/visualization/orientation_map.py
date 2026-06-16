@@ -118,6 +118,9 @@ def make_orientation_map(
     x_axis: str = "auto",
     y_axis: str = "auto",
     rgb_symmetry: str = "auto",
+    rgb_reference_mode: str = "lab",
+    rgb_reference_step: int = None,
+    rgb_reference_matrix=None,
 ) -> go.Figure:
     """
     Create a 2D orientation scatter plot.
@@ -191,6 +194,9 @@ def make_orientation_map(
         cmin=cmin,
         cmax=cmax,
         rgb_symmetry=rgb_symmetry,
+        rgb_reference_mode=rgb_reference_mode,
+        rgb_reference_step=rgb_reference_step,
+        rgb_reference_matrix=rgb_reference_matrix,
     )
 
     fig.add_trace(
@@ -248,6 +254,9 @@ def make_orientation_map_3d(
     y_axis: str = "Y",
     z_axis: str = "Z",
     rgb_symmetry: str = "auto",
+    rgb_reference_mode: str = "lab",
+    rgb_reference_step: int = None,
+    rgb_reference_matrix=None,
 ) -> go.Figure:
     """
     Create a 3D orientation scatter plot using all three sample coordinates.
@@ -303,6 +312,9 @@ def make_orientation_map_3d(
         cmin=cmin,
         cmax=cmax,
         rgb_symmetry=rgb_symmetry,
+        rgb_reference_mode=rgb_reference_mode,
+        rgb_reference_step=rgb_reference_step,
+        rgb_reference_matrix=rgb_reference_matrix,
     )
 
     fig.add_trace(
@@ -362,6 +374,9 @@ def _build_marker_dict(
     cmin=None,
     cmax=None,
     rgb_symmetry="auto",
+    rgb_reference_mode="lab",
+    rgb_reference_step=None,
+    rgb_reference_matrix=None,
 ):
     """Build Plotly marker dict for the given coloring mode."""
     base = dict(
@@ -381,6 +396,9 @@ def _build_marker_dict(
             pole_center_xy=pole_center_xy,
             pole_color_rad_deg=pole_color_rad_deg,
             rgb_symmetry=rgb_symmetry,
+            rgb_reference_mode=rgb_reference_mode,
+            rgb_reference_step=rgb_reference_step,
+            rgb_reference_matrix=rgb_reference_matrix,
         )
         base["color"] = colors
         # No colorscale or colorbar for per-point RGB
@@ -523,6 +541,9 @@ def _get_orientation_colors(
     pole_center_xy=None,
     pole_color_rad_deg=22.5,
     rgb_symmetry="auto",
+    rgb_reference_mode="lab",
+    rgb_reference_step=None,
+    rgb_reference_matrix=None,
 ):
     """Return list of 'rgb(r,g,b)' strings for orientation coloring modes."""
     recip_lattices = parsed["recip_lattices"]
@@ -541,9 +562,27 @@ def _get_orientation_colors(
             symmetry_ops = symmetry_ops_for_space_group(parsed.get("space_group"))
         else:
             symmetry_ops = symmetry_ops_for_name(rgb_symmetry)
-        rod_vecs = batch_rodrigues(recip_lattices, lattice_params, symmetry_ops=symmetry_ops)
+
+        reference_index = None
+        reference_recip = None
+        if rgb_reference_mode == "step":
+            reference_index = rgb_reference_step
+        elif rgb_reference_mode == "custom" and rgb_reference_matrix is not None:
+            matrix = np.asarray(rgb_reference_matrix, dtype=float)
+            if matrix.shape == (3, 3) and np.all(np.isfinite(matrix)):
+                reference_recip = matrix
+
+        rod_vecs, valid = batch_rodrigues(
+            recip_lattices,
+            lattice_params,
+            symmetry_ops=symmetry_ops,
+            reference_index=reference_index,
+            reference_recip=reference_recip,
+            return_valid=True,
+        )
         rgb = batch_rodrigues_rgb(rod_vecs)
-        return rgb_to_plotly_colors(rgb)
+        alpha = np.where(valid, 1.0, 0.0)
+        return rgb_to_plotly_colors(rgb, alpha=alpha)
 
     elif color_by == "misorientation" and ref_grain_index is not None:
         orientations = batch_orientations(recip_lattices, lattice_params)

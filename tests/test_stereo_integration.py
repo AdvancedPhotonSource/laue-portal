@@ -162,8 +162,29 @@ def test_orientation_map_rodrigues_forced_symmetry():
     cubic = make_orientation_map(parsed, color_by="rodrigues", rgb_symmetry="cubic")
     hexagonal = make_orientation_map(parsed, color_by="rodrigues", rgb_symmetry="hexagonal")
 
-    assert cubic.data[0].marker.color[0] == "rgb(0,0,0)"
-    assert hexagonal.data[0].marker.color[0] != "rgb(0,0,0)"
+    assert cubic.data[0].marker.color[0] == "rgba(0,0,0,1)"
+    assert hexagonal.data[0].marker.color[0] != "rgba(0,0,0,1)"
+
+
+def test_orientation_map_rodrigues_invalid_points_are_transparent():
+    recip = np.eye(3)
+    parsed = {
+        "positions": np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+        "positions_hf": np.array([[0.0, 0.0], [0.0, 0.0]]),
+        "depths": np.array([np.nan, np.nan]),
+        "recip_lattices": np.array([recip, np.zeros((3, 3))]),
+        "lattice_params": np.array([2 * np.pi, 2 * np.pi, 2 * np.pi, 90.0, 90.0, 90.0]),
+        "space_group": 225,
+        "n_patterns": np.array([1, 0]),
+        "n_indexed": np.array([1, 0]),
+        "goodnesses": np.array([1.0, np.nan]),
+        "rms_errors": np.array([0.0, np.nan]),
+    }
+
+    fig = make_orientation_map(parsed, color_by="rodrigues")
+    colors = fig.data[0].marker.color
+    assert colors[0] == "rgba(0,0,0,1)"
+    assert colors[1] == "rgba(0,0,0,0)"
 
 
 def test_orientation_map_3d_cubic_ipf():

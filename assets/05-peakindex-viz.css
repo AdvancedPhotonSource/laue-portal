@@ -165,6 +165,37 @@
   flex: 0 0 auto;
 }
 
+/* Compact 3x3 reciprocal-lattice reference matrix */
+#orientation-rgb-reference-matrix-wrap .pi-viz-control {
+  align-items: stretch;
+  flex-direction: column;
+}
+#orientation-rgb-reference-matrix-wrap .pi-viz-control > label {
+  min-width: 0;
+  text-align: left;
+  padding-right: 0;
+}
+.pi-matrix-input {
+  display: grid;
+  grid-template-columns: 1.6rem repeat(3, minmax(3.4rem, 1fr));
+  gap: .25rem;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+.pi-matrix-row-label {
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--pi-slate-90);
+  text-align: right;
+}
+.pi-viz-control .pi-matrix-input .form-control[type="number"] {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: .1rem .25rem;
+}
+
 /* Range slider */
 .pi-viz-control input[type="range"] {
   flex: 1 1 0;
