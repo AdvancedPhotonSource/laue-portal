@@ -28,6 +28,8 @@ from laue_portal.analysis.orientation import (
     batch_orientations,
     batch_rodrigues,
     misorientation_from_reference,
+    symmetry_ops_for_name,
+    symmetry_ops_for_space_group,
 )
 from laue_portal.analysis.projection import (
     cubic_hkl_family,
@@ -115,6 +117,7 @@ def make_orientation_map(
     cmax: float = None,
     x_axis: str = "auto",
     y_axis: str = "auto",
+    rgb_symmetry: str = "auto",
 ) -> go.Figure:
     """
     Create a 2D orientation scatter plot.
@@ -187,6 +190,7 @@ def make_orientation_map(
         reverse_palette=reverse_palette,
         cmin=cmin,
         cmax=cmax,
+        rgb_symmetry=rgb_symmetry,
     )
 
     fig.add_trace(
@@ -243,6 +247,7 @@ def make_orientation_map_3d(
     x_axis: str = "X",
     y_axis: str = "Y",
     z_axis: str = "Z",
+    rgb_symmetry: str = "auto",
 ) -> go.Figure:
     """
     Create a 3D orientation scatter plot using all three sample coordinates.
@@ -297,6 +302,7 @@ def make_orientation_map_3d(
         reverse_palette=reverse_palette,
         cmin=cmin,
         cmax=cmax,
+        rgb_symmetry=rgb_symmetry,
     )
 
     fig.add_trace(
@@ -355,6 +361,7 @@ def _build_marker_dict(
     reverse_palette=False,
     cmin=None,
     cmax=None,
+    rgb_symmetry="auto",
 ):
     """Build Plotly marker dict for the given coloring mode."""
     base = dict(
@@ -373,6 +380,7 @@ def _build_marker_dict(
             pole_hkl=pole_hkl,
             pole_center_xy=pole_center_xy,
             pole_color_rad_deg=pole_color_rad_deg,
+            rgb_symmetry=rgb_symmetry,
         )
         base["color"] = colors
         # No colorscale or colorbar for per-point RGB
@@ -514,6 +522,7 @@ def _get_orientation_colors(
     pole_hkl=None,
     pole_center_xy=None,
     pole_color_rad_deg=22.5,
+    rgb_symmetry="auto",
 ):
     """Return list of 'rgb(r,g,b)' strings for orientation coloring modes."""
     recip_lattices = parsed["recip_lattices"]
@@ -528,7 +537,11 @@ def _get_orientation_colors(
         return rgb_to_plotly_colors(rgb)
 
     elif color_by == "rodrigues":
-        rod_vecs = batch_rodrigues(recip_lattices, lattice_params)
+        if rgb_symmetry == "auto":
+            symmetry_ops = symmetry_ops_for_space_group(parsed.get("space_group"))
+        else:
+            symmetry_ops = symmetry_ops_for_name(rgb_symmetry)
+        rod_vecs = batch_rodrigues(recip_lattices, lattice_params, symmetry_ops=symmetry_ops)
         rgb = batch_rodrigues_rgb(rod_vecs)
         return rgb_to_plotly_colors(rgb)
 

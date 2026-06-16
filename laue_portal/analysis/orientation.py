@@ -110,12 +110,13 @@ def orientation_to_rodrigues(R):
     if angle < 1e-12:
         return np.zeros(3)
 
-    # Rotation axis from skew-symmetric part
+    # Rotation axis from skew-symmetric part.  Sign follows Igor's
+    # axisOfMatrix() convention after its 2007 Rodrigues polarity fix.
     axis = np.array(
         [
-            R[1, 2] - R[2, 1],
-            R[2, 0] - R[0, 2],
-            R[0, 1] - R[1, 0],
+            R[2, 1] - R[1, 2],
+            R[0, 2] - R[2, 0],
+            R[1, 0] - R[0, 1],
         ]
     )
     axis_norm = np.linalg.norm(axis)
@@ -241,7 +242,7 @@ def batch_orientations(recip_lattices, lattice_params):
     return orientations
 
 
-def batch_rodrigues(recip_lattices, lattice_params):
+def batch_rodrigues(recip_lattices, lattice_params, symmetry_ops=None):
     """
     Compute Rodrigues vectors for an array of reciprocal lattice matrices.
 
@@ -251,6 +252,11 @@ def batch_rodrigues(recip_lattices, lattice_params):
         Array of reciprocal lattice matrices.
     lattice_params : ndarray (6,)
         Lattice parameters: a, b, c, alpha, beta, gamma.
+    symmetry_ops : ndarray (M, 3, 3), optional
+        Proper crystal symmetry operations.  When supplied, each orientation
+        is symmetry-reduced to the smallest rotation from the reference before
+        conversion to a Rodrigues vector, matching LaueGo's
+        ``symReducedRecipLattice`` path.
 
     Returns
     -------
@@ -262,14 +268,34 @@ def batch_rodrigues(recip_lattices, lattice_params):
     rodrigues = np.zeros((N, 3))
 
     for i in range(N):
-        rodrigues[i] = orientation_to_rodrigues(orientations[i])
+        R = orientations[i]
+        if symmetry_ops is not None:
+            R = symmetry_reduce_orientation(R, symmetry_ops=symmetry_ops)
+        rodrigues[i] = orientation_to_rodrigues(R)
 
     return rodrigues
 
 
 # ---------------------------------------------------------------------------
-# Cubic symmetry operations (24 proper rotations of point group 432 / m-3m)
+# Symmetry operations
 # ---------------------------------------------------------------------------
+
+
+def _rotation_matrix(axis, angle_deg):
+    """Return a proper rotation matrix about ``axis`` by ``angle_deg``."""
+    a = np.radians(angle_deg)
+    c, s = np.cos(a), np.sin(a)
+    ax = np.asarray(axis, dtype=float)
+    ax = ax / np.linalg.norm(ax)
+    x, y, z = ax
+    c1 = 1.0 - c
+    return np.array(
+        [
+            [c + x * x * c1, x * y * c1 - z * s, x * z * c1 + y * s],
+            [x * y * c1 + z * s, c + y * y * c1, y * z * c1 - x * s],
+            [x * z * c1 - y * s, y * z * c1 + x * s, c + z * z * c1],
+        ]
+    )
 
 
 def _make_cubic_symmetry_ops():
@@ -289,38 +315,45 @@ def _make_cubic_symmetry_ops():
     """
     ops = []
 
-    # Helper: rotation matrix about a unit axis by angle (radians)
-    def _rot(axis, angle_deg):
-        a = np.radians(angle_deg)
-        c, s = np.cos(a), np.sin(a)
-        ax = np.asarray(axis, dtype=float)
-        ax = ax / np.linalg.norm(ax)
-        x, y, z = ax
-        c1 = 1.0 - c
-        return np.array(
-            [
-                [c + x * x * c1, x * y * c1 - z * s, x * z * c1 + y * s],
-                [x * y * c1 + z * s, c + y * y * c1, y * z * c1 - x * s],
-                [x * z * c1 - y * s, y * z * c1 + x * s, c + z * z * c1],
-            ]
-        )
-
     # Identity
     ops.append(np.eye(3))
 
     # Four-fold axes: [100], [010], [001] at 90, 180, 270 deg
     for axis in ([1, 0, 0], [0, 1, 0], [0, 0, 1]):
         for angle in (90, 180, 270):
-            ops.append(_rot(axis, angle))
+            ops.append(_rotation_matrix(axis, angle))
 
     # Three-fold axes: [111], [-111], [1-11], [-1-11] at 120, 240 deg
     for axis in ([1, 1, 1], [-1, 1, 1], [1, -1, 1], [-1, -1, 1]):
         for angle in (120, 240):
-            ops.append(_rot(axis, angle))
+            ops.append(_rotation_matrix(axis, angle))
 
     # Two-fold axes: [110], [1-10], [101], [10-1], [011], [01-1] at 180 deg
     for axis in ([1, 1, 0], [1, -1, 0], [1, 0, 1], [1, 0, -1], [0, 1, 1], [0, 1, -1]):
-        ops.append(_rot(axis, 180))
+        ops.append(_rotation_matrix(axis, 180))
+
+    return np.array(ops)
+
+
+def _make_hexagonal_symmetry_ops():
+    """
+    Build the 12 proper rotations for the full hexagonal point group 622.
+
+    This is the proper-rotation subset of the common hexagonal Laue group
+    6/mmm: six rotations about c*, plus six two-fold rotations about axes in
+    the basal plane.  It mirrors Igor's use of proper operations only in
+    ``MakeSymmetryOps`` / ``symReducedRecipLattice``.
+    """
+    ops = []
+
+    # Six-fold axis along c*.
+    for angle in (0, 60, 120, 180, 240, 300):
+        ops.append(_rotation_matrix([0, 0, 1], angle))
+
+    # Six two-fold axes in the basal plane, separated by 30 degrees.
+    for angle in (0, 30, 60, 90, 120, 150):
+        axis = [np.cos(np.radians(angle)), np.sin(np.radians(angle)), 0.0]
+        ops.append(_rotation_matrix(axis, 180))
 
     return np.array(ops)
 
@@ -328,10 +361,64 @@ def _make_cubic_symmetry_ops():
 # Pre-computed constant: 24 cubic proper rotation matrices
 CUBIC_SYMMETRY_OPS = _make_cubic_symmetry_ops()
 
+# Pre-computed constant: 12 full hexagonal proper rotation matrices
+HEXAGONAL_SYMMETRY_OPS = _make_hexagonal_symmetry_ops()
+
 # Pre-computed transposes for vectorized misorientation.
 # Since symmetry ops are orthogonal, inv(S) = S.T.
 # Stacked as (24, 3, 3) for batch matmul.
 _SYM_OPS_T = np.array([s.T for s in CUBIC_SYMMETRY_OPS])
+
+
+def symmetry_ops_for_space_group(space_group):
+    """
+    Return supported proper symmetry operations for a crystallographic space group.
+
+    Currently supports hexagonal space groups 168-194 and cubic space groups
+    195-230.  Unsupported or missing groups return ``None`` so callers can
+    fall back to unreduced rotations.
+    """
+    try:
+        sg = int(space_group)
+    except (TypeError, ValueError):
+        return None
+
+    if 195 <= sg <= 230:
+        return CUBIC_SYMMETRY_OPS
+    if 168 <= sg <= 194:
+        return HEXAGONAL_SYMMETRY_OPS
+    return None
+
+
+def symmetry_ops_for_name(symmetry):
+    """Return supported proper symmetry operations by UI/option name."""
+    if symmetry == "cubic":
+        return CUBIC_SYMMETRY_OPS
+    if symmetry == "hexagonal":
+        return HEXAGONAL_SYMMETRY_OPS
+    return None
+
+
+def symmetry_reduce_orientation(R, reference=None, symmetry_ops=None):
+    """
+    Symmetry-reduce an orientation to the smallest rotation from ``reference``.
+
+    This ports LaueGo's ``symReducedRecipLattice`` trace-maximization logic
+    into orientation-matrix form.  Candidates are ``R @ S.T @ inv(reference)``;
+    the largest trace gives the smallest rotation angle.
+    """
+    if symmetry_ops is None:
+        return R
+
+    if reference is None:
+        ref_inv = np.eye(3)
+    else:
+        ref_inv = np.linalg.inv(reference)
+
+    sym_ops_t = np.swapaxes(np.asarray(symmetry_ops, dtype=float), 1, 2)
+    candidates = R @ (sym_ops_t @ ref_inv)
+    traces = candidates[:, 0, 0] + candidates[:, 1, 1] + candidates[:, 2, 2]
+    return candidates[int(np.argmax(traces))]
 
 
 # ---------------------------------------------------------------------------

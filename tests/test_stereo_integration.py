@@ -7,6 +7,8 @@ Tests pole figure and updated orientation_map with real XML fixture data.
 import os
 import sys
 
+import numpy as np
+
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
@@ -141,6 +143,27 @@ def test_orientation_map_rodrigues():
     assert len(fig.data) == 1
     colors = fig.data[0].marker.color
     assert isinstance(colors, (list, tuple))
+
+
+def test_orientation_map_rodrigues_forced_symmetry():
+    parsed = {
+        "positions": np.array([[0.0, 0.0, 0.0]]),
+        "positions_hf": np.array([[0.0, 0.0]]),
+        "depths": np.array([np.nan]),
+        "recip_lattices": np.array([[[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]]),
+        "lattice_params": np.array([2 * np.pi, 2 * np.pi, 2 * np.pi, 90.0, 90.0, 90.0]),
+        "space_group": 194,
+        "n_patterns": np.array([1]),
+        "n_indexed": np.array([1]),
+        "goodnesses": np.array([1.0]),
+        "rms_errors": np.array([0.0]),
+    }
+
+    cubic = make_orientation_map(parsed, color_by="rodrigues", rgb_symmetry="cubic")
+    hexagonal = make_orientation_map(parsed, color_by="rodrigues", rgb_symmetry="hexagonal")
+
+    assert cubic.data[0].marker.color[0] == "rgb(0,0,0)"
+    assert hexagonal.data[0].marker.color[0] != "rgb(0,0,0)"
 
 
 def test_orientation_map_3d_cubic_ipf():

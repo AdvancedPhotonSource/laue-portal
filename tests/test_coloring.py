@@ -137,6 +137,16 @@ class TestRodriguesRgb:
         rgb = rodrigues_rgb(vecs, max_angle_deg=90)
         assert rgb.shape == (3, 3)
 
+    def test_default_scaling_uses_igor_component_percentile(self):
+        vecs = np.array([[1.0, 1.0, 0.0]])
+        rgb = rodrigues_rgb(vecs)
+        expected_max = 90.0  # p95 of component angles [90, 90, 0], rounded
+        expected_angle = 2.0 * np.degrees(np.arctan(np.sqrt(2.0)))
+        expected_channel = (1.0 / np.sqrt(2.0)) * (expected_angle / expected_max)
+        np.testing.assert_allclose(rgb[0, 0], expected_channel, atol=1e-10)
+        np.testing.assert_allclose(rgb[0, 1], expected_channel, atol=1e-10)
+        np.testing.assert_allclose(rgb[0, 2], 0.0, atol=1e-10)
+
 
 # ---------------------------------------------------------------------------
 # HSV wheel coloring

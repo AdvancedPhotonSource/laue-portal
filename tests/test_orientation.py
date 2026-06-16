@@ -16,6 +16,7 @@ sys.path.insert(0, project_root)
 
 from laue_portal.analysis.orientation import (
     CUBIC_SYMMETRY_OPS,
+    HEXAGONAL_SYMMETRY_OPS,
     batch_crystal_directions,
     batch_orientations,
     batch_rodrigues,
@@ -26,6 +27,9 @@ from laue_portal.analysis.orientation import (
     orientation_to_rodrigues,
     pairwise_misorientation,
     recip_to_orientation,
+    symmetry_ops_for_name,
+    symmetry_ops_for_space_group,
+    symmetry_reduce_orientation,
 )
 
 # ---------------------------------------------------------------------------
@@ -164,9 +168,10 @@ class TestOrientationToRodrigues:
         rod = orientation_to_rodrigues(R)
         # Length should be tan(45 deg) = 1
         np.testing.assert_allclose(np.linalg.norm(rod), 1.0, atol=1e-10)
-        # Should be along z axis (x and y components zero)
+        # Should be along Igor's z-axis polarity (x and y components zero)
         np.testing.assert_allclose(rod[0], 0.0, atol=1e-10)
         np.testing.assert_allclose(rod[1], 0.0, atol=1e-10)
+        assert rod[2] > 0
 
     def test_rodrigues_length_is_tan_half_angle(self):
         """For arbitrary rotation, |R_vec| = tan(angle/2)."""
@@ -327,6 +332,30 @@ class TestCubicSymmetryOps:
     def test_count(self):
         """There should be exactly 24 proper cubic rotations."""
         assert CUBIC_SYMMETRY_OPS.shape == (24, 3, 3)
+
+    def test_hexagonal_count(self):
+        """There should be exactly 12 full hexagonal proper rotations."""
+        assert HEXAGONAL_SYMMETRY_OPS.shape == (12, 3, 3)
+
+    def test_space_group_selector(self):
+        assert symmetry_ops_for_space_group(225) is CUBIC_SYMMETRY_OPS
+        assert symmetry_ops_for_space_group(194) is HEXAGONAL_SYMMETRY_OPS
+        assert symmetry_ops_for_space_group(1) is None
+
+    def test_name_selector(self):
+        assert symmetry_ops_for_name("cubic") is CUBIC_SYMMETRY_OPS
+        assert symmetry_ops_for_name("hexagonal") is HEXAGONAL_SYMMETRY_OPS
+        assert symmetry_ops_for_name("auto") is None
+
+    def test_cubic_symmetry_reduce_equivalent_orientation(self):
+        R = CUBIC_SYMMETRY_OPS[1]
+        reduced = symmetry_reduce_orientation(R, symmetry_ops=CUBIC_SYMMETRY_OPS)
+        np.testing.assert_allclose(reduced, np.eye(3), atol=1e-10)
+
+    def test_hexagonal_symmetry_reduce_equivalent_orientation(self):
+        R = HEXAGONAL_SYMMETRY_OPS[1]
+        reduced = symmetry_reduce_orientation(R, symmetry_ops=HEXAGONAL_SYMMETRY_OPS)
+        np.testing.assert_allclose(reduced, np.eye(3), atol=1e-10)
 
     def test_all_orthogonal(self):
         """Each matrix should be orthogonal: R @ R^T = I."""

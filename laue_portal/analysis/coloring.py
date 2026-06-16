@@ -14,6 +14,14 @@ Utility_JZT.ipf).  Zero Dash/Plotly dependencies.
 
 import numpy as np
 
+
+def _round_significant(value, digits):
+    """Round ``value`` to ``digits`` significant digits."""
+    if value == 0 or not np.isfinite(value):
+        return value
+    return round(value, digits - int(np.floor(np.log10(abs(value)))) - 1)
+
+
 # ===================================================================
 # Scheme 1: Cubic IPF Standard Triangle
 # ===================================================================
@@ -115,8 +123,9 @@ def rodrigues_rgb(rodrigues_vec, max_angle_deg=None):
     rodrigues_vec : ndarray (3,) or (N, 3)
         Rodrigues vector(s).
     max_angle_deg : float, optional
-        Normalization angle in degrees. Default: 95th percentile of all
-        rotation angles in the input.
+        Normalization angle in degrees. Default follows LaueGo's
+        ``makeRGBJZT``: 95th percentile of per-component Rodrigues angles,
+        rounded to two significant digits.
 
     Returns
     -------
@@ -135,13 +144,16 @@ def rodrigues_rgb(rodrigues_vec, max_angle_deg=None):
     lengths = np.linalg.norm(rodrigues_vec, axis=1)
     angles_deg = 2.0 * np.degrees(np.arctan(lengths))
 
-    # Determine max angle for normalization
+    # Determine max angle for normalization, matching Igor's makeRGBJZT:
+    # concatenate RX/RH/RF, convert each component to an angle, then take p95.
     if max_angle_deg is None:
-        nonzero = angles_deg[angles_deg > 1e-6]
-        if len(nonzero) > 0:
-            max_angle_deg = np.percentile(nonzero, 95)
+        component_angles = 2.0 * np.degrees(np.arctan(np.abs(rodrigues_vec.reshape(-1))))
+        if len(component_angles) > 0 and np.any(np.isfinite(component_angles)):
+            max_angle_deg = _round_significant(np.nanpercentile(component_angles, 95), 2)
         else:
             max_angle_deg = 45.0  # fallback
+        if not np.isfinite(max_angle_deg) or max_angle_deg <= 1e-12:
+            max_angle_deg = 45.0
 
     rgb = np.zeros((N, 3))
 

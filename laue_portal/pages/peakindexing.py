@@ -46,12 +46,17 @@ def _viz_sidebar_head(title, icon_class="bi bi-sliders"):
     )
 
 
-def _viz_control(label_text, *children):
+def _viz_control(label_text, *children, help_text=None):
     """Single labelled control row inside a visualization sidebar."""
-    return html.Div(
-        [html.Label(label_text), *children],
-        className="pi-viz-control",
-    )
+    content = [html.Label(label_text), *children]
+    if help_text:
+        content.append(html.Small(help_text, className="text-muted"))
+    return html.Div(content, className="pi-viz-control")
+
+
+def _rgb_symmetry_controls_visible(color_mode):
+    """Show Rodrigues RGB symmetry controls only for Rodrigues coloring."""
+    return {} if color_mode == "rodrigues" else {"display": "none"}
 
 
 def _viz_graph_with_loading(graph, target_id, text="Updating\u2026"):
@@ -153,6 +158,23 @@ _viz_tabs = dbc.Tabs(
                                             id="orientation-color-controls-wrap",
                                             style=scalar_controls_visible("cubic_ipf"),
                                             children=scalar_color_controls(),
+                                        ),
+                                        html.Div(
+                                            id="orientation-rgb-symmetry-wrap",
+                                            style={"display": "none"},
+                                            children=_viz_control(
+                                                "RGB symmetry",
+                                                dbc.Select(
+                                                    id="orientation-rgb-symmetry-select",
+                                                    options=[
+                                                        {"label": "XML Auto", "value": "auto"},
+                                                        {"label": "Cubic", "value": "cubic"},
+                                                        {"label": "Hexagonal", "value": "hexagonal"},
+                                                    ],
+                                                    value="auto",
+                                                    className="form-select",
+                                                ),
+                                            ),
                                         ),
                                     ],
                                 ),
@@ -882,6 +904,7 @@ def load_peakindexing_data(href):
     Output("orientation-loading-target", "children"),
     Input("peakindexing-xml-path", "data"),
     Input("orientation-color-select", "value"),
+    Input("orientation-rgb-symmetry-select", "value"),
     Input("orientation-surface-select", "value"),
     Input("orientation-marker-size", "value"),
     Input("orientation-view-toggle", "value"),
@@ -904,6 +927,7 @@ def load_peakindexing_data(href):
 def update_orientation_map(
     xml_path,
     color_by,
+    rgb_symmetry,
     surface,
     input_size,
     view_mode,
@@ -1019,6 +1043,7 @@ def update_orientation_map(
                 x_axis=plot_x_axis,
                 y_axis=plot_y_axis,
                 z_axis=z_axis_val,
+                rgb_symmetry=rgb_symmetry or "auto",
             )
         else:
             fig = make_orientation_map(
@@ -1036,6 +1061,7 @@ def update_orientation_map(
                 cmax=cmax,
                 x_axis=plot_x_axis,
                 y_axis=plot_y_axis,
+                rgb_symmetry=rgb_symmetry or "auto",
             )
 
         # Cross-plot highlighting: dim unselected points, ring selected ones
@@ -1745,14 +1771,16 @@ def reset_scalar_color_range(auto_range, _reset_clicks, color_mode):
 @callback(
     Output("orientation-color-key", "children"),
     Output("orientation-color-controls-wrap", "style"),
+    Output("orientation-rgb-symmetry-wrap", "style"),
     Input("orientation-color-select", "value"),
     Input("orientation-surface-select", "value"),
 )
 def update_orientation_color_key(color_mode, surface):
-    """Refresh the IPF/HSV reference legend and toggle scalar-controls visibility."""
+    """Refresh the orientation legend and mode-specific color controls."""
     return (
         orientation_color_key(color_mode, surface),
         scalar_controls_visible(color_mode),
+        _rgb_symmetry_controls_visible(color_mode),
     )
 
 
