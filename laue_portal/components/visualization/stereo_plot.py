@@ -51,6 +51,7 @@ def make_pole_figure(
     marker_size=5,
     surface="normal",
     center_xy=None,
+    surface_vectors=None,
 ):
     """
     Create a pole figure scatter plot.
@@ -118,7 +119,10 @@ def make_pole_figure(
             )
 
     # Look up surface vectors
-    surf_normal, surf_roll, surf_tilt = get_surface_vectors(surface)
+    if surface_vectors is None:
+        surf_normal, surf_roll, surf_tilt = get_surface_vectors(surface)
+    else:
+        surf_normal, surf_roll, surf_tilt = surface_vectors
 
     # Generate hkl family
     family = cubic_hkl_family(*hkl)

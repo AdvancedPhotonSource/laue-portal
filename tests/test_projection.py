@@ -15,6 +15,7 @@ sys.path.insert(0, project_root)
 from laue_portal.analysis.projection import (
     cubic_hkl_family,
     get_surface_vectors,
+    normalize_surface_frame,
     pole_figure_points,
 )
 
@@ -202,6 +203,26 @@ class TestSurfaceFrames:
         for name in ("normal", "X", "H", "Y", "Z", "F"):
             normal, roll, tilt = get_surface_vectors(name)
             self._assert_orthonormal(normal, roll, tilt)
+
+    def test_custom_surface_frame_normalizes_and_returns_backend_order(self):
+        normal, roll, tilt = normalize_surface_frame(
+            [2.0, 0.0, 0.0],
+            [0.0, 3.0, 0.0],
+            [0.0, 0.0, 4.0],
+        )
+        np.testing.assert_allclose(tilt, [1.0, 0.0, 0.0], atol=1e-12)
+        np.testing.assert_allclose(roll, [0.0, 1.0, 0.0], atol=1e-12)
+        np.testing.assert_allclose(normal, [0.0, 0.0, 1.0], atol=1e-12)
+
+    def test_custom_surface_frame_rejects_left_handed_input(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="right-handed"):
+            normalize_surface_frame(
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, -1.0],
+            )
 
     def test_surface_frames_match_igor(self):
         # Pin every (tilt, roll, normal) triplet against the Igor source

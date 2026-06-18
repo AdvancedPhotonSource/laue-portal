@@ -121,6 +121,7 @@ def make_orientation_map(
     rgb_reference_mode: str = "lab",
     rgb_reference_step: int = None,
     rgb_reference_matrix=None,
+    surface_vectors=None,
 ) -> go.Figure:
     """
     Create a 2D orientation scatter plot.
@@ -197,6 +198,7 @@ def make_orientation_map(
         rgb_reference_mode=rgb_reference_mode,
         rgb_reference_step=rgb_reference_step,
         rgb_reference_matrix=rgb_reference_matrix,
+        surface_vectors=surface_vectors,
     )
 
     fig.add_trace(
@@ -257,6 +259,7 @@ def make_orientation_map_3d(
     rgb_reference_mode: str = "lab",
     rgb_reference_step: int = None,
     rgb_reference_matrix=None,
+    surface_vectors=None,
 ) -> go.Figure:
     """
     Create a 3D orientation scatter plot using all three sample coordinates.
@@ -315,6 +318,7 @@ def make_orientation_map_3d(
         rgb_reference_mode=rgb_reference_mode,
         rgb_reference_step=rgb_reference_step,
         rgb_reference_matrix=rgb_reference_matrix,
+        surface_vectors=surface_vectors,
     )
 
     fig.add_trace(
@@ -377,6 +381,7 @@ def _build_marker_dict(
     rgb_reference_mode="lab",
     rgb_reference_step=None,
     rgb_reference_matrix=None,
+    surface_vectors=None,
 ):
     """Build Plotly marker dict for the given coloring mode."""
     base = dict(
@@ -399,7 +404,9 @@ def _build_marker_dict(
             rgb_reference_mode=rgb_reference_mode,
             rgb_reference_step=rgb_reference_step,
             rgb_reference_matrix=rgb_reference_matrix,
+            surface_vectors=surface_vectors,
         )
+
         base["color"] = colors
         # No colorscale or colorbar for per-point RGB
     else:
@@ -544,13 +551,17 @@ def _get_orientation_colors(
     rgb_reference_mode="lab",
     rgb_reference_step=None,
     rgb_reference_matrix=None,
+    surface_vectors=None,
 ):
     """Return list of 'rgb(r,g,b)' strings for orientation coloring modes."""
     recip_lattices = parsed["recip_lattices"]
     lattice_params = parsed["lattice_params"]
 
     # Look up the surface normal vector for the chosen surface direction.
-    surf_normal, surf_roll, surf_tilt = get_surface_vectors(surface)
+    if surface_vectors is None:
+        surf_normal, surf_roll, surf_tilt = get_surface_vectors(surface)
+    else:
+        surf_normal, surf_roll, surf_tilt = surface_vectors
 
     if color_by == "cubic_ipf":
         crystal_dirs = batch_crystal_directions(recip_lattices, normal=surf_normal)

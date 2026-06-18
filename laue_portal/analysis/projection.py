@@ -68,6 +68,43 @@ _SURFACE_MATRICES = {
 }
 
 
+def normalize_surface_frame(tilt, roll, normal):
+    """
+    Validate and normalize a custom right-handed surface frame.
+
+    The input rows follow Igor's frame order: ``tilt``, ``roll``, ``normal``.
+    The return order matches :func:`get_surface_vectors`: ``normal``, ``roll``,
+    ``tilt``.
+    """
+    tilt = np.asarray(tilt, dtype=float)
+    roll = np.asarray(roll, dtype=float)
+    normal = np.asarray(normal, dtype=float)
+
+    for name, vec in (("tilt", tilt), ("roll", roll), ("normal", normal)):
+        if vec.shape != (3,) or not np.all(np.isfinite(vec)):
+            raise ValueError(f"Surface {name} must be a finite 3-vector")
+        if np.linalg.norm(vec) < 1e-12:
+            raise ValueError(f"Surface {name} must be non-zero")
+
+    tilt = tilt / np.linalg.norm(tilt)
+    roll = roll / np.linalg.norm(roll)
+    normal = normal / np.linalg.norm(normal)
+
+    if abs(float(np.dot(tilt, roll))) > 1e-3:
+        raise ValueError("Surface tilt and roll must be orthogonal")
+    if abs(float(np.dot(tilt, normal))) > 1e-3:
+        raise ValueError("Surface tilt and normal must be orthogonal")
+    if abs(float(np.dot(roll, normal))) > 1e-3:
+        raise ValueError("Surface roll and normal must be orthogonal")
+
+    expected_normal = np.cross(tilt, roll)
+    expected_normal = expected_normal / np.linalg.norm(expected_normal)
+    if float(np.dot(expected_normal, normal)) < 0.999:
+        raise ValueError("Surface frame must be right-handed: tilt x roll = normal")
+
+    return normal, roll, tilt
+
+
 def get_surface_vectors(surface="normal"):
     """
     Look up the ``(normal, roll, tilt)`` vectors for a named surface.

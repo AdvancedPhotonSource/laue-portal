@@ -166,11 +166,15 @@
 }
 
 /* Compact 3x3 reciprocal-lattice reference matrix */
-#orientation-rgb-reference-matrix-wrap .pi-viz-control {
+#orientation-rgb-reference-matrix-wrap .pi-viz-control,
+#orientation-surface-custom-wrap .pi-viz-control,
+#stereo-surface-custom-wrap .pi-viz-control {
   align-items: stretch;
   flex-direction: column;
 }
-#orientation-rgb-reference-matrix-wrap .pi-viz-control > label {
+#orientation-rgb-reference-matrix-wrap .pi-viz-control > label,
+#orientation-surface-custom-wrap .pi-viz-control > label,
+#stereo-surface-custom-wrap .pi-viz-control > label {
   min-width: 0;
   text-align: left;
   padding-right: 0;
@@ -190,6 +194,22 @@
   text-align: right;
 }
 .pi-viz-control .pi-matrix-input .form-control[type="number"] {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: .1rem .25rem;
+}
+
+/* Compact pole-figure HKL triplet */
+.pi-hkl-input {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(3.4rem, 1fr);
+  gap: .25rem;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+.pi-viz-control .pi-hkl-input .form-control[type="number"] {
   width: 100%;
   min-width: 0;
   height: 26px;

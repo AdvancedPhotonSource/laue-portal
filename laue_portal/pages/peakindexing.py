@@ -1,3 +1,4 @@
+import math
 import traceback
 import urllib.parse
 from pathlib import Path
@@ -69,6 +70,11 @@ def _rgb_reference_matrix_visible(color_mode, reference_mode):
     return {} if color_mode == "rodrigues" and reference_mode == "custom" else {"display": "none"}
 
 
+def _surface_custom_visible(surface):
+    """Show custom surface frame inputs only for the Custom surface option."""
+    return {} if surface == "custom" else {"display": "none"}
+
+
 def _rgb_reference_matrix_inputs():
     """Compact 3x3 input grid for G_ref rows = [astar; bstar; cstar]."""
     rows = []
@@ -85,6 +91,97 @@ def _rgb_reference_matrix_inputs():
                 )
             )
     return html.Div(rows, className="pi-matrix-input")
+
+
+def _surface_frame_inputs(prefix):
+    """Compact 3x3 input grid for custom surface rows = [tilt; roll; normal]."""
+    defaults = {
+        "tilt": (1.0, 0.0, 0.0),
+        "roll": (0.0, -1.0 / math.sqrt(2.0), -1.0 / math.sqrt(2.0)),
+        "normal": (0.0, 1.0 / math.sqrt(2.0), -1.0 / math.sqrt(2.0)),
+    }
+    rows = []
+    for row_label, row_name in (("tilt", "tilt"), ("roll", "roll"), ("normal", "normal")):
+        rows.append(html.Div(row_label, className="pi-matrix-row-label"))
+        for col, value in zip(("x", "y", "z"), defaults[row_name], strict=False):
+            rows.append(
+                dbc.Input(
+                    id=f"{prefix}-surface-{row_name}-{col}",
+                    type="number",
+                    step="any",
+                    value=value,
+                    debounce=True,
+                    size="sm",
+                )
+            )
+    return html.Div(rows, className="pi-matrix-input")
+
+
+def _stereo_hkl_inputs():
+    """Compact integer HKL input row for pole figures."""
+    fields = []
+    for label, input_id, value in (
+        ("h", "stereo-hkl-h", 1),
+        ("k", "stereo-hkl-k", 0),
+        ("l", "stereo-hkl-l", 0),
+    ):
+        fields.append(html.Div(label, className="pi-matrix-row-label"))
+        fields.append(
+            dbc.Input(
+                id=input_id,
+                type="number",
+                step=1,
+                value=value,
+                debounce=True,
+                size="sm",
+            )
+        )
+    return html.Div(fields, className="pi-hkl-input")
+
+
+def _parse_surface_frame(values):
+    """Return normalized custom surface vectors in backend order."""
+    from laue_portal.analysis.projection import normalize_surface_frame
+
+    if len(values) != 9:
+        raise ValueError("Surface frame requires 9 values")
+    if any(v is None or v == "" for v in values):
+        raise ValueError("Surface frame requires all tilt, roll, and normal values")
+
+    nums = [float(v) for v in values]
+    return normalize_surface_frame(nums[0:3], nums[3:6], nums[6:9])
+
+
+def _surface_vectors_for(surface, values):
+    """Resolve custom surface vectors, or return None for preset surfaces."""
+    if surface != "custom":
+        return None
+    return _parse_surface_frame(values)
+
+
+def _resolved_surface_vectors(surface, values):
+    """Return concrete surface vectors for preset or custom surfaces."""
+    from laue_portal.analysis.projection import get_surface_vectors
+
+    if surface == "custom":
+        return _parse_surface_frame(values)
+    return get_surface_vectors(surface or "normal")
+
+
+def _parse_stereo_hkl(h, k, l):
+    """Return a valid integer HKL triplet or raise ValueError."""
+    parsed = []
+    for value in (h, k, l):
+        if value is None or value == "":
+            raise ValueError("HKL requires h, k, and l")
+        fval = float(value)
+        if not math.isfinite(fval) or not fval.is_integer():
+            raise ValueError("HKL values must be finite integers")
+        parsed.append(int(fval))
+    hkl = tuple(parsed)
+    if hkl == (0, 0, 0):
+        raise ValueError("HKL cannot be 0,0,0")
+    return hkl
 
 
 def _viz_graph_with_loading(graph, target_id, text="Updating\u2026"):
@@ -259,9 +356,18 @@ _viz_tabs = dbc.Tabs(
                                                     {"label": "Y", "value": "Y"},
                                                     {"label": "Z", "value": "Z"},
                                                     {"label": "F", "value": "F"},
+                                                    {"label": "Custom", "value": "custom"},
                                                 ],
                                                 value="normal",
                                                 className="form-select",
+                                            ),
+                                        ),
+                                        html.Div(
+                                            id="orientation-surface-custom-wrap",
+                                            style={"display": "none"},
+                                            children=_viz_control(
+                                                "Custom frame",
+                                                _surface_frame_inputs("orientation"),
                                             ),
                                         ),
                                         _viz_control(
@@ -445,17 +551,7 @@ _viz_tabs = dbc.Tabs(
                                         _viz_sidebar_head("Pole", "bi bi-bullseye"),
                                         _viz_control(
                                             "{hkl}",
-                                            dbc.Select(
-                                                id="stereo-hkl-select",
-                                                options=[
-                                                    {"label": "{100}", "value": "1,0,0"},
-                                                    {"label": "{110}", "value": "1,1,0"},
-                                                    {"label": "{111}", "value": "1,1,1"},
-                                                    {"label": "{210}", "value": "2,1,0"},
-                                                ],
-                                                value="1,0,0",
-                                                className="form-select",
-                                            ),
+                                            _stereo_hkl_inputs(),
                                         ),
                                         _viz_control(
                                             "Surface",
@@ -468,9 +564,18 @@ _viz_tabs = dbc.Tabs(
                                                     {"label": "Y", "value": "Y"},
                                                     {"label": "Z", "value": "Z"},
                                                     {"label": "F", "value": "F"},
+                                                    {"label": "Custom", "value": "custom"},
                                                 ],
                                                 value="normal",
                                                 className="form-select",
+                                            ),
+                                        ),
+                                        html.Div(
+                                            id="stereo-surface-custom-wrap",
+                                            style={"display": "none"},
+                                            children=_viz_control(
+                                                "Custom frame",
+                                                _surface_frame_inputs("stereo"),
                                             ),
                                         ),
                                     ],
@@ -983,13 +1088,33 @@ def load_peakindexing_data(href):
     Input("orientation-rgb-reference-c1", "value"),
     Input("orientation-rgb-reference-c2", "value"),
     Input("orientation-surface-select", "value"),
+    Input("orientation-surface-tilt-x", "value"),
+    Input("orientation-surface-tilt-y", "value"),
+    Input("orientation-surface-tilt-z", "value"),
+    Input("orientation-surface-roll-x", "value"),
+    Input("orientation-surface-roll-y", "value"),
+    Input("orientation-surface-roll-z", "value"),
+    Input("orientation-surface-normal-x", "value"),
+    Input("orientation-surface-normal-y", "value"),
+    Input("orientation-surface-normal-z", "value"),
     Input("orientation-marker-size", "value"),
     Input("orientation-view-toggle", "value"),
     Input("selected-grain-indices", "data"),
     Input("pole-figure-center", "data"),
-    Input("stereo-hkl-select", "value"),
+    Input("stereo-hkl-h", "value"),
+    Input("stereo-hkl-k", "value"),
+    Input("stereo-hkl-l", "value"),
     Input("stereo-color-rad", "value"),
     Input("stereo-surface-select", "value"),
+    Input("stereo-surface-tilt-x", "value"),
+    Input("stereo-surface-tilt-y", "value"),
+    Input("stereo-surface-tilt-z", "value"),
+    Input("stereo-surface-roll-x", "value"),
+    Input("stereo-surface-roll-y", "value"),
+    Input("stereo-surface-roll-z", "value"),
+    Input("stereo-surface-normal-x", "value"),
+    Input("stereo-surface-normal-y", "value"),
+    Input("stereo-surface-normal-z", "value"),
     Input(SCALAR_PALETTE_ID, "value"),
     Input(SCALAR_REVERSE_ID, "value"),
     Input(SCALAR_MIN_ID, "value"),
@@ -1017,13 +1142,33 @@ def update_orientation_map(
     ref_c1,
     ref_c2,
     surface,
+    surface_tilt_x,
+    surface_tilt_y,
+    surface_tilt_z,
+    surface_roll_x,
+    surface_roll_y,
+    surface_roll_z,
+    surface_normal_x,
+    surface_normal_y,
+    surface_normal_z,
     input_size,
     view_mode,
     selected_grains,
     pole_center,
-    pole_hkl_str,
+    pole_h,
+    pole_k,
+    pole_l,
     pole_color_rad_deg,
     pole_surface,
+    pole_surface_tilt_x,
+    pole_surface_tilt_y,
+    pole_surface_tilt_z,
+    pole_surface_roll_x,
+    pole_surface_roll_y,
+    pole_surface_roll_z,
+    pole_surface_normal_x,
+    pole_surface_normal_y,
+    pole_surface_normal_z,
     palette,
     reverse_palette,
     user_vmin,
@@ -1041,7 +1186,22 @@ def update_orientation_map(
     # (hkl, color radius, surface) changed but the orientation map
     # isn't using pole_hsv mode, there is nothing to update.
     triggered = dash.ctx.triggered_id
-    _POLE_ONLY_TRIGGERS = {"stereo-hkl-select", "stereo-color-rad", "stereo-surface-select"}
+    _POLE_ONLY_TRIGGERS = {
+        "stereo-hkl-h",
+        "stereo-hkl-k",
+        "stereo-hkl-l",
+        "stereo-color-rad",
+        "stereo-surface-select",
+        "stereo-surface-tilt-x",
+        "stereo-surface-tilt-y",
+        "stereo-surface-tilt-z",
+        "stereo-surface-roll-x",
+        "stereo-surface-roll-y",
+        "stereo-surface-roll-z",
+        "stereo-surface-normal-x",
+        "stereo-surface-normal-y",
+        "stereo-surface-normal-z",
+    }
     if triggered in _POLE_ONLY_TRIGGERS and (color_by or "cubic_ipf") != "pole_hsv":
         raise PreventUpdate
 
@@ -1068,6 +1228,23 @@ def update_orientation_map(
         parsed = parse_indexing_xml(xml_path)
 
         marker_size = max(1, int(input_size or 40))
+        try:
+            surface_vectors = _surface_vectors_for(
+                surface,
+                [
+                    surface_tilt_x,
+                    surface_tilt_y,
+                    surface_tilt_z,
+                    surface_roll_x,
+                    surface_roll_y,
+                    surface_roll_z,
+                    surface_normal_x,
+                    surface_normal_y,
+                    surface_normal_z,
+                ],
+            )
+        except ValueError:
+            raise PreventUpdate from None
 
         # Determine effective color mode and reference grain.
         ref_grain_index = None
@@ -1080,11 +1257,11 @@ def update_orientation_map(
         pole_rad = float(pole_color_rad_deg or 22.5)
 
         if effective_color == "pole_hsv":
-            # Parse hkl from the pole figure selector
-            if pole_hkl_str:
-                pole_hkl = tuple(int(x) for x in pole_hkl_str.split(","))
-            else:
-                pole_hkl = (1, 0, 0)
+            # Parse hkl from the pole figure integer inputs.
+            try:
+                pole_hkl = _parse_stereo_hkl(pole_h, pole_k, pole_l)
+            except ValueError:
+                raise PreventUpdate from None
 
             # Use pole figure center if available
             if pole_center:
@@ -1093,6 +1270,23 @@ def update_orientation_map(
             # Use pole figure surface for consistency
             if pole_surface:
                 surface = pole_surface
+                try:
+                    surface_vectors = _surface_vectors_for(
+                        pole_surface,
+                        [
+                            pole_surface_tilt_x,
+                            pole_surface_tilt_y,
+                            pole_surface_tilt_z,
+                            pole_surface_roll_x,
+                            pole_surface_roll_y,
+                            pole_surface_roll_z,
+                            pole_surface_normal_x,
+                            pole_surface_normal_y,
+                            pole_surface_normal_z,
+                        ],
+                    )
+                except ValueError:
+                    raise PreventUpdate from None
 
         # ── Scalar color settings ──
         # If the user hasn't set Min/Max, fall back to the data range so
@@ -1148,6 +1342,7 @@ def update_orientation_map(
                 rgb_reference_mode=rgb_reference_mode or "lab",
                 rgb_reference_step=rgb_reference_step,
                 rgb_reference_matrix=rgb_reference_matrix,
+                surface_vectors=surface_vectors,
             )
         else:
             fig = make_orientation_map(
@@ -1169,6 +1364,7 @@ def update_orientation_map(
                 rgb_reference_mode=rgb_reference_mode or "lab",
                 rgb_reference_step=rgb_reference_step,
                 rgb_reference_matrix=rgb_reference_matrix,
+                surface_vectors=surface_vectors,
             )
 
         # Cross-plot highlighting: dim unselected points, ring selected ones
@@ -1307,21 +1503,43 @@ def show_point_details(click_data, xml_path):
     Output("stereo-color-rad-col", "style"),
     Output("poles-loading-target", "children"),
     Input("peakindexing-xml-path", "data"),
-    Input("stereo-hkl-select", "value"),
+    Input("stereo-hkl-h", "value"),
+    Input("stereo-hkl-k", "value"),
+    Input("stereo-hkl-l", "value"),
     Input("stereo-marker-size", "value"),
     Input("stereo-color-select", "value"),
     Input("stereo-color-rad", "value"),
     Input("stereo-surface-select", "value"),
+    Input("stereo-surface-tilt-x", "value"),
+    Input("stereo-surface-tilt-y", "value"),
+    Input("stereo-surface-tilt-z", "value"),
+    Input("stereo-surface-roll-x", "value"),
+    Input("stereo-surface-roll-y", "value"),
+    Input("stereo-surface-roll-z", "value"),
+    Input("stereo-surface-normal-x", "value"),
+    Input("stereo-surface-normal-y", "value"),
+    Input("stereo-surface-normal-z", "value"),
     Input("pole-figure-center", "data"),
     prevent_initial_call=True,
 )
 def update_pole_figure(
     xml_path,
-    hkl_str,
+    h,
+    k,
+    l,
     input_size,
     color_scheme,
     color_rad_deg,
     surface,
+    surface_tilt_x,
+    surface_tilt_y,
+    surface_tilt_z,
+    surface_roll_x,
+    surface_roll_y,
+    surface_roll_z,
+    surface_normal_x,
+    surface_normal_y,
+    surface_normal_z,
     pole_center,
 ):
     if not xml_path:
@@ -1341,7 +1559,24 @@ def update_pole_figure(
         parsed = parse_indexing_xml(xml_path)
 
         marker_size = max(1, int(input_size or 12))
-        hkl = tuple(int(x) for x in hkl_str.split(","))
+        try:
+            hkl = _parse_stereo_hkl(h, k, l)
+            surface_vectors = _surface_vectors_for(
+                surface,
+                [
+                    surface_tilt_x,
+                    surface_tilt_y,
+                    surface_tilt_z,
+                    surface_roll_x,
+                    surface_roll_y,
+                    surface_roll_z,
+                    surface_normal_x,
+                    surface_normal_y,
+                    surface_normal_z,
+                ],
+            )
+        except ValueError:
+            raise PreventUpdate from None
 
         # Pass center from store if available
         center_xy = None
@@ -1356,6 +1591,7 @@ def update_pole_figure(
             marker_size=marker_size,
             surface=surface or "normal",
             center_xy=center_xy,
+            surface_vectors=surface_vectors,
         )
 
         return fig, marker_size, rad_col_style, ""
@@ -1503,12 +1739,42 @@ def update_pattern_columns(default_cols, position_cols, run_cols, detail_cols, c
     Input("pole-figure-reset-btn", "n_clicks"),
     State("pole-figure-center", "data"),
     State("peakindexing-xml-path", "data"),
-    State("stereo-hkl-select", "value"),
+    State("stereo-hkl-h", "value"),
+    State("stereo-hkl-k", "value"),
+    State("stereo-hkl-l", "value"),
     State("stereo-surface-select", "value"),
+    State("stereo-surface-tilt-x", "value"),
+    State("stereo-surface-tilt-y", "value"),
+    State("stereo-surface-tilt-z", "value"),
+    State("stereo-surface-roll-x", "value"),
+    State("stereo-surface-roll-y", "value"),
+    State("stereo-surface-roll-z", "value"),
+    State("stereo-surface-normal-x", "value"),
+    State("stereo-surface-normal-y", "value"),
+    State("stereo-surface-normal-z", "value"),
     State("orientation-color-select", "value"),
     prevent_initial_call=True,
 )
-def handle_pole_figure_click(click_data, reset_clicks, current_center, xml_path, hkl_str, surface, current_color_by):
+def handle_pole_figure_click(
+    click_data,
+    reset_clicks,
+    current_center,
+    xml_path,
+    h,
+    k,
+    l,
+    surface,
+    surface_tilt_x,
+    surface_tilt_y,
+    surface_tilt_z,
+    surface_roll_x,
+    surface_roll_y,
+    surface_roll_z,
+    surface_normal_x,
+    surface_normal_y,
+    surface_normal_z,
+    current_color_by,
+):
     """Set or clear the HSV color center when a point is clicked or reset is pressed."""
     triggered = dash.ctx.triggered_id
     _default_hint = html.Small(
@@ -1550,19 +1816,33 @@ def handle_pole_figure_click(click_data, reset_clicks, current_center, xml_path,
 
                 from laue_portal.analysis.projection import (
                     cubic_hkl_family,
-                    get_surface_vectors,
                     pole_figure_points,
                 )
                 from laue_portal.analysis.xml_parser import parse_indexing_xml
 
                 parsed = parse_indexing_xml(xml_path)
-                hkl = tuple(int(v) for v in hkl_str.split(","))
+                hkl = _parse_stereo_hkl(h, k, l)
                 family = cubic_hkl_family(*hkl)
-                surf_normal, _, _ = get_surface_vectors(surface or "normal")
+                surf_normal, surf_roll, surf_tilt = _resolved_surface_vectors(
+                    surface,
+                    [
+                        surface_tilt_x,
+                        surface_tilt_y,
+                        surface_tilt_z,
+                        surface_roll_x,
+                        surface_roll_y,
+                        surface_roll_z,
+                        surface_normal_x,
+                        surface_normal_y,
+                        surface_normal_z,
+                    ],
+                )
                 pts, grain_indices = pole_figure_points(
                     parsed["recip_lattices"],
                     family,
                     surface_normal=surf_normal,
+                    surface_roll=surf_roll,
+                    surface_tilt=surf_tilt,
                 )
                 if len(pts) > 0:
                     finite_mask = np.all(np.isfinite(pts), axis=1)
@@ -1613,11 +1893,38 @@ def handle_pole_figure_click(click_data, reset_clicks, current_center, xml_path,
     Output("stereo-selection-info", "children"),
     Input("stereo-plot-graph", "selectedData"),
     State("peakindexing-xml-path", "data"),
-    State("stereo-hkl-select", "value"),
+    State("stereo-hkl-h", "value"),
+    State("stereo-hkl-k", "value"),
+    State("stereo-hkl-l", "value"),
     State("stereo-surface-select", "value"),
+    State("stereo-surface-tilt-x", "value"),
+    State("stereo-surface-tilt-y", "value"),
+    State("stereo-surface-tilt-z", "value"),
+    State("stereo-surface-roll-x", "value"),
+    State("stereo-surface-roll-y", "value"),
+    State("stereo-surface-roll-z", "value"),
+    State("stereo-surface-normal-x", "value"),
+    State("stereo-surface-normal-y", "value"),
+    State("stereo-surface-normal-z", "value"),
     prevent_initial_call=True,
 )
-def handle_pole_selection(selected_data, xml_path, hkl_str, surface):
+def handle_pole_selection(
+    selected_data,
+    xml_path,
+    h,
+    k,
+    l,
+    surface,
+    surface_tilt_x,
+    surface_tilt_y,
+    surface_tilt_z,
+    surface_roll_x,
+    surface_roll_y,
+    surface_roll_z,
+    surface_normal_x,
+    surface_normal_y,
+    surface_normal_z,
+):
     """Process lasso/box selection on the pole figure to extract grain indices."""
     # If selection is cleared (double-click to deselect), reset
     if not selected_data or not selected_data.get("points"):
@@ -1653,16 +1960,28 @@ def handle_pole_selection(selected_data, xml_path, hkl_str, surface):
 
             from laue_portal.analysis.projection import (
                 cubic_hkl_family,
-                get_surface_vectors,
                 pole_figure_points,
             )
             from laue_portal.analysis.xml_parser import parse_indexing_xml
 
             parsed = parse_indexing_xml(xml_path)
 
-            hkl = tuple(int(x) for x in hkl_str.split(","))
+            hkl = _parse_stereo_hkl(h, k, l)
             family = cubic_hkl_family(*hkl)
-            surf_normal, surf_roll, surf_tilt = get_surface_vectors(surface or "normal")
+            surf_normal, surf_roll, surf_tilt = _resolved_surface_vectors(
+                surface,
+                [
+                    surface_tilt_x,
+                    surface_tilt_y,
+                    surface_tilt_z,
+                    surface_roll_x,
+                    surface_roll_y,
+                    surface_roll_z,
+                    surface_normal_x,
+                    surface_normal_y,
+                    surface_normal_z,
+                ],
+            )
             points, grain_indices = pole_figure_points(
                 parsed["recip_lattices"],
                 family,
@@ -1881,6 +2200,7 @@ def reset_scalar_color_range(auto_range, _reset_clicks, color_mode):
     Output("orientation-rgb-symmetry-wrap", "style"),
     Output("orientation-rgb-reference-step-wrap", "style"),
     Output("orientation-rgb-reference-matrix-wrap", "style"),
+    Output("orientation-surface-custom-wrap", "style"),
     Input("orientation-color-select", "value"),
     Input("orientation-surface-select", "value"),
     Input("orientation-rgb-reference-select", "value"),
@@ -1893,16 +2213,19 @@ def update_orientation_color_key(color_mode, surface, reference_mode):
         _rgb_symmetry_controls_visible(color_mode),
         _rgb_reference_step_visible(color_mode, reference_mode),
         _rgb_reference_matrix_visible(color_mode, reference_mode),
+        _surface_custom_visible(surface),
     )
 
 
 @callback(
     Output("stereo-color-key", "children"),
+    Output("stereo-surface-custom-wrap", "style"),
     Input("stereo-color-select", "value"),
+    Input("stereo-surface-select", "value"),
 )
-def update_stereo_color_key(color_mode):
-    """Refresh the pole-figure reference legend when scheme changes."""
-    return stereo_color_key(color_mode)
+def update_stereo_color_key(color_mode, surface):
+    """Refresh the pole-figure reference legend and surface controls."""
+    return stereo_color_key(color_mode), _surface_custom_visible(surface)
 
 
 # ---------------------------------------------------------------------------
