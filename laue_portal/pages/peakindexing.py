@@ -806,6 +806,81 @@ _viz_tabs = dbc.Tabs(
                                 html.Div(
                                     className="pi-viz-sidebar-section",
                                     children=[
+                                        _viz_sidebar_head("Image", "bi bi-image"),
+                                        _viz_control(
+                                            "",
+                                            dbc.Checkbox(
+                                                id="detector-show-image",
+                                                label="Show detector image",
+                                                value=True,
+                                            ),
+                                        ),
+                                        _viz_control(
+                                            "Colormap",
+                                            dbc.Select(
+                                                id="detector-image-colormap",
+                                                options=[
+                                                    {"label": "Terrain", "value": "terrain_r"},
+                                                    {"label": "Gray", "value": "gray"},
+                                                    {"label": "Gray reversed", "value": "gray_r"},
+                                                    {"label": "Viridis", "value": "viridis"},
+                                                    {"label": "Plasma", "value": "plasma"},
+                                                    {"label": "Inferno", "value": "inferno"},
+                                                    {"label": "Magma", "value": "magma"},
+                                                    {"label": "Turbo", "value": "turbo"},
+                                                    {"label": "Jet", "value": "jet"},
+                                                ],
+                                                value="terrain_r",
+                                                className="form-select",
+                                            ),
+                                        ),
+                                        _viz_control(
+                                            "Min I",
+                                            dbc.Input(
+                                                id="detector-image-vmin",
+                                                type="number",
+                                                step="any",
+                                                value=None,
+                                                debounce=True,
+                                                placeholder="auto",
+                                                className="form-control",
+                                            ),
+                                        ),
+                                        _viz_control(
+                                            "Max I",
+                                            dbc.Input(
+                                                id="detector-image-vmax",
+                                                type="number",
+                                                step="any",
+                                                value=None,
+                                                debounce=True,
+                                                placeholder="auto",
+                                                className="form-control",
+                                            ),
+                                        ),
+                                        html.Div(
+                                            className="pi-viz-control pi-viz-control-slider",
+                                            children=[
+                                                html.Label("Opacity"),
+                                                html.Div(
+                                                    dcc.Slider(
+                                                        id="detector-image-opacity",
+                                                        min=0,
+                                                        max=1,
+                                                        step=0.05,
+                                                        value=0.8,
+                                                        marks={0: "0", 0.5: "0.5", 1: "1"},
+                                                        tooltip={"placement": "bottom", "always_visible": False},
+                                                    ),
+                                                    className="pi-viz-slider-wide",
+                                                ),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                                html.Div(
+                                    className="pi-viz-sidebar-section",
+                                    children=[
                                         _viz_sidebar_head("Patterns", "bi bi-collection"),
                                         # Per-step pattern checklist is populated
                                         # dynamically; empty list at startup.
@@ -895,6 +970,8 @@ layout = html.Div(
         dcc.Location(id="url-peakindexing-page", refresh=False),
         # Store parsed XML data path so visualization callbacks can load it
         dcc.Store(id="peakindexing-xml-path"),
+        # Store DB/config roots used to resolve detector image files.
+        dcc.Store(id="peakindexing-path-context", data={}),
         # Store selected grain indices for cross-plot linking
         dcc.Store(id="selected-grain-indices", data=[]),
         # Store pole figure color center: {x, y, grain_index} or None
@@ -923,6 +1000,7 @@ layout = html.Div(
 @callback(
     Output("peakindex-id-header", "children"),
     Output("peakindexing-xml-path", "data"),
+    Output("peakindexing-path-context", "data"),
     Input("url-peakindexing-page", "href"),
     prevent_initial_call=True,
 )
@@ -938,6 +1016,7 @@ def load_peakindexing_data(href):
     root_path = DEFAULT_VARIABLES.get("root_path", "")
 
     xml_path = None  # Will be set if we find an XML file
+    path_context = {"root_path": root_path}
 
     if peakindex_id_str:
         try:
@@ -956,8 +1035,14 @@ def load_peakindexing_data(href):
                     if peakindex_data.crystFile:
                         peakindex_data.crystFile = remove_root_path_prefix(peakindex_data.crystFile, root_path)
 
-                    # Resolve XML path before stripping root_path from outputFolder
+                    # Resolve XML/image paths before stripping root_path from display fields.
                     xml_path = _resolve_xml_path(peakindex_data, root_path)
+                    output_folder_full = peakindex_data.outputFolder
+                    data_folder_full = peakindex_data.filefolder
+                    if output_folder_full:
+                        path_context["output_folder"] = str(output_folder_full)
+                    if data_folder_full:
+                        path_context["data_folder"] = str(data_folder_full)
 
                     if peakindex_data.outputFolder:
                         peakindex_data.outputFolder = remove_root_path_prefix(peakindex_data.outputFolder, root_path)
@@ -1053,15 +1138,17 @@ def load_peakindexing_data(href):
                             link_children.append(link)
                         header_content.append(html.Span(link_children, className="pi-page-links"))
 
-                    return header_content, xml_path
+                    return header_content, xml_path, path_context
         except Exception as e:
             print(f"Error loading peak indexing data: {e}")
             traceback.print_exc()
-            return [
-                html.Span(f"Error loading data for Peak Indexing ID: {peakindex_id}", className="pi-page-title")
-            ], None
+            return (
+                [html.Span(f"Error loading data for Peak Indexing ID: {peakindex_id}", className="pi-page-title")],
+                None,
+                path_context,
+            )
 
-    return [html.Span("No Peak Indexing ID provided", className="pi-page-title")], None
+    return [html.Span("No Peak Indexing ID provided", className="pi-page-title")], None, path_context
 
 
 # ---------------------------------------------------------------------------
@@ -2354,6 +2441,7 @@ def populate_detector_pattern_checklist(xml_path, step_value):
     Output("detector-step-summary", "children"),
     Output("detector-loading-target", "children"),
     Input("peakindexing-xml-path", "data"),
+    Input("peakindexing-path-context", "data"),
     Input("detector-step-select", "value"),
     Input("detector-show-predicted", "value"),
     Input("detector-show-hkl", "value"),
@@ -2361,10 +2449,16 @@ def populate_detector_pattern_checklist(xml_path, step_value):
     Input("detector-marker-size", "value"),
     Input("detector-label-size", "value"),
     Input("detector-pattern-checklist", "value"),
+    Input("detector-show-image", "value"),
+    Input("detector-image-colormap", "value"),
+    Input("detector-image-vmin", "value"),
+    Input("detector-image-vmax", "value"),
+    Input("detector-image-opacity", "value"),
     prevent_initial_call=True,
 )
 def update_detector_view(
     xml_path,
+    path_context,
     step_value,
     show_predicted,
     show_hkl,
@@ -2372,6 +2466,11 @@ def update_detector_view(
     marker_size,
     label_size,
     selected_patterns,
+    show_image,
+    image_colormap,
+    image_vmin,
+    image_vmax,
+    image_opacity,
 ):
     """Re-render the detector overlay whenever the user changes any control."""
     if not xml_path or step_value is None:
@@ -2382,6 +2481,7 @@ def update_detector_view(
             build_step_overlay,
             overlay_statistics,
         )
+        from laue_portal.analysis.detector_image import load_detector_image
         from laue_portal.analysis.geometry import resolve_geometry_for_indexing
         from laue_portal.analysis.xml_parser import parse_indexing_xml
         from laue_portal.components.visualization.detector_view import make_detector_view
@@ -2403,6 +2503,29 @@ def update_detector_view(
 
         overlay = build_step_overlay(parsed, step_idx, geometry)
 
+        image_result = None
+        detector_image = None
+        image_vmin_eff = image_vmin
+        image_vmax_eff = image_vmax
+        if overlay is not None and show_image:
+            path_context = path_context or {}
+            image_result = load_detector_image(
+                overlay.image_path,
+                xml_path=xml_path,
+                data_folder=path_context.get("data_folder"),
+                root_path=path_context.get("root_path"),
+            )
+            if image_result.image is not None:
+                detector_image = image_result.image.data
+                image_vmin_eff, image_vmax_eff = _detector_image_range(
+                    image_vmin,
+                    image_vmax,
+                    image_result.image.vmin,
+                    image_result.image.vmax,
+                )
+            elif image_result.warning:
+                overlay.warnings.append(image_result.warning)
+
         fig = make_detector_view(
             overlay,
             show_predicted=bool(show_predicted),
@@ -2411,9 +2534,15 @@ def update_detector_view(
             marker_size=max(1, int(marker_size or 10)),
             label_size=max(6, int(label_size or 10)),
             selected_patterns=list(selected_patterns) if selected_patterns else None,
+            detector_image=detector_image,
+            image_visible=bool(show_image),
+            image_colorscale=image_colormap or "terrain_r",
+            image_vmin=image_vmin_eff,
+            image_vmax=image_vmax_eff,
+            image_opacity=float(image_opacity if image_opacity is not None else 0.8),
         )
 
-        summary_children = _detector_step_summary(parsed, step_idx, overlay, overlay_statistics)
+        summary_children = _detector_step_summary(parsed, step_idx, overlay, overlay_statistics, image_result)
         return fig, summary_children, ""
 
     except PreventUpdate:
@@ -2428,7 +2557,7 @@ def update_detector_view(
         )
 
 
-def _detector_step_summary(parsed, step_idx, overlay, overlay_statistics):
+def _detector_step_summary(parsed, step_idx, overlay, overlay_statistics, image_result=None):
     """Compose the small summary card shown beneath the detector graph."""
     if overlay is None:
         return html.Small("No detector data for this step.", className="text-muted")
@@ -2461,9 +2590,25 @@ def _detector_step_summary(parsed, step_idx, overlay, overlay_statistics):
         )
 
     body = [html.P(header_bits, className="mb-1")]
+    if image_result is not None and image_result.image is not None:
+        body.append(
+            html.Small(
+                f"Image: {image_result.image.path} [{image_result.image.dataset}]",
+                className="text-muted d-block mb-1",
+            )
+        )
     if pattern_rows:
         body.append(html.Ul(pattern_rows, className="mb-0 small"))
     return dbc.Card(dbc.CardBody(body), className="mt-2")
+
+
+def _detector_image_range(custom_vmin, custom_vmax, auto_vmin, auto_vmax):
+    """Resolve detector image contrast values from sidebar controls."""
+    vmin = custom_vmin if custom_vmin is not None else auto_vmin
+    vmax = custom_vmax if custom_vmax is not None else auto_vmax
+    if vmin is not None and vmax is not None and float(vmin) > float(vmax):
+        return vmax, vmin
+    return vmin, vmax
 
 
 # ---------------------------------------------------------------------------

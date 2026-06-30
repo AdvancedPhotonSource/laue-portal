@@ -29,6 +29,7 @@ from typing import List, Optional
 
 import numpy as np
 import plotly.graph_objects as go
+from plotly.colors import sample_colorscale
 
 from laue_portal.analysis.back_projection import StepOverlay
 
@@ -52,6 +53,18 @@ _PATTERN_COLOURS = [
 # Unicode combining overline for negative Miller indices.
 _OVERLINE = "\u0305"
 
+_IMAGE_COLOR_SCALES = {
+    "gray": "Gray",
+    "gray_r": "Greys",
+    "viridis": "Viridis",
+    "plasma": "Plasma",
+    "inferno": "Inferno",
+    "magma": "Magma",
+    "turbo": "Turbo",
+    "jet": "Jet",
+    "terrain_r": "Portland",
+}
+
 
 def _format_hkl(h: int, k: int, l: int) -> str:
     """Format Miller indices with overlines for negatives, like Igor."""
@@ -72,6 +85,12 @@ def make_detector_view(
     marker_size: int = 10,
     label_size: int = 10,
     selected_patterns: Optional[List[int]] = None,
+    detector_image: Optional[np.ndarray] = None,
+    image_visible: bool = True,
+    image_colorscale: str = "terrain_r",
+    image_vmin: Optional[float] = None,
+    image_vmax: Optional[float] = None,
+    image_opacity: float = 0.8,
 ) -> go.Figure:
     """
     Render the detector-pixel overlay for one step.
@@ -95,6 +114,10 @@ def make_detector_view(
     selected_patterns : list[int] | None
         If supplied, only patterns whose ``pattern_num`` is in this list
         are drawn.  ``None`` shows everything (Igor's default).
+    detector_image : ndarray | None
+        Optional 2-D detector intensity image shown under the peak overlays.
+    image_visible, image_colorscale, image_vmin, image_vmax, image_opacity
+        Display controls for the optional detector image.
 
     Returns
     -------
@@ -139,6 +162,25 @@ def make_detector_view(
             x_max = (overlay.roi.endx - overlay.roi.startx) / overlay.roi.groupx
         if overlay.roi.endy and overlay.roi.groupy:
             y_max = (overlay.roi.endy - overlay.roi.starty) / overlay.roi.groupy
+
+    if detector_image is not None and image_visible:
+        img = np.asarray(detector_image, dtype=float)
+        image_zmin = float(image_vmin) if image_vmin is not None else float(np.nanmin(img))
+        image_zmax = float(image_vmax) if image_vmax is not None else float(np.nanmax(img))
+        fig.add_trace(
+            go.Heatmap(
+                z=img,
+                x=np.arange(img.shape[1]),
+                y=np.arange(img.shape[0]),
+                zmin=image_zmin,
+                zmax=image_zmax,
+                colorscale=_detector_colorscale(image_colorscale),
+                opacity=max(0.0, min(1.0, float(image_opacity))),
+                name="Detector image",
+                colorbar=dict(title="I", thickness=14, len=0.75),
+                hovertemplate="x: %{x}<br>y: %{y}<br>I: %{z:.3g}<extra>image</extra>",
+            )
+        )
 
     # Outline the chip with a thin polyline.  Using ``add_shape`` with a
     # filled rect would normally work, but combining shapes with
@@ -335,6 +377,15 @@ def make_detector_view(
         )
 
     return fig
+
+
+def _detector_colorscale(name: str):
+    """Return a Plotly colorscale for detector image intensity."""
+    scale = _IMAGE_COLOR_SCALES.get(name or "terrain_r", _IMAGE_COLOR_SCALES["terrain_r"])
+    if name == "gray_r":
+        colors = sample_colorscale("Gray", [i / 255 for i in range(256)])
+        return [[i / 255, colors[255 - i]] for i in range(256)]
+    return scale
 
 
 def _style_detector_axes(fig: go.Figure, nx: float, ny: float) -> None:

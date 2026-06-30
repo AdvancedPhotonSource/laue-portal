@@ -224,6 +224,23 @@
   cursor: pointer;
   accent-color: var(--pi-teal);
 }
+.pi-viz-control-slider {
+  align-items: stretch;
+  flex-direction: column;
+}
+.pi-viz-control-slider > label {
+  min-width: 0;
+  text-align: left;
+  padding-right: 0;
+}
+.pi-viz-slider-wide {
+  width: 100%;
+  min-width: 0;
+  padding: .15rem .15rem .45rem;
+}
+.pi-viz-slider-wide .rc-slider {
+  width: 100%;
+}
 
 /* Checkbox / switch */
 .pi-viz-control .form-check {
