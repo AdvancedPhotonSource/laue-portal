@@ -190,6 +190,7 @@ def _parse_indexing_xml_impl(xml_path: str) -> dict:
     space_group = 0
     lattice_params = np.zeros(6)
     structure_desc = ""
+    atoms = []
 
     # Store raw step data for get_step_peaks()
     step_data_list = []
@@ -258,6 +259,7 @@ def _parse_indexing_xml_impl(xml_path: str) -> dict:
                     desc_text = _text(xtl_el, "structureDesc")
                     if desc_text:
                         structure_desc = desc_text.strip()
+                    atoms = _parse_xtl_atoms(xtl_el)
 
         step_data_list.append(step_peaks)
 
@@ -281,6 +283,7 @@ def _parse_indexing_xml_impl(xml_path: str) -> dict:
         "space_group": space_group,
         "lattice_params": lattice_params,
         "structure_desc": structure_desc,
+        "atoms": atoms,
         "_steps": step_data_list,
     }
 
@@ -652,6 +655,36 @@ def _array_value(values, index: int) -> float | None:
     if values is None or index >= len(values):
         return None
     return _safe_float(values[index])
+
+
+def _parse_xtl_atoms(xtl_el) -> list[dict]:
+    """Parse fractional atom positions from an ``<xtl>`` block."""
+    atoms = []
+    if xtl_el is None:
+        return atoms
+    for atom_el in xtl_el.findall("atom"):
+        coords = _float_array_text(atom_el.text)
+        if coords is None or len(coords) < 3:
+            continue
+        z_attr = atom_el.get("Z") or atom_el.get("Zatom")
+        atoms.append(
+            {
+                "n": _safe_int(atom_el.get("n")),
+                "symbol": atom_el.get("symbol"),
+                "label": atom_el.get("label"),
+                "Zatom": _safe_int(z_attr),
+                "xyz": tuple(float(v) for v in coords[:3]),
+            }
+        )
+    return atoms
+
+
+def _float_array_text(text: str | None) -> np.ndarray | None:
+    """Parse space-separated floats from raw text."""
+    if not text:
+        return None
+    values = np.fromstring(text.strip(), sep=" ")
+    return values if values.size else None
 
 
 def _safe_float(value) -> float | None:

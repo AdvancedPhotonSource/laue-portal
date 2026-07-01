@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import sys
 import textwrap
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -24,6 +25,7 @@ sys.path.insert(0, project_root)
 from laue_portal.analysis.back_projection import (  # noqa: E402
     ROI,
     StepOverlay,
+    _centering_allowed_mask,
     build_step_overlay,
     full_to_roi,
     pixel_to_xyz,
@@ -231,6 +233,27 @@ class TestQtoPixel:
 
 
 # ===========================================================================
+# Systematic absence helpers
+# ===========================================================================
+
+
+def test_face_centered_space_groups_filter_mixed_parity_hkl():
+    hkl = np.array(
+        [
+            [-5, 3, 8],  # mixed parity, forbidden for F lattices
+            [-4, 2, 10],  # all even, allowed
+            [-3, 1, 5],  # all odd, allowed
+        ]
+    )
+    np.testing.assert_array_equal(_centering_allowed_mask(hkl, 225), [False, True, True])
+
+
+def test_unknown_space_group_keeps_candidates():
+    hkl = np.array([[-5, 3, 8], [-4, 2, 10]])
+    np.testing.assert_array_equal(_centering_allowed_mask(hkl, None), [True, True])
+
+
+# ===========================================================================
 # ROI conversion
 # ===========================================================================
 
@@ -314,19 +337,23 @@ def _make_synthetic_indexed_xml(tmp_path, geo_path):
     derive the corresponding Q-vector, then set hkl = (1, 0, 0) and
     astar = q exactly so q = a* · 1 + b* · 0 + c* · 0 = a*.
     """
-    # Pick a target pixel and derive q from it for our synthetic detector.
+    # Pick target pixels and derive q from them for our synthetic detector.
     target_px = 700.0
     target_py = 850.0
 
     det = parse_geometry_xml(geo_path).detectors[0]
-    kf = pixel_to_xyz(det, target_px, target_py)
-    kf /= np.linalg.norm(kf)
-    q = kf - np.array([0.0, 0.0, 1.0])
+
+    def q_from_pixel(px, py):
+        kf = pixel_to_xyz(det, px, py)
+        kf /= np.linalg.norm(kf)
+        return kf - np.array([0.0, 0.0, 1.0])
+
+    q = q_from_pixel(target_px, target_py)
     # The recip_lattice in xml_parser is stored row-major: astar/bstar/cstar
     # as rows. So q = h*a* + k*b* + l*c*; with hkl=(1,0,0) -> q = a*.
     astar = q
-    bstar = np.zeros(3)
-    cstar = np.zeros(3)
+    bstar = q_from_pixel(900.0, 1120.0)
+    cstar = q_from_pixel(1200.0, 760.0)
 
     # Add one extra measured peak that is NOT indexed.
     extra_px, extra_py = 1500.0, 200.0
@@ -355,12 +382,14 @@ def _make_synthetic_indexed_xml(tmp_path, geo_path):
     <indexing indexProgram="euler" Nindexed="1" Npeaks="2" Npatterns="1"
               keVmaxCalc="30" keVmaxTest="30" angleTolerance="0.1"
               cone="72" hklPrefer="0 0 0" executionTime="0">
-      <xtl>
-        <structureDesc>Si</structureDesc>
-        <xtlFile/>
-        <SpaceGroup>227</SpaceGroup>
-        <latticeParameters unit="nm">0.5431 0.5431 0.5431 90 90 90</latticeParameters>
-      </xtl>
+        <xtl>
+          <structureDesc>Si</structureDesc>
+          <xtlFile/>
+          <SpaceGroup>227</SpaceGroup>
+          <latticeParameters unit="nm">0.5431 0.5431 0.5431 90 90 90</latticeParameters>
+          <atom n="1" symbol="Si" label="Si001">0 0 0</atom>
+        </xtl>
+
       <pattern num="0" Nindexed="1" rms_error="0.001" goodness="100">
         <recip_lattice unit="1/nm">
           <astar>{astar[0]} {astar[1]} {astar[2]}</astar>
@@ -401,13 +430,51 @@ def test_build_step_overlay_end_to_end(tmp_path, syn_geo_path):
     assert len(pat.predicted_xy) == 1
     np.testing.assert_allclose(pat.predicted_xy[0], [tpx, tpy], atol=1e-4)
 
-    # The first measured peak should be matched to that reflection
+    # The first measured peak is indexed because XML PkIndex points at it.
     assert pat.measured_index[0] == 0
-    assert pat.match_distance[0] < 0.01
+    assert np.isnan(pat.match_distance[0])
 
     # The extra peak should be flagged un-indexed
     assert overlay.measured_indexed_mask[0]
     assert not overlay.measured_indexed_mask[1]
+
+
+def test_build_step_overlay_uses_pkindex_not_nearest_neighbor(tmp_path, syn_geo_path):
+    indexed_path, *_ = _make_synthetic_indexed_xml(tmp_path, syn_geo_path)
+    text = Path(indexed_path).read_text()
+    text = text.replace("<PkIndex>0</PkIndex>", "<PkIndex>1</PkIndex>")
+    Path(indexed_path).write_text(text)
+
+    parsed = parse_indexing_xml(indexed_path)
+    geom = resolve_geometry_for_indexing(indexed_path)
+    overlay = build_step_overlay(parsed, 0, geom)
+
+    pat = overlay.patterns[0]
+    assert pat.measured_index[0] == 1
+    assert not overlay.measured_indexed_mask[0]
+    assert overlay.measured_indexed_mask[1]
+
+
+def test_build_step_overlay_simulates_missing_spots(tmp_path, syn_geo_path):
+    indexed_path, *_ = _make_synthetic_indexed_xml(tmp_path, syn_geo_path)
+
+    parsed = parse_indexing_xml(indexed_path)
+    assert parsed["atoms"] == [{"n": 1, "symbol": "Si", "label": "Si001", "Zatom": None, "xyz": (0.0, 0.0, 0.0)}]
+    geom = resolve_geometry_for_indexing(indexed_path)
+    overlay = build_step_overlay(
+        parsed,
+        0,
+        geom,
+        simulate_missing=True,
+        missing_energy_range_kev=(0.01, 50.0),
+        missing_hkl_limit=2,
+    )
+
+    assert len(overlay.missing_spots) == 1
+    missing = overlay.missing_spots[0]
+    assert len(missing.predicted_xy) > 0
+    assert (1, 0, 0) not in {tuple(hkl) for hkl in missing.hkl.tolist()}
+    assert np.all(np.isfinite(missing.energy_kev))
 
 
 def test_build_step_overlay_empty_step(tmp_path, syn_geo_path):

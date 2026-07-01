@@ -293,11 +293,22 @@ class PatternOverlay:
     # Indexed reflections (one row per (h,k,l) the indexer solved for):
     hkl: np.ndarray = field(default_factory=lambda: np.zeros((0, 3), dtype=int))
     predicted_xy: np.ndarray = field(default_factory=lambda: np.zeros((0, 2)))
-    # Index into the parent step's measured-peaks array for each indexed
-    # reflection (``-1`` if the reflection did not match any measured peak).
+    # XML PkIndex values: index into the parent measured-peaks array for each
+    # indexed reflection (``-1`` if the XML did not provide a valid mapping).
     measured_index: np.ndarray = field(default_factory=lambda: np.zeros((0,), dtype=int))
-    # Per-reflection match distance in ROI pixels (NaN if not matched).
+    # Reserved for optional projection-residual diagnostics. Classification
+    # does not use pixel proximity.
     match_distance: np.ndarray = field(default_factory=lambda: np.zeros((0,)))
+
+
+@dataclass
+class MissingSpotOverlay:
+    """Simulated reflections not already represented by indexed peaks."""
+
+    pattern_num: int = 0
+    hkl: np.ndarray = field(default_factory=lambda: np.zeros((0, 3), dtype=int))
+    predicted_xy: np.ndarray = field(default_factory=lambda: np.zeros((0, 2)))
+    energy_kev: np.ndarray = field(default_factory=lambda: np.zeros((0,)))
 
 
 @dataclass
@@ -314,9 +325,10 @@ class StepOverlay:
     # Measured peaks from <peaksXY>, in ROI / binned pixels.
     measured_xy: np.ndarray = field(default_factory=lambda: np.zeros((0, 2)))
     measured_intensity: np.ndarray = field(default_factory=lambda: np.zeros((0,)))
-    # True where the measured peak was matched to *any* indexed reflection.
+    # True where the measured peak is referenced by any XML PkIndex value.
     measured_indexed_mask: np.ndarray = field(default_factory=lambda: np.zeros((0,), dtype=bool))
     patterns: List[PatternOverlay] = field(default_factory=list)
+    missing_spots: List[MissingSpotOverlay] = field(default_factory=list)
     # Diagnostics
     warnings: List[str] = field(default_factory=list)
 
@@ -325,14 +337,18 @@ def build_step_overlay(
     parsed: dict,
     step_index: int,
     geometry: BeamlineGeometry,
-    match_tolerance_px: float = 4.0,
+    match_tolerance_px: float | None = None,
+    simulate_missing: bool = False,
+    missing_energy_range_kev: Tuple[float, float] = (6.0, 30.0),
+    missing_hkl_limit: int = 12,
 ) -> Optional[StepOverlay]:
     """
-    Back-project all indexed reflections for one step and pair them with
-    the step's measured peaks.
+    Back-project indexed reflections for one step and classify measured peaks
+    using the XML ``PkIndex`` assignments.
 
-    Direct Python port of Igor's ``xmlPixelinfoForMovies``
-    (``xmlMultiIndex.ipf:104-260``).
+    Projection math follows Igor's ``xmlPixelinfoForMovies``
+    (``xmlMultiIndex.ipf:104-260``), but measured indexed/un-indexed status is
+    not inferred from nearest-neighbour pixel distance.
 
     Parameters
     ----------
@@ -343,10 +359,16 @@ def build_step_overlay(
     geometry : BeamlineGeometry
         Detector geometry (resolved via
         :func:`laue_portal.analysis.geometry.resolve_geometry_for_indexing`).
-    match_tolerance_px : float
-        Maximum distance (in ROI pixels) between a predicted and measured
-        peak for them to be considered the same reflection.  Defaults to
-        Igor's hard-coded 4 px.
+    match_tolerance_px : float | None
+        Deprecated no-op. Indexed/un-indexed measured peak classification is
+        authoritative from XML ``PkIndex`` values, not pixel proximity.
+    simulate_missing : bool
+        When true, enumerate candidate HKLs in the indexed lattice and keep
+        on-detector reflections that are not already indexed/matched.
+    missing_energy_range_kev : tuple[float, float]
+        Energy window used by the lightweight missing-spot enumerator.
+    missing_hkl_limit : int
+        Enumerate integer HKLs in ``[-limit, limit]`` for each axis.
 
     Returns
     -------
@@ -427,43 +449,241 @@ def build_step_overlay(
         qvecs = hkl @ recip  # (N, 3) -- recip.T applied row-wise
 
         # Predict in full-chip un-binned pixels, then transform to ROI
-        # coordinates so we can compare to the measured peaks.
+        # coordinates for display. This does not classify measured peaks.
         full_xy = q_to_pixel_batch(detector, qvecs, depth=depth)
         px_roi, py_roi = full_to_roi(full_xy[:, 0], full_xy[:, 1], overlay.roi)
         pred_xy = np.column_stack([px_roi, py_roi])
 
-        # Nearest-neighbour match against measured peaks within tolerance.
         n_idx = len(pred_xy)
-        measured_index = -np.ones(n_idx, dtype=int)
+        measured_index = _valid_pk_indices(pat.get("peak_indices"), n_idx, len(overlay.measured_xy))
         match_dist = np.full(n_idx, np.nan)
+        if len(measured_index):
+            overlay.measured_indexed_mask[measured_index[measured_index >= 0]] = True
 
-        if len(overlay.measured_xy) > 0:
-            # Brute-force NN search is fine; <~200 peaks per step.
-            tol2 = match_tolerance_px * match_tolerance_px
-            for i in range(n_idx):
-                if not np.all(np.isfinite(pred_xy[i])):
-                    continue
-                d2 = np.sum((overlay.measured_xy - pred_xy[i]) ** 2, axis=1)
-                j = int(np.argmin(d2))
-                if d2[j] <= tol2:
-                    measured_index[i] = j
-                    match_dist[i] = float(np.sqrt(d2[j]))
-                    overlay.measured_indexed_mask[j] = True
-
-        overlay.patterns.append(
-            PatternOverlay(
-                pattern_num=int(pat.get("pattern_num", 0)),
-                rms_error=float(pat.get("rms_error", float("nan"))),
-                goodness=float(pat.get("goodness", float("nan"))),
-                n_indexed=int(pat.get("n_indexed", 0)),
-                hkl=hkl.astype(int),
-                predicted_xy=pred_xy,
-                measured_index=measured_index,
-                match_distance=match_dist,
-            )
+        pattern_overlay = PatternOverlay(
+            pattern_num=int(pat.get("pattern_num", 0)),
+            rms_error=float(pat.get("rms_error", float("nan"))),
+            goodness=float(pat.get("goodness", float("nan"))),
+            n_indexed=int(pat.get("n_indexed", 0)),
+            hkl=hkl.astype(int),
+            predicted_xy=pred_xy,
+            measured_index=measured_index,
+            match_distance=match_dist,
         )
+        overlay.patterns.append(pattern_overlay)
+
+        if simulate_missing:
+            missing = _simulate_missing_spots(
+                pattern_overlay,
+                detector,
+                overlay,
+                np.asarray(recip, dtype=float),
+                depth=depth,
+                energy_range_kev=missing_energy_range_kev,
+                hkl_limit=missing_hkl_limit,
+                space_group=parsed.get("space_group"),
+            )
+            overlay.missing_spots.append(missing)
 
     return overlay
+
+
+def _valid_pk_indices(pk_indices, n_hkl: int, n_measured: int) -> np.ndarray:
+    """Return XML PkIndex values aligned to the HKL array, with invalids as -1."""
+    measured_index = -np.ones(n_hkl, dtype=int)
+    if pk_indices is None:
+        return measured_index
+    values = np.asarray(pk_indices, dtype=int).reshape(-1)
+    n = min(n_hkl, len(values))
+    if n == 0:
+        return measured_index
+    valid = (values[:n] >= 0) & (values[:n] < n_measured)
+    measured_index[:n][valid] = values[:n][valid]
+    return measured_index
+
+
+def _simulate_missing_spots(
+    pattern: PatternOverlay,
+    detector: DetectorGeometry,
+    overlay: StepOverlay,
+    recip: np.ndarray,
+    *,
+    depth: float,
+    energy_range_kev: Tuple[float, float],
+    hkl_limit: int,
+    space_group: int | None = None,
+) -> MissingSpotOverlay:
+    """Lightweight candidate-reflection enumerator for missing spot display."""
+    hkl_candidates = _enumerate_hkl(int(hkl_limit))
+    hkl_candidates = hkl_candidates[_centering_allowed_mask(hkl_candidates, space_group)]
+    if len(hkl_candidates) == 0:
+        return MissingSpotOverlay(pattern_num=pattern.pattern_num)
+    qvecs = hkl_candidates @ recip
+    full_xy = q_to_pixel_batch(detector, qvecs, depth=depth)
+    px_roi, py_roi = full_to_roi(full_xy[:, 0], full_xy[:, 1], overlay.roi)
+    pred_xy = np.column_stack([px_roi, py_roi])
+
+    q_norm = np.linalg.norm(qvecs, axis=1)
+    qhat_z = np.full(len(q_norm), np.nan)
+    nonzero = q_norm > 0
+    qhat_z[nonzero] = qvecs[nonzero, 2] / q_norm[nonzero]
+    sin_theta = -qhat_z
+    energy = np.full(len(q_norm), np.nan)
+    valid_theta = sin_theta > 0
+    # The XML reciprocal lattice is in 1/nm; hc is keV*nm.
+    energy[valid_theta] = q_norm[valid_theta] * 1.2398419739 / (4.0 * np.pi * sin_theta[valid_theta])
+
+    emin, emax = sorted((float(energy_range_kev[0]), float(energy_range_kev[1])))
+    x_max = (overlay.roi.endx - overlay.roi.startx) / overlay.roi.groupx if overlay.roi.endx else overlay.Nx
+    y_max = (overlay.roi.endy - overlay.roi.starty) / overlay.roi.groupy if overlay.roi.endy else overlay.Ny
+    finite = np.isfinite(pred_xy[:, 0]) & np.isfinite(pred_xy[:, 1]) & np.isfinite(energy)
+    on_chip = finite & (pred_xy[:, 0] >= 0) & (pred_xy[:, 1] >= 0) & (pred_xy[:, 0] <= x_max) & (pred_xy[:, 1] <= y_max)
+    in_energy = (energy >= emin) & (energy <= emax)
+    keep = on_chip & in_energy
+
+    if not np.any(keep):
+        return MissingSpotOverlay(pattern_num=pattern.pattern_num)
+
+    indexed_hkl = {tuple(map(int, hkl)) for hkl in pattern.hkl}
+    missing_idx = []
+
+    for idx in np.where(keep)[0]:
+        hkl = tuple(map(int, hkl_candidates[idx]))
+        if hkl in indexed_hkl:
+            continue
+        missing_idx.append(idx)
+
+    if not missing_idx:
+        return MissingSpotOverlay(pattern_num=pattern.pattern_num)
+
+    idx = _deduplicate_by_direction(np.asarray(missing_idx, dtype=int), qvecs, energy)
+    return MissingSpotOverlay(
+        pattern_num=pattern.pattern_num,
+        hkl=hkl_candidates[idx].astype(int),
+        predicted_xy=pred_xy[idx],
+        energy_kev=energy[idx],
+    )
+
+
+def _deduplicate_by_direction(indices: np.ndarray, qvecs: np.ndarray, energy: np.ndarray) -> np.ndarray:
+    """Collapse harmonic reflections that share the same scattering direction."""
+    by_direction: dict[tuple[int, int, int], int] = {}
+    for idx in indices:
+        q = qvecs[idx]
+        norm = float(np.linalg.norm(q))
+        if norm == 0.0 or not np.isfinite(norm):
+            continue
+        key = tuple(int(v) for v in np.trunc((q / norm) * 1e5))
+        prev = by_direction.get(key)
+        if prev is None or energy[idx] < energy[prev]:
+            by_direction[key] = int(idx)
+    return np.array(sorted(by_direction.values(), key=lambda i: energy[i]), dtype=int)
+
+
+def _enumerate_hkl(limit: int) -> np.ndarray:
+    """Return all integer HKLs in a cube around zero, excluding 000."""
+    limit = max(1, int(limit))
+    values = np.arange(-limit, limit + 1, dtype=int)
+    grid = np.stack(np.meshgrid(values, values, values, indexing="ij"), axis=-1).reshape(-1, 3)
+    return grid[np.any(grid != 0, axis=1)]
+
+
+def _centering_allowed_mask(hkl: np.ndarray, space_group: int | None) -> np.ndarray:
+    """Apply lattice-centering systematic absences for common space groups."""
+    hkl = np.asarray(hkl, dtype=int)
+    if hkl.size == 0:
+        return np.zeros((0,), dtype=bool)
+    try:
+        sg = int(space_group)
+    except (TypeError, ValueError):
+        return np.ones(len(hkl), dtype=bool)
+
+    h = hkl[:, 0]
+    k = hkl[:, 1]
+    l = hkl[:, 2]
+    parity = np.mod(hkl, 2)
+
+    if _space_group_is_face_centered(sg):
+        return (parity[:, 0] == parity[:, 1]) & (parity[:, 1] == parity[:, 2])
+    if _space_group_is_body_centered(sg):
+        return np.mod(h + k + l, 2) == 0
+    if _space_group_is_base_centered(sg):
+        return np.mod(h + k, 2) == 0
+    if _space_group_is_r_centered_hex(sg):
+        return np.mod(-h + k + l, 3) == 0
+    return np.ones(len(hkl), dtype=bool)
+
+
+def _space_group_is_face_centered(space_group: int) -> bool:
+    return space_group in {
+        22,
+        42,
+        43,
+        69,
+        70,
+        196,
+        202,
+        203,
+        209,
+        210,
+        216,
+        219,
+        225,
+        226,
+        227,
+        228,
+    }
+
+
+def _space_group_is_body_centered(space_group: int) -> bool:
+    return space_group in {
+        23,
+        24,
+        44,
+        45,
+        46,
+        71,
+        72,
+        73,
+        74,
+        79,
+        80,
+        82,
+        87,
+        88,
+        97,
+        98,
+        107,
+        108,
+        109,
+        110,
+        119,
+        120,
+        121,
+        122,
+        139,
+        140,
+        141,
+        142,
+        197,
+        199,
+        204,
+        206,
+        211,
+        214,
+        217,
+        220,
+        229,
+        230,
+    }
+
+
+def _space_group_is_base_centered(space_group: int) -> bool:
+    return space_group in {5, 8, 9, 12, 15, 20, 21, 35, 36, 37, 38, 39, 40, 41, 63, 64, 65, 66, 67, 68}
+
+
+def _space_group_is_r_centered_hex(space_group: int) -> bool:
+    return space_group in {146, 148, 155, 160, 161, 166, 167}
 
 
 def overlay_statistics(overlay: StepOverlay) -> dict:
@@ -471,6 +691,7 @@ def overlay_statistics(overlay: StepOverlay) -> dict:
     n_meas = len(overlay.measured_xy)
     n_indexed = int(overlay.measured_indexed_mask.sum())
     by_pattern = []
+    missing_by_pattern = {missing.pattern_num: len(missing.predicted_xy) for missing in overlay.missing_spots}
     for pat in overlay.patterns:
         n_matched = int(np.sum(pat.measured_index >= 0))
         n_predicted = len(pat.predicted_xy)
@@ -491,11 +712,10 @@ def overlay_statistics(overlay: StepOverlay) -> dict:
                 "n_predicted": n_predicted,
                 "n_predicted_on_detector": n_on,
                 "n_matched": n_matched,
+                "n_missing": int(missing_by_pattern.get(pat.pattern_num, 0)),
                 "rms_error": pat.rms_error,
                 "goodness": pat.goodness,
-                "median_match_dist_px": float(np.nanmedian(pat.match_distance))
-                if np.any(np.isfinite(pat.match_distance))
-                else float("nan"),
+                "n_pkindex": n_matched,
             }
         )
     return {

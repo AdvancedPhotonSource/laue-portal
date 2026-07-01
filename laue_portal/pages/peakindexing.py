@@ -755,8 +755,16 @@ _viz_tabs = dbc.Tabs(
                                             "",
                                             dbc.Checkbox(
                                                 id="detector-show-predicted",
-                                                label="Show predicted (back-projected)",
+                                                label="Show predicted (XML back-projected)",
                                                 value=True,
+                                            ),
+                                        ),
+                                        _viz_control(
+                                            "",
+                                            dbc.Checkbox(
+                                                id="detector-show-missing",
+                                                label="Show simulated missing",
+                                                value=False,
                                             ),
                                         ),
                                         _viz_control(
@@ -820,8 +828,8 @@ _viz_tabs = dbc.Tabs(
                                             dbc.Select(
                                                 id="detector-image-colormap",
                                                 options=[
-                                                    {"label": "Terrain", "value": "terrain_r"},
                                                     {"label": "Gray", "value": "gray"},
+                                                    {"label": "Terrain", "value": "terrain_r"},
                                                     {"label": "Gray reversed", "value": "gray_r"},
                                                     {"label": "Viridis", "value": "viridis"},
                                                     {"label": "Plasma", "value": "plasma"},
@@ -830,7 +838,7 @@ _viz_tabs = dbc.Tabs(
                                                     {"label": "Turbo", "value": "turbo"},
                                                     {"label": "Jet", "value": "jet"},
                                                 ],
-                                                value="terrain_r",
+                                                value="gray",
                                                 className="form-select",
                                             ),
                                         ),
@@ -2444,6 +2452,7 @@ def populate_detector_pattern_checklist(xml_path, step_value):
     Input("peakindexing-path-context", "data"),
     Input("detector-step-select", "value"),
     Input("detector-show-predicted", "value"),
+    Input("detector-show-missing", "value"),
     Input("detector-show-hkl", "value"),
     Input("detector-show-unindexed", "value"),
     Input("detector-marker-size", "value"),
@@ -2461,6 +2470,7 @@ def update_detector_view(
     path_context,
     step_value,
     show_predicted,
+    show_missing,
     show_hkl,
     show_unindexed,
     marker_size,
@@ -2501,7 +2511,7 @@ def update_detector_view(
             )
             return fig, summary, ""
 
-        overlay = build_step_overlay(parsed, step_idx, geometry)
+        overlay = build_step_overlay(parsed, step_idx, geometry, simulate_missing=bool(show_missing))
 
         image_result = None
         detector_image = None
@@ -2529,6 +2539,7 @@ def update_detector_view(
         fig = make_detector_view(
             overlay,
             show_predicted=bool(show_predicted),
+            show_missing=bool(show_missing),
             show_unindexed=bool(show_unindexed),
             show_hkl_labels=bool(show_hkl),
             marker_size=max(1, int(marker_size or 10)),
@@ -2536,7 +2547,7 @@ def update_detector_view(
             selected_patterns=list(selected_patterns) if selected_patterns else None,
             detector_image=detector_image,
             image_visible=bool(show_image),
-            image_colorscale=image_colormap or "terrain_r",
+            image_colorscale=image_colormap or "gray",
             image_vmin=image_vmin_eff,
             image_vmax=image_vmax_eff,
             image_opacity=float(image_opacity if image_opacity is not None else 0.8),
@@ -2577,15 +2588,14 @@ def _detector_step_summary(parsed, step_idx, overlay, overlay_statistics, image_
     ]
     pattern_rows = []
     for p in stats["patterns"]:
-        med = p["median_match_dist_px"]
-        med_txt = f"{med:.2f} px" if med == med else "n/a"  # NaN-aware
+        missing_txt = f", missing sim={p['n_missing']}" if p.get("n_missing") else ""
         pattern_rows.append(
             html.Li(
                 f"Pattern {p['pattern_num']}: "
-                f"{p['n_matched']}/{p['n_predicted_on_detector']} matched (on-detector), "
+                f"{p['n_pkindex']}/{p['n_predicted_on_detector']} PkIndex assigned (on-detector predictions), "
                 f"RMS={p['rms_error']:.4f}\u00b0, "
-                f"goodness={p['goodness']:.1f}, "
-                f"median match={med_txt}"
+                f"goodness={p['goodness']:.1f}"
+                f"{missing_txt}"
             )
         )
 

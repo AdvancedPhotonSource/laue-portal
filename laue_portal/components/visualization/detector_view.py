@@ -40,6 +40,7 @@ _COLOR_MATCHED_PATTERN0 = "rgb(0, 170, 0)"  # green
 _COLOR_MATCHED_PATTERN1PLUS = "rgb(40, 80, 220)"  # deep blue
 _COLOR_PREDICTED = "rgb(214, 19, 0)"  # orange-red (Igor X)
 _COLOR_PREDICTED_OFFDETECTOR = "rgba(214, 19, 0, 0.25)"  # faded for off-chip
+_COLOR_MISSING = "rgb(130, 45, 210)"
 
 # Pattern colours after the first are cycled for the "matched" markers.
 _PATTERN_COLOURS = [
@@ -80,6 +81,7 @@ def _format_hkl(h: int, k: int, l: int) -> str:
 def make_detector_view(
     overlay: Optional[StepOverlay],
     show_predicted: bool = True,
+    show_missing: bool = False,
     show_unindexed: bool = True,
     show_hkl_labels: bool = True,
     marker_size: int = 10,
@@ -87,7 +89,7 @@ def make_detector_view(
     selected_patterns: Optional[List[int]] = None,
     detector_image: Optional[np.ndarray] = None,
     image_visible: bool = True,
-    image_colorscale: str = "terrain_r",
+    image_colorscale: str = "gray",
     image_vmin: Optional[float] = None,
     image_vmax: Optional[float] = None,
     image_opacity: float = 0.8,
@@ -103,6 +105,8 @@ def make_detector_view(
         ``None`` produces an empty figure with a helpful annotation.
     show_predicted : bool
         Draw the orange "X" markers at each predicted pixel position.
+    show_missing : bool
+        Draw simulated on-detector reflections not already indexed/matched.
     show_unindexed : bool
         Draw measured peaks that did not match any indexed reflection.
     show_hkl_labels : bool
@@ -288,12 +292,7 @@ def make_detector_view(
             finite = np.isfinite(px) & np.isfinite(py)
 
             hkl_labels = [_format_hkl(*hkl) for hkl in pat.hkl] if show_hkl_labels else None
-            customdata = np.column_stack(
-                [
-                    pat.hkl.astype(int),
-                    pat.match_distance,
-                ]
-            )
+            customdata = np.column_stack([pat.hkl.astype(int), pat.measured_index])
 
             # On-detector vs off-detector (we still draw both, but off-detector
             # uses a faded colour and is hidden by default).
@@ -338,11 +337,45 @@ def make_detector_view(
                             f"pattern {pat.pattern_num}<br>"
                             "hkl: (%{customdata[0]} %{customdata[1]} %{customdata[2]})<br>"
                             "x: %{x:.2f} px<br>y: %{y:.2f} px<br>"
-                            "match d: %{customdata[3]:.2f} px"
+                            "PkIndex: %{customdata[3]}"
                             f"<extra>predicted ({sub_suffix})</extra>"
                         ),
                     )
                 )
+
+    if show_missing:
+        for missing in overlay.missing_spots:
+            if selected_patterns is not None and missing.pattern_num not in selected_patterns:
+                continue
+            if not len(missing.predicted_xy):
+                continue
+            customdata = np.column_stack([missing.hkl.astype(int), missing.energy_kev])
+            texts = [_format_hkl(*hkl) for hkl in missing.hkl] if show_hkl_labels else None
+            fig.add_trace(
+                go.Scatter(
+                    x=missing.predicted_xy[:, 0],
+                    y=missing.predicted_xy[:, 1],
+                    mode="markers+text" if (show_hkl_labels and texts) else "markers",
+                    name=f"Simulated missing (pat {missing.pattern_num}, {len(missing.predicted_xy)})",
+                    text=texts,
+                    textposition="bottom right",
+                    textfont=dict(size=label_size, color=_COLOR_MISSING),
+                    marker=dict(
+                        size=marker_size + 4,
+                        symbol="triangle-up-open",
+                        color=_COLOR_MISSING,
+                        line=dict(width=1.8, color=_COLOR_MISSING),
+                    ),
+                    customdata=customdata,
+                    hovertemplate=(
+                        f"pattern {missing.pattern_num}<br>"
+                        "hkl: (%{customdata[0]} %{customdata[1]} %{customdata[2]})<br>"
+                        "E: %{customdata[3]:.2f} keV<br>"
+                        "x: %{x:.2f} px<br>y: %{y:.2f} px"
+                        "<extra>missing</extra>"
+                    ),
+                )
+            )
 
     _style_detector_axes(fig, nx=x_max, ny=y_max)
 

@@ -103,7 +103,7 @@ def load_detector_image(
     finite = data[np.isfinite(data)]
     if finite.size:
         vmin = float(np.nanpercentile(finite, 1.0))
-        vmax = float(np.nanpercentile(finite, 99.5))
+        vmax = float(np.nanpercentile(finite, 99.9))
         if not np.isfinite(vmin) or not np.isfinite(vmax) or vmin == vmax:
             vmin = float(np.nanmin(finite))
             vmax = float(np.nanmax(finite))
