@@ -473,15 +473,15 @@ def build_step_overlay(
         overlay.patterns.append(pattern_overlay)
 
         if simulate_missing:
-            missing = _simulate_missing_spots(
+            missing = _simulate_missing_spots_with_optional_jzt(
                 pattern_overlay,
                 detector,
                 overlay,
                 np.asarray(recip, dtype=float),
+                parsed=parsed,
                 depth=depth,
                 energy_range_kev=missing_energy_range_kev,
                 hkl_limit=missing_hkl_limit,
-                space_group=parsed.get("space_group"),
             )
             overlay.missing_spots.append(missing)
 
@@ -500,6 +500,59 @@ def _valid_pk_indices(pk_indices, n_hkl: int, n_measured: int) -> np.ndarray:
     valid = (values[:n] >= 0) & (values[:n] < n_measured)
     measured_index[:n][valid] = values[:n][valid]
     return measured_index
+
+
+def _simulate_missing_spots_with_optional_jzt(
+    pattern: PatternOverlay,
+    detector: DetectorGeometry,
+    overlay: StepOverlay,
+    recip: np.ndarray,
+    *,
+    parsed: dict,
+    depth: float,
+    energy_range_kev: Tuple[float, float],
+    hkl_limit: int,
+) -> MissingSpotOverlay:
+    """Prefer the optional JZT backend, falling back to the lightweight enumerator."""
+    try:
+        from laue_portal.analysis.jzt_simulation import simulate_missing_spots as simulate_missing_spots_jzt
+
+        result = simulate_missing_spots_jzt(
+            crystal={
+                "space_group": parsed.get("space_group"),
+                "lattice_params": parsed.get("lattice_params"),
+                "atoms": parsed.get("atoms"),
+                "structure_desc": parsed.get("structure_desc"),
+                "xtl_file": parsed.get("xtl_file"),
+            },
+            detector=detector,
+            recip=recip,
+            indexed_hkl=pattern.hkl,
+            depth=depth,
+            energy_range_kev=energy_range_kev,
+            roi=overlay.roi,
+        )
+        overlay.warnings.extend(result.warnings)
+        if result.used_backend:
+            return MissingSpotOverlay(
+                pattern_num=pattern.pattern_num,
+                hkl=np.asarray(result.hkl, dtype=int),
+                predicted_xy=np.asarray(result.predicted_xy, dtype=float),
+                energy_kev=np.asarray(result.energy_kev, dtype=float),
+            )
+    except Exception as exc:  # pragma: no cover - defensive optional-backend guard
+        overlay.warnings.append(f"JZT missing-spot simulation failed; using lightweight candidate simulation: {exc}")
+
+    return _simulate_missing_spots(
+        pattern,
+        detector,
+        overlay,
+        recip,
+        depth=depth,
+        energy_range_kev=energy_range_kev,
+        hkl_limit=hkl_limit,
+        space_group=parsed.get("space_group"),
+    )
 
 
 def _simulate_missing_spots(

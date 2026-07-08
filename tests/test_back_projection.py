@@ -459,6 +459,7 @@ def test_build_step_overlay_simulates_missing_spots(tmp_path, syn_geo_path):
     indexed_path, *_ = _make_synthetic_indexed_xml(tmp_path, syn_geo_path)
 
     parsed = parse_indexing_xml(indexed_path)
+    assert parsed["xtl_file"] == ""
     assert parsed["atoms"] == [{"n": 1, "symbol": "Si", "label": "Si001", "Zatom": None, "xyz": (0.0, 0.0, 0.0)}]
     geom = resolve_geometry_for_indexing(indexed_path)
     overlay = build_step_overlay(
@@ -475,6 +476,7 @@ def test_build_step_overlay_simulates_missing_spots(tmp_path, syn_geo_path):
     assert len(missing.predicted_xy) > 0
     assert (1, 0, 0) not in {tuple(hkl) for hkl in missing.hkl.tolist()}
     assert np.all(np.isfinite(missing.energy_kev))
+    assert not any("JZT missing-spot simulation" in warning for warning in overlay.warnings)
 
 
 def test_build_step_overlay_empty_step(tmp_path, syn_geo_path):

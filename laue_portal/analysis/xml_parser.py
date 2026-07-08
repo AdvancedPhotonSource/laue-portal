@@ -190,6 +190,7 @@ def _parse_indexing_xml_impl(xml_path: str) -> dict:
     space_group = 0
     lattice_params = np.zeros(6)
     structure_desc = ""
+    xtl_file = ""
     atoms = []
 
     # Store raw step data for get_step_peaks()
@@ -259,6 +260,9 @@ def _parse_indexing_xml_impl(xml_path: str) -> dict:
                     desc_text = _text(xtl_el, "structureDesc")
                     if desc_text:
                         structure_desc = desc_text.strip()
+                    xtl_file_text = _text(xtl_el, "xtlFile")
+                    if xtl_file_text:
+                        xtl_file = xtl_file_text.strip()
                     atoms = _parse_xtl_atoms(xtl_el)
 
         step_data_list.append(step_peaks)
@@ -283,6 +287,7 @@ def _parse_indexing_xml_impl(xml_path: str) -> dict:
         "space_group": space_group,
         "lattice_params": lattice_params,
         "structure_desc": structure_desc,
+        "xtl_file": xtl_file,
         "atoms": atoms,
         "_steps": step_data_list,
     }
