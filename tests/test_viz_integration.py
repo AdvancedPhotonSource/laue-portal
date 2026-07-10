@@ -73,10 +73,10 @@ def test_orientation_map_marker_size():
     assert fig.data[0].marker.size == 25
 
 
-def test_orientation_map_aspect_ratio():
+def test_orientation_map_axes_are_unconstrained():
     fig = make_orientation_map(_parsed())
-    assert fig.layout.yaxis.scaleanchor == "x"
-    assert fig.layout.yaxis.scaleratio == 1
+    assert fig.layout.yaxis.scaleanchor is None
+    assert fig.layout.yaxis.scaleratio is None
 
 
 def test_quality_map_marker_size():

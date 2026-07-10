@@ -226,11 +226,10 @@ def make_orientation_map(
         xaxis=dict(uirevision="orientation-2d-x"),
         plot_bgcolor=_GRAY_BG,
         paper_bgcolor="white",
-        yaxis=dict(
-            scaleanchor="x",
-            scaleratio=1,
-            uirevision="orientation-2d-y",
-        ),
+        # Do not link the Cartesian axis scales here. Preserving a 1:1 pixel
+        # ratio makes Plotly's Scattergl zoom path noticeably laggy around
+        # 100k points. The pole figure retains its required circular 1:1 scale.
+        yaxis=dict(uirevision="orientation-2d-y"),
         margin=dict(l=60, r=20, t=40, b=60),
         uirevision="orientation-2d",
         autosize=True,
