@@ -74,6 +74,25 @@ def test_pole_figure_lasso_dragmode():
     assert fig.layout.dragmode == "lasso"
 
 
+def test_pole_figure_disables_hover_above_limit_but_keeps_click_data():
+    fig = make_pole_figure(_parsed(), hkl=(1, 0, 0), hover_point_limit=0)
+    data_trace = fig.data[0]
+
+    assert data_trace.hoverinfo == "skip"
+    assert data_trace.hovertemplate is None
+    assert data_trace.customdata is not None
+    assert any("hover disabled" in annotation.text.lower() for annotation in fig.layout.annotations)
+
+
+def test_pole_figure_keeps_hover_below_limit():
+    fig = make_pole_figure(_parsed(), hkl=(1, 0, 0), hover_point_limit=None)
+    data_trace = fig.data[0]
+
+    assert data_trace.hoverinfo is None
+    assert "Grain" in data_trace.hovertemplate
+    assert not fig.layout.annotations
+
+
 def test_pole_figure_default_hsv_position():
     """Default color scheme is now hsv_position (not ipf)."""
     fig = make_pole_figure(_parsed(), hkl=(1, 0, 0))

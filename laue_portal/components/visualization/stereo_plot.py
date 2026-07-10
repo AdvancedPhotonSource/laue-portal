@@ -22,6 +22,7 @@ from laue_portal.analysis.projection import (
 logger = logging.getLogger(__name__)
 
 _GRAY_BG = "rgb(156, 156, 156)"
+_HOVER_POINT_LIMIT = 50_000
 
 # Unicode combining overline for negative Miller indices
 _OVERLINE = "\u0305"
@@ -52,6 +53,7 @@ def make_pole_figure(
     surface="normal",
     center_xy=None,
     surface_vectors=None,
+    hover_point_limit=_HOVER_POINT_LIMIT,
 ):
     """
     Create a pole figure scatter plot.
@@ -91,6 +93,10 @@ def make_pole_figure(
         When a user clicks a point on the pole figure, pass its
         stereographic coordinates here to recenter the HSV color wheel
         (matching Igor Pro's cursor-based ``MakePolePoints``).
+    hover_point_limit : int or None, optional
+        Disable point hover above this many rendered poles while preserving
+        zoom, selection, and click metadata. Defaults to 50,000. Use ``None``
+        to keep hover enabled at every size.
 
     Returns
     -------
@@ -181,6 +187,7 @@ def make_pole_figure(
         point_colors = "rgb(214, 20, 0)"
 
     fig = go.Figure()
+    hover_disabled = hover_point_limit is not None and len(points) > hover_point_limit
 
     if len(points) > 0:
         fig.add_trace(
@@ -195,7 +202,12 @@ def make_pole_figure(
                     line=dict(width=0),
                 ),
                 customdata=grain_indices.reshape(-1, 1),
-                hovertemplate=("x: %{x:.4f}<br>y: %{y:.4f}<br>Grain: %{customdata[0]}<br><extra></extra>"),
+                hovertemplate=(
+                    None
+                    if hover_disabled
+                    else "x: %{x:.4f}<br>y: %{y:.4f}<br>Grain: %{customdata[0]}<br><extra></extra>"
+                ),
+                hoverinfo="skip" if hover_disabled else None,
                 name=f"{{{_format_hkl(*hkl)}}} ({len(points)} pts)",
                 uid="pole-figure-data",
             )
@@ -311,5 +323,23 @@ def make_pole_figure(
         dragmode="lasso",  # enable lasso select for ROI picking (Stage 3)
         uirevision="pole-figure",
     )
+
+    if hover_disabled:
+        fig.add_annotation(
+            xref="paper",
+            yref="paper",
+            x=0.01,
+            y=0.99,
+            xanchor="left",
+            yanchor="top",
+            text=(
+                f"Point hover disabled above {hover_point_limit:,} poles for performance; "
+                "zoom and click remain available."
+            ),
+            showarrow=False,
+            font=dict(size=11, color="rgb(70, 70, 70)"),
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            borderpad=3,
+        )
 
     return fig
