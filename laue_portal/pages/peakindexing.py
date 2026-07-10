@@ -725,24 +725,24 @@ _viz_tabs = dbc.Tabs(
                                         _viz_sidebar_head("Step", "bi bi-list-ol"),
                                         _viz_control(
                                             "Step #",
-                                            dbc.Select(
-                                                id="detector-step-select",
-                                                options=[],
-                                                value=None,
-                                                className="form-select",
-                                            ),
-                                        ),
-                                        _viz_control(
-                                            "",
-                                            dbc.Button(
+                                            html.Div(
                                                 [
-                                                    html.I(className="bi bi-shuffle me-1"),
-                                                    "Next indexed step",
+                                                    dbc.Input(
+                                                        id="detector-step-select",
+                                                        type="number",
+                                                        min=0,
+                                                        step=1,
+                                                        value=None,
+                                                        debounce=True,
+                                                        className="form-control",
+                                                    ),
+                                                    html.Small(
+                                                        "Steps: load data",
+                                                        id="detector-step-range-text",
+                                                        className="text-muted",
+                                                    ),
                                                 ],
-                                                id="detector-next-indexed-btn",
-                                                color="secondary",
-                                                size="sm",
-                                                style={"width": "100%"},
+                                                className="pi-viz-field-stack",
                                             ),
                                         ),
                                     ],
@@ -2328,19 +2328,36 @@ def update_stereo_color_key(color_mode, surface):
 # ---------------------------------------------------------------------------
 
 
+def _validated_detector_step(step_value, n_steps):
+    """Return an in-range integer detector step or raise PreventUpdate."""
+    if step_value is None or step_value == "":
+        raise PreventUpdate
+    try:
+        step_float = float(step_value)
+    except (TypeError, ValueError):
+        raise PreventUpdate from None
+    if not math.isfinite(step_float) or not step_float.is_integer():
+        raise PreventUpdate
+    step_idx = int(step_float)
+    if step_idx < 0 or step_idx >= n_steps:
+        raise PreventUpdate
+    return step_idx
+
+
 @callback(
-    Output("detector-step-select", "options"),
+    Output("detector-step-select", "min"),
+    Output("detector-step-select", "max"),
     Output("detector-step-select", "value"),
+    Output("detector-step-range-text", "children"),
     Input("peakindexing-xml-path", "data"),
     prevent_initial_call=True,
 )
-def populate_detector_step_options(xml_path):
+def populate_detector_step_input(xml_path):
     """
-    Populate the step selector from the parsed XML.
+    Populate the detector step input bounds from the parsed XML.
 
-    Each option shows ``Step N — Nindexed/Npeaks``.  The first step with
-    any indexed reflections is pre-selected so users see something useful
-    immediately.
+    The first step with any indexed reflections is pre-selected so users see
+    something useful immediately.
     """
     if not xml_path:
         raise PreventUpdate
@@ -2357,52 +2374,21 @@ def populate_detector_step_options(xml_path):
 
     n_indexed = parsed["n_indexed"]
     n_steps = len(parsed["positions"])
+    if n_steps < 1:
+        raise PreventUpdate
 
-    options = []
     default_value = None
     for i in range(n_steps):
-        ni = int(n_indexed[i])
-        label = f"Step {i}" + (f"  ({ni} indexed)" if ni else "")
-        options.append({"label": label, "value": str(i)})
-        if default_value is None and ni > 0:
-            default_value = str(i)
-
-    if default_value is None and options:
-        default_value = options[0]["value"]
-
-    return options, default_value
-
-
-@callback(
-    Output("detector-step-select", "value", allow_duplicate=True),
-    Input("detector-next-indexed-btn", "n_clicks"),
-    State("detector-step-select", "value"),
-    State("peakindexing-xml-path", "data"),
-    prevent_initial_call=True,
-)
-def jump_to_next_indexed_step(n_clicks, current_value, xml_path):
-    """Skip to the next step that contains at least one indexed reflection."""
-    if not n_clicks or not xml_path:
-        raise PreventUpdate
-    try:
-        from laue_portal.analysis.xml_parser import parse_indexing_xml
-    except Exception:
-        raise PreventUpdate from None
-
-    parsed = parse_indexing_xml(xml_path)
-    n_indexed = parsed["n_indexed"]
-    n_steps = len(parsed["positions"])
-
-    try:
-        start = int(current_value) if current_value is not None else -1
-    except (TypeError, ValueError):
-        start = -1
-
-    for offset in range(1, n_steps + 1):
-        i = (start + offset) % n_steps
         if int(n_indexed[i]) > 0:
-            return str(i)
-    raise PreventUpdate
+            default_value = i
+            break
+
+    if default_value is None:
+        default_value = 0
+
+    step_min = 0
+    step_max = n_steps - 1
+    return step_min, step_max, default_value, f"Steps: {step_min} to {step_max}"
 
 
 @callback(
@@ -2414,8 +2400,10 @@ def jump_to_next_indexed_step(n_clicks, current_value, xml_path):
 )
 def populate_detector_pattern_checklist(xml_path, step_value):
     """Refresh the pattern checklist whenever the step changes."""
-    if not xml_path or step_value is None:
+    if not xml_path:
         return [], []
+    if step_value is None or step_value == "":
+        raise PreventUpdate
     try:
         from laue_portal.analysis.xml_parser import get_step_peaks, parse_indexing_xml
     except Exception:
@@ -2423,8 +2411,10 @@ def populate_detector_pattern_checklist(xml_path, step_value):
 
     try:
         parsed = parse_indexing_xml(xml_path)
-        step_idx = int(step_value)
+        step_idx = _validated_detector_step(step_value, len(parsed["positions"]))
         step_peaks = get_step_peaks(parsed, step_idx)
+    except PreventUpdate:
+        raise
     except Exception:
         return [], []
 
@@ -2497,7 +2487,7 @@ def update_detector_view(
         from laue_portal.components.visualization.detector_view import make_detector_view
 
         parsed = parse_indexing_xml(xml_path)
-        step_idx = int(step_value)
+        step_idx = _validated_detector_step(step_value, len(parsed["positions"]))
 
         geometry = resolve_geometry_for_indexing(xml_path)
         if geometry is None or not geometry.detectors:

@@ -164,6 +164,16 @@
   width: 60px;
   flex: 0 0 auto;
 }
+.pi-viz-field-stack {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: .15rem;
+}
+.pi-viz-control .pi-viz-field-stack .form-control[type="number"] {
+  width: 100%;
+}
 
 /* Compact 3x3 reciprocal-lattice reference matrix */
 #orientation-rgb-reference-matrix-wrap .pi-viz-control,
