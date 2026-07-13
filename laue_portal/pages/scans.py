@@ -37,18 +37,6 @@ layout = html.Div(
                                     style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
                                     className="me-2",
                                 ),
-                                dbc.Button(
-                                    "New Recon + Index",
-                                    id="scans-page-recon-index-btn-placeholder",
-                                    style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
-                                    className="me-2",
-                                ),
-                                dbc.Button(
-                                    "Energy to K-space",
-                                    id="scans-page-energy-kspace-btn-placeholder",
-                                    style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
-                                    className="me-2",
-                                ),
                             ],
                             className="bg-light px-2 py-2 d-flex justify-content-end w-100",
                         )
@@ -230,10 +218,6 @@ def get_metadatas(path):
     Output("scans-page-wire-recon-btn", "style"),
     Output("scans-page-peakindex-btn", "disabled"),
     Output("scans-page-peakindex-btn", "style"),
-    Output("scans-page-recon-index-btn-placeholder", "disabled"),
-    Output("scans-page-recon-index-btn-placeholder", "style"),
-    Output("scans-page-energy-kspace-btn-placeholder", "disabled"),
-    Output("scans-page-energy-kspace-btn-placeholder", "style"),
     Input("metadata-table", "selectedRows"),
     prevent_initial_call=False,
 )
@@ -249,10 +233,6 @@ def update_button_states(selected_rows):
             enabled_style,  # New Recon
             False,
             enabled_style,  # New Index
-            True,
-            disabled_style,  # New Recon + Index (placeholder)
-            True,
-            disabled_style,  # Energy to K-space (placeholder)
         )
     else:
         return (
@@ -260,10 +240,6 @@ def update_button_states(selected_rows):
             disabled_style,  # New Recon
             True,
             disabled_style,  # New Index
-            True,
-            disabled_style,  # New Recon + Index (placeholder)
-            True,
-            disabled_style,  # Energy to K-space (placeholder)
         )
 
 
@@ -277,13 +253,11 @@ def handle_recon_button(n_clicks, rows):
     if not n_clicks:
         return dash.no_update
 
-    base_href = "/create-wire-reconstruction"
-
     if not rows:
-        return base_href
+        return "/create-reconstruction"
 
     scan_ids = []
-    any_wire_scans, any_nonwire_scans = False, False
+    reconstruction_types = set()
 
     for row in rows:
         if row.get("scanNumber"):
@@ -291,20 +265,16 @@ def handle_recon_button(n_clicks, rows):
         else:
             return dash.no_update
 
-        if row.get("aperture"):
-            aperture = str(row["aperture"]).lower()
-            if aperture == "none":
-                return dash.no_update
-            if "wire" in aperture:
-                any_wire_scans = True
-            else:
-                any_nonwire_scans = True
+        aperture = str(row.get("aperture") or "").lower()
+        reconstruction_types.add("wire" if "wire" in aperture else "standard")
 
-            if any_wire_scans and any_nonwire_scans:
-                return dash.no_update
+    # The two reconstruction forms cannot accept a mixed wire/non-wire batch.
+    if len(reconstruction_types) > 1:
+        return dash.no_update
 
-    if any_nonwire_scans:
-        base_href = "/create-reconstruction"
+    base_href = (
+        "/create-wire-reconstruction" if "wire" in reconstruction_types else "/create-reconstruction"
+    )
 
     url = f"{base_href}?scan_id={','.join(scan_ids)}"
     return url
