@@ -272,9 +272,7 @@ def handle_recon_button(n_clicks, rows):
     if len(reconstruction_types) > 1:
         return dash.no_update
 
-    base_href = (
-        "/create-wire-reconstruction" if "wire" in reconstruction_types else "/create-reconstruction"
-    )
+    base_href = "/create-wire-reconstruction" if "wire" in reconstruction_types else "/create-reconstruction"
 
     url = f"{base_href}?scan_id={','.join(scan_ids)}"
     return url

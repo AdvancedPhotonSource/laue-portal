@@ -153,6 +153,7 @@ def _parse_pooled_value(value, count, converter=None):
         values = [converter(item) if item is not None else None for item in values]
     return values
 
+
 dash.register_page(__name__)
 
 layout = dbc.Container(
