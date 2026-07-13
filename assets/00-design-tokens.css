@@ -1,0 +1,40 @@
+/* Shared Laue Portal design tokens.
+   Page- and feature-specific styles should consume these --lp-* variables. */
+
+:root {
+  --lp-bg:          #f7f8fa;
+  --lp-slate:       #2c3e50;
+  --lp-slate-90:    #34495e;
+  --lp-teal:        #18bc9c;
+  --lp-teal-light:  rgba(24, 188, 156, .08);
+  --lp-teal-border: rgba(24, 188, 156, .25);
+  --lp-blue:        #3498db;
+  --lp-ash:         #95a5a6;
+  --lp-fog:         #ecf0f1;
+  --lp-white:       #ffffff;
+  --lp-text:        #2c3e50;
+  --lp-radius:      6px;
+  --lp-radius-lg:   10px;
+  --lp-shadow-sm:   0 1px 3px rgba(44, 62, 80, .06);
+  --lp-shadow-md:   0 2px 8px rgba(44, 62, 80, .08);
+  --lp-transition:  180ms ease;
+
+  /* Compatibility aliases for peak-indexing visualization styles while
+     those selectors remain intentionally namespaced to that feature. */
+  --pi-bg:          var(--lp-bg);
+  --pi-slate:       var(--lp-slate);
+  --pi-slate-90:    var(--lp-slate-90);
+  --pi-teal:        var(--lp-teal);
+  --pi-teal-light:  var(--lp-teal-light);
+  --pi-teal-border: var(--lp-teal-border);
+  --pi-blue:        var(--lp-blue);
+  --pi-ash:         var(--lp-ash);
+  --pi-fog:         var(--lp-fog);
+  --pi-white:       var(--lp-white);
+  --pi-text:        var(--lp-text);
+  --pi-radius:      var(--lp-radius);
+  --pi-radius-lg:   var(--lp-radius-lg);
+  --pi-shadow-sm:   var(--lp-shadow-sm);
+  --pi-shadow-md:   var(--lp-shadow-md);
+  --pi-transition:  var(--lp-transition);
+}

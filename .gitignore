@@ -170,7 +170,9 @@ config.yaml
 
 # External hosted resources
 assets/*
+!assets/00-design-tokens.css
 !assets/customAgGridFunctions.js
+!assets/04-detail-page.css
 !assets/04-form-layout.css
 !assets/04-form-layout.js
 !assets/05-peakindex-viz.css

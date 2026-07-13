@@ -1,0 +1,76 @@
+/* Shared record-detail header and tab navigation. */
+
+.lp-detail-header {
+  display: flex;
+  align-items: baseline;
+  gap: .75rem;
+  flex-wrap: wrap;
+  padding: .75rem 1rem .5rem;
+  margin: 0;
+  background: var(--lp-white);
+  border-bottom: 1px solid var(--lp-fog);
+}
+
+.lp-detail-title {
+  font-family: Lato, sans-serif;
+  font-weight: 700;
+  font-size: 1.75rem;
+  color: var(--lp-slate);
+  margin: 0;
+}
+
+.lp-detail-links {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+
+.lp-detail-links a {
+  font-size: .78rem;
+  color: var(--lp-teal);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color var(--lp-transition);
+}
+
+.lp-detail-links a:hover {
+  color: var(--lp-blue);
+  text-decoration: underline;
+}
+
+.lp-detail-separator {
+  color: var(--lp-ash);
+  font-size: .72rem;
+}
+
+.lp-detail-tabs .nav-tabs {
+  border-bottom: 2px solid var(--lp-fog);
+  padding: 0 .5rem;
+  background: var(--lp-white);
+}
+
+.lp-detail-tabs .nav-tabs .nav-link {
+  font-family: Lato, sans-serif;
+  font-size: .82rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--lp-ash);
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: .6rem 1rem;
+  margin-bottom: -2px;
+  transition: color var(--lp-transition), border-color var(--lp-transition);
+}
+
+.lp-detail-tabs .nav-tabs .nav-link:hover {
+  color: var(--lp-slate);
+  border-bottom-color: var(--lp-ash);
+}
+
+.lp-detail-tabs .nav-tabs .nav-link.active {
+  color: var(--lp-teal);
+  border-bottom-color: var(--lp-teal);
+  background: transparent;
+  font-weight: 700;
+}

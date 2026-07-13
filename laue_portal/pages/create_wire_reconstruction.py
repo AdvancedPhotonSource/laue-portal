@@ -14,7 +14,6 @@ import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.db_utils as db_utils
 import laue_portal.database.session_utils as session_utils
-from laue_portal.components.form_base import _field
 from laue_portal.components.validation_alerts import (
     apply_validation_highlights,
     update_validation_alerts,
@@ -160,15 +159,10 @@ dash.register_page(__name__)
 layout = dbc.Container(
     [
         html.Div(
-            [
+            className="lp-form-page",
+            children=[
                 navbar.navbar,
                 dcc.Location(id="url-create-wirerecon", refresh=False),
-                dbc.Alert(
-                    "Hello! I am an alert",
-                    id="alert-upload",
-                    dismissable=True,
-                    is_open=False,
-                ),
                 dbc.Alert(
                     "Hello! I am an alert",
                     id="alert-submit",
@@ -182,73 +176,40 @@ layout = dbc.Container(
                     is_open=False,
                     color="success",
                 ),
-                html.Hr(),
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            html.H3(id="wirerecon-title", children="New Wire Reconstruction"),
-                            width="auto",  # shrink to content
+                html.Div(
+                    className="lp-form-masthead",
+                    children=[
+                        html.Div(
+                            [
+                                html.Div("Wire Reconstructions / New", className="lp-form-breadcrumb"),
+                                html.H2(id="wirerecon-title", children="New Wire Reconstruction"),
+                            ]
                         ),
-                        dbc.Col(
-                            dbc.Button(
-                                "Validate",
-                                id="wirerecon-validate-btn",
-                                color="secondary",
-                                style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
-                            ),
-                            width="auto",
-                            className="ms-3",  # small gap from title
-                        ),
-                        dbc.Col(
-                            dbc.Button(
-                                "Submit",
-                                id="submit_wire",
-                                color="primary",
-                                style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
-                            ),
-                            width="auto",
-                            className="ms-2",
+                        html.Div(
+                            className="lp-form-actions",
+                            children=[
+                                dbc.Button(
+                                    [html.I(className="bi bi-check2-circle me-1"), "Validate"],
+                                    id="wirerecon-validate-btn",
+                                    color="primary",
+                                    outline=True,
+                                ),
+                                dbc.Button(
+                                    [html.I(className="bi bi-send me-1"), "Submit"],
+                                    id="submit_wire",
+                                    color="success",
+                                ),
+                            ],
                         ),
                     ],
-                    className="g-2",  # gutter between cols
-                    justify="center",  # CENTER horizontally
-                    align="center",  # CENTER vertically
                 ),
-                html.Hr(),
-                validation_alerts,
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            dbc.Button(
-                                "Set from ...",
-                                id="upload-wireconfig",
-                                color="secondary",
-                                style={"minWidth": 150, "maxWidth": "150px", "width": "100%"},
-                            ),
-                            width="auto",
-                        ),
-                        dbc.Col(
-                            _field(
-                                "Author",
-                                "author",
-                                kwargs={
-                                    "type": "text",
-                                    "placeholder": "Required! Enter author or Tag for the reconstruction",
-                                },
-                            ),
-                            width="auto",
-                            style={"minWidth": "300px", "flexGrow": 1},
-                        ),
-                    ],
-                    justify="start",
-                    className="mb-0",
-                ),
+                html.Div(validation_alerts, className="lp-form-validation"),
                 wire_recon_form,
                 dcc.Store(id="wirerecon-data-loaded-signal"),
             ],
         )
     ],
-    className="dbc",
+    className="dbc px-0",
     fluid=True,
 )
 
@@ -1240,6 +1201,27 @@ def submit_parameters(
                     "color": "danger",
                 },
             )
+
+
+@dash.callback(
+    Output("depth_start", "value"),
+    Output("depth_end", "value"),
+    Output("depth_resolution", "value"),
+    Output("wire_edges", "value"),
+    Output("percent_brightest", "value"),
+    Input("wirerecon-set-default-parameters-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def set_wire_recon_defaults(n_clicks):
+    if not n_clicks:
+        raise PreventUpdate
+    return (
+        WIRERECON_DEFAULTS.get("depth_start"),
+        WIRERECON_DEFAULTS.get("depth_end"),
+        WIRERECON_DEFAULTS.get("depth_resolution"),
+        WIRERECON_DEFAULTS.get("wire_edges"),
+        WIRERECON_DEFAULTS.get("percent_brightest"),
+    )
 
 
 # Register shared callbacks

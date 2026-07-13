@@ -4,22 +4,6 @@
    Follows the Flatly theme palette via shared CSS custom properties.
    ========================================================================== */
 
-/* --------------------------------------------------------------------------
-   Design tokens (Flatly palette)
-   -------------------------------------------------------------------------- */
-:root {
-  --pi-slate:       #2c3e50;
-  --pi-slate-90:    #34495e;
-  --pi-teal:        #18bc9c;
-  --pi-teal-border: rgba(24, 188, 156, .25);
-  --pi-blue:        #3498db;
-  --pi-ash:         #95a5a6;
-  --pi-fog:         #ecf0f1;
-  --pi-white:       #ffffff;
-  --pi-text:        #2c3e50;
-  --pi-transition:  180ms ease;
-}
-
 /* ==========================================================================
    Layout: sidebar + visualization
    ========================================================================== */
@@ -367,78 +351,6 @@
   font-size: .8rem;
   margin-bottom: .15rem;
   color: var(--pi-text);
-}
-
-/* ==========================================================================
-   Tabs & page header
-   ========================================================================== */
-
-.pi-viz-tabs .nav-tabs {
-  border-bottom: 2px solid var(--pi-fog);
-  padding: 0 .5rem;
-  background: var(--pi-white);
-}
-.pi-viz-tabs .nav-tabs .nav-link {
-  font-family: Lato, sans-serif;
-  font-size: .82rem;
-  font-weight: 600;
-  letter-spacing: .02em;
-  color: var(--pi-ash);
-  border: none;
-  border-bottom: 2px solid transparent;
-  padding: .6rem 1rem;
-  margin-bottom: -2px;
-  transition: color var(--pi-transition), border-color var(--pi-transition);
-}
-.pi-viz-tabs .nav-tabs .nav-link:hover {
-  color: var(--pi-slate);
-  border-bottom-color: var(--pi-ash);
-}
-.pi-viz-tabs .nav-tabs .nav-link.active {
-  color: var(--pi-teal);
-  border-bottom-color: var(--pi-teal);
-  background: transparent;
-  font-weight: 700;
-}
-
-/* Page header */
-.pi-page-header {
-  display: flex;
-  align-items: baseline;
-  gap: .75rem;
-  flex-wrap: wrap;
-  padding: .75rem 1rem .5rem;
-  margin: 0;
-  background: var(--pi-white);
-  border-bottom: 1px solid var(--pi-fog);
-}
-.pi-page-header .pi-page-title {
-  font-family: Lato, sans-serif;
-  font-weight: 700;
-  font-size: 1.75rem;
-  color: var(--pi-slate);
-  margin: 0;
-}
-.pi-page-header .pi-page-links {
-  display: flex;
-  align-items: center;
-  gap: .5rem;
-  flex-wrap: wrap;
-}
-.pi-page-header .pi-page-links a {
-  font-size: .78rem;
-  color: var(--pi-teal);
-  text-decoration: none;
-  font-weight: 600;
-  transition: color var(--pi-transition);
-}
-.pi-page-header .pi-page-links a:hover {
-  color: var(--pi-blue);
-  text-decoration: underline;
-}
-.pi-page-header .pi-page-sep {
-  color: var(--pi-ash);
-  font-size: .72rem;
 }
 
 /* Peaks table tab */

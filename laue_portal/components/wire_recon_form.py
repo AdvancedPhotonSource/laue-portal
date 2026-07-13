@@ -1,227 +1,158 @@
 import dash_bootstrap_components as dbc
 from dash import html, set_props
 
-from laue_portal.components.form_base import _field, _notes, _select, _stack
+from laue_portal.components.form_layout import (
+    form_field,
+    form_field_with_button,
+    form_layout,
+    form_select,
+    form_textarea,
+    section_card,
+    section_sidebar,
+)
 from laue_portal.database.db_utils import make_IDnumber
 
-wire_recon_form = dbc.Row(
-    [
-        dbc.Accordion(
-            [
-                dbc.AccordionItem(
-                    [
-                        dbc.Row(
-                            [
-                                dbc.Col(
-                                    _field(
-                                        "ID Number: SN# | WR#",
-                                        "IDnumber",
-                                        kwargs={
-                                            "type": "text",
-                                            "placeholder": "e.g. SN123456 or WR1",
-                                        },
-                                    ),
-                                    className="flex-grow-1",
-                                    style={"minWidth": 0},
-                                ),
-                                dbc.Col(
-                                    dbc.Button(
-                                        "Update path fields",
-                                        id="wirerecon-update-path-fields-btn",
-                                        color="secondary",
-                                        size="md",
-                                        style={"minWidth": "220px", "whiteSpace": "nowrap"},
-                                    ),
-                                    width="auto",
-                                    className="d-flex justify-content-end",
-                                ),
-                            ],
-                            className="mb-3",
-                            align="center",
+WIRE_RECON_SECTIONS = [
+    (
+        "Configuration",
+        [
+            ("Identity", "bi bi-person-badge", "#wire-recon-sec-identity"),
+            ("File Paths", "bi bi-folder2-open", "#wire-recon-sec-files"),
+        ],
+    ),
+    (
+        "Parameters",
+        [("Reconstruction", "bi bi-layers", "#wire-recon-sec-parameters")],
+    ),
+    ("Other", [("Notes", "bi bi-journal-text", "#wire-recon-sec-notes")]),
+]
+
+
+def build_wire_recon_form(readonly=False, show_actions=True):
+    return form_layout(
+        section_sidebar(WIRE_RECON_SECTIONS),
+        [
+            section_card(
+                "Identity",
+                html.Div(
+                    className="lp-form-field-grid",
+                    children=[
+                        form_field_with_button(
+                            "ID Number",
+                            "IDnumber",
+                            "wirerecon-update-path-fields-btn",
+                            "Update Paths",
+                            placeholder="SN123456 | WR1",
+                            readonly=readonly,
+                            show_button=show_actions,
                         ),
-                        _stack(
-                            [
-                                _field("Root Path", "root_path"),
-                            ]
-                        ),
-                        _stack(
-                            [
-                                _field("Folder Path", "data_path"),
-                            ]
-                        ),
-                        dbc.Row(
-                            [
-                                dbc.Col(
-                                    html.Div(
-                                        [
-                                            _field(
-                                                "Filename",
-                                                "filenamePrefix",
-                                                kwargs={
-                                                    "placeholder": "e.g. Si_%d.h5 or Si_*%d.h5",
-                                                    "list": "wirerecon-filename-templates",  # link to datalist below
-                                                },
-                                            ),
-                                            html.Datalist(id="wirerecon-filename-templates", children=[]),
-                                        ]
-                                    ),
-                                    className="flex-grow-1",
-                                    style={"minWidth": 0},
-                                ),
-                                dbc.Col(
-                                    dbc.Button(
-                                        "Find file names",
-                                        id="wirerecon-check-filenames-btn",
-                                        color="secondary",
-                                        size="md",
-                                        style={"minWidth": "220px", "whiteSpace": "nowrap"},
-                                    ),
-                                    width="auto",
-                                    className="d-flex justify-content-end mb-3",
-                                ),
-                            ],
-                            align="center",
-                        ),
-                        dbc.Row(
-                            [
-                                dbc.Col(
-                                    _field(
-                                        "Range of Files",
-                                        "scanPoints",
-                                        kwargs={"placeholder": "e.g. 1-10 or 1,5,8,9 or 1-4,10-21"},
-                                    ),
-                                    className="flex-grow-1",
-                                    style={"minWidth": 0},
-                                ),
-                                dbc.Col(
-                                    dbc.Button(
-                                        "Load indices from file",
-                                        id="wirerecon-load-file-indices-btn",
-                                        color="secondary",
-                                        size="md",
-                                        style={"minWidth": "220px", "whiteSpace": "nowrap"},
-                                    ),
-                                    width="auto",
-                                    className="d-flex justify-content-end mb-3",
-                                ),
-                            ],
-                            align="center",
-                        ),
-                        _stack(
-                            [
-                                _field("Output Path", "outputFolder"),
-                            ]
-                        ),
-                        dbc.Row(
-                            [
-                                dbc.Col(
-                                    _field("Geometry File", "geoFile"),
-                                    className="flex-grow-1",
-                                    style={"minWidth": 150},
-                                ),
-                                dbc.Col(
-                                    dbc.Row(
-                                        [
-                                            dbc.Col(
-                                                dbc.Button(
-                                                    "Use default",
-                                                    id="wirerecon-load-default-geo-btn",
-                                                    color="secondary",
-                                                    size="md",
-                                                    style={"minWidth": "120px", "whiteSpace": "nowrap"},
-                                                ),
-                                                width="auto",
-                                            ),
-                                            dbc.Col(
-                                                dbc.Button(
-                                                    "Edit current",
-                                                    id="wirerecon-view-modify-params-btn",
-                                                    color="secondary",
-                                                    size="md",
-                                                    style={"minWidth": "220px", "whiteSpace": "nowrap"},
-                                                ),
-                                                width="auto",
-                                            ),
-                                        ],
-                                        className="g-2 justify-content-end",  # g-2 adds a nice gap
-                                    ),
-                                    xs=12,
-                                    md="auto",  # whole block drops under input on small screens
-                                    className="mb-3",
-                                ),
-                            ],
-                            className="g-2",
-                            align="center",
+                        form_field(
+                            "Author",
+                            "author",
+                            placeholder="Required! Enter author or tag",
+                            wide=True,
+                            readonly=readonly,
                         ),
                     ],
-                    title="Files",
-                    item_id="item-1",
                 ),
-                dbc.AccordionItem(
-                    [
-                        _stack(
-                            [
-                                dbc.Row(
-                                    [
-                                        dbc.Col(
-                                            _field("Depth Start [µm]", "depth_start", size="md"),
-                                            className="flex-grow-1",
-                                            style={"minWidth": 100},
-                                            xs=12,
-                                            md=4,
-                                        ),
-                                        dbc.Col(
-                                            _field("Depth End [µm]", "depth_end", size="md"),
-                                            className="flex-grow-1",
-                                            style={"minWidth": 100},
-                                            xs=12,
-                                            md=4,
-                                        ),
-                                        dbc.Col(
-                                            _field("Depth Resolution [µm]", "depth_resolution", size="md"),
-                                            className="flex-grow-1",
-                                            style={"minWidth": 100},
-                                            xs=12,
-                                            md=4,
-                                        ),
-                                    ],
-                                    # align="center",
-                                ),
-                            ]
+                accent="slate",
+                icon_class="bi bi-person-badge",
+                anchor_id="wire-recon-sec-identity",
+            ),
+            section_card(
+                "File Paths",
+                html.Div(
+                    className="lp-form-field-grid",
+                    children=[
+                        form_field("Root Path", "root_path", wide=True, readonly=readonly),
+                        form_field("Folder Path", "data_path", wide=True, readonly=readonly),
+                        form_field_with_button(
+                            "Filename",
+                            "filenamePrefix",
+                            "wirerecon-check-filenames-btn",
+                            "Find Matching Files",
+                            placeholder="e.g. Si_%d.h5 or Si_*%d.h5",
+                            datalist_id="wirerecon-filename-templates",
+                            readonly=readonly,
+                            show_button=show_actions,
                         ),
-                        _stack(
-                            [
-                                _select(
-                                    "Wire Edges",
-                                    "wire_edges",
-                                    [
-                                        {"label": "Leading Edge", "value": "leading"},
-                                        {"label": "Trailing Edge", "value": "trailing"},
-                                        {"label": "Both Edges", "value": "both"},
-                                    ],
-                                    size="md",
-                                    kwargs={"placeholder": "Select:"},
-                                ),
-                                _field("Intensity percentile", "percent_brightest", size="md"),
-                            ]
+                        form_field_with_button(
+                            "Scan Indices",
+                            "scanPoints",
+                            "wirerecon-load-file-indices-btn",
+                            "Find Indices",
+                            placeholder="e.g. 1-10 or 1,5,8,9 or 1-4,10-21",
+                            readonly=readonly,
+                            show_button=show_actions,
                         ),
+                        form_field("Output Path", "outputFolder", wide=True, readonly=readonly),
+                        form_field("Geometry File", "geoFile", wide=True, readonly=readonly),
                     ],
-                    title="Wire Reconstruction Parameters",
-                    item_id="item-2",
                 ),
-                dbc.AccordionItem(
-                    [_notes("notes")],
-                    title="User Text",
-                    item_id="item-3",
+                accent="teal",
+                icon_class="bi bi-folder2-open",
+                anchor_id="wire-recon-sec-files",
+            ),
+            section_card(
+                "Wire Reconstruction Parameters",
+                html.Div(
+                    className="lp-form-field-grid--three",
+                    children=[
+                        form_field("Depth Start [µm]", "depth_start", readonly=readonly),
+                        form_field("Depth End [µm]", "depth_end", readonly=readonly),
+                        form_field("Depth Resolution [µm]", "depth_resolution", readonly=readonly),
+                        form_select(
+                            "Wire Edges",
+                            "wire_edges",
+                            [
+                                {"label": "Leading Edge", "value": "leading"},
+                                {"label": "Trailing Edge", "value": "trailing"},
+                                {"label": "Both Edges", "value": "both"},
+                            ],
+                            disabled=readonly,
+                        ),
+                        form_field("Intensity Percentile", "percent_brightest", readonly=readonly),
+                    ],
                 ),
-            ],
-            always_open=True,
-            start_collapsed=False,
-            active_item=["item-1", "item-2", "item-3"],
-        ),
-    ],
-    style={"width": "100%", "overflow-x": "auto"},
-)
+                accent="purple",
+                icon_class="bi bi-layers",
+                anchor_id="wire-recon-sec-parameters",
+                header_actions=(
+                    dbc.Button(
+                        "Restore Default",
+                        id="wirerecon-set-default-parameters-btn",
+                        color="primary",
+                        outline=True,
+                        size="sm",
+                    )
+                    if show_actions
+                    else None
+                ),
+            ),
+            section_card(
+                "Notes",
+                html.Div(
+                    className="lp-form-field-grid",
+                    children=[
+                        form_textarea(
+                            "Notes",
+                            "notes",
+                            placeholder="Optional notes about this reconstruction run...",
+                            readonly=readonly,
+                        )
+                    ],
+                ),
+                accent="gold",
+                icon_class="bi bi-journal-text",
+                anchor_id="wire-recon-sec-notes",
+            ),
+            html.Div(style={"height": "3rem"}),
+        ],
+    )
+
+
+wire_recon_form = build_wire_recon_form()
+wire_recon_readonly_form = build_wire_recon_form(readonly=True, show_actions=False)
 
 
 def set_wire_recon_form_props(wirerecon, read_only=False):

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
+from laue_portal.components.detail_layout import detail_header, detail_header_content
 from laue_portal.components.peakindex_form import peakindex_readonly_form, set_peakindex_form_props
 from laue_portal.components.visualization.ipf_legend import (
     DEFAULT_PALETTE,
@@ -212,7 +213,7 @@ def _viz_graph_with_loading(graph, target_id, text="Updating\u2026"):
 _viz_tabs = dbc.Tabs(
     id="peakindexing-viz-tabs",
     active_tab="tab-parameters",
-    className="pi-viz-tabs",
+    className="lp-detail-tabs",
     children=[
         # ==================================================================
         # Tab: Parameters (unchanged — full-width accordion form)
@@ -990,10 +991,7 @@ layout = html.Div(
         # populates the Min/Max inputs.
         dcc.Store(id="orientation-color-auto-range", data=None),
         # Page header
-        html.Div(
-            id="peakindex-id-header",
-            className="pi-page-header",
-        ),
+        detail_header("peakindex-id-header"),
         # Visualization tabs
         _viz_tabs,
     ]
@@ -1106,57 +1104,45 @@ def load_peakindexing_data(href):
                     # Add job link if it exists
                     if peakindex_data.job_id:
                         related_links.append(
-                            html.A(f"Job ID: {peakindex_data.job_id}", href=f"/job?job_id={peakindex_data.job_id}")
+                            (f"Job ID: {peakindex_data.job_id}", f"/job?job_id={peakindex_data.job_id}")
                         )
 
                     if peakindex_data.recon_id:
                         related_links.append(
-                            html.A(
+                            (
                                 f"Reconstruction ID: {peakindex_data.recon_id}",
-                                href=f"/reconstruction?recon_id={peakindex_data.recon_id}",
+                                f"/reconstruction?recon_id={peakindex_data.recon_id}",
                             )
                         )
                     elif peakindex_data.wirerecon_id:
                         related_links.append(
-                            html.A(
+                            (
                                 f"Wire Reconstruction ID: {peakindex_data.wirerecon_id}",
-                                href=f"/wire_reconstruction?wirerecon_id={peakindex_data.wirerecon_id}",
+                                f"/wire_reconstruction?wirerecon_id={peakindex_data.wirerecon_id}",
                             )
                         )
 
                     # Add scan link
                     if peakindex_data.scanNumber:
                         related_links.append(
-                            html.A(
+                            (
                                 f"Scan ID: {peakindex_data.scanNumber}",
-                                href=f"/scan?scan_id={peakindex_data.scanNumber}",
+                                f"/scan?scan_id={peakindex_data.scanNumber}",
                             )
                         )
 
-                    # Build header with links using modernised classes
-                    header_content = [
-                        html.Span(f"Peak Indexing ID: {peakindex_id}", className="pi-page-title"),
-                    ]
-
-                    if related_links:
-                        link_children = []
-                        for i, link in enumerate(related_links):
-                            if i > 0:
-                                link_children.append(html.Span("|", className="pi-page-sep"))
-                            link_children.append(link)
-                        header_content.append(html.Span(link_children, className="pi-page-links"))
-
+                    header_content = detail_header_content(f"Peak Indexing ID: {peakindex_id}", related_links)
                     return header_content, xml_path, path_context
         except Exception as e:
             print(f"Error loading peak indexing data: {e}")
             traceback.print_exc()
             return (
-                [html.Span(f"Error loading data for Peak Indexing ID: {peakindex_id}", className="pi-page-title")],
+                detail_header_content(f"Error loading data for Peak Indexing ID: {peakindex_id}"),
                 None,
                 path_context,
             )
 
-    return [html.Span("No Peak Indexing ID provided", className="pi-page-title")], None, path_context
+    return detail_header_content("No Peak Indexing ID provided"), None, path_context
 
 
 # ---------------------------------------------------------------------------

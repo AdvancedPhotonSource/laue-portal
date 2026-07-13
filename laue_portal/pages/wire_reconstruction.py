@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
-from laue_portal.components.wire_recon_form import set_wire_recon_form_props, wire_recon_form
+from laue_portal.components.detail_layout import detail_header, detail_header_content
+from laue_portal.components.wire_recon_form import set_wire_recon_form_props, wire_recon_readonly_form
 from laue_portal.config import DEFAULT_VARIABLES
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix
 
@@ -19,17 +20,23 @@ layout = html.Div(
     [
         navbar.navbar,
         dcc.Location(id="url-wire-recon-page", refresh=False),
-        dbc.Container(
-            id="wire-recon-content-container",
-            fluid=True,
-            className="mt-4",
+        detail_header("wire-recon-id-header"),
+        dbc.Tabs(
+            id="wire-recon-detail-tabs",
+            active_tab="wire-recon-tab-parameters",
+            className="lp-detail-tabs",
             children=[
-                html.H1(
-                    id="wire-recon-id-header",
-                    style={"display": "flex", "gap": "10px", "align-items": "baseline", "flexWrap": "wrap"},
-                    className="mb-4",
+                dbc.Tab(
+                    label="Parameters",
+                    tab_id="wire-recon-tab-parameters",
+                    children=[
+                        html.Div(
+                            id="wire-recon-tab-parameters-content",
+                            className="pt-3 px-2",
+                            children=[wire_recon_readonly_form],
+                        )
+                    ],
                 ),
-                wire_recon_form,
             ],
         ),
     ]
@@ -86,35 +93,22 @@ def load_wire_recon_data(href):
                     # Add job link if it exists
                     if wirerecon_data.job_id:
                         related_links.append(
-                            html.A(f"Job ID: {wirerecon_data.job_id}", href=f"/job?job_id={wirerecon_data.job_id}")
+                            (f"Job ID: {wirerecon_data.job_id}", f"/job?job_id={wirerecon_data.job_id}")
                         )
 
                     # Add scan link
                     if wirerecon_data.scanNumber:
                         related_links.append(
-                            html.A(
+                            (
                                 f"Scan ID: {wirerecon_data.scanNumber}",
-                                href=f"/scan?scan_id={wirerecon_data.scanNumber}",
+                                f"/scan?scan_id={wirerecon_data.scanNumber}",
                             )
                         )
 
-                    # Build header with links
-                    header_content = [html.Span(f"Wire Reconstruction ID: {wirerecon_id}")]
-
-                    if related_links:
-                        # Add separator before links
-                        header_content.append(html.Span(" • ", className="mx-2", style={"color": "#6c757d"}))
-
-                        # Add each link with separators
-                        for i, link in enumerate(related_links):
-                            if i > 0:
-                                header_content.append(html.Span(" | ", className="mx-2", style={"color": "#6c757d"}))
-                            header_content.append(html.Span(link, style={"fontSize": "0.7em"}))
-
-                    return header_content
+                    return detail_header_content(f"Wire Reconstruction ID: {wirerecon_id}", related_links)
 
         except Exception as e:
             print(f"Error loading wire reconstruction data: {e}")
-            return f"Error loading data for Wire Recon ID: {wirerecon_id}"
+            return detail_header_content(f"Error loading data for Wire Recon ID: {wirerecon_id_str}")
 
-    return "No Wire Recon ID provided"
+    return detail_header_content("No Wire Recon ID provided")
