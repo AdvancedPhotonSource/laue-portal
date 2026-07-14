@@ -35,6 +35,19 @@ dagcomponentfuncs.ScanLinkRenderer = function (props) {
     );
 };
 
+dagcomponentfuncs.ScanSourceLinkRenderer = function (props) {
+    const scanNumber = props.data.scanNumber;
+    if (scanNumber == null) {
+        return React.createElement('span', { className: 'text-muted' }, 'Unlinked');
+    }
+
+    return React.createElement(
+        'a',
+        { href: `/scan?scan_id=${scanNumber}` },
+        `SN${scanNumber}`
+    );
+};
+
 dagcomponentfuncs.WireReconScanLinkRenderer = function (props) {
     // Get the scan number from the data
     const scanNumber = props.data.scanNumber;
