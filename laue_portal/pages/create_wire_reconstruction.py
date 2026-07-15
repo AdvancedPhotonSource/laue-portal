@@ -1338,25 +1338,30 @@ def load_scan_data_from_url(href):
         set_wire_recon_form_props(wirerecon_form_data)
         return datetime.datetime.now().isoformat()
 
-    if scan_id_str:
+    if scan_id_str or wirerecon_id_str:
         with Session(session_utils.get_engine()) as session:
             try:
                 # This section handles both single and multiple/pooled scan numbers
+                scan_id_entries = scan_id_str.split(",") if scan_id_str else []
+                wirerecon_id_entries = wirerecon_id_str.split(",") if wirerecon_id_str else []
+                peakindex_id_entries = peakindex_id_str.split(",") if peakindex_id_str else []
+                num_url_entries = max(len(scan_id_entries), len(wirerecon_id_entries), len(peakindex_id_entries))
+
                 scan_ids = [
                     int(sid) if sid and sid.lower() != "none" else None
-                    for sid in (scan_id_str.split(",") if scan_id_str else [])
+                    for sid in (scan_id_entries or [None] * num_url_entries)
                 ]
 
                 # Handle pooled wirerecon IDs
                 wirerecon_ids = [
                     int(wid) if wid and wid.lower() != "none" else None
-                    for wid in (wirerecon_id_str.split(",") if wirerecon_id_str else [])
+                    for wid in (wirerecon_id_entries or [None] * num_url_entries)
                 ]
 
                 # Handle pooled peakindex IDs
                 peakindex_ids = [
                     int(pid) if pid and pid.lower() != "none" else None
-                    for pid in (peakindex_id_str.split(",") if peakindex_id_str else [])
+                    for pid in (peakindex_id_entries or [None] * num_url_entries)
                 ]
 
                 # Validate that lists have matching lengths
@@ -1386,7 +1391,7 @@ def load_scan_data_from_url(href):
                         .first()
                     )
 
-                    if metadata_data:
+                    if metadata_data or current_wirerecon_id:
                         if current_peakindex_id:
                             found_items.append(f"peak index {current_peakindex_id}")
                         elif current_wirerecon_id:
@@ -1425,8 +1430,11 @@ def load_scan_data_from_url(href):
                                     .first()
                                 )
                                 if wirerecon_data:
-                                    # Use existing wirerecon data as the base
-                                    wirerecon_form_data = wirerecon_data
+                                    # Use existing wirerecon parameters as the base for a new run.
+                                    wirerecon_form_data = db_schema.WireRecon()
+                                    for column in db_schema.WireRecon.__table__.columns.keys():
+                                        setattr(wirerecon_form_data, column, getattr(wirerecon_data, column))
+                                    wirerecon_form_data.wirerecon_id = None
                                     # Update only the necessary fields
                                     wirerecon_form_data.outputFolder = output_folder
                                     # Convert file paths to relative paths

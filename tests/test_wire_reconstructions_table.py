@@ -86,6 +86,10 @@ def test_wire_recon_action_buttons_follow_selection_state(selected_rows, expecte
             "/create-wire-reconstruction?scan_id=12&wirerecon_id=3",
         ),
         (
+            [{"wirerecon_id": 3, "scanNumber": None}],
+            "/create-wire-reconstruction?wirerecon_id=3",
+        ),
+        (
             [
                 {"wirerecon_id": 3, "scanNumber": 12},
                 {"wirerecon_id": 4, "scanNumber": 13},
@@ -312,7 +316,7 @@ def test_new_recon_loads_unlinked_wire_recon_by_id(empty_test_database):
     assert len(loaded) == 1
     form_data = loaded[0]
     assert form_data.scanNumber is None
-    assert form_data.wirerecon_id == wire_recon_id
+    assert form_data.wirerecon_id is None
     assert form_data.data_path == "raw"
     assert form_data.filenamePrefix == ["image_%d"]
     assert form_data.geoFile == "geometries/wire.xml"
@@ -348,3 +352,4 @@ def test_new_index_loads_unlinked_wire_recon_by_id(empty_test_database):
     assert form_data.scanPoints == "4-7"
     assert form_data.scanPointslen == 4
     assert form_data.outputFolder == f"analysis/rec_{wire_recon_id}/index_%d"
+
