@@ -253,7 +253,7 @@ def test_new_recon_url_loads_selected_wire_recon_parameters(test_metadata_databa
     assert len(loaded) == 1
     form_data = loaded[0]
     assert form_data.scanNumber == 1
-    assert form_data.wirerecon_id == wire_recon_id
+    assert form_data.wirerecon_id is None
     assert form_data.data_path == "raw"
     assert form_data.filenamePrefix == ["image_%d"]
     assert form_data.geoFile == "geometries/wire.xml"
@@ -352,4 +352,3 @@ def test_new_index_loads_unlinked_wire_recon_by_id(empty_test_database):
     assert form_data.scanPoints == "4-7"
     assert form_data.scanPointslen == 4
     assert form_data.outputFolder == f"analysis/rec_{wire_recon_id}/index_%d"
-

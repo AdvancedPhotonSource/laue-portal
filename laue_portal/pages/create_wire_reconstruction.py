@@ -90,6 +90,15 @@ JOB_DEFAULTS = {
 }
 
 
+def _copy_wirerecon_for_new_run(wirerecon_data):
+    """Copy persisted WireRecon parameters without reusing its primary key."""
+    wirerecon_form_data = db_schema.WireRecon()
+    for column in db_schema.WireRecon.__table__.columns.keys():
+        setattr(wirerecon_form_data, column, getattr(wirerecon_data, column))
+    wirerecon_form_data.wirerecon_id = None
+    return wirerecon_form_data
+
+
 def create_default_wirerecon(overrides=None):
     """
     Create a WireRecon object populated with defaults from config.
@@ -1302,6 +1311,7 @@ def load_scan_data_from_url(href):
                 if not wirerecon_form_data:
                     raise ValueError(f"Wire reconstruction {current_wirerecon_id} was not found")
 
+                wirerecon_form_data = _copy_wirerecon_for_new_run(wirerecon_form_data)
                 data_path = remove_root_path_prefix(wirerecon_form_data.filefolder, root_path)
                 wirerecon_form_data.root_path = root_path
                 wirerecon_form_data.data_path = data_path
@@ -1430,11 +1440,7 @@ def load_scan_data_from_url(href):
                                     .first()
                                 )
                                 if wirerecon_data:
-                                    # Use existing wirerecon parameters as the base for a new run.
-                                    wirerecon_form_data = db_schema.WireRecon()
-                                    for column in db_schema.WireRecon.__table__.columns.keys():
-                                        setattr(wirerecon_form_data, column, getattr(wirerecon_data, column))
-                                    wirerecon_form_data.wirerecon_id = None
+                                    wirerecon_form_data = _copy_wirerecon_for_new_run(wirerecon_data)
                                     # Update only the necessary fields
                                     wirerecon_form_data.outputFolder = output_folder
                                     # Convert file paths to relative paths
