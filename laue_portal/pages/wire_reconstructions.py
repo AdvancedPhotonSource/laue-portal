@@ -247,6 +247,15 @@ def update_button_states(selected_rows):
         )
 
 
+def _query_id(value):
+    """Format an AG Grid numeric ID without a possible pandas ``.0`` suffix."""
+    if value is None or pd.isna(value):
+        return None
+    if isinstance(value, (int, float)):
+        return str(int(value))
+    return str(value)
+
+
 @dash.callback(
     Output("wire-recons-url", "href"),
     Input("wire-recons-page-wire-recon-btn", "n_clicks"),
@@ -262,20 +271,15 @@ def handle_recon_button(n_clicks, rows):
     if not rows:
         return base_href
 
-    scan_ids, wirerecon_ids = [], []
+    row = rows[0]
+    scan_id = _query_id(row.get("scanNumber"))
+    wirerecon_id = _query_id(row.get("wirerecon_id"))
+    if not wirerecon_id:
+        return dash.no_update
 
-    for row in rows:
-        if row.get("scanNumber"):
-            scan_ids.append(str(row["scanNumber"]))
-        else:
-            return dash.no_update
-
-        wirerecon_ids.append(str(row["wirerecon_id"]) if row.get("wirerecon_id") else "")
-
-    query_params = [f"scan_id={','.join(scan_ids)}"]
-    if any(wirerecon_ids):
-        query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
-
+    query_params = [f"wirerecon_id={wirerecon_id}"]
+    if scan_id:
+        query_params.insert(0, f"scan_id={scan_id}")
     return f"{base_href}?{'&'.join(query_params)}"
 
 
@@ -294,18 +298,13 @@ def handle_peakindex_button(n_clicks, rows):
     if not rows:
         return base_href
 
-    scan_ids, wirerecon_ids = [], []
+    row = rows[0]
+    scan_id = _query_id(row.get("scanNumber"))
+    wirerecon_id = _query_id(row.get("wirerecon_id"))
+    if not wirerecon_id:
+        return dash.no_update
 
-    for row in rows:
-        if row.get("scanNumber"):
-            scan_ids.append(str(row["scanNumber"]))
-        else:
-            return base_href
-
-        wirerecon_ids.append(str(row["wirerecon_id"]) if row.get("wirerecon_id") else "")
-
-    query_params = [f"scan_id={','.join(scan_ids)}"]
-    if any(wirerecon_ids):
-        query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
-
+    query_params = [f"wirerecon_id={wirerecon_id}"]
+    if scan_id:
+        query_params.insert(0, f"scan_id={scan_id}")
     return f"{base_href}?{'&'.join(query_params)}"

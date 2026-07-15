@@ -1287,6 +1287,51 @@ def load_scan_data_from_url(href):
 
     root_path = DEFAULT_VARIABLES.get("root_path", "")
 
+    # A wire reconstruction can be unlinked from a catalog scan. In that case,
+    # load it directly as the template for the new reconstruction.
+    if not scan_id_str and wirerecon_id_str:
+        with Session(session_utils.get_engine()) as session:
+            try:
+                current_wirerecon_id = int(wirerecon_id_str.split(",")[0])
+                wirerecon_form_data = (
+                    session.query(db_schema.WireRecon)
+                    .filter(db_schema.WireRecon.wirerecon_id == current_wirerecon_id)
+                    .first()
+                )
+
+                if not wirerecon_form_data:
+                    raise ValueError(f"Wire reconstruction {current_wirerecon_id} was not found")
+
+                data_path = remove_root_path_prefix(wirerecon_form_data.filefolder, root_path)
+                wirerecon_form_data.root_path = root_path
+                wirerecon_form_data.data_path = data_path
+                wirerecon_form_data.geoFile = remove_root_path_prefix(wirerecon_form_data.geoFile, root_path)
+                wirerecon_form_data.outputFolder = build_output_folder_template(
+                    scan_num_int=None,
+                    data_path=data_path,
+                )
+                wirerecon_form_data.author = DEFAULT_VARIABLES["author"]
+                wirerecon_form_data.notes = DEFAULT_VARIABLES["notes"]
+                set_wire_recon_form_props(wirerecon_form_data)
+                set_props(
+                    "alert-scan-loaded",
+                    {
+                        "is_open": True,
+                        "children": f"Successfully loaded wire reconstruction {current_wirerecon_id} into the form.",
+                        "color": "success",
+                    },
+                )
+            except Exception as e:
+                set_wire_recon_form_props(create_default_wirerecon())
+                set_props(
+                    "alert-scan-loaded",
+                    {"is_open": True, "children": f"Error loading wire reconstruction: {str(e)}", "color": "danger"},
+                )
+
+        # The form already has the selected reconstruction's scan points. Do
+        # not trigger the automatic directory scan, which could overwrite them.
+        return dash.no_update
+
     # Handle case where no query parameters are provided - load defaults
     if not scan_id_str and not wirerecon_id_str:
         wirerecon_form_data = create_default_wirerecon()
@@ -1526,5 +1571,8 @@ def load_scan_data_from_url(href):
                     {"is_open": True, "children": f"Error loading scan data: {str(e)}", "color": "danger"},
                 )
 
-    # Return timestamp to trigger downstream callbacks
+    # Loading a prior reconstruction should preserve its stored scan points.
+    # For a scan-only source, trigger the existing automatic index discovery.
+    if wirerecon_id_str or peakindex_id_str:
+        return dash.no_update
     return datetime.datetime.now().isoformat()

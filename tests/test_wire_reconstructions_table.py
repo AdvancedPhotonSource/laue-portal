@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 
 import lau_dash  # noqa: F401
 import laue_portal.database.db_schema as db_schema
+import laue_portal.pages.create_peakindexing as create_peakindexing
+import laue_portal.pages.create_wire_reconstruction as create_wire_reconstruction
 from laue_portal.pages.wire_reconstructions import (
     _get_recons,
     get_recons,
@@ -88,8 +90,10 @@ def test_wire_recon_action_buttons_follow_selection_state(selected_rows, expecte
                 {"wirerecon_id": 3, "scanNumber": 12},
                 {"wirerecon_id": 4, "scanNumber": 13},
             ],
-            "/create-wire-reconstruction?scan_id=12,13&wirerecon_id=3,4",
+            "/create-wire-reconstruction?scan_id=12&wirerecon_id=3",
         ),
+        ([{"wirerecon_id": 3, "scanNumber": 12.0}], "/create-wire-reconstruction?scan_id=12&wirerecon_id=3"),
+        ([{"wirerecon_id": 3, "scanNumber": None}], "/create-wire-reconstruction?wirerecon_id=3"),
     ],
 )
 def test_new_wire_recon_routes_selection(rows, expected_href):
@@ -109,8 +113,10 @@ def test_new_wire_recon_routes_selection(rows, expected_href):
                 {"wirerecon_id": 3, "scanNumber": 12},
                 {"wirerecon_id": 4, "scanNumber": 13},
             ],
-            "/create-peakindexing?scan_id=12,13&wirerecon_id=3,4",
+            "/create-peakindexing?scan_id=12&wirerecon_id=3",
         ),
+        ([{"wirerecon_id": 3, "scanNumber": 12.0}], "/create-peakindexing?scan_id=12&wirerecon_id=3"),
+        ([{"wirerecon_id": 3, "scanNumber": None}], "/create-peakindexing?wirerecon_id=3"),
     ],
 )
 def test_new_peakindex_routes_wire_recon_selection(rows, expected_href):
@@ -176,3 +182,169 @@ def test_wire_recon_table_callback_path(empty_test_database):
 def test_wire_recon_actions_ignore_initial_callback():
     assert handle_recon_button(0, []) is dash.no_update
     assert handle_peakindex_button(0, []) is dash.no_update
+
+
+def _add_linked_wire_recon(test_engine, metadata, scan, catalog):
+    wire_recon = _wire_recon(job_id=1, scan_number=metadata.scanNumber)
+    wire_recon.filefolder = "/workspace/raw"
+    wire_recon.outputFolder = "/workspace/analysis/scan_1/rec_1/data"
+    wire_recon.geoFile = "/workspace/geometries/wire.xml"
+    wire_recon.filenamePrefix = ["image_%d"]
+    wire_recon.scanPoints = "4-7"
+    wire_recon.scanPointslen = 4
+
+    with Session(test_engine) as session:
+        session.add_all(
+            [
+                metadata,
+                scan,
+                catalog,
+                db_schema.Job(job_id=1, computer_name="localhost", status=2, priority=0),
+                wire_recon,
+            ]
+        )
+        session.commit()
+        return wire_recon.wirerecon_id
+
+
+def _add_unlinked_wire_recon(test_engine):
+    wire_recon = _wire_recon(job_id=1, scan_number=None)
+    wire_recon.filefolder = "/workspace/raw"
+    wire_recon.outputFolder = "/workspace/unlinked/rec_1/data"
+    wire_recon.geoFile = "/workspace/geometries/wire.xml"
+    wire_recon.filenamePrefix = ["image_%d"]
+    wire_recon.scanPoints = "4-7"
+    wire_recon.scanPointslen = 4
+
+    with Session(test_engine) as session:
+        session.add_all(
+            [
+                db_schema.Job(job_id=1, computer_name="localhost", status=2, priority=0),
+                wire_recon,
+            ]
+        )
+        session.commit()
+        return wire_recon.wirerecon_id
+
+
+def test_new_recon_url_loads_selected_wire_recon_parameters(test_metadata_database):
+    test_engine, _, metadata, scan, catalog = test_metadata_database
+    wire_recon_id = _add_linked_wire_recon(test_engine, metadata, scan, catalog)
+    loaded = []
+
+    with (
+        patch("laue_portal.pages.create_wire_reconstruction.session_utils.get_engine", return_value=test_engine),
+        patch.dict(
+            create_wire_reconstruction.DEFAULT_VARIABLES,
+            {"root_path": "/workspace", "author": "new author", "notes": "new notes"},
+        ),
+        patch.object(create_wire_reconstruction, "set_wire_recon_form_props", side_effect=loaded.append),
+        patch.object(create_wire_reconstruction, "set_props"),
+    ):
+        result = create_wire_reconstruction.load_scan_data_from_url(
+            f"http://localhost/create-wire-reconstruction?scan_id=1&wirerecon_id={wire_recon_id}"
+        )
+
+    assert result is dash.no_update
+    assert len(loaded) == 1
+    form_data = loaded[0]
+    assert form_data.scanNumber == 1
+    assert form_data.wirerecon_id == wire_recon_id
+    assert form_data.data_path == "raw"
+    assert form_data.filenamePrefix == ["image_%d"]
+    assert form_data.geoFile == "geometries/wire.xml"
+    assert form_data.scanPoints == "4-7"
+    assert form_data.percent_brightest == 0.5
+    assert form_data.depth_start == 0.0
+    assert form_data.depth_end == 10.0
+    assert form_data.outputFolder == "analysis/scan_1/rec_%d/data"
+
+
+def test_new_index_url_loads_selected_wire_recon_source_fields(test_metadata_database):
+    test_engine, _, metadata, scan, catalog = test_metadata_database
+    wire_recon_id = _add_linked_wire_recon(test_engine, metadata, scan, catalog)
+    loaded = []
+
+    with (
+        patch("laue_portal.pages.create_peakindexing.session_utils.get_engine", return_value=test_engine),
+        patch.dict(
+            create_peakindexing.DEFAULT_VARIABLES,
+            {"root_path": "/workspace", "author": "new author", "notes": "new notes"},
+        ),
+        patch.object(create_peakindexing, "set_peakindex_form_props", side_effect=loaded.append),
+        patch.object(create_peakindexing, "set_props"),
+    ):
+        create_peakindexing.load_scan_data_from_url(
+            f"http://localhost/create-peakindexing?scan_id=1&wirerecon_id={wire_recon_id}"
+        )
+
+    assert len(loaded) == 1
+    form_data = loaded[0]
+    assert form_data.scanNumber == 1
+    assert form_data.wirerecon_id == wire_recon_id
+    assert form_data.data_path == "analysis/scan_1/rec_1/data"
+    assert form_data.filenamePrefix == ["image_%d"]
+    assert form_data.geoFile == "geometries/wire.xml"
+    assert form_data.scanPoints == "4-7"
+    assert form_data.scanPointslen == 4
+    assert form_data.outputFolder == f"analysis/scan_1/rec_{wire_recon_id}/index_%d"
+
+
+def test_new_recon_loads_unlinked_wire_recon_by_id(empty_test_database):
+    test_engine, _ = empty_test_database
+    wire_recon_id = _add_unlinked_wire_recon(test_engine)
+    loaded = []
+
+    with (
+        patch("laue_portal.pages.create_wire_reconstruction.session_utils.get_engine", return_value=test_engine),
+        patch.dict(
+            create_wire_reconstruction.DEFAULT_VARIABLES,
+            {"root_path": "/workspace", "author": "new author", "notes": "new notes"},
+        ),
+        patch.object(create_wire_reconstruction, "set_wire_recon_form_props", side_effect=loaded.append),
+        patch.object(create_wire_reconstruction, "set_props"),
+    ):
+        result = create_wire_reconstruction.load_scan_data_from_url(
+            f"http://localhost/create-wire-reconstruction?wirerecon_id={wire_recon_id}"
+        )
+
+    assert result is dash.no_update
+    assert len(loaded) == 1
+    form_data = loaded[0]
+    assert form_data.scanNumber is None
+    assert form_data.wirerecon_id == wire_recon_id
+    assert form_data.data_path == "raw"
+    assert form_data.filenamePrefix == ["image_%d"]
+    assert form_data.geoFile == "geometries/wire.xml"
+    assert form_data.scanPoints == "4-7"
+    assert form_data.outputFolder == "analysis/raw/rec_%d/data"
+
+
+def test_new_index_loads_unlinked_wire_recon_by_id(empty_test_database):
+    test_engine, _ = empty_test_database
+    wire_recon_id = _add_unlinked_wire_recon(test_engine)
+    loaded = []
+
+    with (
+        patch("laue_portal.pages.create_peakindexing.session_utils.get_engine", return_value=test_engine),
+        patch.dict(
+            create_peakindexing.DEFAULT_VARIABLES,
+            {"root_path": "/workspace", "author": "new author", "notes": "new notes"},
+        ),
+        patch.object(create_peakindexing, "set_peakindex_form_props", side_effect=loaded.append),
+        patch.object(create_peakindexing, "set_props"),
+    ):
+        create_peakindexing.load_scan_data_from_url(
+            f"http://localhost/create-peakindexing?wirerecon_id={wire_recon_id}"
+        )
+
+    assert len(loaded) == 1
+    form_data = loaded[0]
+    assert form_data.scanNumber is None
+    assert form_data.wirerecon_id == wire_recon_id
+    assert form_data.data_path == "unlinked/rec_1/data"
+    assert form_data.filenamePrefix == ["image_%d"]
+    assert form_data.geoFile == "geometries/wire.xml"
+    assert form_data.scanPoints == "4-7"
+    assert form_data.scanPointslen == 4
+    assert form_data.outputFolder == f"analysis/rec_{wire_recon_id}/index_%d"

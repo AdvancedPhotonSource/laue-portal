@@ -1084,8 +1084,56 @@ def load_scan_data_from_url(href):
 
     root_path = DEFAULT_VARIABLES.get("root_path", "")
 
+    # Wire reconstructions may be unlinked from catalog scans. They can still
+    # provide the reconstructed data and shared parameters for a new index.
+    if not scan_id_str and wirerecon_id_str:
+        with Session(session_utils.get_engine()) as session:
+            try:
+                current_wirerecon_id = int(wirerecon_id_str.split(",")[0])
+                source_wirerecon = (
+                    session.query(db_schema.WireRecon)
+                    .filter(db_schema.WireRecon.wirerecon_id == current_wirerecon_id)
+                    .first()
+                )
+
+                if not source_wirerecon:
+                    raise ValueError(f"Wire reconstruction {current_wirerecon_id} was not found")
+
+                peakindex_form_data = create_default_peakindex(
+                    overrides={
+                        "scanNumber": None,
+                        "wirerecon_id": current_wirerecon_id,
+                        "scanPoints": source_wirerecon.scanPoints,
+                        "geoFile": remove_root_path_prefix(source_wirerecon.geoFile, root_path),
+                        "outputFolder": build_output_folder_template(
+                            scan_num_int=None,
+                            data_path=None,
+                            wirerecon_id_int=current_wirerecon_id,
+                        ),
+                    }
+                )
+                peakindex_form_data.data_path = remove_root_path_prefix(source_wirerecon.outputFolder, root_path)
+                peakindex_form_data.filenamePrefix = source_wirerecon.filenamePrefix or []
+                set_peakindex_form_props(peakindex_form_data)
+                set_props(
+                    "alert-scan-loaded",
+                    {
+                        "is_open": True,
+                        "children": f"Successfully loaded wire reconstruction {current_wirerecon_id} into the form.",
+                        "color": "success",
+                    },
+                )
+            except Exception as e:
+                set_peakindex_form_props(create_default_peakindex())
+                set_props(
+                    "alert-scan-loaded",
+                    {"is_open": True, "children": f"Error loading wire reconstruction: {str(e)}", "color": "danger"},
+                )
+
+        return datetime.datetime.now().isoformat()
+
     # Handle case where no query parameters are provided - load defaults
-    if not scan_id_str and not peakindex_id_str:
+    if not scan_id_str and not peakindex_id_str and not wirerecon_id_str:
         # Use factory function to create default PeakIndex
         peakindex_form_data = create_default_peakindex()
         set_peakindex_form_props(peakindex_form_data)
@@ -1272,6 +1320,7 @@ def load_scan_data_from_url(href):
                     current_wirerecon_id = wirerecon_ids[i]
                     current_recon_id = recon_ids[i]
                     current_peakindex_id = peakindex_ids[i]
+                    source_wirerecon = None
 
                     # Query metadata and scan data
                     metadata_data = (
@@ -1338,6 +1387,13 @@ def load_scan_data_from_url(href):
 
                         # Create defaults if no peakindex_id or if loading failed
                         if not current_peakindex_id:
+                            if current_wirerecon_id:
+                                source_wirerecon = (
+                                    session.query(db_schema.WireRecon)
+                                    .filter(db_schema.WireRecon.wirerecon_id == current_wirerecon_id)
+                                    .first()
+                                )
+
                             # Create a PeakIndex object with populated defaults from metadata/scan
                             peakindex_form_data = db_schema.PeakIndex(
                                 scanNumber=current_scan_id,
@@ -1368,6 +1424,15 @@ def load_scan_data_from_url(href):
                                     ]
                                 },
                             )
+
+                            # Carry the fields shared by wire reconstruction and indexing
+                            # so the selected reconstruction is a useful starting point.
+                            if source_wirerecon:
+                                peakindex_form_data.scanPoints = source_wirerecon.scanPoints
+                                peakindex_form_data.scanPointslen = source_wirerecon.scanPointslen
+                                peakindex_form_data.geoFile = remove_root_path_prefix(
+                                    source_wirerecon.geoFile, root_path
+                                )
 
                         # Add root_path from DEFAULT_VARIABLES
                         peakindex_form_data.root_path = root_path
