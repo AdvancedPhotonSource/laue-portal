@@ -39,6 +39,7 @@ from laue_portal.analysis.projection import (
 
 # Igor Pro background: gbRGB=(40000,40000,40000) / 65535
 _GRAY_BG = "rgb(156, 156, 156)"
+_ASPECT_RATIO_POINT_LIMIT = 50_000
 
 # Orientation color modes (no colorscale -- per-point RGB)
 _ORIENTATION_MODES = {"cubic_ipf", "rodrigues", "misorientation", "pole_hsv"}
@@ -122,6 +123,7 @@ def make_orientation_map(
     rgb_reference_step: int = None,
     rgb_reference_matrix=None,
     surface_vectors=None,
+    aspect_ratio_point_limit=_ASPECT_RATIO_POINT_LIMIT,
 ) -> go.Figure:
     """
     Create a 2D orientation scatter plot.
@@ -164,6 +166,10 @@ def make_orientation_map(
         heuristic, default), ``"X"``, ``"Y"``, ``"Z"``, ``"H"``, ``"F"``,
         or ``"depth"``.  H and F are wire-frame coordinates rotated from
         ``(Y, Z)`` (see ``xml_parser.yz_to_hf``).
+    aspect_ratio_point_limit : int or None, optional
+        Disable 1:1 axis scaling above this many points for Scattergl zoom
+        performance. Defaults to 50,000. Use ``None`` to keep scaling enabled
+        at every size.
 
     Returns
     -------
@@ -220,20 +226,37 @@ def make_orientation_map(
         )
     )
 
+    aspect_ratio_disabled = aspect_ratio_point_limit is not None and len(positions) > aspect_ratio_point_limit
+    yaxis = dict(uirevision="orientation-2d-y")
+    if not aspect_ratio_disabled:
+        yaxis.update(scaleanchor="x", scaleratio=1)
+
     fig.update_layout(
         xaxis_title=x_label,
         yaxis_title=y_label,
         xaxis=dict(uirevision="orientation-2d-x"),
         plot_bgcolor=_GRAY_BG,
         paper_bgcolor="white",
-        # Do not link the Cartesian axis scales here. Preserving a 1:1 pixel
-        # ratio makes Plotly's Scattergl zoom path noticeably laggy around
-        # 100k points. The pole figure retains its required circular 1:1 scale.
-        yaxis=dict(uirevision="orientation-2d-y"),
+        yaxis=yaxis,
         margin=dict(l=60, r=20, t=40, b=60),
         uirevision="orientation-2d",
         autosize=True,
     )
+
+    if aspect_ratio_disabled:
+        fig.add_annotation(
+            xref="paper",
+            yref="paper",
+            x=0.01,
+            y=0.99,
+            xanchor="left",
+            yanchor="top",
+            text=f"Aspect ratio scaling disabled above {aspect_ratio_point_limit:,} points for performance.",
+            showarrow=False,
+            font=dict(size=11, color="rgb(70, 70, 70)"),
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            borderpad=3,
+        )
 
     return fig
 
