@@ -324,6 +324,8 @@ dagcomponentfuncs.ScanImportStatusRenderer = function (props) {
         'imported': { text: 'Imported', color: 'info' },
         'failed':   { text: 'Failed',   color: 'danger' },
         'skipped':  { text: 'Skipped',  color: 'secondary' },
+        'duplicate': { text: 'Duplicate', color: 'secondary' },
+        'invalid':   { text: 'Invalid',   color: 'danger' },
     };
 
     const key = (props.value || '').toLowerCase();

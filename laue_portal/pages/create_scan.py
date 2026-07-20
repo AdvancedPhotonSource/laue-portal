@@ -1,5 +1,5 @@
 import base64
-import json
+from datetime import datetime
 
 import dash
 import dash_ag_grid as dag
@@ -18,7 +18,7 @@ dash.register_page(__name__)
 layout = dbc.Container(
     [
         # Client-side stores
-        dcc.Store(id="bulk-parsed-scans", data=None),  # full parsed scan data (list of dicts)
+        dcc.Store(id="bulk-scan-source-token", data=None),
         html.Div(
             [
                 navbar.navbar,
@@ -39,6 +39,53 @@ layout = dbc.Container(
                     ),
                 ),
                 html.Hr(),
+                # ---- Quick Selection Card (collapsed until scans loaded) ----
+                dbc.Card(
+                    [
+                        dbc.CardHeader(html.H5("Choose scans to import", className="mb-0")),
+                        dbc.CardBody(
+                            [
+                                dbc.Row(
+                                    [
+                                        dbc.Col(
+                                            dbc.InputGroup(
+                                                [
+                                                    dbc.InputGroupText("Scan ID greater than"),
+                                                    dbc.Input(
+                                                        id="bulk-after-scan-id",
+                                                        type="number",
+                                                        step=1,
+                                                        placeholder="e.g. 276500",
+                                                    ),
+                                                    dbc.Button(
+                                                        "Select", id="btn-select-after-scan-id", color="secondary"
+                                                    ),
+                                                ]
+                                            ),
+                                            lg=6,
+                                            className="mb-2",
+                                        ),
+                                        dbc.Col(
+                                            dbc.InputGroup(
+                                                [
+                                                    dbc.InputGroupText("Created at/after"),
+                                                    dbc.Input(id="bulk-after-time", type="datetime-local"),
+                                                    dbc.Button("Select", id="btn-select-after-time", color="secondary"),
+                                                ]
+                                            ),
+                                            lg=6,
+                                            className="mb-2",
+                                        ),
+                                    ]
+                                ),
+                                html.Div(id="quick-selection-feedback", className="small text-muted"),
+                            ]
+                        ),
+                    ],
+                    id="quick-selection-card",
+                    style={"display": "none"},
+                    className="mb-3",
+                ),
                 # ---- Catalog Defaults Card (collapsed until scans loaded) ----
                 dbc.Card(
                     [
@@ -194,7 +241,7 @@ layout = dbc.Container(
                                 },
                                 style={"width": "100%"},
                                 className="ag-theme-alpine",
-                                getRowId="params.data.scanNumber",
+                                getRowId="params.data.scan_key",
                             ),
                         ],
                     ),
@@ -230,13 +277,13 @@ BULK_SCAN_COLS = [
     {
         "headerName": "Scan ID",
         "field": "scanNumber",
-        "sort": "asc",
         "filter": "agNumberColumnFilter",
         "width": 110,
     },
     {
         "headerName": "Date / Time",
         "field": "time",
+        "sort": "desc",
         "width": 180,
     },
     {
@@ -271,31 +318,32 @@ BULK_SCAN_COLS = [
 
 
 # ---------------------------------------------------------------------------
-# Callback 1: Upload XML -> parse all scans -> populate table
+# Callback 1: Upload XML -> build lightweight index -> populate table
 # ---------------------------------------------------------------------------
 
 
 @dash.callback(
     Output("bulk-scan-table", "columnDefs"),
     Output("bulk-scan-table", "rowData"),
-    Output("bulk-parsed-scans", "data"),
+    Output("bulk-scan-source-token", "data"),
     Output("alert-upload", "is_open"),
     Output("alert-upload", "children"),
     Output("alert-upload", "color"),
     Output("upload-metadata-log", "contents"),
     Output("scan-table-container", "style"),
+    Output("quick-selection-card", "style"),
     Output("catalog-defaults-card", "style"),
     Output("action-bar", "style"),
     Input("upload-metadata-log", "contents"),
     prevent_initial_call=True,
 )
 def upload_and_parse(contents):
-    """Decode the uploaded XML, parse every scan, check for duplicates, and populate the AG Grid."""
+    """Decode an XML log, build its lightweight index, and stage it for selected imports."""
     if not contents:
         raise dash.exceptions.PreventUpdate
 
     try:
-        _, content_string = contents.split(",")
+        _, content_string = contents.split(",", 1)
         xml_bytes = base64.b64decode(content_string)
     except Exception as e:
         return (
@@ -309,11 +357,12 @@ def upload_and_parse(contents):
             {"display": "none"},
             {"display": "none"},
             {"display": "none"},
+            {"display": "none"},
         )
 
-    # Parse all scans
+    # Stage 1: parse only the fields needed for display and selection.
     try:
-        parsed = scan_import.parse_all_scans_from_xml(xml_bytes)
+        scan_index = scan_import.index_scans_from_xml(xml_bytes)
     except Exception as e:
         return (
             [],
@@ -326,9 +375,10 @@ def upload_and_parse(contents):
             {"display": "none"},
             {"display": "none"},
             {"display": "none"},
+            {"display": "none"},
         )
 
-    if not parsed:
+    if not scan_index:
         return (
             [],
             [],
@@ -340,49 +390,78 @@ def upload_and_parse(contents):
             {"display": "none"},
             {"display": "none"},
             {"display": "none"},
+            {"display": "none"},
         )
 
     # Check which scan numbers already exist in the DB
-    all_scan_numbers = [p["scanNumber"] for p in parsed]
-    existing = scan_import.check_existing_scan_numbers(all_scan_numbers)
+    valid_scan_numbers = []
+    for entry in scan_index:
+        try:
+            valid_scan_numbers.append(int(entry["scanNumber"]))
+        except (TypeError, ValueError):
+            continue
+    existing = scan_import.check_existing_scan_numbers(valid_scan_numbers)
 
     # Build AG Grid row data
     row_data = []
-    for p in parsed:
-        sn = p["scanNumber"]
+    seen_scan_numbers = set()
+    for entry in scan_index:
+        sn = entry["scanNumber"]
         energy_str = ""
-        if p.get("energy"):
-            energy_str = f"{p['energy']}"
-            if p.get("energy_unit"):
-                energy_str += f" {p['energy_unit']}"
+        if entry.get("energy"):
+            energy_str = f"{entry['energy']}"
+            if entry.get("energy_unit"):
+                energy_str += f" {entry['energy_unit']}"
 
-        row_data.append(
-            {
-                "scanNumber": str(sn),
-                "time": p.get("time", ""),
-                "user_name": p.get("user_name", ""),
-                "energy_display": energy_str,
-                "sample_XYZ": p.get("sample_XYZ", ""),
-                "num_dims": p.get("num_dims", 0),
-                "status": "Exists" if int(sn) in existing else "New",
-                "scan_index": p["scan_index"],
-            }
+        try:
+            numeric_scan_number = int(sn)
+        except (TypeError, ValueError):
+            status = "Invalid"
+        else:
+            if numeric_scan_number in seen_scan_numbers:
+                status = "Duplicate"
+            elif numeric_scan_number in existing:
+                status = "Exists"
+            else:
+                status = "New"
+            seen_scan_numbers.add(numeric_scan_number)
+
+        row_data.append({**entry, "scanNumber": str(sn), "energy_display": energy_str, "status": status})
+
+    try:
+        source_token = scan_import.stage_scan_log(xml_bytes)
+    except Exception as e:
+        return (
+            [],
+            [],
+            None,
+            True,
+            f"Failed to stage uploaded log: {e}",
+            "danger",
+            None,
+            {"display": "none"},
+            {"display": "none"},
+            {"display": "none"},
+            {"display": "none"},
         )
-
-    # Store full parsed data for later import (minus the large log/scans dicts to save memory)
-    # We keep them because we need them for import
-    store_data = json.dumps(parsed, default=str)
 
     num_new = sum(1 for r in row_data if r["status"] == "New")
     num_existing = sum(1 for r in row_data if r["status"] == "Exists")
-    alert_msg = f"Parsed {len(row_data)} scans: {num_new} new, {num_existing} already in database."
+    num_duplicates = sum(1 for r in row_data if r["status"] == "Duplicate")
+    num_invalid = sum(1 for r in row_data if r["status"] == "Invalid")
+    details = [f"{num_new} new", f"{num_existing} already in database"]
+    if num_duplicates:
+        details.append(f"{num_duplicates} duplicate IDs in the log")
+    if num_invalid:
+        details.append(f"{num_invalid} invalid IDs")
+    alert_msg = f"Indexed {len(row_data)} scans: {', '.join(details)}."
     alert_color = "success" if num_new > 0 else "info"
 
     show = {"display": "block"}
     return (
         BULK_SCAN_COLS,
         row_data,
-        store_data,
+        source_token,
         True,
         alert_msg,
         alert_color,
@@ -390,7 +469,68 @@ def upload_and_parse(contents):
         show,
         show,
         show,
+        show,
     )
+
+
+def _select_new_rows_after_scan_id(row_data, threshold):
+    threshold = int(threshold)
+    selected = []
+    for row in row_data or []:
+        if row.get("status") != "New":
+            continue
+        try:
+            if int(row["scanNumber"]) > threshold:
+                selected.append(row)
+        except (KeyError, TypeError, ValueError):
+            continue
+    return selected
+
+
+def _select_new_rows_at_or_after_time(row_data, threshold):
+    threshold_time = datetime.fromisoformat(str(threshold))
+    selected = []
+    for row in row_data or []:
+        if row.get("status") != "New":
+            continue
+        try:
+            row_time = scan_import.convert_time_string_to_datetime(row.get("time", ""))
+        except ValueError:
+            continue
+        if row_time is not None and row_time >= threshold_time:
+            selected.append(row)
+    return selected
+
+
+@dash.callback(
+    Output("bulk-scan-table", "selectedRows", allow_duplicate=True),
+    Output("quick-selection-feedback", "children"),
+    Input("btn-select-after-scan-id", "n_clicks"),
+    Input("btn-select-after-time", "n_clicks"),
+    State("bulk-scan-table", "rowData"),
+    State("bulk-after-scan-id", "value"),
+    State("bulk-after-time", "value"),
+    prevent_initial_call=True,
+)
+def apply_quick_selection(_scan_clicks, _time_clicks, row_data, after_scan_id, after_time):
+    trigger = dash.ctx.triggered_id
+    try:
+        if trigger == "btn-select-after-scan-id":
+            if after_scan_id in (None, ""):
+                return dash.no_update, "Enter a scan ID threshold first."
+            selected = _select_new_rows_after_scan_id(row_data, after_scan_id)
+            criterion = f"with scan ID greater than {int(after_scan_id)}"
+        elif trigger == "btn-select-after-time":
+            if not after_time:
+                return dash.no_update, "Enter a creation time threshold first."
+            selected = _select_new_rows_at_or_after_time(row_data, after_time)
+            criterion = f"created at or after {after_time}"
+        else:
+            raise dash.exceptions.PreventUpdate
+    except (TypeError, ValueError):
+        return dash.no_update, "The selection threshold is not valid."
+
+    return selected, f"Selected {len(selected)} new scan{'s' if len(selected) != 1 else ''} {criterion}."
 
 
 # ---------------------------------------------------------------------------
@@ -423,6 +563,7 @@ def update_import_button(selected_rows):
 
 @dash.callback(
     Output("bulk-scan-table", "rowData", allow_duplicate=True),
+    Output("bulk-scan-table", "selectedRows", allow_duplicate=True),
     Output("alert-import", "is_open"),
     Output("alert-import", "children"),
     Output("alert-import", "color"),
@@ -430,7 +571,7 @@ def update_import_button(selected_rows):
     Input("btn-import-selected", "n_clicks"),
     State("bulk-scan-table", "selectedRows"),
     State("bulk-scan-table", "rowData"),
-    State("bulk-parsed-scans", "data"),
+    State("bulk-scan-source-token", "data"),
     # Catalog defaults
     State("bulk-aperture", "value"),
     State("bulk-sample-name", "value"),
@@ -451,32 +592,24 @@ def import_selected_scans(
     n_clicks,
     selected_rows,
     current_row_data,
-    parsed_scans_json,
+    source_token,
     aperture,
     sample_name,
     filefolder,
     filename_prefix,
     notes,
 ):
-    if not n_clicks or not selected_rows or not parsed_scans_json:
+    if not n_clicks or not selected_rows or not source_token:
         raise dash.exceptions.PreventUpdate
 
-    # Deserialize stored parsed data
-    all_parsed = json.loads(parsed_scans_json)
-
-    # Build lookup: scanNumber -> parsed entry
-    parsed_lookup = {str(p["scanNumber"]): p for p in all_parsed}
-
-    # Filter to only selected NEW scans
-    scans_to_import = []
-    for row in selected_rows:
-        if row.get("status") == "New":
-            sn = str(row["scanNumber"])
-            if sn in parsed_lookup:
-                scans_to_import.append(parsed_lookup[sn])
-
-    if not scans_to_import:
+    selected_new_rows = [row for row in selected_rows if row.get("status") == "New"]
+    try:
+        selected_indices = list(dict.fromkeys(int(row["scan_index"]) for row in selected_new_rows))
+    except (KeyError, TypeError, ValueError):
+        return dash.no_update, dash.no_update, True, "The scan selection is invalid; reload the log.", "danger", 8000
+    if not selected_indices:
         return (
+            dash.no_update,
             dash.no_update,
             True,
             "No new scans selected for import.",
@@ -484,12 +617,19 @@ def import_selected_scans(
             4000,
         )
 
+    # Stage 2: retrieve the source and fully parse only the selected scan elements.
+    try:
+        xml_bytes = scan_import.load_staged_scan_log(source_token)
+        scans_to_import = scan_import.parse_selected_scans_from_xml(xml_bytes, selected_indices)
+    except Exception as e:
+        return dash.no_update, dash.no_update, True, f"Failed to load selected scans: {e}", "danger", 8000
+
     # Build catalog defaults
     prefix_list = [s.strip() for s in filename_prefix.split(",")] if filename_prefix else []
     catalog_defaults = {
         "filefolder": filefolder or "",
         "filenamePrefix": prefix_list,
-        "aperture": aperture or None,
+        "aperture": aperture or "none",
         "sample_name": sample_name or "",
         "notes": notes or "",
     }
@@ -498,10 +638,15 @@ def import_selected_scans(
     results = scan_import.bulk_import_scans(scans_to_import, catalog_defaults)
 
     # Update row data with new statuses
+    parsed_indices = {parsed["scan_index"] for parsed in scans_to_import}
+    selected_index_set = set(selected_indices)
     updated_rows = []
     for row in current_row_data:
         sn = str(row["scanNumber"])
-        if sn in results:
+        scan_index = int(row["scan_index"])
+        if scan_index in selected_index_set and scan_index not in parsed_indices:
+            row["status"] = "Failed"
+        elif scan_index in parsed_indices and sn in results:
             r = results[sn]
             if r["status"] == "success":
                 row["status"] = "Imported"
@@ -514,6 +659,7 @@ def import_selected_scans(
     # Build summary message
     n_success = sum(1 for r in results.values() if r["status"] == "success")
     n_failed = sum(1 for r in results.values() if r["status"] == "failed")
+    n_failed += len(selected_index_set - parsed_indices)
     n_skipped = sum(1 for r in results.values() if r["status"] == "skipped")
 
     parts = []
@@ -529,10 +675,13 @@ def import_selected_scans(
     if n_failed:
         # Include failure details
         failures = [r["message"] for r in results.values() if r["status"] == "failed"]
-        summary += " Errors: " + "; ".join(failures[:5])
-        if len(failures) > 5:
-            summary += f" ... and {len(failures) - 5} more"
+        if failures:
+            summary += " Errors: " + "; ".join(failures[:5])
+            if len(failures) > 5:
+                summary += f" ... and {len(failures) - 5} more"
+        if selected_index_set - parsed_indices:
+            summary += " Some selected scan elements could not be parsed; see the server log for details."
 
     alert_color = "success" if n_failed == 0 else ("warning" if n_success > 0 else "danger")
 
-    return updated_rows, True, summary, alert_color, None
+    return updated_rows, [], True, summary, alert_color, None

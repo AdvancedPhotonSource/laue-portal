@@ -225,14 +225,14 @@ class TestMetadataParsing:
 
     def test_parse_all_scans_from_xml_logs_skipped_scans(self, test_xml_data, monkeypatch, caplog):
         """Test parse failures for individual scans are logged instead of silently disappearing."""
-        original_parse_metadata = scan_import.parse_metadata
+        original_parse_scan_element = scan_import._parse_scan_element
 
-        def fail_first_scan(xml, xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog", scan_no=2, empty="\n\t\t"):
-            if scan_no == 2:
+        def fail_first_scan(scan, xmlns=scan_import.SCAN_LOG_XMLNS, empty="\n\t\t"):
+            if scan.get("scanNumber") == "276990":
                 raise ValueError("bad scan")
-            return original_parse_metadata(xml, xmlns=xmlns, scan_no=scan_no, empty=empty)
+            return original_parse_scan_element(scan, xmlns=xmlns, empty=empty)
 
-        monkeypatch.setattr(scan_import, "parse_metadata", fail_first_scan)
+        monkeypatch.setattr(scan_import, "_parse_scan_element", fail_first_scan)
 
         with caplog.at_level(logging.ERROR, logger="laue_portal.services.scan_import"):
             parsed = scan_import.parse_all_scans_from_xml(test_xml_data)
@@ -241,6 +241,82 @@ class TestMetadataParsing:
         assert all(scan["scan_index"] != 2 for scan in parsed)
         assert "Skipping scan at XML index 2 after parse failure" in caplog.text
         assert "bad scan" in caplog.text
+
+    def test_scan_index_is_lightweight_and_parses_document_once(self, test_xml_data, monkeypatch):
+        original_fromstring = scan_import.ET.fromstring
+        parse_calls = 0
+
+        def counted_fromstring(xml):
+            nonlocal parse_calls
+            parse_calls += 1
+            return original_fromstring(xml)
+
+        monkeypatch.setattr(scan_import.ET, "fromstring", counted_fromstring)
+
+        index = scan_import.index_scans_from_xml(test_xml_data)
+
+        assert parse_calls == 1
+        assert len(index) == 5
+        assert index[0] == {
+            "scan_key": "2",
+            "scan_index": 2,
+            "scanNumber": "276990",
+            "time": "2023-02-25T02:09:58",
+            "time_epoch": "1046160598",
+            "user_name": "User1",
+            "energy": "21.3047",
+            "energy_unit": "keV",
+            "sample_XYZ": "7411.3 -492.2 -917",
+            "num_dims": 1,
+        }
+        assert "log" not in index[0]
+        assert "scans" not in index[0]
+
+    def test_parse_all_scans_parses_document_once(self, test_xml_data, monkeypatch):
+        original_fromstring = scan_import.ET.fromstring
+        parse_calls = 0
+
+        def counted_fromstring(xml):
+            nonlocal parse_calls
+            parse_calls += 1
+            return original_fromstring(xml)
+
+        monkeypatch.setattr(scan_import.ET, "fromstring", counted_fromstring)
+
+        parsed = scan_import.parse_all_scans_from_xml(test_xml_data)
+
+        assert parsed
+        assert parse_calls == 1
+
+    def test_parse_selected_scans_supports_individuals_and_blocks(self, test_xml_data):
+        parsed = scan_import.parse_selected_scans_from_xml(test_xml_data, [2, 4, 5])
+
+        assert [scan["scan_index"] for scan in parsed] == [2, 4, 5]
+        assert [scan["scanNumber"] for scan in parsed] == ["276990", "276992", "276993"]
+
+    def test_parse_selected_scans_rejects_unknown_indices(self, test_xml_data):
+        with pytest.raises(ValueError, match="999"):
+            scan_import.parse_selected_scans_from_xml(test_xml_data, [2, 999])
+
+    def test_staged_scan_log_round_trip_and_expiry(self, test_xml_data, tmp_path, monkeypatch):
+        monkeypatch.setattr(scan_import, "SCAN_LOG_CACHE_DIR", tmp_path)
+        monkeypatch.setattr(scan_import, "SCAN_LOG_CACHE_TTL_SECONDS", 60)
+
+        token = scan_import.stage_scan_log(test_xml_data)
+        cache_path = tmp_path / f"{token}.xml"
+
+        assert scan_import.load_staged_scan_log(token) == test_xml_data
+        assert cache_path.stat().st_mode & 0o777 == 0o600
+
+        old_time = cache_path.stat().st_mtime - 120
+        os.utime(cache_path, (old_time, old_time))
+        with pytest.raises(FileNotFoundError, match="expired or is unavailable"):
+            scan_import.load_staged_scan_log(token)
+
+    @pytest.mark.parametrize("token", ["../scan-log", "not-a-uuid", None])
+    def test_staged_scan_log_rejects_invalid_tokens(self, token):
+        with pytest.raises(ValueError, match="Invalid staged scan-log token"):
+            scan_import.load_staged_scan_log(token)
 
 
 class TestDatabaseIntegration:

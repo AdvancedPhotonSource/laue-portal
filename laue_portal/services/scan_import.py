@@ -1,8 +1,13 @@
 """Scan XML parsing and database import services."""
 
 import logging
+import os
+import tempfile
+import time
+import uuid
 import xml.etree.ElementTree as ET
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -12,12 +17,19 @@ from laue_portal.config import MOTOR_GROUPS
 
 logger = logging.getLogger(__name__)
 
+SCAN_LOG_XMLNS = "http://sector34.xray.aps.anl.gov/34ide/scanLog"
+SCAN_LOG_CACHE_DIR = Path(tempfile.gettempdir()) / "laue-portal-scan-imports"
+SCAN_LOG_CACHE_TTL_SECONDS = 24 * 60 * 60
 
-def parse_metadata(xml, xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog", scan_no=2, empty="\n\t\t"):
-    # tree = ET.parse(xml)
-    # root = tree.getroot()
+
+def parse_metadata(xml, xmlns=SCAN_LOG_XMLNS, scan_no=2, empty="\n\t\t"):
+    """Parse one scan by its child index in an XML scan log."""
     root = ET.fromstring(xml)
-    scan = root[scan_no]
+    return _parse_scan_element(root[scan_no], xmlns=xmlns, empty=empty)
+
+
+def _parse_scan_element(scan, xmlns=SCAN_LOG_XMLNS, empty="\n\t\t"):
+    """Convert an already-parsed ``fullScan`` element into import dictionaries."""
 
     def name(s, xmlns=xmlns):
         return s.replace(f"{{{xmlns}}}", "")
@@ -33,7 +45,7 @@ def parse_metadata(xml, xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog", 
                 if not any([field_name == f for f in ["scan", "cpt"]]):
                     path_name = f"{parent_name}{field_name}"
                     field_dict = dict([(f"{path_name}_{k}", v) for k, v in field.attrib.items()])
-                    if empty not in field.text:
+                    if field.text and empty not in field.text:
                         field_dict[path_name] = field.text
                     tree_dict.update(field_dict)
                     traverse_tree(field, tree_dict, path_name + "_")
@@ -165,6 +177,161 @@ def parse_metadata(xml, xmlns="http://sector34.xray.aps.anl.gov/34ide/scanLog", 
     # *****#
 
     return log_dict, dims_dict_list
+
+
+def _find_text(element, path, default=""):
+    """Return stripped child text without making missing optional fields fatal."""
+    child = element.find(path)
+    if child is None or child.text is None:
+        return default
+    return child.text.strip()
+
+
+def _scan_index_entry(scan, scan_index, xmlns=SCAN_LOG_XMLNS):
+    """Build the lightweight row used by the first-stage scan index."""
+    namespace = f"{{{xmlns}}}"
+    time_element = scan.find(f"{namespace}time")
+    energy_element = scan.find(f"{namespace}source/{namespace}energy")
+
+    return {
+        "scan_key": str(scan_index),
+        "scan_index": scan_index,
+        "scanNumber": scan.get("scanNumber", ""),
+        "time": _find_text(scan, f"{namespace}time"),
+        "time_epoch": time_element.get("epoch", "") if time_element is not None else "",
+        "user_name": _find_text(scan, f"{namespace}user/{namespace}name"),
+        "energy": _find_text(scan, f"{namespace}source/{namespace}energy"),
+        "energy_unit": energy_element.get("unit", "") if energy_element is not None else "",
+        "sample_XYZ": _find_text(scan, f"{namespace}sample/{namespace}XYZ"),
+        "num_dims": sum(1 for _ in scan.iter(f"{namespace}scan")),
+    }
+
+
+def index_scans_from_xml(xml_bytes, xmlns=SCAN_LOG_XMLNS):
+    """Parse a log once and return lightweight scan summaries for selection."""
+    root = ET.fromstring(xml_bytes)
+    return [
+        _scan_index_entry(element, scan_index, xmlns=xmlns)
+        for scan_index, element in enumerate(root)
+        if element.tag.endswith("Scan")
+    ]
+
+
+def _scan_result(scan, scan_index, xmlns=SCAN_LOG_XMLNS):
+    log, scans = _parse_scan_element(scan, xmlns=xmlns)
+    return {
+        "scan_key": str(scan_index),
+        "scan_index": scan_index,
+        "scanNumber": log.get("scanNumber", ""),
+        "log": log,
+        "scans": scans,
+        "time": log.get("time", ""),
+        "user_name": log.get("user_name", ""),
+        "energy": log.get("source_energy", ""),
+        "energy_unit": log.get("source_energy_unit", ""),
+        "sample_XYZ": log.get("sample_XYZ", ""),
+        "num_dims": len(scans),
+    }
+
+
+def _parse_scans_from_root(root, selected_indices=None, xmlns=SCAN_LOG_XMLNS):
+    selected = None if selected_indices is None else {int(index) for index in selected_indices}
+    found = set()
+    results = []
+
+    for scan_index, element in enumerate(root):
+        if not element.tag.endswith("Scan") or (selected is not None and scan_index not in selected):
+            continue
+
+        found.add(scan_index)
+        try:
+            results.append(_scan_result(element, scan_index, xmlns=xmlns))
+        except Exception:
+            logger.exception("Skipping scan at XML index %s after parse failure", scan_index)
+
+    if selected is not None:
+        missing = selected - found
+        if missing:
+            missing_display = ", ".join(str(index) for index in sorted(missing))
+            raise ValueError(f"Selected scan indices are not present in the staged log: {missing_display}")
+
+    return results
+
+
+def parse_selected_scans_from_xml(xml_bytes, scan_indices, xmlns=SCAN_LOG_XMLNS):
+    """Fully parse only the selected top-level scan elements in one document pass."""
+    root = ET.fromstring(xml_bytes)
+    return _parse_scans_from_root(root, selected_indices=scan_indices, xmlns=xmlns)
+
+
+def _ensure_scan_log_cache_dir():
+    SCAN_LOG_CACHE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    try:
+        SCAN_LOG_CACHE_DIR.chmod(0o700)
+    except OSError:
+        logger.warning("Could not restrict permissions on scan-log cache %s", SCAN_LOG_CACHE_DIR)
+
+
+def _scan_log_cache_path(token):
+    if not isinstance(token, str):
+        raise ValueError("Invalid staged scan-log token")
+    try:
+        canonical_token = uuid.UUID(token).hex
+    except (ValueError, AttributeError) as error:
+        raise ValueError("Invalid staged scan-log token") from error
+    if token != canonical_token:
+        raise ValueError("Invalid staged scan-log token")
+    return SCAN_LOG_CACHE_DIR / f"{canonical_token}.xml"
+
+
+def cleanup_expired_scan_logs(now=None):
+    """Remove staged logs that have not been accessed within the cache TTL."""
+    if not SCAN_LOG_CACHE_DIR.exists():
+        return
+
+    cutoff = (time.time() if now is None else now) - SCAN_LOG_CACHE_TTL_SECONDS
+    for path in SCAN_LOG_CACHE_DIR.glob("*.xml"):
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            logger.warning("Could not clean up staged scan log %s", path, exc_info=True)
+
+
+def stage_scan_log(xml_bytes):
+    """Store an already-validated uploaded scan log and return an opaque token."""
+    _ensure_scan_log_cache_dir()
+    cleanup_expired_scan_logs()
+
+    token = uuid.uuid4().hex
+    final_path = _scan_log_cache_path(token)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{token}-", suffix=".tmp", dir=SCAN_LOG_CACHE_DIR)
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(xml_bytes)
+        temporary_path.chmod(0o600)
+        temporary_path.replace(final_path)
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
+    return token
+
+
+def load_staged_scan_log(token):
+    """Load a staged scan log, refreshing its expiry window on access."""
+    path = _scan_log_cache_path(token)
+    try:
+        if path.stat().st_mtime < time.time() - SCAN_LOG_CACHE_TTL_SECONDS:
+            path.unlink()
+            raise FileNotFoundError
+        xml_bytes = path.read_bytes()
+        path.touch()
+    except FileNotFoundError as error:
+        raise FileNotFoundError("The staged scan log expired or is unavailable; upload it again.") from error
+    return xml_bytes
 
 
 def find_motor_group(pv_value):
@@ -341,31 +508,7 @@ def parse_all_scans_from_xml(xml_bytes):
     """
     root = ET.fromstring(xml_bytes)
 
-    results = []
-    for i, elem in enumerate(root):
-        if elem.tag.endswith("Scan"):
-            try:
-                log, scans = parse_metadata(xml_bytes, scan_no=i)
-                results.append(
-                    {
-                        "scan_index": i,
-                        "scanNumber": log.get("scanNumber", ""),
-                        "log": log,
-                        "scans": scans,
-                        "time": log.get("time", ""),
-                        "user_name": log.get("user_name", ""),
-                        "energy": log.get("source_energy", ""),
-                        "energy_unit": log.get("source_energy_unit", ""),
-                        "sample_XYZ": log.get("sample_XYZ", ""),
-                        "num_dims": len(scans),
-                    }
-                )
-            except Exception:
-                # TODO: Surface skipped scan parse errors in the upload UI instead of only server logs.
-                logger.exception("Skipping scan at XML index %s after parse failure", i)
-                continue
-
-    return results
+    return _parse_scans_from_root(root)
 
 
 def check_existing_scan_numbers(scan_numbers):
@@ -447,7 +590,7 @@ def bulk_import_scans(parsed_scans, catalog_defaults):
                     scanNumber=int(scan_number),
                     filefolder=catalog_defaults.get("filefolder", ""),
                     filenamePrefix=catalog_defaults.get("filenamePrefix", []),
-                    aperture=catalog_defaults.get("aperture", None),
+                    aperture=catalog_defaults.get("aperture") or "none",
                     sample_name=catalog_defaults.get("sample_name", ""),
                     notes=catalog_defaults.get("notes", ""),
                 )
