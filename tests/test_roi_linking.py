@@ -192,6 +192,17 @@ class TestOrientationMap3DHighlighting:
         apply_selection_highlight(fig, parsed, [0], marker_size=40, is_3d=True)
         assert len(fig.data) == 2
         assert fig.data[1].type == "scatter3d"
+        assert fig.data[1].marker.symbol == "square-open"
+
+    def test_3d_highlight_keeps_main_volume_opaque(self):
+        parsed = _parsed()
+        fig = make_orientation_map_3d(parsed, color_by="cubic_ipf")
+        original_colors = tuple(fig.data[0].marker.color)
+
+        apply_selection_highlight(fig, parsed, [0], marker_size=40, is_3d=True)
+
+        assert tuple(fig.data[0].marker.color) == original_colors
+        assert fig.data[0].marker.opacity == 1.0
 
 
 # ---------------------------------------------------------------------------

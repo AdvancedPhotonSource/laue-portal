@@ -11,6 +11,7 @@ from laue_portal.pages.create_reconstruction import (
     _parse_pooled_value,
     load_scan_data_from_url,
 )
+from laue_portal.pages.scan import render_flex_plot, render_role_plot
 from laue_portal.pages.scans import handle_recon_button, layout, update_button_states
 
 
@@ -67,6 +68,27 @@ def test_scan_action_buttons_follow_selection_state(selected_rows, expected_disa
 )
 def test_new_recon_routes_selection(rows, expected_href):
     assert handle_recon_button(1, rows) == expected_href
+
+
+def test_flexible_3d_plot_uses_opaque_square_markers():
+    *_, figure = render_flex_plot("3d", "X", "Y", "Z")
+
+    assert figure.data[0].type == "scatter3d"
+    assert figure.data[0].marker.symbol == "square"
+    assert figure.data[0].marker.opacity == 1.0
+
+
+def test_role_3d_plot_uses_opaque_square_markers():
+    rows = [
+        {"var": "x", "isX": "✅"},
+        {"var": "y", "isY": "✅"},
+        {"var": "z", "isZ": "✅"},
+    ]
+    figure = render_role_plot("3d", rows, {"x": [0, 1], "y": [0, 1], "z": [0, 1]})
+
+    assert figure.data[0].type == "scatter3d"
+    assert figure.data[0].marker.symbol == "square"
+    assert figure.data[0].marker.opacity == 1.0
 
 
 def test_standard_reconstruction_loader_populates_scan_database_values(test_metadata_database):

@@ -95,6 +95,8 @@ def test_orientation_map_3d_creates_figure():
     fig = make_orientation_map_3d(_parsed(), color_by="n_indexed")
     assert len(fig.data) == 1
     assert fig.data[0].type == "scatter3d"
+    assert fig.data[0].marker.symbol == "square"
+    assert fig.data[0].marker.opacity == 1.0
     assert fig.layout.scene.aspectmode == "data"
 
 
@@ -112,6 +114,8 @@ def test_quality_map_3d_creates_figure():
     fig = make_quality_map_3d(_parsed(), metric="goodness")
     assert len(fig.data) == 1
     assert fig.data[0].type == "scatter3d"
+    assert fig.data[0].marker.symbol == "square"
+    assert fig.data[0].marker.opacity == 1.0
 
 
 def test_quality_map_3d_all_metrics():

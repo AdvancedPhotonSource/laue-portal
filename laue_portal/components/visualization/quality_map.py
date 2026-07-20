@@ -147,6 +147,8 @@ def make_quality_map_3d(
             mode="markers",
             marker=dict(
                 size=max(2, marker_size // 3),
+                symbol="square",
+                opacity=1.0,
                 color=color_vals,
                 colorscale=colorscale,
                 colorbar=dict(title=display_name),

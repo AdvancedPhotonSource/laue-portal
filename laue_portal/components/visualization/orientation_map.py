@@ -327,6 +327,7 @@ def make_orientation_map_3d(
         parsed,
         color_by,
         max(2, marker_size // 3),
+        marker_symbol="square",
         surface=surface,
         ref_grain_index=ref_grain_index,
         pole_hkl=pole_hkl,
@@ -342,6 +343,7 @@ def make_orientation_map_3d(
         rgb_reference_matrix=rgb_reference_matrix,
         surface_vectors=surface_vectors,
     )
+    marker_dict["opacity"] = 1.0
 
     fig.add_trace(
         go.Scatter3d(
@@ -750,7 +752,8 @@ def apply_selection_highlight(
     Modify a figure in-place to highlight selected grains.
 
     Strategy:
-    - Dim the existing (first) data trace by reducing opacity
+    - Dim unselected points in 2D by reducing opacity
+    - Keep 3D points opaque so WebGL depth testing remains reliable
     - Add a second highlight trace with bright outlines for selected grains
 
     Parameters
@@ -781,66 +784,67 @@ def apply_selection_highlight(
     main_trace = fig.data[0]
     current_colors = main_trace.marker.color
 
-    # Build opacity array: 0.2 for unselected, 1.0 for selected
-    opacity_arr = np.where(
-        np.isin(np.arange(n_points), list(selected_set)),
-        1.0,
-        0.2,
-    )
+    if not is_3d:
+        # Build opacity array: 0.2 for unselected, 1.0 for selected
+        opacity_arr = np.where(
+            np.isin(np.arange(n_points), list(selected_set)),
+            1.0,
+            0.2,
+        )
 
-    # Determine if colors are per-point RGB strings or scalar values
-    is_rgb_strings = (
-        isinstance(current_colors, (list, tuple))
-        and len(current_colors) == n_points
-        and isinstance(current_colors[0], str)
-    )
+        # Determine if colors are per-point RGB strings or scalar values
+        is_rgb_strings = (
+            isinstance(current_colors, (list, tuple))
+            and len(current_colors) == n_points
+            and isinstance(current_colors[0], str)
+        )
 
-    if is_rgb_strings:
-        # Per-point RGB strings -- convert to RGBA with opacity
-        new_colors = []
-        for i, c in enumerate(current_colors):
-            if c.startswith("rgb("):
-                new_colors.append(c.replace("rgb(", "rgba(").replace(")", f",{opacity_arr[i]:.2f})"))
-            else:
-                new_colors.append(c)
-        main_trace.marker.color = new_colors
-    else:
-        # Scalar colorscale mode -- Scattergl doesn't support per-point
-        # opacity, so sample the colorscale to get per-point RGB strings,
-        # then apply per-point opacity via RGBA.
-        import plotly.colors as pc
-
-        color_vals = np.asarray(current_colors, dtype=float)
-        colorscale = main_trace.marker.colorscale
-
-        # Resolve colorscale to list-of-lists format expected by
-        # pc.sample_colorscale.  Plotly stores it as tuple-of-tuples
-        # after figure creation; convert back.
-        if isinstance(colorscale, str):
-            colorscale = pc.get_colorscale(colorscale)
+        if is_rgb_strings:
+            # Per-point RGB strings -- convert to RGBA with opacity
+            new_colors = []
+            for i, c in enumerate(current_colors):
+                if c.startswith("rgb("):
+                    new_colors.append(c.replace("rgb(", "rgba(").replace(")", f",{opacity_arr[i]:.2f})"))
+                else:
+                    new_colors.append(c)
+            main_trace.marker.color = new_colors
         else:
-            colorscale = [[pos, col] for pos, col in colorscale]
+            # Scalar colorscale mode -- Scattergl doesn't support per-point
+            # opacity, so sample the colorscale to get per-point RGB strings,
+            # then apply per-point opacity via RGBA.
+            import plotly.colors as pc
 
-        # Normalize values to [0, 1]
-        vmin = np.nanmin(color_vals)
-        vmax = np.nanmax(color_vals)
-        if vmax - vmin > 0:
-            normed = (color_vals - vmin) / (vmax - vmin)
-        else:
-            normed = np.zeros_like(color_vals)
-        normed = np.clip(normed, 0, 1)
+            color_vals = np.asarray(current_colors, dtype=float)
+            colorscale = main_trace.marker.colorscale
 
-        # Sample colorscale to get per-point RGB, then apply opacity
-        sampled = pc.sample_colorscale(colorscale, normed, colortype="rgb")
-        new_colors = []
-        for i, c in enumerate(sampled):
-            if c.startswith("rgb("):
-                new_colors.append(c.replace("rgb(", "rgba(").replace(")", f",{opacity_arr[i]:.2f})"))
+            # Resolve colorscale to list-of-lists format expected by
+            # pc.sample_colorscale.  Plotly stores it as tuple-of-tuples
+            # after figure creation; convert back.
+            if isinstance(colorscale, str):
+                colorscale = pc.get_colorscale(colorscale)
             else:
-                new_colors.append(c)
-        main_trace.marker.color = new_colors
-        # Remove colorscale since we're now using per-point colors
-        main_trace.marker.colorscale = None
+                colorscale = [[pos, col] for pos, col in colorscale]
+
+            # Normalize values to [0, 1]
+            vmin = np.nanmin(color_vals)
+            vmax = np.nanmax(color_vals)
+            if vmax - vmin > 0:
+                normed = (color_vals - vmin) / (vmax - vmin)
+            else:
+                normed = np.zeros_like(color_vals)
+            normed = np.clip(normed, 0, 1)
+
+            # Sample colorscale to get per-point RGB, then apply opacity
+            sampled = pc.sample_colorscale(colorscale, normed, colortype="rgb")
+            new_colors = []
+            for i, c in enumerate(sampled):
+                if c.startswith("rgb("):
+                    new_colors.append(c.replace("rgb(", "rgba(").replace(")", f",{opacity_arr[i]:.2f})"))
+                else:
+                    new_colors.append(c)
+            main_trace.marker.color = new_colors
+            # Remove colorscale since we're now using per-point colors
+            main_trace.marker.colorscale = None
 
     # Add highlight ring trace for selected grains
     sel_mask = np.isin(np.arange(n_points), list(selected_set))
@@ -867,7 +871,7 @@ def apply_selection_highlight(
                 marker=dict(
                     size=max(3, highlight_size // 3),
                     color="rgba(0,0,0,0)",
-                    symbol="circle",
+                    symbol="square-open",
                     line=dict(color="white", width=2),
                 ),
                 hoverinfo="skip",

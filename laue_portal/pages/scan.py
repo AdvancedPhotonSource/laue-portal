@@ -814,7 +814,7 @@ def render_flex_plot(plot_type, x_sel, y_sel, z_sel):
                     y=dft[y],
                     z=dft[z],
                     mode="markers",
-                    marker=dict(size=3.5, opacity=0.85),
+                    marker=dict(size=3.5, symbol="square", opacity=1.0),
                     name=f"{z} vs {x},{y}",
                     hovertemplate=f"{x}: %{{x}}<br>{y}: %{{y}}<br>{z}: %{{z}}<extra></extra>",
                 )
@@ -965,7 +965,8 @@ def render_role_plot(mode, rows, data):
                 mode="markers",
                 marker=dict(
                     size=3.5,
-                    opacity=0.85,
+                    symbol="square",
+                    opacity=1.0,
                     color=z_plot,
                     colorscale="Viridis",
                     showscale=True,
