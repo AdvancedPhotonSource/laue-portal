@@ -7,9 +7,19 @@ import dash_bootstrap_components as dbc
 from dash import Input, Output, State, dcc, html
 
 import laue_portal.components.navbar as navbar
+from laue_portal.components.server_path_picker import (
+    register_server_path_picker_callbacks,
+    server_path_picker,
+)
+from laue_portal.config import SCAN_LOG_BROWSER
 from laue_portal.services import scan_import
+from laue_portal.services.filesystem_browser import read_selected_file
 
 dash.register_page(__name__)
+
+SCAN_LOG_DEFAULT_PATH = SCAN_LOG_BROWSER.get("default_path", "")
+SCAN_LOG_MAX_FILE_SIZE_MB = SCAN_LOG_BROWSER.get("max_file_size_mb", 100)
+SCAN_LOG_EXTENSIONS = [".xml", ".txt"]
 
 # ---------------------------------------------------------------------------
 # Layout
@@ -28,14 +38,29 @@ layout = dbc.Container(
                 html.Hr(),
                 # ---- Upload Section ----
                 html.Center(
-                    dcc.Upload(
-                        id="upload-metadata-log",
-                        children=dbc.Button(
-                            [html.I(className="bi bi-upload me-2"), "Upload Scan Log XML"],
-                            color="primary",
-                            size="lg",
-                        ),
-                        multiple=False,
+                    dbc.Stack(
+                        [
+                            server_path_picker(
+                                "scan-log-picker",
+                                SCAN_LOG_DEFAULT_PATH,
+                                extensions=SCAN_LOG_EXTENSIONS,
+                                max_file_size_mb=SCAN_LOG_MAX_FILE_SIZE_MB,
+                                title="Browse Server Logs",
+                            ),
+                            dcc.Upload(
+                                id="upload-metadata-log",
+                                children=dbc.Button(
+                                    [html.I(className="bi bi-upload me-2"), "Upload from Computer"],
+                                    color="primary",
+                                    size="lg",
+                                ),
+                                accept=".xml,.txt,application/xml,text/xml,text/plain",
+                                multiple=False,
+                            ),
+                        ],
+                        direction="horizontal",
+                        gap=2,
+                        className="justify-content-center flex-wrap",
                     ),
                 ),
                 html.Hr(),
@@ -318,8 +343,16 @@ BULK_SCAN_COLS = [
 
 
 # ---------------------------------------------------------------------------
-# Callback 1: Upload XML -> build lightweight index -> populate table
+# Callback 1: Select XML -> build lightweight index -> populate table
 # ---------------------------------------------------------------------------
+
+
+register_server_path_picker_callbacks(
+    "scan-log-picker",
+    SCAN_LOG_DEFAULT_PATH,
+    extensions=SCAN_LOG_EXTENSIONS,
+    max_file_size_mb=SCAN_LOG_MAX_FILE_SIZE_MB,
+)
 
 
 @dash.callback(
@@ -335,23 +368,33 @@ BULK_SCAN_COLS = [
     Output("catalog-defaults-card", "style"),
     Output("action-bar", "style"),
     Input("upload-metadata-log", "contents"),
+    Input("scan-log-picker-selection", "data"),
     prevent_initial_call=True,
 )
-def upload_and_parse(contents):
-    """Decode an XML log, build its lightweight index, and stage it for selected imports."""
-    if not contents:
+def upload_and_parse(contents, server_selection=None):
+    """Read an XML log, build its lightweight index, and stage selected imports."""
+    if not contents and not server_selection:
         raise dash.exceptions.PreventUpdate
 
     try:
-        _, content_string = contents.split(",", 1)
-        xml_bytes = base64.b64decode(content_string)
+        if server_selection and not contents:
+            xml_bytes = read_selected_file(
+                server_selection.get("path"),
+                extensions=SCAN_LOG_EXTENSIONS,
+                max_file_size_mb=SCAN_LOG_MAX_FILE_SIZE_MB,
+            )
+        else:
+            _, content_string = contents.split(",", 1)
+            xml_bytes = base64.b64decode(content_string, validate=True)
+            if len(xml_bytes) > SCAN_LOG_MAX_FILE_SIZE_MB * 1024 * 1024:
+                raise ValueError(f"The uploaded file exceeds the {SCAN_LOG_MAX_FILE_SIZE_MB} MB limit.")
     except Exception as e:
         return (
             [],
             [],
             None,
             True,
-            f"Failed to decode uploaded file: {e}",
+            f"Failed to read XML file: {e}",
             "danger",
             None,
             {"display": "none"},

@@ -17,6 +17,11 @@ VALID_HDF_EXTENSIONS:
   - .hdf5
   - .he5
 
+# Server-side scan log browser
+SCAN_LOG_BROWSER:
+  default_path: ""
+  max_file_size_mb: 100
+
 # Redis server configuration
 REDIS_CONFIG:
   host: localhost
