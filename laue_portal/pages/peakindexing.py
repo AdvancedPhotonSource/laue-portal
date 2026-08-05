@@ -389,8 +389,12 @@ _viz_tabs = dbc.Tabs(
                                         ),
                                         # Custom plot axes.  H and F are wire-frame
                                         # coords rotated from (Y, Z); see
-                                        # ``xml_parser.yz_to_hf``.  Defaults are X/H
-                                        # in 2-D and X/Y/Z in 3-D.
+                                        # ``xml_parser.yz_to_hf``.  The "lab" axes are
+                                        # beam-line voxel-in-sample coords (Igor's
+                                        # XX/YY/ZZ/HH/FF): negated stage position with
+                                        # depth folded into Z; see
+                                        # ``xml_parser.positions_lab``.  Defaults are
+                                        # X/H in 2-D and X/Y/Z in 3-D.
                                         html.Div(
                                             id="orientation-2d-axis-wrap",
                                             children=[
@@ -405,6 +409,11 @@ _viz_tabs = dbc.Tabs(
                                                             {"label": "H", "value": "H"},
                                                             {"label": "F", "value": "F"},
                                                             {"label": "Depth", "value": "depth"},
+                                                            {"label": "X lab", "value": "Xlab"},
+                                                            {"label": "Y lab", "value": "Ylab"},
+                                                            {"label": "Z lab", "value": "Zlab"},
+                                                            {"label": "H lab", "value": "Hlab"},
+                                                            {"label": "F lab", "value": "Flab"},
                                                         ],
                                                         value="X",
                                                         className="form-select",
@@ -421,6 +430,11 @@ _viz_tabs = dbc.Tabs(
                                                             {"label": "H", "value": "H"},
                                                             {"label": "F", "value": "F"},
                                                             {"label": "Depth", "value": "depth"},
+                                                            {"label": "X lab", "value": "Xlab"},
+                                                            {"label": "Y lab", "value": "Ylab"},
+                                                            {"label": "Z lab", "value": "Zlab"},
+                                                            {"label": "H lab", "value": "Hlab"},
+                                                            {"label": "F lab", "value": "Flab"},
                                                         ],
                                                         value="H",
                                                         className="form-select",
@@ -443,6 +457,11 @@ _viz_tabs = dbc.Tabs(
                                                             {"label": "H", "value": "H"},
                                                             {"label": "F", "value": "F"},
                                                             {"label": "Depth", "value": "depth"},
+                                                            {"label": "X lab", "value": "Xlab"},
+                                                            {"label": "Y lab", "value": "Ylab"},
+                                                            {"label": "Z lab", "value": "Zlab"},
+                                                            {"label": "H lab", "value": "Hlab"},
+                                                            {"label": "F lab", "value": "Flab"},
                                                         ],
                                                         value="X",
                                                         className="form-select",
@@ -459,6 +478,11 @@ _viz_tabs = dbc.Tabs(
                                                             {"label": "H", "value": "H"},
                                                             {"label": "F", "value": "F"},
                                                             {"label": "Depth", "value": "depth"},
+                                                            {"label": "X lab", "value": "Xlab"},
+                                                            {"label": "Y lab", "value": "Ylab"},
+                                                            {"label": "Z lab", "value": "Zlab"},
+                                                            {"label": "H lab", "value": "Hlab"},
+                                                            {"label": "F lab", "value": "Flab"},
                                                         ],
                                                         value="Y",
                                                         className="form-select",
@@ -475,6 +499,11 @@ _viz_tabs = dbc.Tabs(
                                                             {"label": "H", "value": "H"},
                                                             {"label": "F", "value": "F"},
                                                             {"label": "Depth", "value": "depth"},
+                                                            {"label": "X lab", "value": "Xlab"},
+                                                            {"label": "Y lab", "value": "Ylab"},
+                                                            {"label": "Z lab", "value": "Zlab"},
+                                                            {"label": "H lab", "value": "Hlab"},
+                                                            {"label": "F lab", "value": "Flab"},
                                                         ],
                                                         value="Z",
                                                         className="form-select",

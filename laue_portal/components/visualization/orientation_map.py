@@ -55,7 +55,27 @@ _SCALAR_MODES = {"n_indexed", "goodness", "rms_error", "n_patterns"}
 # ``xml_parser.parse_indexing_xml`` (see ``yz_to_hf``).  ``depth`` exposes
 # the per-step depth field (NaN-padded if absent).  ``auto`` defers to the
 # Igor-style heuristic in ``_select_axes_auto``.
-_AXIS_CHOICES = ("auto", "X", "Y", "Z", "H", "F", "depth")
+#
+# ``Xlab``/``Ylab``/``Zlab``/``Hlab``/``Flab`` are the lab (beam-line)
+# voxel-in-sample coordinates -- Igor's XX/YY/ZZ/HH/FF from
+# ``xmlMultiIndex.ipf:4084``.  These are the negated stage position with
+# ``depth`` folded into Z, i.e. where the diffracting voxel sits inside
+# the sample rather than where the stage was.  See
+# ``xml_parser.positions_lab``.
+_AXIS_CHOICES = (
+    "auto",
+    "X",
+    "Y",
+    "Z",
+    "H",
+    "F",
+    "depth",
+    "Xlab",
+    "Ylab",
+    "Zlab",
+    "Hlab",
+    "Flab",
+)
 
 _AXIS_LABELS = {
     "X": "X (um)",
@@ -64,7 +84,30 @@ _AXIS_LABELS = {
     "H": "H (um)",
     "F": "F (um)",
     "depth": "depth (um)",
+    "Xlab": "X lab (um)",
+    "Ylab": "Y lab (um)",
+    "Zlab": "Z lab (um)",
+    "Hlab": "H lab (um)",
+    "Flab": "F lab (um)",
 }
+
+# Column index into ``parsed["positions_lab"]`` for each lab axis name.
+_LAB_AXIS_COLUMNS = {"Xlab": 0, "Ylab": 1, "Zlab": 2, "Hlab": 3, "Flab": 4}
+
+
+def _lab_positions(parsed):
+    """
+    Return the (N, 5) lab-frame coordinate array for *parsed*.
+
+    Falls back to a runtime compute when an older cached dict predates
+    the ``positions_lab`` key, mirroring the H/F handling below.
+    """
+    lab = parsed.get("positions_lab")
+    if lab is None:
+        from laue_portal.analysis.xml_parser import positions_lab as _compute_lab
+
+        lab = _compute_lab(parsed["positions"], parsed.get("depths"))
+    return lab
 
 
 def _resolve_axis(parsed, axis_name):
@@ -72,9 +115,13 @@ def _resolve_axis(parsed, axis_name):
     Return ``(values, label)`` for a named axis.
 
     Recognised names: ``"X"``, ``"Y"``, ``"Z"``, ``"H"``, ``"F"``,
-    ``"depth"``.  Unknown names fall back to X.
+    ``"depth"``, and the lab-frame ``"Xlab"``, ``"Ylab"``, ``"Zlab"``,
+    ``"Hlab"``, ``"Flab"``.  Unknown names fall back to X.
     """
     positions = parsed["positions"]
+    if axis_name in _LAB_AXIS_COLUMNS:
+        lab = _lab_positions(parsed)
+        return lab[:, _LAB_AXIS_COLUMNS[axis_name]], _AXIS_LABELS[axis_name]
     if axis_name == "X":
         return positions[:, 0], _AXIS_LABELS["X"]
     if axis_name == "Y":

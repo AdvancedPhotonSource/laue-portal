@@ -19,6 +19,7 @@ from laue_portal.analysis.xml_parser import (
     get_step_peaks,
     parse_indexing_xml,
     positions_hf,
+    positions_lab,
     yz_to_hf,
 )
 
@@ -373,3 +374,74 @@ class TestHFCoordinates:
         # ``positions_hf`` helper and the parser-cached array must agree.
         recomputed = positions_hf(parsed["positions"])
         assert np.allclose(recomputed, parsed["positions_hf"])
+
+
+class TestPositionsLab:
+    """
+    Lab (beam-line) voxel-in-sample coordinates.
+
+    Ported from Igor ``xmlMultiIndex.ipf:4084-4092``::
+
+        XX = -(Xsample)
+        YY = -(Ysample)
+        ZZ = -(Zsample) + depth     // depth only for wire scans
+        HH = YZ2H(YY, ZZ)
+        FF = YZ2F(YY, ZZ)
+
+    The sign flip turns stage position into position *inside* the sample.
+    Getting it wrong flips the map, and folding depth into the wrong axis
+    would silently distort wire-scan reconstructions, so both are pinned
+    explicitly here.
+    """
+
+    def test_negates_stage_position(self):
+        pos = np.array([[10.0, 20.0, 30.0], [-5.0, 2.0, 7.0]])
+        lab = positions_lab(pos)
+        assert np.allclose(lab[:, 0], [-10.0, 5.0])
+        assert np.allclose(lab[:, 1], [-20.0, -2.0])
+        assert np.allclose(lab[:, 2], [-30.0, -7.0])
+
+    def test_depth_folded_into_z_only(self):
+        # Igor adds depth to ZZ; X and Y must be untouched.
+        pos = np.array([[10.0, 20.0, 30.0]])
+        lab = positions_lab(pos, np.array([25.0]))
+        assert np.allclose(lab[:, 2], [-30.0 + 25.0])
+        assert np.allclose(lab[:, 0], [-10.0])
+        assert np.allclose(lab[:, 1], [-20.0])
+
+    def test_nan_depth_treated_as_zero(self):
+        # Igor guard: numtype(depthRaw) ? 0 : depthRaw
+        pos = np.array([[10.0, 20.0, 30.0]])
+        lab_nan = positions_lab(pos, np.array([np.nan]))
+        lab_none = positions_lab(pos)
+        assert np.allclose(lab_nan, lab_none)
+
+    def test_hf_derived_from_negated_and_depth_corrected_yz(self):
+        # HH/FF must come from YY/ZZ (post-negation, post-depth), which is
+        # NOT the same as negating the stage-frame H/F.
+        pos = np.array([[10.0, 20.0, 30.0]])
+        depths = np.array([25.0])
+        lab = positions_lab(pos, depths)
+        exp_h, exp_f = yz_to_hf(lab[0, 1], lab[0, 2])
+        assert abs(lab[0, 3] - exp_h) < 1e-9
+        assert abs(lab[0, 4] - exp_f) < 1e-9
+        # Guard against the tempting-but-wrong "lab H == -stage H" shortcut.
+        stage_h = positions_hf(pos)[0, 0]
+        assert abs(lab[0, 3] - (-stage_h)) > 1e-6
+
+    def test_lab_hf_equals_negated_stage_hf_without_depth(self):
+        # With no depth term the rotation is linear, so lab H/F collapse
+        # to the negated stage H/F.  Pins the linearity assumption.
+        pos = np.array([[10.0, 20.0, 30.0], [-5.0, 2.0, 7.0]])
+        lab = positions_lab(pos)
+        stage = positions_hf(pos)
+        assert np.allclose(lab[:, 3], -stage[:, 0])
+        assert np.allclose(lab[:, 4], -stage[:, 1])
+
+    def test_shape_and_parsed_dict(self, parsed):
+        # Regression guard: parser must populate positions_lab.
+        assert "positions_lab" in parsed
+        lab = parsed["positions_lab"]
+        assert lab.shape == (len(parsed["positions"]), 5)
+        recomputed = positions_lab(parsed["positions"], parsed["depths"])
+        assert np.allclose(recomputed, lab, equal_nan=True)

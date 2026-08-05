@@ -3,6 +3,8 @@
 import os
 import sys
 
+import numpy as np
+
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
@@ -12,6 +14,8 @@ from laue_portal.analysis.xml_parser import (
     parse_indexing_xml,
 )
 from laue_portal.components.visualization.orientation_map import (
+    _AXIS_CHOICES,
+    _resolve_axis,
     make_orientation_map,
     make_orientation_map_3d,
 )
@@ -46,6 +50,56 @@ def test_orientation_map_3d_xyz_axes():
     assert fig.layout.scene.xaxis.title.text == "X (um)"
     assert fig.layout.scene.yaxis.title.text == "Y (um)"
     assert fig.layout.scene.zaxis.title.text == "Z (um)"
+
+
+def test_orientation_map_lab_axes():
+    # Lab (beam-line) axes must be selectable in the 2-D map.
+    fig = make_orientation_map(_parsed(), color_by="n_indexed", x_axis="Xlab", y_axis="Hlab")
+    assert fig.layout.xaxis.title.text == "X lab (um)"
+    assert fig.layout.yaxis.title.text == "H lab (um)"
+
+
+def test_orientation_map_3d_lab_axes():
+    fig = make_orientation_map_3d(_parsed(), color_by="n_indexed", x_axis="Xlab", y_axis="Ylab", z_axis="Zlab")
+    assert fig.layout.scene.xaxis.title.text == "X lab (um)"
+    assert fig.layout.scene.yaxis.title.text == "Y lab (um)"
+    assert fig.layout.scene.zaxis.title.text == "Z lab (um)"
+
+
+def test_orientation_map_mixed_sample_and_lab_axes():
+    # Mixing frames on one plot is odd but must not raise.
+    fig = make_orientation_map(_parsed(), color_by="goodness", x_axis="X", y_axis="Zlab")
+    assert fig.layout.xaxis.title.text == "X (um)"
+    assert fig.layout.yaxis.title.text == "Z lab (um)"
+
+
+def test_lab_axis_values_are_negated_stage_positions():
+    # Plotted lab values must actually be Igor's XX/YY/ZZ, not the raw stage
+    # coords under a new label.
+    parsed = _parsed()
+    x_lab, _ = _resolve_axis(parsed, "Xlab")
+    assert np.allclose(x_lab, -parsed["positions"][:, 0])
+
+
+def test_resolve_axis_all_declared_choices():
+    # Every advertised choice must resolve; catches a dropdown option that
+    # was added without a matching branch in _resolve_axis.
+    parsed = _parsed()
+    n = len(parsed["positions"])
+    for name in _AXIS_CHOICES:
+        if name == "auto":
+            continue
+        vals, label = _resolve_axis(parsed, name)
+        assert len(vals) == n, name
+        assert label, name
+
+
+def test_resolve_axis_lab_fallback_for_legacy_cache():
+    # A cached parse predating positions_lab must still resolve lab axes.
+    parsed = _parsed()
+    legacy = {k: v for k, v in parsed.items() if k != "positions_lab"}
+    vals, _ = _resolve_axis(legacy, "Zlab")
+    assert np.allclose(vals, parsed["positions_lab"][:, 2])
 
 
 def test_orientation_map_all_color_modes():

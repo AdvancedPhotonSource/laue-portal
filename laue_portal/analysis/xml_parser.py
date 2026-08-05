@@ -107,6 +107,62 @@ def positions_hf(positions, theta=_THETA_WIRE_DEFAULT):
     return np.column_stack([h, f])
 
 
+def positions_lab(positions, depths=None, theta=_THETA_WIRE_DEFAULT):
+    """
+    Convert sample *positions* to Igor's lab voxel-in-sample coordinates.
+
+    Ported from LaueGo ``xmlMultiIndex.ipf:4083-4092``
+    (``ProcessLoadedXMLfile``), whose comment reads *"transform to voxel
+    coordinate in sample, not sample position"*::
+
+        XX = -(Xsample - Xoff)
+        YY = -(Ysample - Yoff)
+        ZZ = -(Zsample - Zoff) + depth      // only when a wire scan
+        HH = YZ2H(YY, ZZ)
+        FF = YZ2F(YY, ZZ)
+
+    The sign flip converts *stage position* into *position within the
+    sample*: moving the stage +X puts the illuminated voxel at -X in the
+    sample.  For wire scans the reconstructed ``depth`` (measured along
+    the incident beam from the origin, ``microGeometryN.ipf:3204``) is
+    added back into Z so ZZ locates the actual diffracting voxel rather
+    than the stage.
+
+    Note this differs from ``positions_hf``: H/F there are derived from
+    the *un-negated* stage Y/Z, so lab-H is not simply -H.
+
+    Igor also supports ``Xoff``/``Yoff``/``Zoff`` offsets and a
+    ``centerVolume`` re-centering; both default to 0 / off and are not
+    exposed here.
+
+    Parameters
+    ----------
+    positions : array-like (N, 3)
+        Beam-line-frame stage positions (X, Y, Z) straight from the XML.
+    depths : array-like (N,), optional
+        Per-step depth.  NaN entries are treated as 0, matching Igor's
+        ``numtype(depthRaw) ? 0 : depthRaw`` guard.  When omitted, no
+        depth term is added.
+    theta : float, optional
+        Wire angle in radians, forwarded to :func:`yz_to_hf`.
+
+    Returns
+    -------
+    ndarray (N, 5)
+        Columns ``[XX, YY, ZZ, HH, FF]`` -- lab-frame X, Y, Z, H, F.
+    """
+    positions = np.asarray(positions, dtype=float)
+    xx = -positions[:, 0]
+    yy = -positions[:, 1]
+    zz = -positions[:, 2]
+    if depths is not None:
+        d = np.asarray(depths, dtype=float)
+        # Igor: numtype(depthRaw) ? 0 : depthRaw  -- NaN depth contributes 0.
+        zz = zz + np.nan_to_num(d, nan=0.0)
+    hh, ff = yz_to_hf(yy, zz, theta=theta)
+    return np.column_stack([xx, yy, zz, hh, ff])
+
+
 @functools.lru_cache(maxsize=4)
 def _cached_parse(xml_path: str, mtime_ns: int) -> dict:
     """Cache-internal parser keyed on (path, mtime).
@@ -135,6 +191,8 @@ def parse_indexing_xml(xml_path: str) -> dict:
     dict with keys:
         positions : ndarray (N, 3) -- Xsample, Ysample, Zsample
         positions_hf : ndarray (N, 2) -- H, F (computed from Y, Z)
+        positions_lab : ndarray (N, 5) -- lab-frame Xlab, Ylab, Zlab,
+            Hlab, Flab (Igor's XX/YY/ZZ/HH/FF; see ``positions_lab``)
         depths : ndarray (N,) -- depth values (may contain NaN)
         energies : ndarray (N,) -- beam energy in keV
         scan_nums : ndarray (N,) -- scan numbers
@@ -273,9 +331,14 @@ def _parse_indexing_xml_impl(xml_path: str) -> dict:
     # treat them on equal footing with X/Y/Z.
     pos_hf = positions_hf(positions)
 
+    # Lab (beam-line) voxel-in-sample coordinates, Igor's XX/YY/ZZ/HH/FF.
+    # Negated stage position with depth folded into Z; see ``positions_lab``.
+    pos_lab = positions_lab(positions, depths)
+
     return {
         "positions": positions,
         "positions_hf": pos_hf,
+        "positions_lab": pos_lab,
         "depths": depths,
         "energies": energies,
         "scan_nums": scan_nums,
