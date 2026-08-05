@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 import lau_dash  # noqa: F401
+import laue_portal.pages.scan as scan_page
 from laue_portal.components.recon_form import set_recon_form_props
 from laue_portal.pages.create_reconstruction import (
     _merge_recon_scan_updates,
@@ -166,3 +167,147 @@ def test_existing_reconstruction_uses_distance_for_ceny(test_database):
 
     assert updates["calib_id"]["value"] == recon.calib_id
     assert updates["ceny"]["value"] == recon.geo_mask_focus_dist
+
+
+# ---------------------------------------------------------------------------
+# Scan detail page: "New Recon" / "New Index" prefill
+# ---------------------------------------------------------------------------
+# With nothing ticked in either table these buttons used to drop the user on
+# a bare create page with no scan filled in, and "New Recon" always went to
+# the coded-aperture form.  They should instead prefill the scan currently
+# open on the page and route by that scan's aperture.
+
+_SCAN_PAGE_URL = "http://host/scan?scan_id=276514"
+_SCAN_PAGE_URL_NO_ID = "http://host/scan"
+
+
+def _patch_aperture(aperture):
+    """Force ``_recon_page_for_scan`` to resolve to *aperture*'s page."""
+    page = "/create-wire-reconstruction" if "wire" in aperture else "/create-reconstruction"
+    return patch.object(scan_page, "_recon_page_for_scan", return_value=page)
+
+
+@pytest.mark.parametrize(
+    "href, expected",
+    [
+        ("http://host/scan?scan_id=276514", "276514"),
+        ("http://host/scan", None),
+        # Only the first id of a pooled list is a meaningful default.
+        ("http://host/scan?scan_id=1,2,3", "1"),
+        # Non-numeric ids must not be propagated into a create URL.
+        ("http://host/scan?scan_id=abc", None),
+        ("http://host/scan?scan_id=", None),
+        (None, None),
+    ],
+)
+def test_scan_id_from_href(href, expected):
+    assert scan_page._scan_id_from_href(href) == expected
+
+
+def test_new_recon_with_no_selection_prefills_current_scan():
+    with _patch_aperture("wire"):
+        recon_href, index_href = scan_page.selected_recon_href([], [], "/create-wire-reconstruction", _SCAN_PAGE_URL)
+    assert recon_href == "/create-wire-reconstruction?scan_id=276514"
+    assert index_href == "/create-wire-reconstruction?scan_id=276514"
+
+
+def test_new_recon_with_no_selection_routes_by_aperture():
+    with _patch_aperture("mask"):
+        recon_href, _ = scan_page.selected_recon_href([], [], "/create-wire-reconstruction", _SCAN_PAGE_URL)
+    assert recon_href == "/create-reconstruction?scan_id=276514"
+
+
+def test_new_recon_without_scan_in_url_falls_back_to_bare_href():
+    with _patch_aperture("wire"):
+        recon_href, _ = scan_page.selected_recon_href([], [], "/create-wire-reconstruction", _SCAN_PAGE_URL_NO_ID)
+    assert recon_href == "/create-wire-reconstruction"
+
+
+def test_new_index_with_no_selection_prefills_current_scan():
+    recon_href, index_href = scan_page.selected_peakindex_href([], [], "/create-peakindexing", _SCAN_PAGE_URL)
+    assert recon_href == "/create-peakindexing?scan_id=276514"
+    assert index_href == "/create-peakindexing?scan_id=276514"
+
+
+def test_new_index_without_scan_in_url_falls_back_to_bare_href():
+    _, index_href = scan_page.selected_peakindex_href([], [], "/create-peakindexing", _SCAN_PAGE_URL_NO_ID)
+    assert index_href == "/create-peakindexing"
+
+
+def test_selected_rows_still_take_priority_over_page_scan():
+    # A ticked row must win over the page-level fallback.
+    rows = [{"scanNumber": 999, "wirerecon_id": 5, "recon_id": "", "aperture": "wire"}]
+    with _patch_aperture("wire"):
+        recon_href, _ = scan_page.selected_recon_href(rows, [], "/create-wire-reconstruction", _SCAN_PAGE_URL)
+    assert recon_href == "/create-wire-reconstruction?scan_id=999&wirerecon_id=5"
+
+
+def test_selected_index_rows_still_take_priority_over_page_scan():
+    rows = [{"scanNumber": 999, "wirerecon_id": 5, "recon_id": "", "peakindex_id": 7}]
+    _, index_href = scan_page.selected_peakindex_href([], rows, "/create-peakindexing", _SCAN_PAGE_URL)
+    assert index_href == "/create-peakindexing?scan_id=999&wirerecon_id=5&peakindex_id=7"
+
+
+def test_href_rewrite_is_idempotent():
+    # The callback reads the button's own href via State and also writes it,
+    # so a second firing must not accumulate query strings.
+    with _patch_aperture("wire"):
+        recon_href, _ = scan_page.selected_recon_href([], [], "/create-wire-reconstruction?scan_id=111", _SCAN_PAGE_URL)
+    assert recon_href == "/create-wire-reconstruction?scan_id=276514"
+
+    _, index_href = scan_page.selected_peakindex_href([], [], "/create-peakindexing?scan_id=111", _SCAN_PAGE_URL)
+    assert index_href == "/create-peakindexing?scan_id=276514"
+
+
+def test_recon_page_for_scan_defaults_to_wire_on_unknown_scan():
+    # Missing/garbage scans must degrade to the wire form, not raise.
+    assert scan_page._recon_page_for_scan(None) == "/create-wire-reconstruction"
+    assert scan_page._recon_page_for_scan("not-a-number") == "/create-wire-reconstruction"
+
+
+@pytest.mark.parametrize(
+    "aperture, expected",
+    [
+        ("wire", "/create-wire-reconstruction"),
+        ("Wire", "/create-wire-reconstruction"),
+        ("mask", "/create-reconstruction"),
+        ("CA", "/create-reconstruction"),
+        # Absent / placeholder apertures default to wire rather than CA.
+        (None, "/create-wire-reconstruction"),
+        ("None", "/create-wire-reconstruction"),
+        ("", "/create-wire-reconstruction"),
+    ],
+)
+def test_recon_page_for_scan_maps_aperture_to_form(aperture, expected):
+    # Exercises the real aperture lookup (not the _patch_aperture stub) by
+    # faking only the DB read, so a routing regression can't slip through.
+    class _FakeQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def scalar(self):
+            return aperture
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def query(self, *_args, **_kwargs):
+            return _FakeQuery()
+
+    with patch.object(scan_page, "Session", lambda *_a, **_k: _FakeSession()):
+        assert scan_page._recon_page_for_scan(276514) == expected
+
+
+def test_scan_page_has_no_dead_recon_index_button():
+    # "/create-reconstruction-peakindexing" is not a registered route, so the
+    # button that pointed at it was a guaranteed 404 and has been removed.
+    # The scan page uses dict ids for pattern-matching callbacks, so keep
+    # only the plain string ids before comparing.
+    component_ids = {cid for cid in _component_ids(scan_page.layout) if isinstance(cid, str)}
+    assert "recon-table-new-recon-index-btn" not in component_ids
+    assert "recon-table-new-recon-btn" in component_ids
+    assert "recon-table-new-index-btn" in component_ids

@@ -480,7 +480,7 @@ layout = html.Div(
                                                                     color="success",
                                                                     size="sm",
                                                                     className="me-2",
-                                                                    href="/create-reconstruction",
+                                                                    href="/create-wire-reconstruction",
                                                                 ),
                                                                 dbc.Button(
                                                                     "New Index",
@@ -489,14 +489,6 @@ layout = html.Div(
                                                                     size="sm",
                                                                     className="me-2",
                                                                     href="/create-peakindexing",
-                                                                ),
-                                                                dbc.Button(
-                                                                    "New Recon+Index",
-                                                                    id="recon-table-new-recon-index-btn",
-                                                                    color="success",
-                                                                    size="sm",
-                                                                    className="me-2",
-                                                                    href="/create-reconstruction-peakindexing",
                                                                 ),
                                                             ],
                                                             className="d-flex justify-content-end",
@@ -550,7 +542,7 @@ layout = html.Div(
                                                             color="success",
                                                             size="sm",
                                                             className="me-2",
-                                                            href="/create-reconstruction",
+                                                            href="/create-wire-reconstruction",
                                                         ),
                                                         dbc.Button(
                                                             "New Index",
@@ -1924,16 +1916,74 @@ def get_scan_peakindexings(href):
         raise PreventUpdate
 
 
+def _scan_id_from_href(href):
+    """
+    Return the ``scan_id`` query param of the current /scan URL, or None.
+
+    Used to prefill the "New ..." buttons with the scan already open on the
+    page when the user hasn't ticked any table rows.
+    """
+    if not href:
+        return None
+    parsed_url = urllib.parse.urlparse(href)
+    scan_id = urllib.parse.parse_qs(parsed_url.query).get("scan_id", [None])[0]
+    if not scan_id:
+        return None
+    # Only a single, well-formed scan id is meaningful as a prefill default.
+    scan_id = scan_id.split(",")[0].strip()
+    try:
+        int(scan_id)
+    except (TypeError, ValueError):
+        return None
+    return scan_id
+
+
+def _recon_page_for_scan(scan_id):
+    """
+    Choose the reconstruction page matching *scan_id*'s aperture.
+
+    Mirrors the aperture test in ``_get_scan_recons``: a wire aperture uses
+    the wire form, anything else uses the coded-aperture form.  Defaults to
+    the wire page when the aperture is missing or unreadable, since that is
+    the common case at 34ID-E.
+    """
+    default_page = "/create-wire-reconstruction"
+    if scan_id is None:
+        return default_page
+    try:
+        with Session(session_utils.get_engine()) as session:
+            aperture = (
+                session.query(db_schema.Catalog.aperture).filter(db_schema.Catalog.scanNumber == int(scan_id)).scalar()
+            )
+    except Exception:
+        return default_page
+    if aperture is None:
+        return default_page
+    aperture = str(aperture).lower()
+    if aperture in ("", "none", "nan"):
+        return default_page
+    return default_page if "wire" in aperture else "/create-reconstruction"
+
+
 @callback(
     Output("recon-table-new-recon-btn", "href"),
     Output("index-table-new-recon-btn", "href"),
     Input("scan-recon-table", "selectedRows"),
     Input("scan-peakindex-table", "selectedRows"),
     State("recon-table-new-recon-btn", "href"),
+    State("url-scan-page", "href"),
     prevent_initial_call=True,
 )
-def selected_recon_href(recon_rows, peakindex_rows, href):
+def selected_recon_href(recon_rows, peakindex_rows, href, page_href):
     base_href = href.split("?")[0]
+
+    # Nothing ticked -> fall back to the scan currently open on the page,
+    # routed to the recon form matching its aperture.
+    page_scan_id = _scan_id_from_href(page_href)
+    if page_scan_id:
+        fallback_href = f"{_recon_page_for_scan(page_scan_id)}?scan_id={page_scan_id}"
+    else:
+        fallback_href = base_href
 
     recon_scan_ids, recon_wirerecon_ids, recon_recon_ids = [], [], []
     index_scan_ids, index_wirerecon_ids, index_recon_ids = [], [], []
@@ -1964,7 +2014,8 @@ def selected_recon_href(recon_rows, peakindex_rows, href):
 
     def build_href(scan_ids, wirerecon_ids, recon_ids, rows, base_href):
         if not rows:
-            return base_href
+            # No rows ticked -> prefill from the scan open on the page.
+            return fallback_href
 
         any_wirerecon_scans, any_recon_scans = False, False
         for _, row in enumerate(rows):
@@ -2011,10 +2062,16 @@ def selected_recon_href(recon_rows, peakindex_rows, href):
     Input("scan-recon-table", "selectedRows"),
     Input("scan-peakindex-table", "selectedRows"),
     State("recon-table-new-index-btn", "href"),
+    State("url-scan-page", "href"),
     prevent_initial_call=True,
 )
-def selected_peakindex_href(recon_rows, peakindex_rows, href):
+def selected_peakindex_href(recon_rows, peakindex_rows, href, page_href):
     base_href = href.split("?")[0]
+
+    # Nothing ticked -> prefill with the scan currently open on the page.
+    # Indexing has a single form, so only the scan_id needs filling in.
+    page_scan_id = _scan_id_from_href(page_href)
+    fallback_href = f"{base_href}?scan_id={page_scan_id}" if page_scan_id else base_href
 
     recon_scan_ids, recon_wirerecon_ids, recon_recon_ids, recon_peakindex_ids = [], [], [], []
     index_scan_ids, index_wirerecon_ids, index_recon_ids, index_peakindex_ids = [], [], [], []
@@ -2049,7 +2106,8 @@ def selected_peakindex_href(recon_rows, peakindex_rows, href):
 
     def build_href(scan_ids, wirerecon_ids, recon_ids, peakindex_ids, base_href):
         if not scan_ids:
-            return base_href
+            # No rows ticked -> prefill from the scan open on the page.
+            return fallback_href
 
         query_params = [f"scan_id={','.join(list(set(scan_ids)))}"]
         if any(wirerecon_ids):
