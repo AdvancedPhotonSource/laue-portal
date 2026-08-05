@@ -206,31 +206,31 @@ def test_scan_id_from_href(href, expected):
 
 def test_new_recon_with_no_selection_prefills_current_scan():
     with _patch_aperture("wire"):
-        recon_href, index_href = scan_page.selected_recon_href([], [], "/create-wire-reconstruction", _SCAN_PAGE_URL)
+        recon_href, index_href = scan_page.selected_recon_href([], [], _SCAN_PAGE_URL, "/create-wire-reconstruction")
     assert recon_href == "/create-wire-reconstruction?scan_id=276514"
     assert index_href == "/create-wire-reconstruction?scan_id=276514"
 
 
 def test_new_recon_with_no_selection_routes_by_aperture():
     with _patch_aperture("mask"):
-        recon_href, _ = scan_page.selected_recon_href([], [], "/create-wire-reconstruction", _SCAN_PAGE_URL)
+        recon_href, _ = scan_page.selected_recon_href([], [], _SCAN_PAGE_URL, "/create-wire-reconstruction")
     assert recon_href == "/create-reconstruction?scan_id=276514"
 
 
 def test_new_recon_without_scan_in_url_falls_back_to_bare_href():
     with _patch_aperture("wire"):
-        recon_href, _ = scan_page.selected_recon_href([], [], "/create-wire-reconstruction", _SCAN_PAGE_URL_NO_ID)
+        recon_href, _ = scan_page.selected_recon_href([], [], _SCAN_PAGE_URL_NO_ID, "/create-wire-reconstruction")
     assert recon_href == "/create-wire-reconstruction"
 
 
 def test_new_index_with_no_selection_prefills_current_scan():
-    recon_href, index_href = scan_page.selected_peakindex_href([], [], "/create-peakindexing", _SCAN_PAGE_URL)
+    recon_href, index_href = scan_page.selected_peakindex_href([], [], _SCAN_PAGE_URL, "/create-peakindexing")
     assert recon_href == "/create-peakindexing?scan_id=276514"
     assert index_href == "/create-peakindexing?scan_id=276514"
 
 
 def test_new_index_without_scan_in_url_falls_back_to_bare_href():
-    _, index_href = scan_page.selected_peakindex_href([], [], "/create-peakindexing", _SCAN_PAGE_URL_NO_ID)
+    _, index_href = scan_page.selected_peakindex_href([], [], _SCAN_PAGE_URL_NO_ID, "/create-peakindexing")
     assert index_href == "/create-peakindexing"
 
 
@@ -238,13 +238,13 @@ def test_selected_rows_still_take_priority_over_page_scan():
     # A ticked row must win over the page-level fallback.
     rows = [{"scanNumber": 999, "wirerecon_id": 5, "recon_id": "", "aperture": "wire"}]
     with _patch_aperture("wire"):
-        recon_href, _ = scan_page.selected_recon_href(rows, [], "/create-wire-reconstruction", _SCAN_PAGE_URL)
+        recon_href, _ = scan_page.selected_recon_href(rows, [], _SCAN_PAGE_URL, "/create-wire-reconstruction")
     assert recon_href == "/create-wire-reconstruction?scan_id=999&wirerecon_id=5"
 
 
 def test_selected_index_rows_still_take_priority_over_page_scan():
     rows = [{"scanNumber": 999, "wirerecon_id": 5, "recon_id": "", "peakindex_id": 7}]
-    _, index_href = scan_page.selected_peakindex_href([], rows, "/create-peakindexing", _SCAN_PAGE_URL)
+    _, index_href = scan_page.selected_peakindex_href([], rows, _SCAN_PAGE_URL, "/create-peakindexing")
     assert index_href == "/create-peakindexing?scan_id=999&wirerecon_id=5&peakindex_id=7"
 
 
@@ -252,10 +252,10 @@ def test_href_rewrite_is_idempotent():
     # The callback reads the button's own href via State and also writes it,
     # so a second firing must not accumulate query strings.
     with _patch_aperture("wire"):
-        recon_href, _ = scan_page.selected_recon_href([], [], "/create-wire-reconstruction?scan_id=111", _SCAN_PAGE_URL)
+        recon_href, _ = scan_page.selected_recon_href([], [], _SCAN_PAGE_URL, "/create-wire-reconstruction?scan_id=111")
     assert recon_href == "/create-wire-reconstruction?scan_id=276514"
 
-    _, index_href = scan_page.selected_peakindex_href([], [], "/create-peakindexing?scan_id=111", _SCAN_PAGE_URL)
+    _, index_href = scan_page.selected_peakindex_href([], [], _SCAN_PAGE_URL, "/create-peakindexing?scan_id=111")
     assert index_href == "/create-peakindexing?scan_id=276514"
 
 
@@ -300,6 +300,34 @@ def test_recon_page_for_scan_maps_aperture_to_form(aperture, expected):
 
     with patch.object(scan_page, "Session", lambda *_a, **_k: _FakeSession()):
         assert scan_page._recon_page_for_scan(276514) == expected
+
+
+@pytest.mark.parametrize(
+    "button_id",
+    [
+        "recon-table-new-recon-btn",
+        "recon-table-new-index-btn",
+    ],
+)
+def test_href_callbacks_listen_to_page_url_as_input(button_id):
+    """
+    The page URL must be an Input on the href callbacks.
+
+    Regression guard: these callbacks are otherwise triggered only by
+    ``selectedRows``.  If the user never ticks a row those Inputs never
+    fire, so with the URL as State the callback never runs at all and the
+    button keeps its static href with no ``scan_id`` -- the buttons route
+    to the right page but fail to prefill.  Calling the callback functions
+    directly cannot catch this, so assert the wiring itself.
+    """
+    from dash._callback import GLOBAL_CALLBACK_MAP
+
+    spec = next(spec for key, spec in GLOBAL_CALLBACK_MAP.items() if button_id in str(key))
+    input_ids = {inp["id"] for inp in spec["inputs"]}
+    state_ids = {st["id"] for st in spec["state"]}
+
+    assert "url-scan-page" in input_ids, f"{button_id}: page URL must be an Input so the callback fires on page load"
+    assert "url-scan-page" not in state_ids
 
 
 def test_scan_page_has_no_dead_recon_index_button():

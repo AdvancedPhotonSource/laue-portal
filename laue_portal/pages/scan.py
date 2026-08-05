@@ -1970,11 +1970,14 @@ def _recon_page_for_scan(scan_id):
     Output("index-table-new-recon-btn", "href"),
     Input("scan-recon-table", "selectedRows"),
     Input("scan-peakindex-table", "selectedRows"),
+    # The page URL must be an Input, not State: with nothing ever selected
+    # the selectedRows Inputs never fire, so a State here would leave the
+    # button stuck on its static default with no scan_id.
+    Input("url-scan-page", "href"),
     State("recon-table-new-recon-btn", "href"),
-    State("url-scan-page", "href"),
     prevent_initial_call=True,
 )
-def selected_recon_href(recon_rows, peakindex_rows, href, page_href):
+def selected_recon_href(recon_rows, peakindex_rows, page_href, href):
     base_href = href.split("?")[0]
 
     # Nothing ticked -> fall back to the scan currently open on the page,
@@ -2061,11 +2064,12 @@ def selected_recon_href(recon_rows, peakindex_rows, href, page_href):
     Output("index-table-new-index-btn", "href"),
     Input("scan-recon-table", "selectedRows"),
     Input("scan-peakindex-table", "selectedRows"),
+    # Input, not State -- see the note in ``selected_recon_href``.
+    Input("url-scan-page", "href"),
     State("recon-table-new-index-btn", "href"),
-    State("url-scan-page", "href"),
     prevent_initial_call=True,
 )
-def selected_peakindex_href(recon_rows, peakindex_rows, href, page_href):
+def selected_peakindex_href(recon_rows, peakindex_rows, page_href, href):
     base_href = href.split("?")[0]
 
     # Nothing ticked -> prefill with the scan currently open on the page.
