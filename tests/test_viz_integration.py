@@ -16,6 +16,7 @@ from laue_portal.analysis.xml_parser import (
 from laue_portal.components.visualization.orientation_map import (
     _AXIS_CHOICES,
     _resolve_axis,
+    apply_selection_highlight,
     make_orientation_map,
     make_orientation_map_3d,
 )
@@ -207,3 +208,99 @@ def test_pattern_table_creates_div():
     table = make_pattern_table(patterns)
     assert table is not None
     assert hasattr(table, "children")
+
+
+# ---------------------------------------------------------------------------
+# 3-D alpha channel / un-indexed point removal
+# ---------------------------------------------------------------------------
+# Plotly's 3-D WebGL renderer mis-sorts markers carrying an alpha channel, so
+# the 3-D path must drop un-indexed steps outright instead of fading them to
+# transparent (which is what the 2-D path still does).
+
+
+def _parsed_with_unindexed(bad_indices=(1, 3)):
+    """Fixture copy whose *bad_indices* steps have no reciprocal lattice."""
+    parsed = dict(_parsed())
+    rl = parsed["recip_lattices"].copy()
+    for i in bad_indices:
+        rl[i] = np.nan
+    parsed["recip_lattices"] = rl
+    return parsed
+
+
+def _rgba_count(fig):
+    """Count marker colors carrying an alpha channel anywhere in *fig*."""
+    total = 0
+    for trace in fig.data:
+        color = trace.marker.color
+        if isinstance(color, str):
+            total += "rgba" in color
+        elif isinstance(color, (list, tuple)):
+            total += sum(1 for c in color if isinstance(c, str) and "rgba" in c)
+    return total
+
+
+def test_3d_rodrigues_drops_unindexed_points():
+    parsed = _parsed_with_unindexed()
+    n_total = len(parsed["positions"])
+    fig = make_orientation_map_3d(parsed, color_by="rodrigues")
+    assert len(fig.data[0].x) == n_total - 2
+
+
+def test_3d_rodrigues_emits_no_alpha_channel():
+    fig = make_orientation_map_3d(_parsed_with_unindexed(), color_by="rodrigues")
+    assert _rgba_count(fig) == 0
+
+
+def test_3d_rodrigues_preserves_original_step_indices():
+    # customdata[0] must still be the original step index after filtering,
+    # otherwise click-to-inspect opens the wrong step.
+    fig = make_orientation_map_3d(_parsed_with_unindexed((1, 3)), color_by="rodrigues")
+    assert [int(row[0]) for row in fig.data[0].customdata] == [0, 2]
+
+
+def test_3d_rodrigues_color_list_matches_filtered_points():
+    fig = make_orientation_map_3d(_parsed_with_unindexed(), color_by="rodrigues")
+    trace = fig.data[0]
+    assert len(trace.marker.color) == len(trace.x)
+
+
+def test_3d_keeps_all_points_when_all_indexed():
+    parsed = dict(_parsed())
+    n = len(parsed["positions"])
+    parsed["recip_lattices"] = np.tile(np.eye(3), (n, 1, 1))
+    fig = make_orientation_map_3d(parsed, color_by="rodrigues")
+    assert len(fig.data[0].x) == n
+
+
+def test_3d_highlight_trace_has_no_alpha():
+    parsed = _parsed_with_unindexed()
+    fig = make_orientation_map_3d(parsed, color_by="rodrigues")
+    apply_selection_highlight(fig, parsed, [0, 2], marker_size=10, is_3d=True)
+    assert len(fig.data) == 2
+    assert _rgba_count(fig) == 0
+
+
+def test_2d_rodrigues_still_fades_unindexed_points():
+    # The 2-D Scattergl path is unaffected by the WebGL sorting bug, so it
+    # keeps every point and fades un-indexed ones via alpha=0.
+    parsed = _parsed_with_unindexed()
+    fig = make_orientation_map(parsed, color_by="rodrigues")
+    assert len(fig.data[0].x) == len(parsed["positions"])
+    assert _rgba_count(fig) > 0
+
+
+def test_3d_other_orientation_modes_keep_all_points():
+    parsed = _parsed_with_unindexed()
+    n = len(parsed["positions"])
+    for mode in ("cubic_ipf", "pole_hsv"):
+        fig = make_orientation_map_3d(parsed, color_by=mode)
+        assert len(fig.data[0].x) == n, mode
+        assert _rgba_count(fig) == 0, mode
+
+
+def test_3d_scalar_mode_unaffected():
+    parsed = _parsed_with_unindexed()
+    fig = make_orientation_map_3d(parsed, color_by="n_indexed")
+    assert len(fig.data[0].x) == len(parsed["positions"])
+    assert _rgba_count(fig) == 0

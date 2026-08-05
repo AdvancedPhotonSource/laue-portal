@@ -370,7 +370,7 @@ def make_orientation_map_3d(
 
     fig = go.Figure()
 
-    marker_dict = _build_marker_dict(
+    marker_dict, valid_mask = _build_marker_dict(
         parsed,
         color_by,
         max(2, marker_size // 3),
@@ -389,8 +389,25 @@ def make_orientation_map_3d(
         rgb_reference_step=rgb_reference_step,
         rgb_reference_matrix=rgb_reference_matrix,
         surface_vectors=surface_vectors,
+        return_valid=True,
     )
     marker_dict["opacity"] = 1.0
+
+    # Drop un-indexed steps entirely rather than fading them out: Plotly's
+    # 3-D WebGL renderer mis-sorts markers that carry an alpha channel, so
+    # transparency of any kind corrupts the whole scene.  ``customdata``
+    # still carries the original step index, so click/hover stay correct.
+    customdata = _build_customdata(parsed)
+    if not np.all(valid_mask):
+        x_vals = np.asarray(x_vals)[valid_mask]
+        y_vals = np.asarray(y_vals)[valid_mask]
+        z_vals = np.asarray(z_vals)[valid_mask]
+        customdata = customdata[valid_mask]
+        colors = marker_dict.get("color")
+        if isinstance(colors, (list, tuple)):
+            marker_dict["color"] = [c for c, keep in zip(colors, valid_mask, strict=False) if keep]
+        elif isinstance(colors, np.ndarray):
+            marker_dict["color"] = colors[valid_mask]
 
     fig.add_trace(
         go.Scatter3d(
@@ -407,7 +424,7 @@ def make_orientation_map_3d(
                 "RMS error: %{customdata[7]:.5f}<br>"
                 "<extra></extra>"
             ),
-            customdata=_build_customdata(parsed),
+            customdata=customdata,
             uid="orientation-3d-main",
         )
     )
@@ -453,14 +470,23 @@ def _build_marker_dict(
     rgb_reference_step=None,
     rgb_reference_matrix=None,
     surface_vectors=None,
+    return_valid=False,
 ):
-    """Build Plotly marker dict for the given coloring mode."""
+    """
+    Build Plotly marker dict for the given coloring mode.
+
+    When *return_valid* is True, returns ``(marker_dict, valid_mask)`` with
+    opaque colors instead of a bare dict.  See ``_get_orientation_colors``
+    for why the 3-D path needs this.
+    """
     base = dict(
         size=marker_size,
         line=dict(width=0),
     )
     if marker_symbol is not None:
         base["symbol"] = marker_symbol
+
+    valid_mask = None
 
     if color_by in _ORIENTATION_MODES:
         colors = _get_orientation_colors(
@@ -476,7 +502,10 @@ def _build_marker_dict(
             rgb_reference_step=rgb_reference_step,
             rgb_reference_matrix=rgb_reference_matrix,
             surface_vectors=surface_vectors,
+            return_valid=return_valid,
         )
+        if return_valid:
+            colors, valid_mask = colors
 
         base["color"] = colors
         # No colorscale or colorbar for per-point RGB
@@ -495,6 +524,11 @@ def _build_marker_dict(
         if cmax is not None:
             base["cmax"] = float(cmax)
 
+    if return_valid:
+        if valid_mask is None:
+            n_points = len(parsed["positions"])
+            valid_mask = np.ones(n_points, dtype=bool)
+        return base, valid_mask
     return base
 
 
@@ -623,10 +657,31 @@ def _get_orientation_colors(
     rgb_reference_step=None,
     rgb_reference_matrix=None,
     surface_vectors=None,
+    return_valid=False,
 ):
-    """Return list of 'rgb(r,g,b)' strings for orientation coloring modes."""
+    """
+    Return list of 'rgb(r,g,b)' strings for orientation coloring modes.
+
+    Parameters
+    ----------
+    return_valid : bool
+        When True, return ``(colors, valid_mask)`` and emit fully opaque
+        colors, leaving it to the caller to drop invalid points.  Only
+        ``"rodrigues"`` produces a meaningful mask (steps whose reciprocal
+        lattice is NaN/singular, i.e. nothing was indexed there); the other
+        modes report all-True.  This exists because Plotly's 3-D WebGL
+        renderer mis-sorts any marker carrying an alpha channel, so the 3-D
+        path must filter points out rather than fade them to transparent.
+    """
     recip_lattices = parsed["recip_lattices"]
     lattice_params = parsed["lattice_params"]
+
+    def _result(colors, valid=None):
+        if not return_valid:
+            return colors
+        if valid is None:
+            valid = np.ones(len(colors), dtype=bool)
+        return colors, valid
 
     # Look up the surface normal vector for the chosen surface direction.
     if surface_vectors is None:
@@ -637,7 +692,7 @@ def _get_orientation_colors(
     if color_by == "cubic_ipf":
         crystal_dirs = batch_crystal_directions(recip_lattices, normal=surf_normal)
         rgb = batch_ipf_colors(crystal_dirs)
-        return rgb_to_plotly_colors(rgb)
+        return _result(rgb_to_plotly_colors(rgb))
 
     elif color_by == "rodrigues":
         if rgb_symmetry == "auto":
@@ -663,6 +718,11 @@ def _get_orientation_colors(
             return_valid=True,
         )
         rgb = batch_rodrigues_rgb(rod_vecs)
+        if return_valid:
+            # Opaque colors + mask; caller drops the invalid points.  An
+            # alpha channel here would break the 3-D WebGL renderer.
+            return rgb_to_plotly_colors(rgb), valid
+        # 2-D path keeps the alpha=0 fade for un-indexed steps.
         alpha = np.where(valid, 1.0, 0.0)
         return rgb_to_plotly_colors(rgb, alpha=alpha)
 
@@ -673,11 +733,11 @@ def _get_orientation_colors(
             # Invalid reference -- fall back to IPF
             crystal_dirs = batch_crystal_directions(recip_lattices, normal=surf_normal)
             rgb = batch_ipf_colors(crystal_dirs)
-            return rgb_to_plotly_colors(rgb)
+            return _result(rgb_to_plotly_colors(rgb))
 
         result = misorientation_from_reference(orientations, ref_idx)
         rgb = batch_rodrigues_rgb(result["rodrigues"])
-        return rgb_to_plotly_colors(rgb)
+        return _result(rgb_to_plotly_colors(rgb))
 
     elif color_by == "pole_hsv":
         rgb = _compute_pole_hsv_colors(
@@ -689,13 +749,13 @@ def _get_orientation_colors(
             center_xy=pole_center_xy,
             color_rad_deg=pole_color_rad_deg,
         )
-        return rgb_to_plotly_colors(rgb)
+        return _result(rgb_to_plotly_colors(rgb))
 
     else:
         # Fallback to IPF
         crystal_dirs = batch_crystal_directions(recip_lattices, normal=surf_normal)
         rgb = batch_ipf_colors(crystal_dirs)
-        return rgb_to_plotly_colors(rgb)
+        return _result(rgb_to_plotly_colors(rgb))
 
 
 def _compute_pole_hsv_colors(
@@ -916,8 +976,11 @@ def apply_selection_highlight(
                 z=np.asarray(z_vals_3d)[sel_mask],
                 mode="markers",
                 marker=dict(
+                    # "square-open" is already unfilled, so an rgba fill only
+                    # served to hide it -- and any alpha breaks the 3-D WebGL
+                    # depth sort.  Use an opaque color instead.
                     size=max(3, highlight_size // 3),
-                    color="rgba(0,0,0,0)",
+                    color="white",
                     symbol="square-open",
                     line=dict(color="white", width=2),
                 ),
