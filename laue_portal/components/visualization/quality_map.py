@@ -81,7 +81,7 @@ def make_quality_map(
             hovertemplate=(
                 "<b>Step %{customdata[0]}</b><br>"
                 f"{display_name}: " + "%{marker.color:.4f}<br>"
-                "Position: (%{customdata[1]:.1f}, %{customdata[2]:.1f})<br>"
+                "Motor position: (%{customdata[1]:.1f}, %{customdata[2]:.1f})<br>"
                 "<extra></extra>"
             ),
             customdata=np.column_stack(
@@ -157,7 +157,7 @@ def make_quality_map_3d(
             hovertemplate=(
                 "<b>Step %{customdata[0]}</b><br>"
                 f"{display_name}: " + "%{marker.color:.4f}<br>"
-                "Position: (%{x:.1f}, %{y:.1f}, %{z:.1f})<br>"
+                "Motor position: (%{x:.1f}, %{y:.1f}, %{z:.1f})<br>"
                 "<extra></extra>"
             ),
             customdata=np.column_stack(
@@ -171,9 +171,9 @@ def make_quality_map_3d(
 
     fig.update_layout(
         scene=dict(
-            xaxis_title="X (um)",
-            yaxis_title="Y (um)",
-            zaxis_title="Z (um)",
+            xaxis_title="X motor (um)",
+            yaxis_title="Y motor (um)",
+            zaxis_title="Z motor (um)",
             aspectmode="data",
             bgcolor=_GRAY_BG,
         ),

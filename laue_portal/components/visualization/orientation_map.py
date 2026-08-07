@@ -78,9 +78,14 @@ _AXIS_CHOICES = (
 )
 
 _AXIS_LABELS = {
-    "X": "X (um)",
-    "Y": "Y (um)",
-    "Z": "Z (um)",
+    # X/Y/Z are the raw sample-positioner (motor) readings from the XML.
+    # Named "motor" to distinguish them at a glance from the "lab" axes
+    # below, which are voxel-in-sample coordinates rather than stage
+    # positions.  Only the display strings differ -- the option *values*
+    # ("X", "Y", "Z") are unchanged so saved URLs keep working.
+    "X": "X motor (um)",
+    "Y": "Y motor (um)",
+    "Z": "Z motor (um)",
     "H": "H (um)",
     "F": "F (um)",
     "depth": "depth (um)",
@@ -262,7 +267,7 @@ def make_orientation_map(
             marker=marker_dict,
             hovertemplate=(
                 "<b>Step %{customdata[0]}</b><br>"
-                "Position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
+                "Motor position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
                 "Patterns: %{customdata[4]}<br>"
                 "Indexed: %{customdata[5]}  Goodness: %{customdata[6]:.1f}<br>"
                 "RMS error: %{customdata[7]:.5f}<br>"
@@ -418,7 +423,7 @@ def make_orientation_map_3d(
             marker=marker_dict,
             hovertemplate=(
                 "<b>Step %{customdata[0]}</b><br>"
-                "Position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
+                "Motor position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
                 "Patterns: %{customdata[4]}<br>"
                 "Indexed: %{customdata[5]}  Goodness: %{customdata[6]:.1f}<br>"
                 "RMS error: %{customdata[7]:.5f}<br>"

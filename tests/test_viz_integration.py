@@ -42,15 +42,15 @@ def test_orientation_map_creates_figure():
 
 def test_orientation_map_xh_axes():
     fig = make_orientation_map(_parsed(), color_by="n_indexed", x_axis="X", y_axis="H")
-    assert fig.layout.xaxis.title.text == "X (um)"
+    assert fig.layout.xaxis.title.text == "X motor (um)"
     assert fig.layout.yaxis.title.text == "H (um)"
 
 
 def test_orientation_map_3d_xyz_axes():
     fig = make_orientation_map_3d(_parsed(), color_by="n_indexed", x_axis="X", y_axis="Y", z_axis="Z")
-    assert fig.layout.scene.xaxis.title.text == "X (um)"
-    assert fig.layout.scene.yaxis.title.text == "Y (um)"
-    assert fig.layout.scene.zaxis.title.text == "Z (um)"
+    assert fig.layout.scene.xaxis.title.text == "X motor (um)"
+    assert fig.layout.scene.yaxis.title.text == "Y motor (um)"
+    assert fig.layout.scene.zaxis.title.text == "Z motor (um)"
 
 
 def test_orientation_map_lab_axes():
@@ -70,7 +70,7 @@ def test_orientation_map_3d_lab_axes():
 def test_orientation_map_mixed_sample_and_lab_axes():
     # Mixing frames on one plot is odd but must not raise.
     fig = make_orientation_map(_parsed(), color_by="goodness", x_axis="X", y_axis="Zlab")
-    assert fig.layout.xaxis.title.text == "X (um)"
+    assert fig.layout.xaxis.title.text == "X motor (um)"
     assert fig.layout.yaxis.title.text == "Z lab (um)"
 
 
@@ -93,6 +93,20 @@ def test_resolve_axis_all_declared_choices():
         vals, label = _resolve_axis(parsed, name)
         assert len(vals) == n, name
         assert label, name
+
+
+def test_motor_axis_rename_is_display_only():
+    # X/Y/Z were relabelled "X motor" etc. for the researchers, but the
+    # underlying option *values* must stay "X"/"Y"/"Z" so existing saved
+    # URLs and callback state keep resolving.
+    parsed = _parsed()
+    for name in ("X", "Y", "Z"):
+        vals, label = _resolve_axis(parsed, name)
+        assert label == f"{name} motor (um)"
+        assert len(vals) == len(parsed["positions"])
+    # The non-motor axes keep their original labels.
+    assert _resolve_axis(parsed, "H")[1] == "H (um)"
+    assert _resolve_axis(parsed, "Xlab")[1] == "X lab (um)"
 
 
 def test_resolve_axis_lab_fallback_for_legacy_cache():

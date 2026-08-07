@@ -403,9 +403,9 @@ _viz_tabs = dbc.Tabs(
                                                     dbc.Select(
                                                         id="orientation-x-axis-select",
                                                         options=[
-                                                            {"label": "X", "value": "X"},
-                                                            {"label": "Y", "value": "Y"},
-                                                            {"label": "Z", "value": "Z"},
+                                                            {"label": "X motor", "value": "X"},
+                                                            {"label": "Y motor", "value": "Y"},
+                                                            {"label": "Z motor", "value": "Z"},
                                                             {"label": "H", "value": "H"},
                                                             {"label": "F", "value": "F"},
                                                             {"label": "Depth", "value": "depth"},
@@ -424,9 +424,9 @@ _viz_tabs = dbc.Tabs(
                                                     dbc.Select(
                                                         id="orientation-y-axis-select",
                                                         options=[
-                                                            {"label": "X", "value": "X"},
-                                                            {"label": "Y", "value": "Y"},
-                                                            {"label": "Z", "value": "Z"},
+                                                            {"label": "X motor", "value": "X"},
+                                                            {"label": "Y motor", "value": "Y"},
+                                                            {"label": "Z motor", "value": "Z"},
                                                             {"label": "H", "value": "H"},
                                                             {"label": "F", "value": "F"},
                                                             {"label": "Depth", "value": "depth"},
@@ -451,9 +451,9 @@ _viz_tabs = dbc.Tabs(
                                                     dbc.Select(
                                                         id="orientation-3d-x-axis-select",
                                                         options=[
-                                                            {"label": "X", "value": "X"},
-                                                            {"label": "Y", "value": "Y"},
-                                                            {"label": "Z", "value": "Z"},
+                                                            {"label": "X motor", "value": "X"},
+                                                            {"label": "Y motor", "value": "Y"},
+                                                            {"label": "Z motor", "value": "Z"},
                                                             {"label": "H", "value": "H"},
                                                             {"label": "F", "value": "F"},
                                                             {"label": "Depth", "value": "depth"},
@@ -472,9 +472,9 @@ _viz_tabs = dbc.Tabs(
                                                     dbc.Select(
                                                         id="orientation-3d-y-axis-select",
                                                         options=[
-                                                            {"label": "X", "value": "X"},
-                                                            {"label": "Y", "value": "Y"},
-                                                            {"label": "Z", "value": "Z"},
+                                                            {"label": "X motor", "value": "X"},
+                                                            {"label": "Y motor", "value": "Y"},
+                                                            {"label": "Z motor", "value": "Z"},
                                                             {"label": "H", "value": "H"},
                                                             {"label": "F", "value": "F"},
                                                             {"label": "Depth", "value": "depth"},
@@ -493,9 +493,9 @@ _viz_tabs = dbc.Tabs(
                                                     dbc.Select(
                                                         id="orientation-z-axis-select",
                                                         options=[
-                                                            {"label": "X", "value": "X"},
-                                                            {"label": "Y", "value": "Y"},
-                                                            {"label": "Z", "value": "Z"},
+                                                            {"label": "X motor", "value": "X"},
+                                                            {"label": "Y motor", "value": "Y"},
+                                                            {"label": "Z motor", "value": "Z"},
                                                             {"label": "H", "value": "H"},
                                                             {"label": "F", "value": "F"},
                                                             {"label": "Depth", "value": "depth"},
@@ -1578,7 +1578,7 @@ def show_point_details(click_data, xml_path):
                     html.P(
                         [
                             html.Strong(f"Step #{step_idx}"),
-                            f"  Position: ({x_pos:.1f}, {y_pos:.1f}, {z_pos:.1f})",
+                            f"  Motor position: ({x_pos:.1f}, {y_pos:.1f}, {z_pos:.1f})",
                         ]
                     ),
                     html.P(
@@ -2585,7 +2585,7 @@ def _detector_step_summary(parsed, step_idx, overlay, overlay_statistics, image_
 
     header_bits = [
         html.Strong(f"Step #{step_idx}"),
-        f"  Position: ({x_pos:.1f}, {y_pos:.1f}, {z_pos:.1f})",
+        f"  Motor position: ({x_pos:.1f}, {y_pos:.1f}, {z_pos:.1f})",
         html.Br(),
         f"Detector: {overlay.detector_id or '?'}  |  ",
         f"Measured: {stats['n_measured']}  |  ",
