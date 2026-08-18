@@ -137,6 +137,20 @@ def test_page_uses_flex_shell_instead_of_hardcoded_height(peakindexing_page):
     assert peakindexing_page.layout.className == "pi-page"
 
 
+def test_pole_hkl_has_manual_update_state(peakindexing_page):
+    widgets = {getattr(c, "id", None): c for c in _walk(peakindexing_page.layout)}
+
+    assert widgets["stereo-applied-hkl"].data == [1, 0, 0]
+    assert widgets["stereo-hkl-update-btn"].children == "Update"
+    assert widgets["stereo-hkl-update-btn"].disabled is True
+
+
+def test_apply_stereo_hkl_validates_and_stores_integer_triplet(peakindexing_page):
+    assert peakindexing_page.apply_stereo_hkl(1, 3, 2, 1) == [3, 2, 1]
+    with pytest.raises(dash.exceptions.PreventUpdate):
+        peakindexing_page.apply_stereo_hkl(1, 0, 0, 0)
+
+
 def test_peakindexing_callbacks_resolve_against_layout(peakindexing_page):
     """Catches typo'd or duplicated component IDs in the new callbacks."""
     peakindexing = peakindexing_page

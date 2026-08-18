@@ -19,7 +19,7 @@ import plotly.graph_objects as go
 from laue_portal.analysis.coloring import (
     batch_ipf_colors,
     batch_rodrigues_rgb,
-    hsv_wheel_color,
+    closest_pole_hsv_colors,
     pole_figure_color_radius,
     rgb_to_plotly_colors,
 )
@@ -835,21 +835,7 @@ def _compute_pole_hsv_colors(
         points = points[finite_mask]
         grain_indices = grain_indices[finite_mask]
 
-    # Compute per-grain HSV color from closest pole to center
-    grain_rgb = np.ones((N_grains, 3))  # default white
-
-    for grain_idx in range(N_grains):
-        mask = grain_indices == grain_idx
-        if not np.any(mask):
-            continue
-        grain_pts = points[mask]
-        dists = np.sum((grain_pts - np.array([x0, y0])) ** 2, axis=1)
-        closest = np.argmin(dists)
-        dx = grain_pts[closest, 0] - x0
-        dy = grain_pts[closest, 1] - y0
-        grain_rgb[grain_idx] = hsv_wheel_color(dx, dy, rmax=rmax)
-
-    return grain_rgb
+    return closest_pole_hsv_colors(points, grain_indices, N_grains, x0, y0, rmax)
 
 
 # ---------------------------------------------------------------------------

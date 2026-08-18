@@ -270,6 +270,10 @@
 }
 
 /* Compact pole-figure HKL triplet */
+.pi-hkl-control {
+  width: 100%;
+  min-width: 0;
+}
 .pi-hkl-input {
   display: grid;
   grid-template-columns: 1.6rem minmax(3.4rem, 1fr);
@@ -283,6 +287,12 @@
   min-width: 0;
   height: var(--pi-control-h-sm);
   padding: .1rem .25rem;
+}
+.pi-hkl-update {
+  display: block;
+  margin: .35rem 0 0 1.85rem;
+  padding: .15rem .65rem;
+  font-size: .72rem;
 }
 
 /* Range slider */

@@ -72,6 +72,35 @@ class TestCubicHklFamily:
 
 
 class TestPoleFigurePoints:
+    @staticmethod
+    def _scalar_reference(recip_lattices, hkl_family, normal, roll, tilt):
+        """Pre-vectorization implementation used to pin values and ordering."""
+        all_x = []
+        all_y = []
+        all_grains = []
+        normal = normal / np.linalg.norm(normal)
+
+        for i, gm in enumerate(recip_lattices):
+            for pole_dir in hkl_family:
+                vec = gm.T @ pole_dir
+                vec_norm = np.linalg.norm(vec)
+                if vec_norm < 1e-12:
+                    continue
+                vec = vec / vec_norm
+                dot_normal = np.dot(vec, normal)
+                if dot_normal < 0:
+                    continue
+                sin_theta = np.sqrt(1.0 - np.clip(dot_normal, 0, 1) ** 2)
+                r = sin_theta / (1.0 + dot_normal) if (1.0 + dot_normal) > 1e-12 else 0.0
+                phi = np.arctan2(np.dot(vec, roll), np.dot(vec, tilt))
+                all_x.append(r * np.cos(phi))
+                all_y.append(r * np.sin(phi))
+                all_grains.append(i)
+
+        if not all_x:
+            return np.empty((0, 2)), np.empty(0, dtype=int)
+        return np.column_stack([all_x, all_y]), np.asarray(all_grains, dtype=int)
+
     def test_returns_arrays(self):
         recip_lattices = np.tile(np.eye(3), (3, 1, 1))
         family = cubic_hkl_family(1, 0, 0)
@@ -110,6 +139,57 @@ class TestPoleFigurePoints:
         points, indices = pole_figure_points(recip_lattices, family)
         assert len(points) == 0
         assert len(indices) == 0
+
+    def test_empty_hkl_family(self):
+        points, indices = pole_figure_points(np.tile(np.eye(3), (2, 1, 1)), [])
+        assert points.shape == (0, 2)
+        assert indices.shape == (0,)
+
+    def test_vectorized_output_matches_scalar_point_placement_and_order(self):
+        rng = np.random.default_rng(20260818)
+        recip_lattices = rng.normal(size=(17, 3, 3))
+        recip_lattices[3] = np.nan
+        recip_lattices[9] = 0.0
+
+        for hkl in ((1, 0, 0), (1, 1, 0), (1, 1, 1), (2, 1, 0), (3, 2, 1)):
+            family = cubic_hkl_family(*hkl)
+            for surface in ("normal", "X", "H", "Y", "Z", "F"):
+                normal, roll, tilt = get_surface_vectors(surface)
+                expected_points, expected_indices = self._scalar_reference(
+                    recip_lattices,
+                    family,
+                    normal,
+                    roll,
+                    tilt,
+                )
+                points, indices = pole_figure_points(
+                    recip_lattices,
+                    family,
+                    surface_normal=normal,
+                    surface_roll=roll,
+                    surface_tilt=tilt,
+                )
+                np.testing.assert_array_equal(indices, expected_indices)
+                np.testing.assert_allclose(points, expected_points, rtol=1e-12, atol=1e-14, equal_nan=True)
+
+    def test_vectorized_output_matches_scalar_for_custom_surface_frame(self):
+        angle = np.deg2rad(27.0)
+        tilt = np.array([np.cos(angle), np.sin(angle), 0.0])
+        roll = np.array([-np.sin(angle), np.cos(angle), 0.0])
+        normal = np.array([0.0, 0.0, 1.0])
+        recip_lattices = np.random.default_rng(7).normal(size=(11, 3, 3))
+        family = cubic_hkl_family(3, 2, 1)
+
+        expected_points, expected_indices = self._scalar_reference(recip_lattices, family, normal, roll, tilt)
+        points, indices = pole_figure_points(
+            recip_lattices,
+            family,
+            surface_normal=normal,
+            surface_roll=roll,
+            surface_tilt=tilt,
+        )
+        np.testing.assert_array_equal(indices, expected_indices)
+        np.testing.assert_allclose(points, expected_points, rtol=1e-12, atol=1e-14)
 
     def test_matches_igor_gm_convention(self):
         """Verify that recip_lattice.T @ hkl gives the same direction as

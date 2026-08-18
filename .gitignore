@@ -112,6 +112,7 @@ env.bak/
 venv.bak/
 opencode.json
 AGENTS.md
+.loglogin
 
 # Spyder project settings
 .spyderproject

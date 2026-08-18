@@ -179,52 +179,55 @@ def pole_figure_points(recip_lattices, hkl_family, surface_normal=None, surface_
     roll = _DEFAULT_ROLL if surface_roll is None else np.asarray(surface_roll, dtype=float)
     tilt = _DEFAULT_TILT if surface_tilt is None else np.asarray(surface_tilt, dtype=float)
 
-    all_x = []
-    all_y = []
-    all_grains = []
-
-    for i, gm in enumerate(recip_lattices):
-        for pole_dir in hkl_family:
-            # Transform pole to lab frame using reciprocal lattice
-            # directly, matching Igor's: MatrixOp vec3 = gmi x vec3
-            # Python stores a*,b*,c* as rows, so gm.T @ hkl gives
-            # q = a*·h + b*·k + c*·l  (the lab-frame Q-vector).
-            vec = gm.T @ pole_dir
-            vec_norm = np.linalg.norm(vec)
-            if vec_norm < 1e-12:
-                continue
-            vec = vec / vec_norm
-
-            # Upper hemisphere only (matching Igor Pro's MakePolePoints).
-            # For centrosymmetric crystals every pole direction has an
-            # antipodal partner already in the hkl family, so the upper-
-            # hemisphere version is always present via that partner.
-            dot_normal = np.dot(vec, normal)
-            if dot_normal < 0:
-                continue
-
-            # Stereographic projection
-            sin_theta = np.sqrt(1.0 - np.clip(dot_normal, 0, 1) ** 2)
-            r = sin_theta / (1.0 + dot_normal) if (1.0 + dot_normal) > 1e-12 else 0.0
-
-            # Project to 2D
-            x_comp = np.dot(vec, tilt)
-            y_comp = np.dot(vec, roll)
-            phi = np.arctan2(y_comp, x_comp)
-
-            x = r * np.cos(phi)
-            y = r * np.sin(phi)
-
-            all_x.append(x)
-            all_y.append(y)
-            all_grains.append(i)
-
-    if len(all_x) == 0:
+    recip_lattices = np.asarray(recip_lattices, dtype=float)
+    family = np.asarray(hkl_family, dtype=float)
+    if len(recip_lattices) == 0 or len(family) == 0:
         return np.empty((0, 2)), np.empty(0, dtype=int)
 
-    points = np.column_stack([all_x, all_y])
-    grain_indices = np.array(all_grains, dtype=int)
+    # Keep the original grain-major, family-major order while applying every
+    # reciprocal lattice to every pole direction in one NumPy operation.
+    # Batched matmul follows the same three-term operation as ``gm.T @ pole``
+    # and avoids einsum's slightly different floating-point reduction order.
+    vectors = np.matmul(
+        recip_lattices.transpose(0, 2, 1)[:, np.newaxis, :, :],
+        family[np.newaxis, :, :, np.newaxis],
+    )[..., 0]
+    vector_norms = np.linalg.norm(vectors, axis=2)
+    # The negated comparison intentionally keeps NaN norms, matching the
+    # scalar implementation where ``nan < 1e-12`` is false.
+    nonzero = ~(vector_norms < 1e-12)
+    vectors = np.divide(
+        vectors,
+        vector_norms[..., np.newaxis],
+        out=np.full_like(vectors, np.nan),
+        where=nonzero[..., np.newaxis],
+    )
 
+    # Preserve the prior NaN behavior: NaN reciprocal lattices yield NaN
+    # points that callers filter, while true zero vectors are omitted.
+    dot_normal = vectors @ normal
+    keep = nonzero & ~(dot_normal < 0)
+    clipped_dot = np.clip(dot_normal, 0, 1)
+    sin_theta = np.sqrt(1.0 - clipped_dot**2)
+    denominator = 1.0 + dot_normal
+    radius = np.divide(
+        sin_theta,
+        denominator,
+        out=np.zeros_like(sin_theta),
+        where=denominator > 1e-12,
+    )
+
+    x_comp = vectors @ tilt
+    y_comp = vectors @ roll
+    phi = np.arctan2(y_comp, x_comp)
+    x = radius * np.cos(phi)
+    y = radius * np.sin(phi)
+
+    points = np.column_stack([x[keep], y[keep]])
+    grain_indices = np.broadcast_to(
+        np.arange(len(recip_lattices), dtype=int)[:, np.newaxis],
+        keep.shape,
+    )[keep]
     return points, grain_indices
 
 

@@ -128,7 +128,7 @@ def _surface_frame_inputs(prefix):
 
 
 def _stereo_hkl_inputs():
-    """Compact integer HKL input row for pole figures."""
+    """Compact integer HKL inputs with an explicit apply action."""
     fields = []
     for label, input_id, value in (
         ("h", "stereo-hkl-h", 1),
@@ -146,7 +146,20 @@ def _stereo_hkl_inputs():
                 size="sm",
             )
         )
-    return html.Div(fields, className="pi-hkl-input")
+    return html.Div(
+        [
+            html.Div(fields, className="pi-hkl-input"),
+            dbc.Button(
+                "Update",
+                id="stereo-hkl-update-btn",
+                color="primary",
+                size="sm",
+                disabled=True,
+                className="pi-hkl-update",
+            ),
+        ],
+        className="pi-hkl-control",
+    )
 
 
 def _parse_surface_frame(values):
@@ -1021,6 +1034,8 @@ layout = html.Div(
         dcc.Store(id="peakindexing-path-context", data={}),
         # Store selected grain indices for cross-plot linking
         dcc.Store(id="selected-grain-indices", data=[]),
+        # HKL inputs are drafts until the user explicitly applies them.
+        dcc.Store(id="stereo-applied-hkl", data=[1, 0, 0]),
         # Store pole figure color center: {x, y, grain_index} or None
         dcc.Store(id="pole-figure-center", data=None),
         # Store auto-computed (min, max) for the current scalar color mode.
@@ -1188,6 +1203,50 @@ def load_peakindexing_data(href):
 
 
 # ---------------------------------------------------------------------------
+# Callbacks: apply pole-figure HKL only when requested
+# ---------------------------------------------------------------------------
+
+
+dash.clientside_callback(
+    """
+    function(h, k, l, applied) {
+        const values = [h, k, l];
+        const draft = values.map(Number);
+        const valid = values.every(value => value !== null && value !== "")
+            && draft.every(Number.isFinite)
+            && draft.every(Number.isInteger)
+            && draft.some(value => value !== 0);
+        const current = Array.isArray(applied) ? applied.map(Number) : [1, 0, 0];
+        const changed = draft.some((value, index) => value !== current[index]);
+        return !(valid && changed);
+    }
+    """,
+    Output("stereo-hkl-update-btn", "disabled"),
+    Input("stereo-hkl-h", "value"),
+    Input("stereo-hkl-k", "value"),
+    Input("stereo-hkl-l", "value"),
+    Input("stereo-applied-hkl", "data"),
+)
+
+
+@callback(
+    Output("stereo-applied-hkl", "data"),
+    Input("stereo-hkl-update-btn", "n_clicks"),
+    State("stereo-hkl-h", "value"),
+    State("stereo-hkl-k", "value"),
+    State("stereo-hkl-l", "value"),
+    prevent_initial_call=True,
+)
+def apply_stereo_hkl(n_clicks, h, k, l):
+    if not n_clicks:
+        raise PreventUpdate
+    try:
+        return list(_parse_stereo_hkl(h, k, l))
+    except ValueError:
+        raise PreventUpdate from None
+
+
+# ---------------------------------------------------------------------------
 # Callback: update orientation map when XML is available or color changes
 # ---------------------------------------------------------------------------
 
@@ -1225,9 +1284,7 @@ def load_peakindexing_data(href):
     Input("orientation-view-toggle", "value"),
     Input("selected-grain-indices", "data"),
     Input("pole-figure-center", "data"),
-    Input("stereo-hkl-h", "value"),
-    Input("stereo-hkl-k", "value"),
-    Input("stereo-hkl-l", "value"),
+    Input("stereo-applied-hkl", "data"),
     Input("stereo-color-rad", "value"),
     Input("stereo-surface-select", "value"),
     Input("stereo-surface-tilt-x", "value"),
@@ -1280,9 +1337,7 @@ def update_orientation_map(
     view_mode,
     selected_grains,
     pole_center,
-    pole_h,
-    pole_k,
-    pole_l,
+    pole_hkl,
     pole_color_rad_deg,
     pole_surface,
     pole_surface_tilt_x,
@@ -1312,9 +1367,7 @@ def update_orientation_map(
     # isn't using pole_hsv mode, there is nothing to update.
     triggered = dash.ctx.triggered_id
     _POLE_ONLY_TRIGGERS = {
-        "stereo-hkl-h",
-        "stereo-hkl-k",
-        "stereo-hkl-l",
+        "stereo-applied-hkl",
         "stereo-color-rad",
         "stereo-surface-select",
         "stereo-surface-tilt-x",
@@ -1377,15 +1430,14 @@ def update_orientation_map(
             ref_grain_index = pole_center["grain_index"]
 
         # Pole figure parameters for pole_hsv mode
-        pole_hkl = None
+        rendered_pole_hkl = None
         pole_center_xy = None
         pole_rad = float(pole_color_rad_deg or 22.5)
 
         if effective_color == "pole_hsv":
-            # Parse hkl from the pole figure integer inputs.
             try:
-                pole_hkl = _parse_stereo_hkl(pole_h, pole_k, pole_l)
-            except ValueError:
+                rendered_pole_hkl = _parse_stereo_hkl(*(pole_hkl or (1, 0, 0)))
+            except (TypeError, ValueError):
                 raise PreventUpdate from None
 
             # Use pole figure center if available
@@ -1453,7 +1505,7 @@ def update_orientation_map(
                 marker_size=marker_size,
                 surface=surface or "normal",
                 ref_grain_index=ref_grain_index,
-                pole_hkl=pole_hkl,
+                pole_hkl=rendered_pole_hkl,
                 pole_center_xy=pole_center_xy,
                 pole_color_rad_deg=pole_rad,
                 palette=palette or DEFAULT_PALETTE,
@@ -1476,7 +1528,7 @@ def update_orientation_map(
                 marker_size=marker_size,
                 surface=surface or "normal",
                 ref_grain_index=ref_grain_index,
-                pole_hkl=pole_hkl,
+                pole_hkl=rendered_pole_hkl,
                 pole_center_xy=pole_center_xy,
                 pole_color_rad_deg=pole_rad,
                 palette=palette or DEFAULT_PALETTE,
@@ -1629,9 +1681,7 @@ def show_point_details(click_data, xml_path):
     Output("poles-loading-target", "children"),
     Input("peakindexing-xml-path", "data"),
     Input(SCOPE_STORE_ID, "data"),
-    Input("stereo-hkl-h", "value"),
-    Input("stereo-hkl-k", "value"),
-    Input("stereo-hkl-l", "value"),
+    Input("stereo-applied-hkl", "data"),
     Input("stereo-marker-size", "value"),
     Input("stereo-color-select", "value"),
     Input("stereo-color-rad", "value"),
@@ -1651,9 +1701,7 @@ def show_point_details(click_data, xml_path):
 def update_pole_figure(
     xml_path,
     scope,
-    h,
-    k,
-    l,
+    applied_hkl,
     input_size,
     color_scheme,
     color_rad_deg,
@@ -1687,7 +1735,7 @@ def update_pole_figure(
 
         marker_size = max(1, int(input_size or 12))
         try:
-            hkl = _parse_stereo_hkl(h, k, l)
+            hkl = _parse_stereo_hkl(*(applied_hkl or (1, 0, 0)))
             surface_vectors = _surface_vectors_for(
                 surface,
                 [
@@ -1869,9 +1917,7 @@ def update_pattern_columns(default_cols, position_cols, run_cols, detail_cols, c
     State("pole-figure-center", "data"),
     State("peakindexing-xml-path", "data"),
     State(SCOPE_STORE_ID, "data"),
-    State("stereo-hkl-h", "value"),
-    State("stereo-hkl-k", "value"),
-    State("stereo-hkl-l", "value"),
+    State("stereo-applied-hkl", "data"),
     State("stereo-surface-select", "value"),
     State("stereo-surface-tilt-x", "value"),
     State("stereo-surface-tilt-y", "value"),
@@ -1891,9 +1937,7 @@ def handle_pole_figure_click(
     current_center,
     xml_path,
     scope,
-    h,
-    k,
-    l,
+    applied_hkl,
     surface,
     surface_tilt_x,
     surface_tilt_y,
@@ -1952,7 +1996,7 @@ def handle_pole_figure_click(
                 from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
 
                 parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
-                hkl = _parse_stereo_hkl(h, k, l)
+                hkl = _parse_stereo_hkl(*(applied_hkl or (1, 0, 0)))
                 family = cubic_hkl_family(*hkl)
                 surf_normal, surf_roll, surf_tilt = _resolved_surface_vectors(
                     surface,
@@ -2025,9 +2069,7 @@ def handle_pole_figure_click(
     Input("stereo-plot-graph", "selectedData"),
     State("peakindexing-xml-path", "data"),
     State(SCOPE_STORE_ID, "data"),
-    State("stereo-hkl-h", "value"),
-    State("stereo-hkl-k", "value"),
-    State("stereo-hkl-l", "value"),
+    State("stereo-applied-hkl", "data"),
     State("stereo-surface-select", "value"),
     State("stereo-surface-tilt-x", "value"),
     State("stereo-surface-tilt-y", "value"),
@@ -2044,9 +2086,7 @@ def handle_pole_selection(
     selected_data,
     xml_path,
     scope,
-    h,
-    k,
-    l,
+    applied_hkl,
     surface,
     surface_tilt_x,
     surface_tilt_y,
@@ -2099,7 +2139,7 @@ def handle_pole_selection(
 
             parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
 
-            hkl = _parse_stereo_hkl(h, k, l)
+            hkl = _parse_stereo_hkl(*(applied_hkl or (1, 0, 0)))
             family = cubic_hkl_family(*hkl)
             surf_normal, surf_roll, surf_tilt = _resolved_surface_vectors(
                 surface,

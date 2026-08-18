@@ -408,6 +408,25 @@ def batch_rodrigues_rgb(rodrigues_vecs, max_angle_deg=None):
     return rodrigues_rgb(rodrigues_vecs, max_angle_deg=max_angle_deg)
 
 
+def closest_pole_hsv_colors(points, grain_indices, n_grains, x0, y0, rmax):
+    """Return each grain's HSV color from its closest projected pole."""
+    grain_rgb = np.ones((n_grains, 3))
+    if len(points) == 0:
+        return grain_rgb
+
+    grain_indices = np.asarray(grain_indices, dtype=int)
+    offsets = np.asarray(points, dtype=float) - np.array([x0, y0])
+    distances = np.sum(offsets**2, axis=1)
+
+    min_distances = np.full(n_grains, np.inf)
+    np.minimum.at(min_distances, grain_indices, distances)
+    candidates = np.flatnonzero(distances == min_distances[grain_indices])
+    grains, first = np.unique(grain_indices[candidates], return_index=True)
+    closest = candidates[first]
+    grain_rgb[grains] = hsv_wheel_color(offsets[closest, 0], offsets[closest, 1], rmax=rmax)
+    return grain_rgb
+
+
 def rgb_to_plotly_colors(rgb_array, alpha=None):
     """
     Convert an (N, 3) float RGB array to Plotly color strings.

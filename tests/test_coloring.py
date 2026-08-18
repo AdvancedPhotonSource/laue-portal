@@ -16,6 +16,7 @@ sys.path.insert(0, project_root)
 from laue_portal.analysis.coloring import (
     batch_ipf_colors,
     batch_rodrigues_rgb,
+    closest_pole_hsv_colors,
     cubic_ipf_color,
     hsv_wheel_color,
     make_color_hexagon,
@@ -178,6 +179,37 @@ class TestHsvWheelColor:
         dy = np.array([0, 0, 1])
         rgb = hsv_wheel_color(dx, dy)
         assert rgb.shape == (3, 3)
+
+    def test_closest_pole_colors_match_per_grain_reference(self):
+        points = np.array(
+            [
+                [0.5, 0.0],
+                [0.1, 0.0],
+                [0.0, 0.3],
+                [0.0, -0.2],
+                [0.2, 0.0],
+                [-0.2, 0.0],
+            ]
+        )
+        grains = np.array([0, 0, 2, 2, 3, 3])
+        x0, y0, rmax = 0.0, 0.0, 1.0
+
+        expected = np.ones((5, 3))
+        for grain in range(5):
+            grain_points = points[grains == grain]
+            if not len(grain_points):
+                continue
+            closest = np.argmin(np.sum((grain_points - [x0, y0]) ** 2, axis=1))
+            expected[grain] = hsv_wheel_color(*grain_points[closest], rmax=rmax)
+
+        actual = closest_pole_hsv_colors(points, grains, 5, x0, y0, rmax)
+        np.testing.assert_allclose(actual, expected)
+
+    def test_closest_pole_colors_keep_first_point_on_distance_tie(self):
+        points = np.array([[0.5, 0.0], [-0.5, 0.0]])
+        actual = closest_pole_hsv_colors(points, np.array([0, 0]), 1, 0.0, 0.0, 1.0)
+        expected = hsv_wheel_color(0.5, 0.0, rmax=1.0)
+        np.testing.assert_allclose(actual[0], expected)
 
 
 # ---------------------------------------------------------------------------

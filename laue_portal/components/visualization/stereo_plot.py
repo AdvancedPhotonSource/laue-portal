@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 
 from laue_portal.analysis.coloring import (
     batch_ipf_colors,
-    hsv_wheel_color,
+    closest_pole_hsv_colors,
     pole_figure_color_radius,
     rgb_to_plotly_colors,
 )
@@ -161,20 +161,14 @@ def make_pole_figure(
             x0, y0 = 0.0, 0.0
         rmax = pole_figure_color_radius(x0, y0, color_rad_deg)
 
-        N_grains = len(recip_lattices)
-        grain_rgb = np.ones((N_grains, 3))  # default white
-
-        for grain_idx in range(N_grains):
-            mask = local_grain_indices == grain_idx
-            if not np.any(mask):
-                continue
-            grain_pts = points[mask]
-            dists = np.sum((grain_pts - np.array([x0, y0])) ** 2, axis=1)
-            closest = np.argmin(dists)
-            dx = grain_pts[closest, 0] - x0
-            dy = grain_pts[closest, 1] - y0
-            grain_rgb[grain_idx] = hsv_wheel_color(dx, dy, rmax=rmax)
-
+        grain_rgb = closest_pole_hsv_colors(
+            points,
+            local_grain_indices,
+            len(recip_lattices),
+            x0,
+            y0,
+            rmax,
+        )
         point_colors = rgb_to_plotly_colors(grain_rgb[local_grain_indices])
 
     elif color_scheme == "ipf" and len(points) > 0:
