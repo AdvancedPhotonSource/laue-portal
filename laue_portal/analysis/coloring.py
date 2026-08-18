@@ -279,8 +279,9 @@ def make_cubic_ipf_triangle(resolution=256):
     """
     Generate the IPF standard triangle color key as an RGBA image.
 
-    Pixel coordinates map to stereographic coordinates in the standard
-    triangle: x in [0, sqrt(2)-1], y in [0, 1/(sqrt(3)+1)], y <= x.
+    Pixel coordinates map uniformly to stereographic coordinates in the
+    cubic fundamental region bounded by k = 0, h = k, and h = l.  Keeping
+    one scale on both axes preserves the 45-90-60 vertex angles.
 
     Parameters
     ----------
@@ -292,26 +293,27 @@ def make_cubic_ipf_triangle(resolution=256):
     ndarray (resolution, resolution, 4)
         RGBA image with uint8 values [0, 255].
     """
-    x_max = np.sqrt(2.0) - 1.0  # ~0.4142
-    y_max = 1.0 / (np.sqrt(3.0) + 1.0)  # ~0.3660
+    x_max = np.sqrt(2.0) - 1.0  # [101] stereographic x coordinate
 
     image = np.zeros((resolution, resolution, 4), dtype=np.uint8)
 
     for j in range(resolution):
         for i in range(resolution):
-            # Map pixel to stereographic coordinates
+            # Use the same scale on both axes so stereographic angles are
+            # preserved. [111] lies at y = 1 / (sqrt(3) + 1), below the top.
             x = i / (resolution - 1) * x_max
-            y = (resolution - 1 - j) / (resolution - 1) * y_max  # y increases upward
+            y = (resolution - 1 - j) / (resolution - 1) * x_max
 
-            # Only fill inside the triangle: y <= x
-            if y > x + 1e-6:
-                continue
-
-            # Inverse stereographic projection to get hkl from (x, y)
+            # Inverse stereographic projection to get hkl from (x, y).
             denom = 1.0 + x**2 + y**2
             h = 2.0 * x / denom
             k = 2.0 * y / denom
             l = (1.0 - x**2 - y**2) / denom
+
+            # Cubic fundamental region: 0 <= k <= h <= l. The h = l
+            # boundary is a circular arc in a stereographic projection.
+            if k > h + 1e-6 or h > l + 1e-6:
+                continue
 
             rgb = _ipf_single(np.array([h, k, l]))
 

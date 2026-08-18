@@ -486,9 +486,8 @@
 }
 
 /* Corner labels for {001}, {101}, {111}.
-   Coordinates match the geometry of make_cubic_ipf_triangle: triangle
-   vertices live at the bottom-left (001), the right edge (101), and
-   the top-right (111) corners of the square image. */
+   Coordinates match the stereographic 45-90-60 fundamental region from
+   make_cubic_ipf_triangle. The 111 pole is 88.4% along both image axes. */
 .pi-ipf-corner-label {
   position: absolute;
   font-family: Lato, sans-serif;
@@ -504,7 +503,7 @@
 }
 .pi-ipf-corner-001 { left: -2px;  bottom: -2px; }
 .pi-ipf-corner-101 { right: -2px; bottom: -2px; }
-.pi-ipf-corner-111 { right: -2px; top: -2px; }
+.pi-ipf-corner-111 { left: 88.4%; top: 11.6%; transform: translate(-50%, -50%); }
 
 /* HSV color-wheel axis labels.
    The wheel is a circle inscribed in the square frame; labels sit just

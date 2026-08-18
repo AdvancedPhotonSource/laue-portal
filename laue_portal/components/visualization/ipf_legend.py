@@ -142,10 +142,8 @@ def ipf_triangle_legend(caption: Optional[str] = None) -> html.Div:
         draggable="false",
     )
 
-    # Corner label positions are tuned to the geometry of
-    # ``make_cubic_ipf_triangle``: the triangle occupies the lower-left
-    # half of the square, with vertices at the bottom-left (001), the
-    # right edge midpoint-ish (101), and the top-right (111).
+    # Corner label positions follow the stereographic 45-90-60 region
+    # produced by ``make_cubic_ipf_triangle``.
     corners = [
         html.Span("001", className="pi-ipf-corner-label pi-ipf-corner-001"),
         html.Span("101", className="pi-ipf-corner-label pi-ipf-corner-101"),

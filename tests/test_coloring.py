@@ -231,6 +231,20 @@ class TestLegendImages:
         img = make_cubic_ipf_triangle(resolution=64)
         assert np.any(img[:, :, 3] == 0)
 
+    def test_ipf_triangle_uses_stereographic_45_90_60_geometry(self):
+        img = make_cubic_ipf_triangle(resolution=128)
+        pole_111 = 1.0 / (np.sqrt(3.0) + 1.0)
+        x_max = np.sqrt(2.0) - 1.0
+        pixel_111 = round(pole_111 / x_max * 127)
+
+        assert img[0, -1, 3] == 0
+        neighborhood = img[
+            127 - pixel_111 - 1 : 127 - pixel_111 + 2,
+            pixel_111 - 1 : pixel_111 + 2,
+            3,
+        ]
+        assert np.any(neighborhood == 255)
+
     def test_color_hexagon_shape(self):
         img = make_color_hexagon(resolution=64)
         assert img.shape == (64, 64, 4)
