@@ -382,7 +382,8 @@ def build_step_overlay(
     if step_peaks is None:
         return None
 
-    overlay = StepOverlay(step_index=step_index)
+    original_step = int(parsed.get("_step_indices", np.arange(len(parsed["_steps"])))[step_index])
+    overlay = StepOverlay(step_index=original_step)
     overlay.image_path = step_peaks.get("input_image")
 
     # ── Detector resolution ──────────────────────────────────────────

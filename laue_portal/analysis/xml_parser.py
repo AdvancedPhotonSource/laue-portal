@@ -8,6 +8,7 @@ This module has zero Dash/Plotly dependencies.
 import functools
 import os
 import xml.etree.ElementTree as ET
+from typing import Optional
 
 import numpy as np
 
@@ -197,6 +198,7 @@ def parse_indexing_xml(xml_path: str) -> dict:
         energies : ndarray (N,) -- beam energy in keV
         scan_nums : ndarray (N,) -- scan numbers
         n_patterns : ndarray (N,) -- number of grains per step
+        n_peaks : ndarray (N,) -- measured detector peaks per step
 
         # Per-pattern data (first/best pattern per step):
         recip_lattices : ndarray (N, 3, 3) -- reciprocal lattice matrices
@@ -239,6 +241,7 @@ def _parse_indexing_xml_impl(xml_path: str) -> dict:
     energies = np.full(n_steps, np.nan)
     scan_nums = np.zeros(n_steps, dtype=np.int64)
     n_patterns = np.zeros(n_steps, dtype=np.int32)
+    n_peaks = np.zeros(n_steps, dtype=np.int32)
     recip_lattices = np.full((n_steps, 3, 3), np.nan)
     rms_errors = np.full(n_steps, np.nan)
     goodnesses = np.full(n_steps, np.nan)
@@ -274,10 +277,17 @@ def _parse_indexing_xml_impl(xml_path: str) -> dict:
 
         # -- Indexing results --
         indexing_el = step.find("indexing")
+        detector_el = step.find("detector")
         step_peaks = {
             "indexing_el": None,
-            "detector_el": step.find("detector"),
+            "detector_el": detector_el,
         }
+
+        peaks_el = detector_el.find("peaksXY") if detector_el is not None else None
+        peak_count = _safe_int(peaks_el.get("Npeaks")) if peaks_el is not None else None
+        if peak_count is None and indexing_el is not None:
+            peak_count = _safe_int(indexing_el.get("Npeaks"))
+        n_peaks[i] = peak_count or 0
 
         if indexing_el is not None:
             step_peaks["indexing_el"] = indexing_el
@@ -343,6 +353,7 @@ def _parse_indexing_xml_impl(xml_path: str) -> dict:
         "energies": energies,
         "scan_nums": scan_nums,
         "n_patterns": n_patterns,
+        "n_peaks": n_peaks,
         "recip_lattices": recip_lattices,
         "rms_errors": rms_errors,
         "goodnesses": goodnesses,
@@ -354,6 +365,74 @@ def _parse_indexing_xml_impl(xml_path: str) -> dict:
         "atoms": atoms,
         "_steps": step_data_list,
     }
+
+
+def apply_data_scope(parsed: dict, scope: Optional[dict] = None) -> dict:
+    """Return a lightweight filtered view without mutating cached parse data."""
+    scope = scope or {}
+    try:
+        min_peaks = max(0, int(scope.get("min_peaks") or 0))
+    except (TypeError, ValueError):
+        min_peaks = 0
+
+    n_steps = len(parsed["_steps"])
+    peak_counts = np.asarray(parsed.get("n_peaks", np.zeros(n_steps, dtype=int)))
+    keep = np.flatnonzero(peak_counts >= min_peaks)
+    original_indices = np.asarray(parsed.get("_step_indices", np.arange(n_steps)), dtype=int)
+
+    scoped = dict(parsed)
+    per_step_keys = (
+        "positions",
+        "positions_hf",
+        "positions_lab",
+        "depths",
+        "energies",
+        "scan_nums",
+        "n_patterns",
+        "n_peaks",
+        "recip_lattices",
+        "rms_errors",
+        "goodnesses",
+        "n_indexed",
+    )
+    for key in per_step_keys:
+        if key in parsed:
+            scoped[key] = parsed[key][keep]
+    scoped["_steps"] = [parsed["_steps"][i] for i in keep]
+    scoped["_step_indices"] = original_indices[keep]
+    scoped["_pattern0_only"] = bool(scope.get("pattern0_only", False))
+
+    if scoped["_pattern0_only"]:
+        for i, step_info in enumerate(scoped["_steps"]):
+            patterns = _pattern_elements(step_info.get("indexing_el"), True)
+            scoped["n_patterns"][i] = len(patterns)
+            if not patterns:
+                scoped["recip_lattices"][i] = np.nan
+                scoped["rms_errors"][i] = np.nan
+                scoped["goodnesses"][i] = np.nan
+                scoped["n_indexed"][i] = 0
+                continue
+
+            pattern = patterns[0]
+            scoped["rms_errors"][i] = _safe_float(pattern.get("rms_error")) or 0.0
+            scoped["goodnesses"][i] = _safe_float(pattern.get("goodness")) or 0.0
+            scoped["n_indexed"][i] = _safe_int(pattern.get("Nindexed")) or 0
+            recip_el = pattern.find("recip_lattice")
+            vectors = (
+                [_float_array(recip_el, name) for name in ("astar", "bstar", "cstar")] if recip_el is not None else []
+            )
+            scoped["recip_lattices"][i] = (
+                np.array(vectors) if len(vectors) == 3 and all(v is not None for v in vectors) else np.nan
+            )
+
+    return scoped
+
+
+def _pattern_elements(indexing_el, pattern0_only=False):
+    patterns = indexing_el.findall("pattern") if indexing_el is not None else []
+    if pattern0_only:
+        patterns = [pat for pat in patterns if _safe_int(pat.get("num")) == 0]
+    return patterns
 
 
 def get_step_peaks(parsed: dict, step_index: int) -> dict | None:
@@ -424,7 +503,7 @@ def get_step_peaks(parsed: dict, step_index: int) -> dict | None:
     # Parse per-pattern indexing info
     patterns = []
     if indexing_el is not None:
-        for pat_el in indexing_el.findall("pattern"):
+        for pat_el in _pattern_elements(indexing_el, parsed.get("_pattern0_only", False)):
             pat_info = {
                 "pattern_num": int(pat_el.get("num", "0")),
                 "rms_error": float(pat_el.get("rms_error", "nan")),
@@ -489,10 +568,11 @@ def get_all_patterns(parsed: dict) -> list[dict]:
         if indexing_el is None:
             continue
 
-        patterns = indexing_el.findall("pattern")
+        patterns = _pattern_elements(indexing_el, parsed.get("_pattern0_only", False))
         if not patterns:
             continue
 
+        original_step = int(parsed.get("_step_indices", np.arange(n_steps))[si])
         scan_num = int(parsed["scan_nums"][si])
         n_patterns = _safe_int(indexing_el.get("Npatterns"))
         n_peaks = _safe_int(indexing_el.get("Npeaks"))
@@ -515,7 +595,7 @@ def get_all_patterns(parsed: dict) -> list[dict]:
                 indexed_fraction = pat_n_indexed / n_peaks
 
             row = {
-                "step_index": si,
+                "step_index": original_step,
                 "step_scan_num": scan_num,
                 "pattern_num": _safe_int(pat_el.get("num")),
                 "rank": rank,
@@ -596,6 +676,7 @@ def get_all_indexed_peaks(parsed: dict) -> list[dict]:
         if step_peaks is None:
             continue
 
+        original_step = int(parsed.get("_step_indices", np.arange(n_steps))[si])
         scan_num = int(parsed["scan_nums"][si])
         n_peaks = step_peaks["n_peaks"]
         peak_attrs = step_peaks.get("peak_attrs", {})
@@ -612,7 +693,7 @@ def get_all_indexed_peaks(parsed: dict) -> list[dict]:
             for j in range(n_idx):
                 pk_i = int(pk_indices[j])
                 row = {
-                    "step_index": si,
+                    "step_index": original_step,
                     "step_scan_num": scan_num,
                     "pattern_num": pat["pattern_num"],
                     "h": int(hkl[j, 0]),

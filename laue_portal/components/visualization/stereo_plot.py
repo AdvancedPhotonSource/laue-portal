@@ -149,6 +149,9 @@ def make_pole_figure(
         points = points[finite_mask]
         grain_indices = grain_indices[finite_mask]
 
+    local_grain_indices = grain_indices
+    step_indices = np.asarray(parsed.get("_step_indices", np.arange(len(recip_lattices))), dtype=int)
+
     # Compute colors
     if color_scheme == "hsv_position" and len(points) > 0:
         # LaueGo-style HSV position coloring (MakePolePoints + poleXY2rgb)
@@ -162,7 +165,7 @@ def make_pole_figure(
         grain_rgb = np.ones((N_grains, 3))  # default white
 
         for grain_idx in range(N_grains):
-            mask = grain_indices == grain_idx
+            mask = local_grain_indices == grain_idx
             if not np.any(mask):
                 continue
             grain_pts = points[mask]
@@ -172,7 +175,7 @@ def make_pole_figure(
             dy = grain_pts[closest, 1] - y0
             grain_rgb[grain_idx] = hsv_wheel_color(dx, dy, rmax=rmax)
 
-        point_colors = rgb_to_plotly_colors(grain_rgb[grain_indices])
+        point_colors = rgb_to_plotly_colors(grain_rgb[local_grain_indices])
 
     elif color_scheme == "ipf" and len(points) > 0:
         crystal_dirs = batch_crystal_directions(
@@ -182,7 +185,7 @@ def make_pole_figure(
         ipf_rgb = batch_ipf_colors(crystal_dirs)
 
         # Map grain colors to pole points
-        point_colors = rgb_to_plotly_colors(ipf_rgb[grain_indices])
+        point_colors = rgb_to_plotly_colors(ipf_rgb[local_grain_indices])
     else:
         point_colors = "rgb(214, 20, 0)"
 
@@ -201,7 +204,7 @@ def make_pole_figure(
                     symbol="circle",
                     line=dict(width=0),
                 ),
-                customdata=grain_indices.reshape(-1, 1),
+                customdata=step_indices[local_grain_indices].reshape(-1, 1),
                 hovertemplate=(
                     None
                     if hover_disabled

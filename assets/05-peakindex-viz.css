@@ -5,34 +5,97 @@
    ========================================================================== */
 
 /* ==========================================================================
+   Page shell
+   --------------------------------------------------------------------------
+   The tab bodies need to fill the viewport below a stack of variable-height
+   chrome (navbar, detail header, data-scope bar).  This used to be a
+   hardcoded `calc(100vh - 170px)` repeated in three places, which silently
+   broke whenever that chrome changed height.  Instead the page is a flex
+   column and the tab body simply takes the remaining space.
+
+   Note: `dbc.Tabs` renders no wrapper element -- the `<ul.nav-tabs>` and the
+   `<div.tab-content>` are direct children of `.pi-page`.
+   ========================================================================== */
+
+.pi-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.pi-page > .tab-content {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The pane is the scrollport.  It must be the pane and not an inner div:
+   the Parameters tab renders `.lp-form-body`, a flex row whose nav sidebar
+   is `position:sticky`, and sticky resolves against the nearest scrolling
+   ancestor -- so the scroller has to sit above that whole row.
+
+   The viz tabs fill the pane exactly (`.pi-viz-layout` and
+   `.pi-viz-table-wrap` are both `height:100%`) and scroll internally, so
+   this only ever produces a scrollbar on Parameters. */
+.pi-page > .tab-content > .tab-pane.active {
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* The form nav sidebar is `height:100vh` so it works on the standalone
+   create/edit pages.  Inside a tab the pane is shorter than the viewport
+   by the navbar + detail header + tab strip, and a 100vh flex item would
+   stretch the row past the pane and swallow the scroll. */
+.pi-page #tab-parameters-content .lp-form-sidebar {
+  height: auto;
+  max-height: 100%;
+}
+
+/* ==========================================================================
    Layout: sidebar + visualization
    ========================================================================== */
 
 .pi-viz-layout {
   display: flex;
   min-height: 0;
-  height: calc(100vh - 170px);
-  max-height: calc(100vh - 170px);
+  height: 100%;
   gap: 0;
   overflow: hidden;
+  /* Sunk gutter so the white sidebar and plot read as raised surfaces,
+     the same figure/ground relationship the card forms use. */
+  background: var(--pi-surface-sunk);
 }
 
-/* ---- Sidebar panel ---- */
+/* ---- Sidebar panel ----
+   Skinned to match the card forms: a white surface separated by soft
+   --lp-fog rules, not a grey trench walled off by hard 1px borders.
+   Density stays viz-specific (see --pi-control-h in 00-design-tokens). */
 
 .pi-viz-sidebar {
-  width: 240px;
+  width: var(--pi-sidebar-w);
   flex-shrink: 0;
-  background: var(--pi-fog);
-  border-right: 1px solid #b4bcc2;
+  background: var(--pi-surface);
+  border-right: 1px solid var(--pi-divider);
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
 }
 @media (max-width: 768px) {
-  .pi-viz-sidebar { width: 200px; }
+  .pi-viz-sidebar { width: var(--pi-sidebar-w-sm); }
 }
 @media (max-width: 576px) {
+  /* Narrow screens scroll the page instead of pinning it to the viewport. */
+  .pi-page {
+    height: auto;
+    overflow: visible;
+  }
+  /* With the page unpinned the window scrolls, so the pane must not clip
+     its content to a height it no longer has. */
+  .pi-page > .tab-content > .tab-pane.active {
+    height: auto;
+    overflow-y: visible;
+  }
   .pi-viz-layout {
     flex-direction: column;
     height: auto;
@@ -40,31 +103,42 @@
   .pi-viz-sidebar {
     width: 100%;
     border-right: none;
-    border-bottom: 1px solid #b4bcc2;
+    border-bottom: 1px solid var(--pi-divider);
     max-height: 280px;
   }
 }
 
-/* Section groups */
+/* Section groups.  A leading gap does the separating -- the eye reads a
+   gap as "new group" faster than it reads a line, and it costs no
+   contrast.  The rule below the header then binds header to controls. */
 .pi-viz-sidebar-section {
-  border-bottom: 1px solid #dce1e3;
+  padding-bottom: .35rem;
 }
-.pi-viz-sidebar-section:last-child {
-  border-bottom: none;
+.pi-viz-sidebar-section + .pi-viz-sidebar-section {
+  margin-top: .5rem;
 }
 
-/* Section header */
+/* Section header.
+   Hierarchy here is carried by SIZE + a rule directly under the title, not
+   by a grey fill.  The header must out-weigh the control labels it governs
+   (.75rem/600); at the old .72rem it was actually *smaller* than its own
+   children, so the fill was the only thing holding the hierarchy up. */
 .pi-viz-sidebar-head {
   display: flex;
   align-items: center;
-  gap: .5rem;
-  padding: .45rem .65rem;
-  background: #dce1e3;
-  border-bottom: 1px solid #b4bcc2;
-  margin: 0;
+  gap: .45rem;
+  padding: .5rem .65rem .3rem;
+  background: transparent;
+  margin: 0 .65rem;
+  /* Underline hugs the title, so it reads as "heading of what follows"
+     rather than "end of what came before".  --pi-divider is only 1.15:1 on
+     white -- a hint, not a divider -- so the rule uses the stronger
+     --pi-border. */
+  border-bottom: 2px solid var(--pi-border);
 }
 .pi-viz-sidebar-head .pi-viz-section-icon {
-  font-size: .78rem;
+  font-size: .82rem;
+  /* Matches .lp-form-section-icon on the Parameters tab. */
   color: var(--pi-slate-90);
   width: 1rem;
   text-align: center;
@@ -74,34 +148,35 @@
   margin: 0;
   font-family: Lato, sans-serif;
   font-weight: 700;
-  font-size: .72rem;
-  letter-spacing: .06em;
-  text-transform: uppercase;
+  font-size: .84rem;
+  letter-spacing: .01em;
   color: var(--pi-slate);
 }
 
 /* ---- Control rows ---- */
 
+/* No per-row divider: grouping is carried by whitespace + the section
+   rule, matching the field grids inside .lp-form-card-body. */
 .pi-viz-control {
   display: flex;
   align-items: center;
-  padding: .3rem .55rem;
+  padding: .25rem .65rem;
   gap: .35rem;
-  border-bottom: 1px solid #e8eced;
-  background: var(--pi-fog);
+  background: transparent;
   transition: background var(--pi-transition);
 }
-.pi-viz-control:last-child {
-  border-bottom: none;
+/* First control sits a little clear of the header underline. */
+.pi-viz-sidebar-head + .pi-viz-control {
+  margin-top: .25rem;
 }
 .pi-viz-control:hover {
-  background: #e4e9ea;
+  background: var(--pi-surface-hover);
 }
 
 /* Field label (direct child only — excludes labels inside toggles) */
 .pi-viz-control > label {
   flex: 0 0 auto;
-  min-width: 80px;
+  min-width: var(--pi-label-w);
   font-family: Lato, sans-serif;
   font-size: .75rem;
   font-weight: 600;
@@ -117,18 +192,18 @@
 .pi-viz-control .form-select {
   flex: 1 1 auto;
   min-width: 0;
-  height: 28px;
+  height: var(--pi-control-h);
   font-size: .78rem;
-  border-radius: 3px;
-  border: 1px solid #b4bcc2;
-  background: var(--pi-white);
+  border-radius: var(--pi-radius);
+  border: 1px solid var(--pi-border);
+  background: var(--pi-surface);
   padding: .15rem .4rem;
   transition: border-color var(--pi-transition), box-shadow var(--pi-transition);
 }
 .pi-viz-control .form-control:focus,
 .pi-viz-control .form-select:focus {
-  border-color: var(--pi-teal);
-  box-shadow: 0 0 0 2px var(--pi-teal-border);
+  border-color: var(--pi-accent);
+  box-shadow: 0 0 0 3px var(--pi-focus-ring);
 }
 
 /* Dropdown arrow (Bootstrap strips it when padding is overridden) */
@@ -190,7 +265,7 @@
 .pi-viz-control .pi-matrix-input .form-control[type="number"] {
   width: 100%;
   min-width: 0;
-  height: 26px;
+  height: var(--pi-control-h-sm);
   padding: .1rem .25rem;
 }
 
@@ -206,7 +281,7 @@
 .pi-viz-control .pi-hkl-input .form-control[type="number"] {
   width: 100%;
   min-width: 0;
-  height: 26px;
+  height: var(--pi-control-h-sm);
   padding: .1rem .25rem;
 }
 
@@ -216,7 +291,7 @@
   min-width: 0;
   height: 4px;
   cursor: pointer;
-  accent-color: var(--pi-teal);
+  accent-color: var(--pi-accent);
 }
 .pi-viz-control-slider {
   align-items: stretch;
@@ -325,14 +400,14 @@
 .pi-viz-details {
   flex: 0 0 auto;
   padding: .4rem .75rem;
-  border-top: 1px solid #dce1e3;
-  background: var(--pi-white);
+  border-top: 1px solid var(--pi-divider);
+  background: var(--pi-surface);
   max-height: 140px;
   overflow-y: auto;
 }
 .pi-viz-details .card {
-  border: 1px solid #dce1e3;
-  border-radius: 4px;
+  border: 1px solid var(--pi-divider);
+  border-radius: var(--pi-radius);
   box-shadow: none;
 }
 .pi-viz-details .card-body {
@@ -356,7 +431,7 @@
 /* Peaks table tab */
 .pi-viz-table-wrap {
   padding: .5rem;
-  height: calc(100vh - 170px);
+  height: 100%;
   overflow: auto;
 }
 
@@ -366,7 +441,7 @@
 
 .pi-ipf-legend {
   padding: .55rem .55rem .65rem;
-  background: var(--pi-fog);
+  background: transparent;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -481,12 +556,8 @@
   display: flex;
   align-items: center;
   gap: .35rem;
-  padding: .3rem .55rem;
-  background: var(--pi-fog);
-  border-bottom: 1px solid #e8eced;
-}
-.pi-color-controls-row:last-child {
-  border-bottom: none;
+  padding: .25rem .65rem;
+  background: transparent;
 }
 
 .pi-color-controls-label {
@@ -506,11 +577,11 @@
 .pi-color-controls .form-control {
   flex: 1 1 auto;
   min-width: 0;
-  height: 28px;
+  height: var(--pi-control-h);
   font-size: .78rem;
-  border-radius: 3px;
-  border: 1px solid #b4bcc2;
-  background: var(--pi-white);
+  border-radius: var(--pi-radius);
+  border: 1px solid var(--pi-border);
+  background: var(--pi-surface);
   padding: .15rem .4rem;
 }
 .pi-color-controls .form-select {
@@ -543,4 +614,126 @@
 .pi-color-controls-row--reset .btn {
   font-size: .72rem;
   padding: .2rem .55rem;
+}
+
+
+/* ==========================================================================
+   Global data-scope bar
+   --------------------------------------------------------------------------
+   Page-level filters applying to every tab, between the detail header and
+   the tab strip.  Built on dbc.Accordion, so open/close, the caret and the
+   ARIA state come from Bootstrap; the rules below only compact the default
+   accordion chrome into a strip and move the caret to the left.
+   ========================================================================== */
+
+.pi-scope-bar {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--pi-divider);
+}
+
+/* ---- Header strip ---- */
+
+.pi-scope-bar .accordion-button {
+  gap: .4rem;
+  padding: .3rem .75rem;
+  background: var(--pi-white);
+  color: var(--pi-slate);
+  font-family: Lato, sans-serif;
+  font-weight: 700;
+  font-size: .72rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+/* Bootstrap tints the open header via --bs-accordion-active-bg; keep it
+   white so the bar reads as one surface with the rest of the page. */
+.pi-scope-bar .accordion-button:not(.collapsed) {
+  background: var(--pi-white);
+  color: var(--pi-slate);
+  box-shadow: none;
+}
+.pi-scope-bar .accordion-button:focus {
+  border-color: transparent;
+  box-shadow: 0 0 0 3px var(--pi-focus-ring);
+}
+
+/* Caret leads the label.  Bootstrap renders it as an ::after pushed right by
+   `margin-left:auto`; the button is flex, so order+margin relocate it
+   without needing a replacement icon. */
+.pi-scope-bar .accordion-button::after {
+  order: -1;
+  margin-left: 0;
+  width: 1rem;
+  height: 1rem;
+  background-size: 1rem;
+}
+
+.pi-scope-bar .accordion-body {
+  padding: 0;
+  background: var(--pi-white);
+}
+
+/* ---- Expanded control panel ---- */
+
+.pi-scope-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: .4rem 2rem;
+  padding: .1rem .75rem .6rem 2.15rem;
+  background: var(--pi-white);
+}
+
+.pi-scope-field {
+  display: flex;
+  flex-direction: column;
+  gap: .1rem;
+}
+
+.pi-scope-inline {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+.pi-scope-field .form-check {
+  margin: 0;
+  min-height: auto;
+}
+.pi-scope-field .form-check-label,
+.pi-scope-label {
+  font-size: .78rem;
+  font-weight: 400;
+  color: var(--pi-text);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.pi-scope-input.form-control {
+  width: 72px;
+  height: var(--pi-control-h-sm);
+  font-size: .78rem;
+  padding: .1rem .35rem;
+  border-radius: var(--pi-radius);
+  border: 1px solid var(--pi-border);
+}
+.pi-scope-input.form-control:focus {
+  border-color: var(--pi-accent);
+  box-shadow: 0 0 0 3px var(--pi-focus-ring);
+}
+
+.pi-scope-help {
+  font-size: .7rem;
+  color: var(--pi-ash);
+}
+
+.pi-scope-reset {
+  align-self: center;
+  font-size: .72rem;
+  padding: .1rem .3rem;
+  text-decoration: none;
+}
+
+@media (max-width: 576px) {
+  .pi-scope-body { gap: .5rem 1rem; padding-left: .75rem; }
 }

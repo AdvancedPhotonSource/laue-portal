@@ -9,6 +9,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 from laue_portal.analysis.xml_parser import (
+    apply_data_scope,
     get_all_indexed_peaks,
     get_all_patterns,
     parse_indexing_xml,
@@ -26,6 +27,7 @@ from laue_portal.components.visualization.quality_map import (
     make_quality_map,
     make_quality_map_3d,
 )
+from laue_portal.components.visualization.stereo_plot import make_pole_figure
 
 FIXTURE_XML = os.path.join(os.path.dirname(__file__), "fixtures", "test_indexing.xml")
 
@@ -38,6 +40,15 @@ def test_orientation_map_creates_figure():
     fig = make_orientation_map(_parsed(), color_by="n_indexed")
     assert len(fig.data) == 1
     assert fig.data[0].type == "scattergl"
+
+
+def test_scoped_maps_preserve_original_step_ids():
+    scoped = apply_data_scope(_parsed(), {"min_peaks": 6})
+    fig = make_orientation_map(scoped, color_by="n_indexed")
+    assert [int(row[0]) for row in fig.data[0].customdata] == [0, 1, 3]
+
+    pole = make_pole_figure(scoped)
+    assert set(int(row[0]) for row in pole.data[0].customdata) == {0, 1, 3}
 
 
 def test_orientation_map_xh_axes():

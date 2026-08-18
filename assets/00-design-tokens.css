@@ -19,22 +19,40 @@
   --lp-shadow-md:   0 2px 8px rgba(44, 62, 80, .08);
   --lp-transition:  180ms ease;
 
-  /* Compatibility aliases for peak-indexing visualization styles while
-     those selectors remain intentionally namespaced to that feature. */
-  --pi-bg:          var(--lp-bg);
-  --pi-slate:       var(--lp-slate);
-  --pi-slate-90:    var(--lp-slate-90);
-  --pi-teal:        var(--lp-teal);
-  --pi-teal-light:  var(--lp-teal-light);
-  --pi-teal-border: var(--lp-teal-border);
-  --pi-blue:        var(--lp-blue);
-  --pi-ash:         var(--lp-ash);
-  --pi-fog:         var(--lp-fog);
-  --pi-white:       var(--lp-white);
-  --pi-text:        var(--lp-text);
-  --pi-radius:      var(--lp-radius);
-  --pi-radius-lg:   var(--lp-radius-lg);
-  --pi-shadow-sm:   var(--lp-shadow-sm);
-  --pi-shadow-md:   var(--lp-shadow-md);
-  --pi-transition:  var(--lp-transition);
+  /* ------------------------------------------------------------------
+     Peak-indexing visualization layer.
+
+     The viz sidebar is a dense tool panel: you scan ~20 controls while
+     watching a plot.  The card forms are a reading surface.  So the two
+     deliberately share a *palette* but not a *density* -- this layer
+     names that split instead of mirroring --lp-* under a new prefix.
+
+     Colours below are aliases on purpose: the viz must restyle with the
+     rest of the portal.  Only the metrics are independent.
+     ------------------------------------------------------------------ */
+
+  /* Shared palette -- keep pointing at --lp-*. */
+  --pi-surface:      var(--lp-white);        /* panels, control rows      */
+  --pi-surface-sunk: var(--lp-bg);           /* gutters behind panels     */
+  --pi-surface-hover: var(--lp-teal-light);  /* row hover                 */
+  --pi-divider:      var(--lp-fog);          /* every rule in the sidebar */
+  --pi-border:       #dce1e3;                /* input outlines            */
+  --pi-focus-ring:   var(--lp-teal-border);
+  --pi-accent:       var(--lp-teal);
+  --pi-slate:        var(--lp-slate);
+  --pi-slate-90:     var(--lp-slate-90);
+  --pi-ash:          var(--lp-ash);
+  --pi-text:         var(--lp-text);
+  --pi-blue:         var(--lp-blue);
+  --pi-white:        var(--lp-white);
+  --pi-radius:       var(--lp-radius);
+  --pi-transition:   var(--lp-transition);
+
+  /* Viz-only metrics -- intentionally NOT the form values.  Matching the
+     forms' 36px inputs would push Color Map controls below the fold. */
+  --pi-sidebar-w:    240px;                  /* forms use 220px           */
+  --pi-sidebar-w-sm: 200px;
+  --pi-control-h:    28px;                   /* forms use 36px            */
+  --pi-control-h-sm: 26px;                   /* matrix / hkl grids        */
+  --pi-label-w:      80px;                   /* inline label column       */
 }

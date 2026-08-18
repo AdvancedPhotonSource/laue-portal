@@ -14,6 +14,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 from laue_portal.analysis.xml_parser import (
+    apply_data_scope,
     get_all_indexed_peaks,
     get_all_patterns,
     get_step_peaks,
@@ -47,6 +48,7 @@ class TestParseIndexingXml:
             "energies",
             "scan_nums",
             "n_patterns",
+            "n_peaks",
             "recip_lattices",
             "rms_errors",
             "goodnesses",
@@ -87,6 +89,9 @@ class TestParseIndexingXml:
         assert parsed["n_patterns"][0] == 2
         assert parsed["n_patterns"][1] == 1
 
+    def test_n_peaks(self, parsed):
+        assert parsed["n_peaks"].tolist() == [12, 8, 5, 6]
+
     def test_recip_lattices_shape(self, parsed):
         assert parsed["recip_lattices"].shape == (4, 3, 3)
 
@@ -112,6 +117,44 @@ class TestParseIndexingXml:
         assert len(lp) == 6
         assert abs(lp[0] - 0.40000) < 0.0001
         assert abs(lp[3] - 90.0) < 0.1
+
+
+# ---------------------------------------------------------------------------
+# data scope tests
+# ---------------------------------------------------------------------------
+
+
+class TestDataScope:
+    def test_neutral_scope_preserves_all_steps(self, parsed):
+        scoped = apply_data_scope(parsed)
+        assert scoped["_step_indices"].tolist() == [0, 1, 2, 3]
+        assert len(scoped["positions"]) == len(parsed["positions"])
+
+    def test_min_peaks_filters_without_mutating_cached_parse(self, parsed):
+        scoped = apply_data_scope(parsed, {"min_peaks": 7})
+        assert scoped["_step_indices"].tolist() == [0, 1]
+        assert scoped["n_peaks"].tolist() == [12, 8]
+        assert len(parsed["positions"]) == 4
+
+    def test_pattern_zero_scope_filters_pattern_consumers(self, parsed):
+        scoped = apply_data_scope(parsed, {"pattern0_only": True})
+        assert [p["pattern_num"] for p in get_step_peaks(scoped, 0)["patterns"]] == [0]
+        assert scoped["n_patterns"][0] == 1
+        assert scoped["n_indexed"][0] == 9
+        assert {row["pattern_num"] for row in get_all_patterns(scoped)} == {0}
+        assert {row["pattern_num"] for row in get_all_indexed_peaks(scoped)} == {0}
+
+    def test_combined_scope_preserves_original_step_ids(self, parsed):
+        scoped = apply_data_scope(parsed, {"min_peaks": 6, "pattern0_only": True})
+        assert scoped["_step_indices"].tolist() == [0, 1, 3]
+        assert {row["step_index"] for row in get_all_patterns(scoped)} == {0, 1, 3}
+        assert {row["step_index"] for row in get_all_indexed_peaks(scoped)} == {0, 1, 3}
+
+    def test_empty_scope(self, parsed):
+        scoped = apply_data_scope(parsed, {"min_peaks": 100})
+        assert len(scoped["positions"]) == 0
+        assert get_all_patterns(scoped) == []
+        assert get_all_indexed_peaks(scoped) == []
 
 
 # ---------------------------------------------------------------------------

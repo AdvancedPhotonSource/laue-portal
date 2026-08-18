@@ -541,9 +541,10 @@ def _build_customdata(parsed):
     """Build customdata array shared by 2D and 3D traces."""
     positions = parsed["positions"]
     n_points = len(positions)
+    step_indices = np.asarray(parsed.get("_step_indices", np.arange(n_points)), dtype=int)
     return np.column_stack(
         [
-            np.arange(n_points),
+            step_indices,
             positions[:, 0],
             positions[:, 1],
             positions[:, 2],
@@ -707,8 +708,11 @@ def _get_orientation_colors(
 
         reference_index = None
         reference_recip = None
-        if rgb_reference_mode == "step":
-            reference_index = rgb_reference_step
+        if rgb_reference_mode == "step" and rgb_reference_step is not None:
+            matches = np.flatnonzero(
+                np.asarray(parsed.get("_step_indices", np.arange(len(recip_lattices)))) == int(rgb_reference_step)
+            )
+            reference_index = int(matches[0]) if matches.size else None
         elif rgb_reference_mode == "custom" and rgb_reference_matrix is not None:
             matrix = np.asarray(rgb_reference_matrix, dtype=float)
             if matrix.shape == (3, 3) and np.all(np.isfinite(matrix)):
@@ -733,7 +737,10 @@ def _get_orientation_colors(
 
     elif color_by == "misorientation" and ref_grain_index is not None:
         orientations = batch_orientations(recip_lattices, lattice_params)
-        ref_idx = int(ref_grain_index)
+        matches = np.flatnonzero(
+            np.asarray(parsed.get("_step_indices", np.arange(len(orientations)))) == int(ref_grain_index)
+        )
+        ref_idx = int(matches[0]) if matches.size else -1
         if ref_idx < 0 or ref_idx >= len(orientations):
             # Invalid reference -- fall back to IPF
             crystal_dirs = batch_crystal_directions(recip_lattices, normal=surf_normal)
@@ -890,6 +897,7 @@ def apply_selection_highlight(
 
     positions = parsed["positions"]
     n_points = len(positions)
+    step_indices = np.asarray(parsed.get("_step_indices", np.arange(n_points)), dtype=int)
     selected_set = set(selected_grains)
 
     # Dim unselected points on the main trace
@@ -899,7 +907,7 @@ def apply_selection_highlight(
     if not is_3d:
         # Build opacity array: 0.2 for unselected, 1.0 for selected
         opacity_arr = np.where(
-            np.isin(np.arange(n_points), list(selected_set)),
+            np.isin(step_indices, list(selected_set)),
             1.0,
             0.2,
         )
@@ -959,7 +967,7 @@ def apply_selection_highlight(
             main_trace.marker.colorscale = None
 
     # Add highlight ring trace for selected grains
-    sel_mask = np.isin(np.arange(n_points), list(selected_set))
+    sel_mask = np.isin(step_indices, list(selected_set))
     if not np.any(sel_mask):
         return
 

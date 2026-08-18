@@ -26,6 +26,15 @@ from laue_portal.components.visualization.ipf_legend import (
     scalar_controls_visible,
     stereo_color_key,
 )
+from laue_portal.components.visualization.scope_bar import (
+    DEFAULT_SCOPE,
+    SCOPE_MIN_PEAKS_ID,
+    SCOPE_PATTERN0_ID,
+    SCOPE_RESET_ID,
+    SCOPE_STORE_ID,
+    normalize_scope,
+    scope_bar,
+)
 from laue_portal.config import DEFAULT_VARIABLES
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix
 
@@ -1021,9 +1030,13 @@ layout = html.Div(
         dcc.Store(id="orientation-color-auto-range", data=None),
         # Page header
         detail_header("peakindex-id-header"),
+        # Global data-scope filters -- apply across every tab, so they sit
+        # above the tab strip rather than in any one tab's sidebar.
+        scope_bar(DEFAULT_SCOPE),
         # Visualization tabs
         _viz_tabs,
-    ]
+    ],
+    className="pi-page",
 )
 
 
@@ -1184,6 +1197,7 @@ def load_peakindexing_data(href):
     Output("orientation-marker-size", "value"),
     Output("orientation-loading-target", "children"),
     Input("peakindexing-xml-path", "data"),
+    Input(SCOPE_STORE_ID, "data"),
     Input("orientation-color-select", "value"),
     Input("orientation-rgb-symmetry-select", "value"),
     Input("orientation-rgb-reference-select", "value"),
@@ -1238,6 +1252,7 @@ def load_peakindexing_data(href):
 )
 def update_orientation_map(
     xml_path,
+    scope,
     color_by,
     rgb_symmetry,
     rgb_reference_mode,
@@ -1327,7 +1342,7 @@ def update_orientation_map(
             raise PreventUpdate
 
     try:
-        from laue_portal.analysis.xml_parser import parse_indexing_xml
+        from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
         from laue_portal.components.visualization.orientation_map import (
             apply_selection_highlight,
             get_scalar_auto_range,
@@ -1335,7 +1350,7 @@ def update_orientation_map(
             make_orientation_map_3d,
         )
 
-        parsed = parse_indexing_xml(xml_path)
+        parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
 
         marker_size = max(1, int(input_size or 40))
         try:
@@ -1613,6 +1628,7 @@ def show_point_details(click_data, xml_path):
     Output("stereo-color-rad-col", "style"),
     Output("poles-loading-target", "children"),
     Input("peakindexing-xml-path", "data"),
+    Input(SCOPE_STORE_ID, "data"),
     Input("stereo-hkl-h", "value"),
     Input("stereo-hkl-k", "value"),
     Input("stereo-hkl-l", "value"),
@@ -1634,6 +1650,7 @@ def show_point_details(click_data, xml_path):
 )
 def update_pole_figure(
     xml_path,
+    scope,
     h,
     k,
     l,
@@ -1661,12 +1678,12 @@ def update_pole_figure(
         rad_col_style["display"] = "none"
 
     try:
-        from laue_portal.analysis.xml_parser import parse_indexing_xml
+        from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
         from laue_portal.components.visualization.stereo_plot import (
             make_pole_figure,
         )
 
-        parsed = parse_indexing_xml(xml_path)
+        parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
 
         marker_size = max(1, int(input_size or 12))
         try:
@@ -1721,17 +1738,18 @@ def update_pole_figure(
 @callback(
     Output("peak-table-container", "children"),
     Input("peakindexing-xml-path", "data"),
+    Input(SCOPE_STORE_ID, "data"),
     prevent_initial_call=True,
 )
-def update_peak_table(xml_path):
+def update_peak_table(xml_path, scope):
     if not xml_path:
         raise PreventUpdate
 
     try:
-        from laue_portal.analysis.xml_parser import get_all_indexed_peaks, parse_indexing_xml
+        from laue_portal.analysis.xml_parser import apply_data_scope, get_all_indexed_peaks, parse_indexing_xml
         from laue_portal.components.visualization.peak_table import make_peak_table
 
-        parsed = parse_indexing_xml(xml_path)
+        parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
         indexed_peaks = get_all_indexed_peaks(parsed)
         return make_peak_table(indexed_peaks)
     except Exception as e:
@@ -1750,17 +1768,18 @@ def update_peak_table(xml_path):
 @callback(
     Output("pattern-table-container", "children"),
     Input("peakindexing-xml-path", "data"),
+    Input(SCOPE_STORE_ID, "data"),
     prevent_initial_call=True,
 )
-def update_pattern_table(xml_path):
+def update_pattern_table(xml_path, scope):
     if not xml_path:
         raise PreventUpdate
 
     try:
-        from laue_portal.analysis.xml_parser import get_all_patterns, parse_indexing_xml
+        from laue_portal.analysis.xml_parser import apply_data_scope, get_all_patterns, parse_indexing_xml
         from laue_portal.components.visualization.pattern_table import make_pattern_table
 
-        parsed = parse_indexing_xml(xml_path)
+        parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
         patterns = get_all_patterns(parsed)
         return make_pattern_table(patterns)
     except Exception as e:
@@ -1849,6 +1868,7 @@ def update_pattern_columns(default_cols, position_cols, run_cols, detail_cols, c
     Input("pole-figure-reset-btn", "n_clicks"),
     State("pole-figure-center", "data"),
     State("peakindexing-xml-path", "data"),
+    State(SCOPE_STORE_ID, "data"),
     State("stereo-hkl-h", "value"),
     State("stereo-hkl-k", "value"),
     State("stereo-hkl-l", "value"),
@@ -1870,6 +1890,7 @@ def handle_pole_figure_click(
     reset_clicks,
     current_center,
     xml_path,
+    scope,
     h,
     k,
     l,
@@ -1928,9 +1949,9 @@ def handle_pole_figure_click(
                     cubic_hkl_family,
                     pole_figure_points,
                 )
-                from laue_portal.analysis.xml_parser import parse_indexing_xml
+                from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
 
-                parsed = parse_indexing_xml(xml_path)
+                parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
                 hkl = _parse_stereo_hkl(h, k, l)
                 family = cubic_hkl_family(*hkl)
                 surf_normal, surf_roll, surf_tilt = _resolved_surface_vectors(
@@ -1958,7 +1979,7 @@ def handle_pole_figure_click(
                     finite_mask = np.all(np.isfinite(pts), axis=1)
                     grain_indices = grain_indices[finite_mask]
                 if 0 <= point_index < len(grain_indices):
-                    grain_index = int(grain_indices[point_index])
+                    grain_index = int(parsed["_step_indices"][grain_indices[point_index]])
             except Exception as e:
                 print(f"Error resolving grain index from click: {e}")
                 traceback.print_exc()
@@ -2003,6 +2024,7 @@ def handle_pole_figure_click(
     Output("stereo-selection-info", "children"),
     Input("stereo-plot-graph", "selectedData"),
     State("peakindexing-xml-path", "data"),
+    State(SCOPE_STORE_ID, "data"),
     State("stereo-hkl-h", "value"),
     State("stereo-hkl-k", "value"),
     State("stereo-hkl-l", "value"),
@@ -2021,6 +2043,7 @@ def handle_pole_figure_click(
 def handle_pole_selection(
     selected_data,
     xml_path,
+    scope,
     h,
     k,
     l,
@@ -2072,9 +2095,9 @@ def handle_pole_selection(
                 cubic_hkl_family,
                 pole_figure_points,
             )
-            from laue_portal.analysis.xml_parser import parse_indexing_xml
+            from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
 
-            parsed = parse_indexing_xml(xml_path)
+            parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
 
             hkl = _parse_stereo_hkl(h, k, l)
             family = cubic_hkl_family(*hkl)
@@ -2108,7 +2131,7 @@ def handle_pole_selection(
 
             for pi in fallback_point_indices:
                 if 0 <= pi < len(grain_indices):
-                    grain_set.add(int(grain_indices[pi]))
+                    grain_set.add(int(parsed["_step_indices"][grain_indices[pi]]))
         except Exception as e:
             print(f"Error in fallback grain extraction: {e}")
             traceback.print_exc()
@@ -2144,16 +2167,16 @@ def handle_pole_selection(
                     batch_orientations,
                     pairwise_misorientation,
                 )
-                from laue_portal.analysis.xml_parser import parse_indexing_xml
+                from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
 
-                parsed = parse_indexing_xml(xml_path)
+                parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
                 orientations = batch_orientations(
                     parsed["recip_lattices"],
                     parsed["lattice_params"],
                 )
 
-                # Only compute if selected indices are within bounds
-                valid_indices = [i for i in selected if i < len(orientations)]
+                local_by_step = {int(step): i for i, step in enumerate(parsed["_step_indices"])}
+                valid_indices = [local_by_step[i] for i in selected if i in local_by_step]
                 if len(valid_indices) >= 2:
                     mis = pairwise_misorientation(
                         orientations,
@@ -2214,9 +2237,10 @@ def handle_pole_selection(
     Output("orientation-color-auto-range", "data"),
     Input("orientation-color-select", "value"),
     Input("peakindexing-xml-path", "data"),
+    Input(SCOPE_STORE_ID, "data"),
     prevent_initial_call=True,
 )
-def compute_orientation_auto_range(color_mode, xml_path):
+def compute_orientation_auto_range(color_mode, xml_path, scope):
     """
     Recompute the data-driven (vmin, vmax) for the current scalar color
     mode and publish to the auto-range Store.  Fires only on the events
@@ -2236,12 +2260,12 @@ def compute_orientation_auto_range(color_mode, xml_path):
 
     # Only parse XML when we actually need a scalar range.
     try:
-        from laue_portal.analysis.xml_parser import parse_indexing_xml
+        from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
         from laue_portal.components.visualization.orientation_map import (
             get_scalar_auto_range,
         )
 
-        parsed = parse_indexing_xml(xml_path)
+        parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
         auto_vmin, auto_vmax = get_scalar_auto_range(parsed, effective_color)
         return {"mode": effective_color, "min": auto_vmin, "max": auto_vmax}
     except Exception as e:
@@ -2343,8 +2367,8 @@ def update_stereo_color_key(color_mode, surface):
 # ---------------------------------------------------------------------------
 
 
-def _validated_detector_step(step_value, n_steps):
-    """Return an in-range integer detector step or raise PreventUpdate."""
+def _validated_detector_step(step_value, parsed):
+    """Translate an eligible original step ID to the scoped local row."""
     if step_value is None or step_value == "":
         raise PreventUpdate
     try:
@@ -2353,10 +2377,14 @@ def _validated_detector_step(step_value, n_steps):
         raise PreventUpdate from None
     if not math.isfinite(step_float) or not step_float.is_integer():
         raise PreventUpdate
-    step_idx = int(step_float)
-    if step_idx < 0 or step_idx >= n_steps:
+
+    import numpy as np
+
+    step_indices = np.asarray(parsed.get("_step_indices", np.arange(len(parsed["positions"]))))
+    matches = np.flatnonzero(step_indices == int(step_float))
+    if not matches.size:
         raise PreventUpdate
-    return step_idx
+    return int(matches[0])
 
 
 @callback(
@@ -2365,9 +2393,10 @@ def _validated_detector_step(step_value, n_steps):
     Output("detector-step-select", "value"),
     Output("detector-step-range-text", "children"),
     Input("peakindexing-xml-path", "data"),
+    Input(SCOPE_STORE_ID, "data"),
     prevent_initial_call=True,
 )
-def populate_detector_step_input(xml_path):
+def populate_detector_step_input(xml_path, scope):
     """
     Populate the detector step input bounds from the parsed XML.
 
@@ -2377,56 +2406,50 @@ def populate_detector_step_input(xml_path):
     if not xml_path:
         raise PreventUpdate
     try:
-        from laue_portal.analysis.xml_parser import parse_indexing_xml
+        from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
     except Exception:
         raise PreventUpdate from None
 
     try:
-        parsed = parse_indexing_xml(xml_path)
+        parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
     except Exception as e:
         print(f"Error parsing XML for detector tab: {e}")
         raise PreventUpdate from None
 
     n_indexed = parsed["n_indexed"]
-    n_steps = len(parsed["positions"])
-    if n_steps < 1:
-        raise PreventUpdate
+    step_indices = parsed.get("_step_indices", [])
+    if len(step_indices) < 1:
+        return 0, 0, None, "No steps match the data scope"
 
-    default_value = None
-    for i in range(n_steps):
-        if int(n_indexed[i]) > 0:
-            default_value = i
-            break
-
-    if default_value is None:
-        default_value = 0
-
-    step_min = 0
-    step_max = n_steps - 1
-    return step_min, step_max, default_value, f"Steps: {step_min} to {step_max}"
+    default_local = next((i for i, count in enumerate(n_indexed) if int(count) > 0), 0)
+    default_value = int(step_indices[default_local])
+    step_min = int(step_indices[0])
+    step_max = int(step_indices[-1])
+    return step_min, step_max, default_value, f"Eligible steps: {len(step_indices)} ({step_min} to {step_max})"
 
 
 @callback(
     Output("detector-pattern-checklist", "options"),
     Output("detector-pattern-checklist", "value"),
     Input("peakindexing-xml-path", "data"),
+    Input(SCOPE_STORE_ID, "data"),
     Input("detector-step-select", "value"),
     prevent_initial_call=True,
 )
-def populate_detector_pattern_checklist(xml_path, step_value):
+def populate_detector_pattern_checklist(xml_path, scope, step_value):
     """Refresh the pattern checklist whenever the step changes."""
     if not xml_path:
         return [], []
     if step_value is None or step_value == "":
         raise PreventUpdate
     try:
-        from laue_portal.analysis.xml_parser import get_step_peaks, parse_indexing_xml
+        from laue_portal.analysis.xml_parser import apply_data_scope, get_step_peaks, parse_indexing_xml
     except Exception:
         return [], []
 
     try:
-        parsed = parse_indexing_xml(xml_path)
-        step_idx = _validated_detector_step(step_value, len(parsed["positions"]))
+        parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
+        step_idx = _validated_detector_step(step_value, parsed)
         step_peaks = get_step_peaks(parsed, step_idx)
     except PreventUpdate:
         raise
@@ -2454,6 +2477,7 @@ def populate_detector_pattern_checklist(xml_path, step_value):
     Output("detector-step-summary", "children"),
     Output("detector-loading-target", "children"),
     Input("peakindexing-xml-path", "data"),
+    Input(SCOPE_STORE_ID, "data"),
     Input("peakindexing-path-context", "data"),
     Input("detector-step-select", "value"),
     Input("detector-show-predicted", "value"),
@@ -2472,6 +2496,7 @@ def populate_detector_pattern_checklist(xml_path, step_value):
 )
 def update_detector_view(
     xml_path,
+    scope,
     path_context,
     step_value,
     show_predicted,
@@ -2498,11 +2523,11 @@ def update_detector_view(
         )
         from laue_portal.analysis.detector_image import load_detector_image
         from laue_portal.analysis.geometry import resolve_geometry_for_indexing
-        from laue_portal.analysis.xml_parser import parse_indexing_xml
+        from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
         from laue_portal.components.visualization.detector_view import make_detector_view
 
-        parsed = parse_indexing_xml(xml_path)
-        step_idx = _validated_detector_step(step_value, len(parsed["positions"]))
+        parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
+        step_idx = _validated_detector_step(step_value, parsed)
 
         geometry = resolve_geometry_for_indexing(xml_path)
         if geometry is None or not geometry.detectors:
@@ -2583,8 +2608,9 @@ def _detector_step_summary(parsed, step_idx, overlay, overlay_statistics, image_
     y_pos = float(parsed["positions"][step_idx, 1])
     z_pos = float(parsed["positions"][step_idx, 2])
 
+    original_step = int(parsed.get("_step_indices", [step_idx])[step_idx])
     header_bits = [
-        html.Strong(f"Step #{step_idx}"),
+        html.Strong(f"Step #{original_step}"),
         f"  Motor position: ({x_pos:.1f}, {y_pos:.1f}, {z_pos:.1f})",
         html.Br(),
         f"Detector: {overlay.detector_id or '?'}  |  ",
@@ -2624,6 +2650,46 @@ def _detector_image_range(custom_vmin, custom_vmax, auto_vmin, auto_vmax):
     if vmin is not None and vmax is not None and float(vmin) > float(vmax):
         return vmax, vmin
     return vmin, vmax
+
+
+# ---------------------------------------------------------------------------
+# Callbacks: global data-scope bar
+#
+# The bar owns a single ``SCOPE_STORE_ID`` store rather than exposing one
+# Input per filter.  Figure/table callbacks should take that store as one
+# Input; ``update_orientation_map`` already has ~50 positional inputs and
+# adding one per filter forever does not scale.
+#
+# Chain is deliberately acyclic:
+#     controls | Reset  ->  scope store    (collect_data_scope)
+#     Reset             ->  control values (reset_data_scope_controls)
+# Nothing reads the store and writes back to the controls, which would
+# cycle with collect_data_scope.
+# ---------------------------------------------------------------------------
+
+
+@callback(
+    Output(SCOPE_STORE_ID, "data"),
+    Input(SCOPE_PATTERN0_ID, "value"),
+    Input(SCOPE_MIN_PEAKS_ID, "value"),
+    Input(SCOPE_RESET_ID, "n_clicks"),
+)
+def collect_data_scope(pattern0_only, min_peaks, reset_clicks):
+    """Gather the scope controls into the single global scope store."""
+    if dash.ctx.triggered_id == SCOPE_RESET_ID:
+        return dict(DEFAULT_SCOPE)
+    return normalize_scope({"pattern0_only": pattern0_only, "min_peaks": min_peaks})
+
+
+@callback(
+    Output(SCOPE_PATTERN0_ID, "value"),
+    Output(SCOPE_MIN_PEAKS_ID, "value"),
+    Input(SCOPE_RESET_ID, "n_clicks"),
+    prevent_initial_call=True,
+)
+def reset_data_scope_controls(n_clicks):
+    """Return the scope widgets to their neutral values."""
+    return DEFAULT_SCOPE["pattern0_only"], DEFAULT_SCOPE["min_peaks"]
 
 
 # ---------------------------------------------------------------------------
