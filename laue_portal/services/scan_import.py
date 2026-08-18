@@ -334,6 +334,37 @@ def load_staged_scan_log(token):
     return xml_bytes
 
 
+def build_technique_strings(scans, none="none"):
+    """Build the filtered and complete motor-group descriptions for scans."""
+    motor_groups = []
+    for scan in scans:
+        for attr_name in dir(scan):
+            if attr_name.startswith("scan_positioner") and attr_name.endswith("_PV"):
+                pv_value = getattr(scan, attr_name, None)
+                if pv_value:
+                    motor_groups.append(find_motor_group(pv_value))
+
+    all_motors_str = "; ".join(motor_groups) if motor_groups else none
+    if not motor_groups:
+        return none, all_motors_str
+
+    motor_groups_lower = [group.lower() for group in motor_groups]
+    sample_count = motor_groups_lower.count("sample")
+    seen_groups = {none}
+    final_groups = []
+
+    for group in motor_groups_lower:
+        if group in seen_groups:
+            continue
+        seen_groups.add(group)
+        if group == "sample":
+            final_groups.append("line" if sample_count == 1 else "area")
+        else:
+            final_groups.append(group)
+
+    return " + ".join(final_groups) if final_groups else none, all_motors_str
+
+
 def find_motor_group(pv_value):
     """
     Find which motor group contains the given motor string.

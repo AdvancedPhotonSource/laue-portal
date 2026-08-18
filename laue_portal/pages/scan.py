@@ -19,7 +19,7 @@ from laue_portal.components.form_base import _stack
 from laue_portal.components.metadata_form import metadata_form, set_metadata_form_props, set_scan_accordions
 from laue_portal.config import MOTOR_GROUPS
 from laue_portal.database import db_schema
-from laue_portal.services.scan_import import find_motor_group, update_motor_group_totals
+from laue_portal.services.scan_import import build_technique_strings, find_motor_group, update_motor_group_totals
 
 dash.register_page(__name__, path="/scan")
 
@@ -984,54 +984,6 @@ def render_role_plot(mode, rows, data):
 # =============================================================================
 # Scan Info
 # =============================================================================
-
-
-def build_technique_strings(scans, none="none"):
-    """
-    Build both filtered and all motor strings from scans.
-
-    Returns a tuple of (filtered_str, all_motors_str)
-
-    Rules for filtered string:
-    - Do not include the same string value twice
-    - Do not include any that are "none" unless all motor strings are "none"
-    - If there is only one string equal to "sample" include the string "line" instead
-    - If there are more than one strings equal to "sample" include the string "area" instead
-    """
-    motor_groups = []
-    for scan in scans:
-        for attr_name in dir(scan):
-            if attr_name.startswith("scan_positioner") and attr_name.endswith("_PV"):
-                pv_value = getattr(scan, attr_name, None)
-                if pv_value:
-                    motor_group = find_motor_group(pv_value)
-                    motor_groups.append(motor_group)
-
-    all_motors_str = "; ".join(motor_groups) if motor_groups else none
-
-    if not motor_groups:
-        return none, all_motors_str
-
-    motor_groups_lower = [g.lower() for g in motor_groups]
-    sample_count = motor_groups_lower.count("sample")
-
-    seen_groups = {none}
-    final_groups = []
-
-    for group in motor_groups_lower:
-        if group not in seen_groups:
-            seen_groups.add(group)
-            if group == "sample":
-                if sample_count == 1:
-                    final_groups.append("line")
-                elif sample_count > 1:
-                    final_groups.append("area")
-            else:
-                final_groups.append(group)
-
-    filtered_str = " + ".join(final_groups) if final_groups else none
-
-    return filtered_str, all_motors_str
 
 
 def set_scaninfo_form_props(metadata, scans, catalog, read_only=True):

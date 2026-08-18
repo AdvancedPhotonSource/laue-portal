@@ -6,6 +6,7 @@ and the Dash server can start without throwing any errors.
 """
 
 import os
+import subprocess
 import sys
 import tempfile
 from unittest.mock import patch
@@ -21,6 +22,18 @@ def test_import_main_app():
 
     assert hasattr(lau_dash, "app")
     assert hasattr(lau_dash, "ensure_database_exists")
+
+
+def test_dash_dependencies_have_no_duplicate_outputs():
+    """Page imports must not register the same callback more than once."""
+    script = """
+from collections import Counter
+import lau_dash
+from dash._callback import GLOBAL_CALLBACK_LIST
+counts = Counter(dependency["output"] for dependency in GLOBAL_CALLBACK_LIST)
+assert not [output for output, count in counts.items() if count > 1]
+"""
+    subprocess.run([sys.executable, "-c", script], cwd=project_root, check=True)
 
 
 def test_dash_app_creation():

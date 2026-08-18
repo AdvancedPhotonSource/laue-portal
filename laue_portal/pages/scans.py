@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 import laue_portal.database.session_utils as session_utils
 from laue_portal.database import db_schema
-from laue_portal.pages.scan import build_technique_strings
+from laue_portal.services.scan_import import build_technique_strings
 
 dash.register_page(__name__, path="/scans")
 
