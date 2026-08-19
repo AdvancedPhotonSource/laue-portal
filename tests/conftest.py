@@ -145,6 +145,46 @@ def create_test_recon(scan_number: int = 1) -> Any:
     )
 
 
+def create_test_reconstruction_run(scan_number: int | None = 1, job_id: int = 1) -> Any:
+    """Create a unified wire reconstruction run for tests."""
+    import laue_portal.database.db_schema as db_schema
+
+    return db_schema.ReconstructionRun(
+        scan_number=scan_number,
+        job_id=job_id,
+        method="wire",
+        input_path="/test/input",
+        output_path="/test/output/rec_1",
+        author="test_user",
+        notes="test reconstruction",
+        algorithm_version="test-version",
+        created_at=datetime.datetime(2022, 1, 1, 0, 0, 0),
+    )
+
+
+def create_test_wire_reconstruction_parameters(reconstruction_id: int | None = None) -> Any:
+    """Create wire-specific parameters for a unified reconstruction run."""
+    import laue_portal.database.db_schema as db_schema
+
+    values = {
+        "filename_prefixes": ["test_*.h5"],
+        "geometry_file": "/test/geometry.xml",
+        "percent_brightest": 10.0,
+        "wire_edges": "0 1",
+        "depth_start": -10.0,
+        "depth_end": 10.0,
+        "depth_resolution": 0.5,
+        "num_threads": 4,
+        "memory_limit_mb": 1024,
+        "scan_points": "1-10",
+        "scan_points_len": 10,
+        "verbose": 1,
+    }
+    if reconstruction_id is not None:
+        values["reconstruction_id"] = reconstruction_id
+    return db_schema.WireReconstructionParameters(**values)
+
+
 def create_test_catalog(scan_number: int = 1) -> Any:
     """
     Factory function to create a test Catalog record.

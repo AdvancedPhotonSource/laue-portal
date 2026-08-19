@@ -81,6 +81,12 @@ class Metadata(Base):
     recon_: Mapped["Recon"] = relationship(backref="metadata")  # noqa: F821
     wirerecon_: Mapped["WireRecon"] = relationship(backref="metadata")  # noqa: F821
     peakindex_: Mapped["PeakIndex"] = relationship(backref="metadata")  # noqa: F821
+    reconstruction_runs: Mapped[list["ReconstructionRun"]] = relationship(  # noqa: F821
+        back_populates="scan"
+    )
+    indexing_runs: Mapped[list["IndexingRun"]] = relationship(  # noqa: F821
+        back_populates="scan"
+    )
 
     def __repr__(self) -> str:
         pass  # TODO: Consider implemeting for debugging

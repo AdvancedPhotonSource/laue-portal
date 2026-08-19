@@ -29,3 +29,9 @@ class Job(Base):
     recon_: Mapped["Recon"] = relationship(backref="job")  # noqa: F821
     wirerecon_: Mapped["WireRecon"] = relationship(backref="job")  # noqa: F821
     peakindex_: Mapped["PeakIndex"] = relationship(backref="job")  # noqa: F821
+    reconstruction_run: Mapped["ReconstructionRun | None"] = relationship(  # noqa: F821
+        back_populates="job", uselist=False
+    )
+    indexing_run: Mapped["IndexingRun | None"] = relationship(  # noqa: F821
+        back_populates="job", uselist=False
+    )
