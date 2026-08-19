@@ -24,7 +24,7 @@ class Job(Base):
     messages: Mapped[str] = mapped_column(String, nullable=True)
 
     # Parent of:
-    subjob_: Mapped["SubJob"] = relationship(backref="job")  # noqa: F821
+    subjobs: Mapped[list["SubJob"]] = relationship(back_populates="job")  # noqa: F821
     calib_: Mapped["Calib"] = relationship(backref="job")  # noqa: F821
     recon_: Mapped["Recon"] = relationship(backref="job")  # noqa: F821
     wirerecon_: Mapped["WireRecon"] = relationship(backref="job")  # noqa: F821
