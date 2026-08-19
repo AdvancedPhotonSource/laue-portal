@@ -564,7 +564,7 @@ _viz_tabs = dbc.Tabs(
                                     dcc.Graph(
                                         id="orientation-map-graph",
                                         config={"displayModeBar": True, "scrollZoom": True},
-                                        style={"height": "100%", "minHeight": "400px"},
+                                        style={"height": "100%", "minHeight": 0},
                                     ),
                                     "orientation-loading-target",
                                 ),
@@ -727,7 +727,7 @@ _viz_tabs = dbc.Tabs(
                                             "scrollZoom": True,
                                             "modeBarButtonsToAdd": ["lasso2d", "select2d"],
                                         },
-                                        style={"height": "100%", "minHeight": "400px"},
+                                        style={"height": "100%", "minHeight": 0},
                                     ),
                                     "poles-loading-target",
                                 ),
@@ -966,7 +966,7 @@ _viz_tabs = dbc.Tabs(
                                     dcc.Graph(
                                         id="detector-view-graph",
                                         config={"displayModeBar": True, "scrollZoom": True},
-                                        style={"height": "100%", "minHeight": "500px"},
+                                        style={"height": "100%", "minHeight": 0},
                                     ),
                                     "detector-loading-target",
                                 ),

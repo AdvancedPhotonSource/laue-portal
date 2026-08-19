@@ -10,23 +10,27 @@
    The tab bodies need to fill the viewport below a stack of variable-height
    chrome (navbar, detail header, data-scope bar).  This used to be a
    hardcoded `calc(100vh - 170px)` repeated in three places, which silently
-   broke whenever that chrome changed height.  Instead the page is a flex
-   column and the tab body simply takes the remaining space.
+   broke whenever that chrome changed height.  The page therefore uses one
+   explicit grid row for each piece of chrome and gives the final row to the
+   tab content.
 
-   Note: `dbc.Tabs` renders no wrapper element -- the `<ul.nav-tabs>` and the
-   `<div.tab-content>` are direct children of `.pi-page`.
+   `dbc.Tabs` renders its navigation `<ul class="lp-detail-tabs">` and its
+   `.tab-content` as *siblings*.  Each `.tab-pane` also contains one anonymous
+   wrapper div before the Python-defined tab content.  Keep those two DOM
+   details in the height chain below; treating the nav as a wrapper either
+   collapses it or layers the content over it.
    ========================================================================== */
 
 .pi-page {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  height: 100dvh;
   overflow: hidden;
 }
 
 .pi-page > .tab-content {
-  flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
 }
 
 /* The pane is the scrollport.  It must be the pane and not an inner div:
@@ -40,6 +44,12 @@
 .pi-page > .tab-content > .tab-pane.active {
   height: 100%;
   overflow-y: auto;
+}
+
+/* dbc.Tab inserts this wrapper around every tab's declared children. */
+.pi-page > .tab-content > .tab-pane.active > div {
+  height: 100%;
+  min-height: 0;
 }
 
 /* The form nav sidebar is `height:100vh` so it works on the standalone
@@ -87,12 +97,15 @@
 @media (max-width: 576px) {
   /* Narrow screens scroll the page instead of pinning it to the viewport. */
   .pi-page {
+    display: flex;
+    flex-direction: column;
     height: auto;
     overflow: visible;
   }
   /* With the page unpinned the window scrolls, so the pane must not clip
      its content to a height it no longer has. */
-  .pi-page > .tab-content > .tab-pane.active {
+  .pi-page > .tab-content > .tab-pane.active,
+  .pi-page > .tab-content > .tab-pane.active > div {
     height: auto;
     overflow-y: visible;
   }
@@ -394,9 +407,8 @@
   min-height: 0;
   position: relative;
 }
-/* Pass height through dcc.Loading's nested wrapper divs so the Plotly
-   figure can fill the flex item. */
-.pi-viz-main > div:not(.pi-viz-details) > div  { height: 100%; }
+/* Pass the now-definite flex-item height through dcc.Loading's wrappers. */
+.pi-viz-main > div:not(.pi-viz-details) > div { height: 100%; }
 .pi-viz-main > div:not(.pi-viz-details) > div > div { height: 100%; }
 
 /* Loading overlay text */
