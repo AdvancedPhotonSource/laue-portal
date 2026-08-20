@@ -74,20 +74,20 @@ layout = html.Div(
 )
 
 VISIBLE_COLS = [
-    db_schema.WireRecon.wirerecon_id,
-    db_schema.WireRecon.scanNumber,
-    db_schema.WireRecon.scanPointslen,
-    db_schema.WireRecon.author,
-    db_schema.WireRecon.notes,
+    db_schema.ReconstructionRun.id.label("reconstruction_id"),
+    db_schema.ReconstructionRun.scan_number,
+    db_schema.WireReconstructionParameters.scan_points_len,
+    db_schema.ReconstructionRun.author,
+    db_schema.ReconstructionRun.notes,
     db_schema.Job.submit_time,
     db_schema.Job.status,
 ]
 
-SOURCE_COLS = {"scanNumber"}
+SOURCE_COLS = {"scan_number"}
 
 CUSTOM_HEADER_NAMES = {
-    "wirerecon_id": "Wire Reconstruction ID",
-    "scanPointslen": "Points",
+    "reconstruction_id": "Reconstruction ID",
+    "scan_points_len": "Points",
     "submit_time": "Date",
 }
 
@@ -104,7 +104,8 @@ def _get_recons():
                 func.sum(case((db_schema.SubJob.status == finished_status, 1), else_=0)).label("completed_subjobs"),
             )
             .join(db_schema.Job, db_schema.SubJob.job_id == db_schema.Job.job_id)
-            .join(db_schema.WireRecon, db_schema.WireRecon.job_id == db_schema.Job.job_id)
+            .join(db_schema.ReconstructionRun, db_schema.ReconstructionRun.job_id == db_schema.Job.job_id)
+            .filter(db_schema.ReconstructionRun.method == "wire")
             .filter(db_schema.Job.status == running_status)
             .group_by(db_schema.SubJob.job_id)
             .subquery()
@@ -113,11 +114,14 @@ def _get_recons():
         wirerecons = pd.read_sql(
             session.query(
                 *VISIBLE_COLS,
+                db_schema.ReconstructionRun.method,
                 func.coalesce(subjob_progress.c.completed_subjobs, 0).label("completed_subjobs"),
                 func.coalesce(subjob_progress.c.total_subjobs, 0).label("total_subjobs"),
             )
-            .join(db_schema.Job, db_schema.WireRecon.job_id == db_schema.Job.job_id)
+            .join(db_schema.WireReconstructionParameters)
+            .join(db_schema.Job, db_schema.ReconstructionRun.job_id == db_schema.Job.job_id)
             .outerjoin(subjob_progress, db_schema.Job.job_id == subjob_progress.c.job_id)
+            .filter(db_schema.ReconstructionRun.method == "wire")
             .statement,
             session.bind,
         )
@@ -171,7 +175,7 @@ def _get_recons():
                         "floatingFilter": True,
                         "unSortIcon": True,
                         "valueGetter": {
-                            "function": "params.data.scanNumber != null ? 'SN' + params.data.scanNumber : 'Unlinked'"
+                            "function": "params.data.scan_number != null ? 'SN' + params.data.scan_number : 'Unlinked'"
                         },
                     }
                 )
@@ -190,8 +194,8 @@ def _get_recons():
             "unSortIcon": True,
         }
 
-        if field_key == "wirerecon_id":
-            col_def["cellRenderer"] = "WireReconLinkRenderer"
+        if field_key == "reconstruction_id":
+            col_def["cellRenderer"] = "ReconstructionLinkRenderer"
             col_def["sort"] = "desc"
         elif field_key in ["submit_time", "start_time", "finish_time"]:
             col_def["cellRenderer"] = "DateFormatter"
@@ -272,12 +276,12 @@ def handle_recon_button(n_clicks, rows):
         return base_href
 
     row = rows[0]
-    scan_id = _query_id(row.get("scanNumber"))
-    wirerecon_id = _query_id(row.get("wirerecon_id"))
-    if not wirerecon_id:
+    scan_id = _query_id(row.get("scan_number"))
+    reconstruction_id = _query_id(row.get("reconstruction_id"))
+    if not reconstruction_id:
         return dash.no_update
 
-    query_params = [f"wirerecon_id={wirerecon_id}"]
+    query_params = [f"reconstruction_id={reconstruction_id}"]
     if scan_id:
         query_params.insert(0, f"scan_id={scan_id}")
     return f"{base_href}?{'&'.join(query_params)}"
@@ -299,12 +303,12 @@ def handle_peakindex_button(n_clicks, rows):
         return base_href
 
     row = rows[0]
-    scan_id = _query_id(row.get("scanNumber"))
-    wirerecon_id = _query_id(row.get("wirerecon_id"))
-    if not wirerecon_id:
+    scan_id = _query_id(row.get("scan_number"))
+    reconstruction_id = _query_id(row.get("reconstruction_id"))
+    if not reconstruction_id:
         return dash.no_update
 
-    query_params = [f"wirerecon_id={wirerecon_id}"]
+    query_params = [f"reconstruction_id={reconstruction_id}"]
     if scan_id:
         query_params.insert(0, f"scan_id={scan_id}")
     return f"{base_href}?{'&'.join(query_params)}"

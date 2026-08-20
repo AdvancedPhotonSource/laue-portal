@@ -1164,274 +1164,99 @@ def load_scan_metadata(href):
 
 
 # =============================================================================
-# Recon Table
+# Reconstruction Runs Table
 # =============================================================================
 
-VISIBLE_COLS_Recon = [
-    db_schema.Recon.recon_id,
-    db_schema.Recon.author,
-    db_schema.Recon.percent_brightest,
+RECONSTRUCTION_COLUMNS = [
+    db_schema.ReconstructionRun.id.label("reconstruction_id"),
+    db_schema.ReconstructionRun.scan_number,
+    db_schema.ReconstructionRun.method,
+    db_schema.ReconstructionRun.author,
+    db_schema.WireReconstructionParameters.scan_points_len,
+    db_schema.WireReconstructionParameters.percent_brightest,
+    db_schema.WireReconstructionParameters.depth_start,
+    db_schema.WireReconstructionParameters.depth_end,
     db_schema.Job.submit_time,
     db_schema.Job.start_time,
     db_schema.Job.finish_time,
     db_schema.Job.status,
-    db_schema.Recon.notes,
+    db_schema.ReconstructionRun.notes,
 ]
 
-CUSTOM_HEADER_NAMES_Recon = {
-    "recon_id": "Recon ID",
+RECONSTRUCTION_HEADERS = {
+    "reconstruction_id": "Reconstruction",
+    "scan_points_len": "Points",
     "percent_brightest": "Pixels",
     "submit_time": "Date",
 }
 
-CUSTOM_COLS_Recon_dict = {
-    1: [
-        db_schema.Catalog.aperture,
-        db_schema.Recon.calib_id,
-    ],
-    4: [
-        db_schema.Recon.scanPointslen,
-        db_schema.Metadata.motorGroup_sample_cpt_total,
-    ],
-    5: [
-        db_schema.Recon.geo_source_offset,
-        db_schema.Recon.geo_source_grid,
-    ],
-}
 
-ALL_COLS_Recon = (
-    VISIBLE_COLS_Recon + [db_schema.Recon.scanNumber] + [ii for i in CUSTOM_COLS_Recon_dict.values() for ii in i]
-)
+def _selection_column():
+    return {
+        "headerName": "",
+        "field": "checkbox",
+        "checkboxSelection": True,
+        "headerCheckboxSelection": True,
+        "width": 60,
+        "pinned": "left",
+        "sortable": False,
+        "filter": False,
+        "resizable": False,
+        "suppressMenu": True,
+        "floatingFilter": False,
+        "cellClass": "ag-checkbox-cell",
+        "headerClass": "ag-checkbox-header",
+    }
 
-VISIBLE_COLS_WireRecon = [
-    db_schema.WireRecon.wirerecon_id,
-    db_schema.WireRecon.author,
-    db_schema.WireRecon.percent_brightest,
-    db_schema.Job.submit_time,
-    db_schema.Job.start_time,
-    db_schema.Job.finish_time,
-    db_schema.Job.status,
-    db_schema.WireRecon.notes,
-]
 
-CUSTOM_HEADER_NAMES_WireRecon = {
-    "wirerecon_id": "Recon ID (Wire)",
-    "percent_brightest": "Pixels",
-    "submit_time": "Date",
-}
-
-CUSTOM_COLS_WireRecon_dict = {
-    1: [
-        db_schema.Catalog.aperture,
-    ],
-    4: [
-        db_schema.WireRecon.scanPointslen,
-        db_schema.Metadata.motorGroup_sample_cpt_total,
-    ],
-    5: [
-        db_schema.WireRecon.depth_start,
-        db_schema.WireRecon.depth_end,
-    ],
-}
-
-ALL_COLS_WireRecon = (
-    VISIBLE_COLS_WireRecon
-    + [db_schema.WireRecon.scanNumber]
-    + [ii for i in CUSTOM_COLS_WireRecon_dict.values() for ii in i]
-)
+def _workflow_columns(columns, headers, identity_field, identity_renderer):
+    definitions = [_selection_column()]
+    for column in columns:
+        field_key = column.key
+        if field_key == "scan_number":
+            continue
+        column_definition = {
+            "headerName": headers.get(field_key, field_key.replace("_", " ").title()),
+            "field": field_key,
+            "filter": True,
+            "sortable": True,
+            "resizable": True,
+            "floatingFilter": True,
+            "suppressMenuHide": True,
+        }
+        if field_key == identity_field:
+            column_definition["cellRenderer"] = identity_renderer
+        elif field_key in {"submit_time", "start_time", "finish_time"}:
+            column_definition["cellRenderer"] = "DateFormatter"
+        elif field_key == "status":
+            column_definition["cellRenderer"] = "StatusRenderer"
+        definitions.append(column_definition)
+    return definitions
 
 
 def _get_scan_recons(scan_id):
-    try:
-        scan_id = int(scan_id)
-        with Session(session_utils.get_engine()) as session:
-            aperture = pd.read_sql(
-                session.query(db_schema.Catalog.aperture).filter(db_schema.Catalog.scanNumber == scan_id).statement,
-                session.bind,
-            ).at[0, "aperture"]
-            aperture = str(aperture).lower()
+    scan_id = int(scan_id)
+    with Session(session_utils.get_engine()) as session:
+        statement = (
+            session.query(*RECONSTRUCTION_COLUMNS)
+            .join(db_schema.Job, db_schema.ReconstructionRun.job_id == db_schema.Job.job_id)
+            .outerjoin(
+                db_schema.WireReconstructionParameters,
+                db_schema.WireReconstructionParameters.reconstruction_id == db_schema.ReconstructionRun.id,
+            )
+            .filter(db_schema.ReconstructionRun.scan_number == scan_id)
+            .order_by(db_schema.ReconstructionRun.id.desc())
+            .statement
+        )
+        runs = pd.read_sql(statement, session.bind)
 
-            if "wire" in aperture:
-                scan_recons = pd.read_sql(
-                    session.query(
-                        *ALL_COLS_WireRecon,
-                    )
-                    .join(db_schema.Metadata.catalog_)
-                    .join(db_schema.Metadata.wirerecon_)
-                    .join(db_schema.Job, db_schema.WireRecon.job_id == db_schema.Job.job_id)
-                    .outerjoin(db_schema.SubJob, db_schema.Job.job_id == db_schema.SubJob.job_id)
-                    .filter(db_schema.Metadata.scanNumber == scan_id)
-                    .group_by(*ALL_COLS_WireRecon)
-                    .statement,
-                    session.bind,
-                )
-
-                cols = []
-                cols.append(
-                    {
-                        "headerName": "",
-                        "field": "checkbox",
-                        "checkboxSelection": True,
-                        "headerCheckboxSelection": True,
-                        "width": 60,
-                        "pinned": "left",
-                        "sortable": False,
-                        "filter": False,
-                        "resizable": False,
-                        "suppressMenu": True,
-                        "floatingFilter": False,
-                        "cellClass": "ag-checkbox-cell",
-                        "headerClass": "ag-checkbox-header",
-                    }
-                )
-                for col in VISIBLE_COLS_WireRecon:
-                    field_key = col.key
-                    header_name = CUSTOM_HEADER_NAMES_WireRecon.get(field_key, field_key.replace("_", " ").title())
-                    col_def = {
-                        "headerName": header_name,
-                        "field": field_key,
-                        "filter": True,
-                        "sortable": True,
-                        "resizable": True,
-                        "floatingFilter": True,
-                        "suppressMenuHide": True,
-                    }
-                    if field_key == "wirerecon_id":
-                        col_def["cellRenderer"] = "WireReconLinkRenderer"
-                    elif field_key in ["scanNumber", "dataset_id"]:
-                        col_def["cellRenderer"] = "DatasetIdScanLinkRenderer"
-                    elif field_key == "scanNumber":
-                        col_def["cellRenderer"] = "ScanLinkRenderer"
-                    elif field_key in ["submit_time", "start_time", "finish_time"]:
-                        col_def["cellRenderer"] = "DateFormatter"
-                    elif field_key == "status":
-                        col_def["cellRenderer"] = "StatusRenderer"
-                    cols.append(col_def)
-
-                for col_num in CUSTOM_COLS_WireRecon_dict.keys():
-                    if col_num == 1:
-                        col_def = {
-                            "headerName": "Calib ID",
-                            "valueGetter": {"function": "params.data.aperture + ': ' + params.data.calib_id"},
-                        }
-                    elif col_num == 4:
-                        col_def = {
-                            "headerName": "Points",
-                            "valueGetter": {
-                                "function": "params.data.scanPointslen + ' / ' + params.data.motorGroup_sample_cpt_total"
-                            },
-                        }
-                    elif col_num == 5:
-                        col_def = {
-                            "headerName": "Depth [µm]",
-                            "valueGetter": {"function": "params.data.depth_start + ' to ' + params.data.depth_end"},
-                        }
-                    col_def.update(
-                        {
-                            "filter": True,
-                            "sortable": True,
-                            "resizable": True,
-                            "suppressMenuHide": True,
-                        }
-                    )
-                    cols.insert(col_num, col_def)
-
-                return cols, scan_recons.to_dict("records")
-
-            else:
-                scan_recons = pd.read_sql(
-                    session.query(
-                        *ALL_COLS_Recon,
-                    )
-                    .join(db_schema.Metadata.catalog_)
-                    .join(db_schema.Metadata.recon_)
-                    .join(db_schema.Metadata.scan_)
-                    .join(db_schema.Job, db_schema.Recon.job_id == db_schema.Job.job_id)
-                    .outerjoin(db_schema.SubJob, db_schema.Job.job_id == db_schema.SubJob.job_id)
-                    .filter(db_schema.Metadata.scanNumber == scan_id)
-                    .group_by(*ALL_COLS_Recon)
-                    .statement,
-                    session.bind,
-                )
-
-                cols = []
-                cols.append(
-                    {
-                        "headerName": "",
-                        "field": "checkbox",
-                        "checkboxSelection": True,
-                        "headerCheckboxSelection": True,
-                        "width": 60,
-                        "pinned": "left",
-                        "sortable": False,
-                        "filter": False,
-                        "resizable": False,
-                        "suppressMenu": True,
-                        "floatingFilter": False,
-                        "cellClass": "ag-checkbox-cell",
-                        "headerClass": "ag-checkbox-header",
-                    }
-                )
-                for col in VISIBLE_COLS_Recon:
-                    field_key = col.key
-                    header_name = CUSTOM_HEADER_NAMES_Recon.get(field_key, field_key.replace("_", " ").title())
-                    col_def = {
-                        "headerName": header_name,
-                        "field": field_key,
-                        "filter": True,
-                        "sortable": True,
-                        "resizable": True,
-                        "floatingFilter": True,
-                        "suppressMenuHide": True,
-                    }
-                    if field_key == "recon_id":
-                        col_def["cellRenderer"] = "ReconLinkRenderer"
-                    elif field_key in ["scanNumber", "dataset_id"]:
-                        col_def["cellRenderer"] = "DatasetIdScanLinkRenderer"
-                    elif field_key == "scanNumber":
-                        col_def["cellRenderer"] = "ScanLinkRenderer"
-                    elif field_key in ["submit_time", "start_time", "finish_time"]:
-                        col_def["cellRenderer"] = "DateFormatter"
-                    elif field_key == "status":
-                        col_def["cellRenderer"] = "StatusRenderer"
-                    cols.append(col_def)
-
-                for col_num in CUSTOM_COLS_Recon_dict.keys():
-                    if col_num == 1:
-                        col_def = {
-                            "headerName": "Method",
-                            "valueGetter": {"function": "params.data.aperture + ', calib: ' + params.data.calib_id"},
-                        }
-                    elif col_num == 4:
-                        col_def = {
-                            "headerName": "Points",
-                            "valueGetter": {
-                                "function": "params.data.scanPointslen + ' / ' + params.data.motorGroup_sample_cpt_total"
-                            },
-                        }
-                    elif col_num == 5:
-                        col_def = {
-                            "headerName": "Depth [µm]",
-                            "valueGetter": {
-                                "function": "1000*(params.data.geo_source_grid[0] + params.data.geo_source_offset) "
-                                "+ ' to ' + "
-                                "1000*(params.data.geo_source_grid[1] + params.data.geo_source_offset)"
-                            },
-                        }
-                    col_def.update(
-                        {
-                            "filter": True,
-                            "sortable": True,
-                            "resizable": True,
-                            "suppressMenuHide": True,
-                        }
-                    )
-                    cols.insert(col_num, col_def)
-
-                return cols, scan_recons.to_dict("records")
-
-    except Exception as e:
-        print(f"Error loading reconstruction data: {e}")
+    columns = _workflow_columns(
+        RECONSTRUCTION_COLUMNS,
+        RECONSTRUCTION_HEADERS,
+        "reconstruction_id",
+        "ReconstructionLinkRenderer",
+    )
+    return columns, runs.to_dict("records")
 
 
 @callback(
@@ -1459,389 +1284,66 @@ def get_scan_recons(href):
 
 
 # =============================================================================
-# Peak Indexing Table
+# Indexing Runs Table
 # =============================================================================
 
-VISIBLE_COLS_PeakIndex = [
-    db_schema.PeakIndex.peakindex_id,
-    db_schema.PeakIndex.scanPointslen,
-    db_schema.PeakIndex.author,
-    db_schema.PeakIndex.boxsize,
+INDEXING_COLUMNS = [
+    db_schema.IndexingRun.id.label("indexing_id"),
+    db_schema.IndexingRun.scan_number,
+    db_schema.IndexingRun.reconstruction_id,
+    db_schema.ReconstructionRun.method.label("reconstruction_method"),
+    db_schema.IndexingRun.author,
+    db_schema.LaueGoIndexingParameters.scan_points_len,
+    db_schema.LaueGoIndexingParameters.depth_range_len,
+    db_schema.LaueGoIndexingParameters.box_size,
+    db_schema.LaueGoIndexingParameters.crystal_file,
     db_schema.Job.submit_time,
     db_schema.Job.status,
-    db_schema.PeakIndex.notes,
+    db_schema.IndexingRun.notes,
 ]
 
-CUSTOM_HEADER_NAMES_PeakIndex = {
-    "peakindex_id": "Index ID",
-    "scanPointslen": "Points",
-    "boxsize": "Box",
+INDEXING_HEADERS = {
+    "indexing_id": "Indexing",
+    "reconstruction_id": "Reconstruction",
+    "scan_points_len": "Points",
+    "depth_range_len": "Depth Points",
+    "box_size": "Box",
+    "crystal_file": "Structure File",
     "submit_time": "Date",
 }
-
-CUSTOM_COLS_PeakIndex_dict = {
-    5: [
-        db_schema.PeakIndex.crystFile,
-    ],
-    6: [
-        db_schema.PeakIndex.scanPointslen.label("PeakIndex_scanPointslen"),
-        db_schema.PeakIndex.depthRangelen,
-        db_schema.Metadata.motorGroup_sample_cpt_total,
-        db_schema.Metadata.motorGroup_depth_cpt_total,
-    ],
-}
-
-ALL_COLS_PeakIndex = (
-    VISIBLE_COLS_PeakIndex
-    + [db_schema.PeakIndex.scanNumber]
-    + [ii for i in CUSTOM_COLS_PeakIndex_dict.values() for ii in i]
-)
-
-VISIBLE_COLS_Recon_PeakIndex = [
-    db_schema.PeakIndex.peakindex_id,
-    db_schema.PeakIndex.recon_id,
-    db_schema.PeakIndex.scanPointslen,
-    db_schema.PeakIndex.author,
-    db_schema.PeakIndex.boxsize,
-    db_schema.Job.submit_time,
-    db_schema.Job.status,
-    db_schema.PeakIndex.notes,
-]
-
-CUSTOM_HEADER_NAMES_Recon_PeakIndex = {
-    "peakindex_id": "Index ID",
-    "recon_id": "Recon ID",
-    "scanPointslen": "Points",
-    "boxsize": "Box",
-    "submit_time": "Date",
-}
-
-CUSTOM_COLS_Recon_PeakIndex_dict = {
-    6: [
-        db_schema.PeakIndex.crystFile,
-    ],
-    7: [
-        db_schema.PeakIndex.scanPointslen.label("PeakIndex_scanPointslen"),
-        db_schema.PeakIndex.depthRangelen,
-        db_schema.Metadata.motorGroup_depth_cpt_total,
-        db_schema.Recon.scanPointslen.label("Recon_scanPointslen"),
-    ],
-}
-
-ALL_COLS_Recon_PeakIndex = (
-    VISIBLE_COLS_Recon_PeakIndex
-    + [db_schema.PeakIndex.scanNumber]
-    + [ii for i in CUSTOM_COLS_Recon_PeakIndex_dict.values() for ii in i]
-)
-
-VISIBLE_COLS_WireRecon_PeakIndex = [
-    db_schema.PeakIndex.peakindex_id,
-    db_schema.PeakIndex.wirerecon_id,
-    db_schema.PeakIndex.scanPointslen,
-    db_schema.PeakIndex.author,
-    db_schema.PeakIndex.boxsize,
-    db_schema.Job.submit_time,
-    db_schema.Job.status,
-    db_schema.PeakIndex.notes,
-]
-
-CUSTOM_HEADER_NAMES_WireRecon_PeakIndex = {
-    "peakindex_id": "Index ID",
-    "wirerecon_id": "Recon ID (Wire)",
-    "scanPointslen": "Points",
-    "boxsize": "Box",
-    "submit_time": "Date",
-}
-
-CUSTOM_COLS_WireRecon_PeakIndex_dict = {
-    6: [
-        db_schema.PeakIndex.crystFile,
-    ],
-    7: [
-        db_schema.PeakIndex.scanPointslen.label("PeakIndex_scanPointslen"),
-        db_schema.PeakIndex.depthRangelen,
-        db_schema.Metadata.motorGroup_depth_cpt_total,
-        db_schema.WireRecon.scanPointslen.label("WireRecon_scanPointslen"),
-    ],
-}
-
-ALL_COLS_WireRecon_PeakIndex = (
-    VISIBLE_COLS_WireRecon_PeakIndex
-    + [db_schema.PeakIndex.scanNumber]
-    + [ii for i in CUSTOM_COLS_WireRecon_PeakIndex_dict.values() for ii in i]
-)
 
 
 def _get_scan_peakindexings(scan_id):
-    try:
-        scan_id = int(scan_id)
-        with Session(session_utils.get_engine()) as session:
-            aperture = pd.read_sql(
-                session.query(db_schema.Catalog.aperture).filter(db_schema.Catalog.scanNumber == scan_id).statement,
-                session.bind,
-            ).at[0, "aperture"]
-            aperture = str(aperture).lower()
+    scan_id = int(scan_id)
+    with Session(session_utils.get_engine()) as session:
+        statement = (
+            session.query(*INDEXING_COLUMNS)
+            .join(db_schema.Job, db_schema.IndexingRun.job_id == db_schema.Job.job_id)
+            .join(
+                db_schema.LaueGoIndexingParameters,
+                db_schema.LaueGoIndexingParameters.indexing_id == db_schema.IndexingRun.id,
+            )
+            .outerjoin(
+                db_schema.ReconstructionRun,
+                db_schema.IndexingRun.reconstruction_id == db_schema.ReconstructionRun.id,
+            )
+            .filter(db_schema.IndexingRun.scan_number == scan_id)
+            .filter(db_schema.IndexingRun.method == "lauego")
+            .order_by(db_schema.IndexingRun.id.desc())
+            .statement
+        )
+        runs = pd.read_sql(statement, session.bind)
 
-            if aperture == "none":
-                scan_peakindexings = pd.read_sql(
-                    session.query(
-                        *ALL_COLS_PeakIndex,
-                    )
-                    .join(db_schema.Metadata, db_schema.PeakIndex.scanNumber == db_schema.Metadata.scanNumber)
-                    .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
-                    .filter(db_schema.PeakIndex.scanNumber == scan_id)
-                    .group_by(*ALL_COLS_PeakIndex)
-                    .statement,
-                    session.bind,
-                )
-
-                cols = []
-                cols.append(
-                    {
-                        "headerName": "",
-                        "field": "checkbox",
-                        "checkboxSelection": True,
-                        "headerCheckboxSelection": True,
-                        "width": 60,
-                        "pinned": "left",
-                        "sortable": False,
-                        "filter": False,
-                        "resizable": False,
-                        "suppressMenu": True,
-                        "floatingFilter": False,
-                        "cellClass": "ag-checkbox-cell",
-                        "headerClass": "ag-checkbox-header",
-                    }
-                )
-                for col in VISIBLE_COLS_PeakIndex:
-                    field_key = col.key
-                    header_name = CUSTOM_HEADER_NAMES_PeakIndex.get(field_key, field_key.replace("_", " ").title())
-                    col_def = {
-                        "headerName": header_name,
-                        "field": field_key,
-                        "filter": True,
-                        "sortable": True,
-                        "resizable": True,
-                        "floatingFilter": True,
-                        "suppressMenuHide": True,
-                    }
-                    if field_key == "peakindex_id":
-                        col_def["cellRenderer"] = "PeakIndexLinkRenderer"
-                    elif field_key in ["scanNumber", "dataset_id"]:
-                        col_def["cellRenderer"] = "DatasetIdScanLinkRenderer"
-                    elif field_key == "scanNumber":
-                        col_def["cellRenderer"] = "ScanLinkRenderer"
-                    elif field_key in ["submit_time", "start_time", "finish_time"]:
-                        col_def["cellRenderer"] = "DateFormatter"
-                    elif field_key == "status":
-                        col_def["cellRenderer"] = "StatusRenderer"
-                    cols.append(col_def)
-
-                for col_num in CUSTOM_COLS_PeakIndex_dict.keys():
-                    if col_num == 5:
-                        col_def = {
-                            "headerName": "Structure",
-                            "valueGetter": {
-                                "function": "params.data.crystFile.slice(params.data.crystFile.lastIndexOf('/') + 1, params.data.crystFile.lastIndexOf('.'))"
-                            },
-                        }
-                    if col_num == 6:
-                        col_def = {
-                            "headerName": "Frames",
-                            "valueGetter": {
-                                "function": "params.data.PeakIndex_scanPointslen * params.data.depthRangelen + ' / ' + params.data.motorGroup_sample_cpt_total * params.data.motorGroup_depth_cpt_total"
-                            },
-                        }
-                    col_def.update(
-                        {
-                            "filter": True,
-                            "sortable": True,
-                            "resizable": True,
-                            "suppressMenuHide": True,
-                        }
-                    )
-                    cols.insert(col_num, col_def)
-
-                return cols, scan_peakindexings.to_dict("records")
-
-            elif "wire" in aperture:
-                scan_peakindexings = pd.read_sql(
-                    session.query(
-                        *ALL_COLS_WireRecon_PeakIndex,
-                    )
-                    .join(db_schema.Metadata, db_schema.PeakIndex.scanNumber == db_schema.Metadata.scanNumber)
-                    .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
-                    .outerjoin(
-                        db_schema.WireRecon, db_schema.PeakIndex.wirerecon_id == db_schema.WireRecon.wirerecon_id
-                    )
-                    .filter(db_schema.PeakIndex.scanNumber == scan_id)
-                    .group_by(*ALL_COLS_PeakIndex)
-                    .statement,
-                    session.bind,
-                )
-
-                cols = []
-                cols.append(
-                    {
-                        "headerName": "",
-                        "field": "checkbox",
-                        "checkboxSelection": True,
-                        "headerCheckboxSelection": True,
-                        "width": 60,
-                        "pinned": "left",
-                        "sortable": False,
-                        "filter": False,
-                        "resizable": False,
-                        "suppressMenu": True,
-                        "floatingFilter": False,
-                        "cellClass": "ag-checkbox-cell",
-                        "headerClass": "ag-checkbox-header",
-                    }
-                )
-                for col in VISIBLE_COLS_WireRecon_PeakIndex:
-                    field_key = col.key
-                    header_name = CUSTOM_HEADER_NAMES_WireRecon_PeakIndex.get(
-                        field_key, field_key.replace("_", " ").title()
-                    )
-                    col_def = {
-                        "headerName": header_name,
-                        "field": field_key,
-                        "filter": True,
-                        "sortable": True,
-                        "resizable": True,
-                        "floatingFilter": True,
-                        "suppressMenuHide": True,
-                    }
-                    if field_key == "peakindex_id":
-                        col_def["cellRenderer"] = "PeakIndexLinkRenderer"
-                    elif field_key == "recon_id":
-                        col_def["cellRenderer"] = "WireReconLinkRenderer"
-                    elif field_key in ["scanNumber", "dataset_id"]:
-                        col_def["cellRenderer"] = "DatasetIdScanLinkRenderer"
-                    elif field_key == "scanNumber":
-                        col_def["cellRenderer"] = "ScanLinkRenderer"
-                    elif field_key in ["submit_time", "start_time", "finish_time"]:
-                        col_def["cellRenderer"] = "DateFormatter"
-                    elif field_key == "status":
-                        col_def["cellRenderer"] = "StatusRenderer"
-                    cols.append(col_def)
-
-                for col_num in CUSTOM_COLS_WireRecon_PeakIndex_dict.keys():
-                    if col_num == 6:
-                        col_def = {
-                            "headerName": "Structure",
-                            "valueGetter": {
-                                "function": "params.data.crystFile.slice(params.data.crystFile.lastIndexOf('/') + 1, params.data.crystFile.lastIndexOf('.'))"
-                            },
-                        }
-                    if col_num == 7:
-                        col_def = {
-                            "headerName": "Frames",
-                            "valueGetter": {
-                                "function": "params.data.PeakIndex_scanPointslen * params.data.depthRangelen + ' / ' + params.data.WireRecon_scanPointslen * params.data.motorGroup_depth_cpt_total"
-                            },
-                        }
-                    col_def.update(
-                        {
-                            "filter": True,
-                            "sortable": True,
-                            "resizable": True,
-                            "suppressMenuHide": True,
-                        }
-                    )
-                    cols.insert(col_num, col_def)
-
-                return cols, scan_peakindexings.to_dict("records")
-
-            else:
-                scan_peakindexings = pd.read_sql(
-                    session.query(
-                        *ALL_COLS_Recon_PeakIndex,
-                    )
-                    .join(db_schema.Metadata, db_schema.PeakIndex.scanNumber == db_schema.Metadata.scanNumber)
-                    .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
-                    .outerjoin(db_schema.Recon, db_schema.PeakIndex.recon_id == db_schema.Recon.recon_id)
-                    .filter(db_schema.PeakIndex.scanNumber == scan_id)
-                    .group_by(*ALL_COLS_PeakIndex)
-                    .statement,
-                    session.bind,
-                )
-
-                cols = []
-                cols.append(
-                    {
-                        "headerName": "",
-                        "field": "checkbox",
-                        "checkboxSelection": True,
-                        "headerCheckboxSelection": True,
-                        "width": 60,
-                        "pinned": "left",
-                        "sortable": False,
-                        "filter": False,
-                        "resizable": False,
-                        "suppressMenu": True,
-                        "floatingFilter": False,
-                        "cellClass": "ag-checkbox-cell",
-                        "headerClass": "ag-checkbox-header",
-                    }
-                )
-                for col in VISIBLE_COLS_Recon_PeakIndex:
-                    field_key = col.key
-                    header_name = CUSTOM_HEADER_NAMES_Recon_PeakIndex.get(
-                        field_key, field_key.replace("_", " ").title()
-                    )
-                    col_def = {
-                        "headerName": header_name,
-                        "field": field_key,
-                        "filter": True,
-                        "sortable": True,
-                        "resizable": True,
-                        "floatingFilter": True,
-                        "suppressMenuHide": True,
-                    }
-                    if field_key == "peakindex_id":
-                        col_def["cellRenderer"] = "PeakIndexLinkRenderer"
-                    elif field_key == "recon_id":
-                        col_def["cellRenderer"] = "ReconLinkRenderer"
-                    elif field_key in ["scanNumber", "dataset_id"]:
-                        col_def["cellRenderer"] = "DatasetIdScanLinkRenderer"
-                    elif field_key == "scanNumber":
-                        col_def["cellRenderer"] = "ScanLinkRenderer"
-                    elif field_key in ["submit_time", "start_time", "finish_time"]:
-                        col_def["cellRenderer"] = "DateFormatter"
-                    elif field_key == "status":
-                        col_def["cellRenderer"] = "StatusRenderer"
-                    cols.append(col_def)
-
-                for col_num in CUSTOM_COLS_Recon_PeakIndex_dict.keys():
-                    if col_num == 6:
-                        col_def = {
-                            "headerName": "Structure",
-                            "valueGetter": {
-                                "function": "params.data.crystFile.slice(params.data.crystFile.lastIndexOf('/') + 1, params.data.crystFile.lastIndexOf('.'))"
-                            },
-                        }
-                    if col_num == 7:
-                        col_def = {
-                            "headerName": "Frames",
-                            "valueGetter": {
-                                "function": "params.data.PeakIndex_scanPointslen * params.data.depthRangelen + ' / ' + params.data.Recon_scanPointslen * params.data.motorGroup_depth_cpt_total"
-                            },
-                        }
-                    col_def.update(
-                        {
-                            "filter": True,
-                            "sortable": True,
-                            "resizable": True,
-                            "suppressMenuHide": True,
-                        }
-                    )
-                    cols.insert(col_num, col_def)
-
-                return cols, scan_peakindexings.to_dict("records")
-
-    except Exception as e:
-        print(f"Error loading peak indexing data: {e}")
+    columns = _workflow_columns(
+        INDEXING_COLUMNS,
+        INDEXING_HEADERS,
+        "indexing_id",
+        "IndexingLinkRenderer",
+    )
+    for column in columns:
+        if column.get("field") == "reconstruction_id":
+            column["cellRenderer"] = "ReconstructionLinkRenderer"
+    return columns, runs.to_dict("records")
 
 
 @callback(
@@ -1931,84 +1433,38 @@ def _recon_page_for_scan(scan_id):
 )
 def selected_recon_href(recon_rows, peakindex_rows, page_href, href):
     base_href = href.split("?")[0]
-
-    # Nothing ticked -> fall back to the scan currently open on the page,
-    # routed to the recon form matching its aperture.
     page_scan_id = _scan_id_from_href(page_href)
-    if page_scan_id:
-        fallback_href = f"{_recon_page_for_scan(page_scan_id)}?scan_id={page_scan_id}"
-    else:
-        fallback_href = base_href
+    fallback_href = f"{_recon_page_for_scan(page_scan_id)}?scan_id={page_scan_id}" if page_scan_id else base_href
 
-    recon_scan_ids, recon_wirerecon_ids, recon_recon_ids = [], [], []
-    index_scan_ids, index_wirerecon_ids, index_recon_ids = [], [], []
-
-    for row in recon_rows or []:
-        if not row.get("scanNumber"):
-            return base_href, base_href
-        scan_id, wirerecon_id, recon_id = (
-            str(row["scanNumber"]),
-            str(row.get("wirerecon_id", "")),
-            str(row.get("recon_id", "")),
-        )
-        recon_scan_ids.append(scan_id)
-        recon_wirerecon_ids.append(wirerecon_id)
-        recon_recon_ids.append(recon_id)
-
-    for row in peakindex_rows or []:
-        if not row.get("scanNumber"):
-            return base_href, base_href
-        scan_id, wirerecon_id, recon_id = (
-            str(row["scanNumber"]),
-            str(row.get("wirerecon_id", "")),
-            str(row.get("recon_id", "")),
-        )
-        index_scan_ids.append(scan_id)
-        index_wirerecon_ids.append(wirerecon_id)
-        index_recon_ids.append(recon_id)
-
-    def build_href(scan_ids, wirerecon_ids, recon_ids, rows, base_href):
+    def build_href(rows):
         if not rows:
-            # No rows ticked -> prefill from the scan open on the page.
             return fallback_href
 
-        any_wirerecon_scans, any_recon_scans = False, False
-        for _, row in enumerate(rows):
-            any_wirerecon_scans = any(wirerecon_ids)
-            any_recon_scans = any(recon_ids)
+        scan_ids = {str(row["scan_number"]) for row in rows if row.get("scan_number") is not None}
+        if not scan_ids:
+            return base_href
 
-            if any_wirerecon_scans and any_recon_scans:
-                return base_href
+        methods = {
+            row.get("method") or row.get("reconstruction_method")
+            for row in rows
+            if row.get("method") or row.get("reconstruction_method")
+        }
+        if not methods:
+            methods = {
+                "wire" if _recon_page_for_scan(scan_id) == "/create-wire-reconstruction" else "ca"
+                for scan_id in scan_ids
+            }
+        if len(methods) != 1:
+            return base_href
 
-            if not any_wirerecon_scans and not any_recon_scans and row.get("aperture"):
-                aperture = str(row["aperture"]).lower()
-                if aperture == "none":
-                    return base_href
-                elif "wire" in aperture:
-                    any_wirerecon_scans = True
-                else:
-                    any_recon_scans = True
+        destination = "/create-wire-reconstruction" if "wire" in methods else "/create-reconstruction"
+        reconstruction_ids = [str(row["reconstruction_id"]) if row.get("reconstruction_id") else "" for row in rows]
+        query_params = [f"scan_id={','.join(sorted(scan_ids, key=int))}"]
+        if any(reconstruction_ids):
+            query_params.append(f"reconstruction_id={','.join(reconstruction_ids)}")
+        return f"{destination}?{'&'.join(query_params)}"
 
-                if any_wirerecon_scans and any_recon_scans:
-                    return base_href
-
-        if any_recon_scans:
-            base_href = "/create-reconstruction"
-        elif any_wirerecon_scans:
-            base_href = "/create-wire-reconstruction"
-
-        query_params = [f"scan_id={','.join(list(set(scan_ids)))}"]
-        if any_wirerecon_scans:
-            query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
-        if any_recon_scans:
-            query_params.append(f"recon_id={','.join(recon_ids)}")
-
-        return f"{base_href}?{'&'.join(query_params)}"
-
-    recon_href = build_href(recon_scan_ids, recon_wirerecon_ids, recon_recon_ids, recon_rows or [], base_href)
-    index_href = build_href(index_scan_ids, index_wirerecon_ids, index_recon_ids, peakindex_rows or [], base_href)
-
-    return recon_href, index_href
+    return build_href(recon_rows or []), build_href(peakindex_rows or [])
 
 
 @callback(
@@ -2023,62 +1479,26 @@ def selected_recon_href(recon_rows, peakindex_rows, page_href, href):
 )
 def selected_peakindex_href(recon_rows, peakindex_rows, page_href, href):
     base_href = href.split("?")[0]
-
-    # Nothing ticked -> prefill with the scan currently open on the page.
-    # Indexing has a single form, so only the scan_id needs filling in.
     page_scan_id = _scan_id_from_href(page_href)
     fallback_href = f"{base_href}?scan_id={page_scan_id}" if page_scan_id else base_href
 
-    recon_scan_ids, recon_wirerecon_ids, recon_recon_ids, recon_peakindex_ids = [], [], [], []
-    index_scan_ids, index_wirerecon_ids, index_recon_ids, index_peakindex_ids = [], [], [], []
-
-    for row in recon_rows or []:
-        if not row.get("scanNumber"):
-            return base_href, base_href
-        scan_id, wirerecon_id, recon_id, peakindex_id = (
-            str(row["scanNumber"]),
-            str(row.get("wirerecon_id", "")),
-            str(row.get("recon_id", "")),
-            str(row.get("peakindex_id", "")),
-        )
-        recon_scan_ids.append(scan_id)
-        recon_wirerecon_ids.append(wirerecon_id)
-        recon_recon_ids.append(recon_id)
-        recon_peakindex_ids.append(peakindex_id)
-
-    for row in peakindex_rows or []:
-        if not row.get("scanNumber"):
-            return base_href, base_href
-        scan_id, wirerecon_id, recon_id, peakindex_id = (
-            str(row["scanNumber"]),
-            str(row.get("wirerecon_id", "")),
-            str(row.get("recon_id", "")),
-            str(row.get("peakindex_id", "")),
-        )
-        index_scan_ids.append(scan_id)
-        index_wirerecon_ids.append(wirerecon_id)
-        index_recon_ids.append(recon_id)
-        index_peakindex_ids.append(peakindex_id)
-
-    def build_href(scan_ids, wirerecon_ids, recon_ids, peakindex_ids, base_href):
-        if not scan_ids:
-            # No rows ticked -> prefill from the scan open on the page.
+    def build_href(rows):
+        if not rows:
             return fallback_href
 
-        query_params = [f"scan_id={','.join(list(set(scan_ids)))}"]
-        if any(wirerecon_ids):
-            query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
-        if any(recon_ids):
-            query_params.append(f"recon_id={','.join(recon_ids)}")
-        if any(peakindex_ids):
-            query_params.append(f"peakindex_id={','.join(peakindex_ids)}")
-
+        scan_ids = {str(row["scan_number"]) for row in rows if row.get("scan_number") is not None}
+        if not scan_ids:
+            return base_href
+        reconstruction_ids = [str(row["reconstruction_id"]) if row.get("reconstruction_id") else "" for row in rows]
+        indexing_ids = [str(row["indexing_id"]) if row.get("indexing_id") else "" for row in rows]
+        query_params = [f"scan_id={','.join(sorted(scan_ids, key=int))}"]
+        if any(reconstruction_ids):
+            query_params.append(f"reconstruction_id={','.join(reconstruction_ids)}")
+        if any(indexing_ids):
+            query_params.append(f"indexing_id={','.join(indexing_ids)}")
         return f"{base_href}?{'&'.join(query_params)}"
 
-    recon_href = build_href(recon_scan_ids, recon_wirerecon_ids, recon_recon_ids, recon_peakindex_ids, base_href)
-    index_href = build_href(index_scan_ids, index_wirerecon_ids, index_recon_ids, index_peakindex_ids, base_href)
-
-    return recon_href, index_href
+    return build_href(recon_rows or []), build_href(peakindex_rows or [])
 
 
 @callback(

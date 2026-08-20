@@ -32,7 +32,8 @@ from sqlalchemy.orm import Session
 
 import laue_portal.database.session_utils as session_utils
 from laue_portal.config import DEFAULT_VARIABLES, VALID_HDF_EXTENSIONS
-from laue_portal.database.db_utils import get_data_from_id, parse_IDnumber, parse_parameter, resolve_path_with_root
+from laue_portal.database import db_schema
+from laue_portal.database.db_utils import parse_parameter, remove_root_path_prefix, resolve_path_with_root
 from laue_portal.utilities.filename_patterns import (
     build_pattern_label,
     extract_index_patterns,
@@ -40,8 +41,46 @@ from laue_portal.utilities.filename_patterns import (
     scan_directory_patterns,
 )
 from laue_portal.utilities.srange import srange
+from laue_portal.workflows.identity import parse_workflow_identities
 
 logger = logging.getLogger(__name__)
+
+
+def _workflow_source_data(session, identity, root_path, context, catalog_defaults):
+    """Resolve form path defaults from unified workflow provenance."""
+
+    if identity.indexing_id is not None:
+        indexing = session.get(db_schema.IndexingRun, identity.indexing_id)
+        if indexing is not None and context == "peakindex" and indexing.lauego_parameters is not None:
+            return {
+                "data_path": remove_root_path_prefix(indexing.input_path, root_path),
+                "filenamePrefix": indexing.lauego_parameters.filename_prefixes,
+            }
+
+    if identity.reconstruction_id is not None:
+        reconstruction = session.get(db_schema.ReconstructionRun, identity.reconstruction_id)
+        if reconstruction is not None:
+            parameters = reconstruction.wire_parameters
+            input_path = reconstruction.output_path if context == "peakindex" else reconstruction.input_path
+            return {
+                "data_path": remove_root_path_prefix(input_path, root_path),
+                "filenamePrefix": parameters.filename_prefixes if parameters is not None else [],
+            }
+
+    if identity.scan_number is not None:
+        catalog = session.get(db_schema.Catalog, identity.scan_number)
+        if catalog is not None:
+            return {
+                "data_path": remove_root_path_prefix(catalog.filefolder, root_path),
+                "filenamePrefix": catalog.filenamePrefix,
+            }
+
+    if catalog_defaults:
+        return {
+            "data_path": catalog_defaults.get("filefolder", ""),
+            "filenamePrefix": catalog_defaults.get("filenamePrefix", ""),
+        }
+    return None
 
 
 def _effective_data_paths(data_path, root_path):
@@ -113,7 +152,7 @@ def register_update_path_fields_callback(
     - filename_prefix_id: ID of the filename prefix field to update
     - root_path_id: ID of the root path field to update
     - catalog_defaults: Dictionary of catalog default values
-    - context: The context for get_data_from_id ('wire_recon', 'recon', or 'peakindex')
+    - context: Source-path context (``wire_recon`` or ``peakindex``)
     - id_number_id: ID of the ID number input field (optional, for IDnumber field)
     - output_folder_id: ID of the output folder field to update (optional)
     - build_template_func: Function to build output folder template (optional, signature: func(scan_num_int, data_path, **kwargs))
@@ -142,24 +181,14 @@ def register_update_path_fields_callback(
 
         with Session(session_utils.get_engine()) as session:
             try:
-                # Parse ID number to get all IDs (handles semicolon-separated values)
-                id_numbers = [s.strip() for s in str(field_value).split(";") if s]
-
-                if not id_numbers:
-                    set_props(alert_id, {"is_open": True, "children": "Invalid ID number format.", "color": "danger"})
-                    raise PreventUpdate
-
-                # Get data for each ID
+                identities = parse_workflow_identities(field_value, session)
                 id_data_list = []
-                for id_num in id_numbers:
-                    try:
-                        id_dict = parse_IDnumber(id_num, session)
-                        id_data = get_data_from_id(session, id_dict, root_path, context, catalog_defaults)
-                        if id_data and id_data.get("data_path"):
-                            id_data_list.append(id_data)
-                    except ValueError as e:
-                        logger.warning(f"Could not parse ID number '{id_num}': {e}")
-                        continue
+                valid_identities = []
+                for identity in identities:
+                    id_data = _workflow_source_data(session, identity, root_path, context, catalog_defaults)
+                    if id_data and id_data.get("data_path"):
+                        id_data_list.append(id_data)
+                        valid_identities.append(identity)
 
                 if id_data_list:
                     # If multiple IDs, merge the data using generic helper
@@ -182,19 +211,8 @@ def register_update_path_fields_callback(
                     # Update output folder if build_template_func and output_folder_id are provided
                     if build_template_func and output_folder_id:
                         try:
-                            # Parse ID numbers to extract individual IDs for template building
                             output_folders = []
-                            for id_num in id_numbers:
-                                id_dict = parse_IDnumber(id_num, session)
-                                scan_num_int = id_dict.get("scanNumber")
-
-                                # Convert to int if present
-                                if scan_num_int:
-                                    try:
-                                        scan_num_int = int(scan_num_int)
-                                    except (ValueError, TypeError):
-                                        scan_num_int = None
-
+                            for identity in valid_identities:
                                 # Get data_path for this ID (use first one if multiple)
                                 current_data_path = (
                                     merged_data["data_path"].split(";")[0].strip()
@@ -202,21 +220,10 @@ def register_update_path_fields_callback(
                                     else merged_data["data_path"]
                                 )
 
-                                # Build template with available IDs (kwargs will contain wirerecon_id_int, recon_id_int for peakindexing)
-                                template_kwargs = {}
-                                if "wirerecon_id" in id_dict and id_dict["wirerecon_id"]:
-                                    try:
-                                        template_kwargs["wirerecon_id_int"] = int(id_dict["wirerecon_id"])
-                                    except (ValueError, TypeError):
-                                        pass
-                                if "recon_id" in id_dict and id_dict["recon_id"]:
-                                    try:
-                                        template_kwargs["recon_id_int"] = int(id_dict["recon_id"])
-                                    except (ValueError, TypeError):
-                                        pass
-
                                 output_folder = build_template_func(
-                                    scan_num_int=scan_num_int, data_path=current_data_path, **template_kwargs
+                                    scan_num_int=identity.scan_number,
+                                    data_path=current_data_path,
+                                    reconstruction_id_int=identity.reconstruction_id,
                                 )
                                 output_folders.append(output_folder)
 

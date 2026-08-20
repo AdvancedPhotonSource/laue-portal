@@ -36,7 +36,7 @@ def valid_peakindex_fields(tmp_path):
         "root_path": "",
         "data_path": str(data_dir),
         "filenamePrefix": "img_1.tif",
-        "scanPoints": "",
+        "scanPoints": "1",
         "depthRange": "",
         "geoFile": str(geo_file),
         "crystFile": str(cryst_file),
@@ -215,11 +215,11 @@ def test_one_placeholder_requires_exactly_one_index_range(tmp_path, isolated_db,
     result = validate_peakindexing(fields)
 
     assert "filenamePrefix" in result["errors"]
-    assert "scanPoints" in result["errors"]
-    assert "depthRange" in result["errors"]
+    assert ("scanPoints" in result["errors"]) is (not scan_points)
+    assert "depthRange" not in result["errors"]
 
 
-def test_one_placeholder_accepts_depth_range_without_scan_points(tmp_path, isolated_db):
+def test_scan_points_are_required_even_when_depth_range_is_present(tmp_path, isolated_db):
     fields = valid_peakindex_fields(tmp_path)
     fields.update(
         {
@@ -232,10 +232,10 @@ def test_one_placeholder_accepts_depth_range_without_scan_points(tmp_path, isola
 
     result = validate_peakindexing(fields)
 
-    assert result["errors"] == {}
+    assert "scanPoints" in result["errors"]
 
 
-def test_indexed_file_validation_reports_missing_scan_points(tmp_path, isolated_db):
+def test_file_resolution_is_deferred_to_the_workflow_service(tmp_path, isolated_db):
     fields = valid_peakindex_fields(tmp_path)
     fields.update(
         {
@@ -248,8 +248,7 @@ def test_indexed_file_validation_reports_missing_scan_points(tmp_path, isolated_
 
     result = validate_peakindexing(fields)
 
-    assert "scanPoints" in result["errors"]
-    assert "indices: 3" in result["errors"]["scanPoints"][0]
+    assert result["errors"] == {}
 
 
 def test_two_placeholders_require_scan_points_and_depth_range(tmp_path, isolated_db):
@@ -265,7 +264,8 @@ def test_two_placeholders_require_scan_points_and_depth_range(tmp_path, isolated
 
     result = validate_peakindexing(fields)
 
-    assert "depthRange" in result["errors"]
+    assert "filenamePrefix" in result["errors"]
+    assert "depthRange" not in result["errors"]
 
 
 def test_multi_input_validation_labels_the_failing_input(tmp_path, isolated_db):

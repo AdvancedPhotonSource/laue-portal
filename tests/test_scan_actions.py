@@ -2,16 +2,9 @@ from unittest.mock import patch
 
 import dash
 import pytest
-from sqlalchemy.orm import Session
 
 import lau_dash  # noqa: F401
 import laue_portal.pages.scan as scan_page
-from laue_portal.components.recon_form import set_recon_form_props
-from laue_portal.pages.create_reconstruction import (
-    _merge_recon_scan_updates,
-    _parse_pooled_value,
-    load_scan_data_from_url,
-)
 from laue_portal.pages.scan import render_flex_plot, render_role_plot
 from laue_portal.pages.scans import handle_recon_button, layout, update_button_states
 
@@ -92,81 +85,13 @@ def test_role_3d_plot_uses_opaque_square_markers():
     assert figure.data[0].marker.opacity == 1.0
 
 
-def test_standard_reconstruction_loader_populates_scan_database_values(test_metadata_database):
-    test_engine, _test_db_file, metadata, scan, catalog = test_metadata_database
-    metadata.motorGroup_sample_cpt_total = 3
-    metadata.motorGroup_depth_cpt_total = 4
-    catalog.filefolder = "/workspace/data/scan_1"
-    catalog.filenamePrefix = ["image_"]
-    catalog.notes = "scan notes"
-    scan.scan_positioner1_PV = "34ide:t80:c0:m1.VAL"
-    scan.scan_positioner1 = "0 10 -0.5"
+def test_ca_creation_page_is_an_unavailable_shim():
+    from laue_portal.pages.create_reconstruction import layout as ca_layout
 
-    with Session(test_engine) as session:
-        session.add_all([metadata, scan, catalog])
-        session.commit()
-
-    updates = {}
-
-    with (
-        patch("laue_portal.pages.create_reconstruction.session_utils.get_engine", return_value=test_engine),
-        patch.dict(
-            "laue_portal.pages.create_reconstruction.DEFAULT_VARIABLES",
-            {"root_path": "/workspace", "author": "", "notes": ""},
-        ),
-        patch(
-            "laue_portal.pages.create_reconstruction.set_props",
-            side_effect=lambda component_id, props: updates.update({component_id: props}),
-        ),
-    ):
-        load_scan_data_from_url("http://localhost/create-reconstruction?scan_id=1")
-
-    expected_values = {
-        "scanNumber": "1",
-        "file_path": "data/scan_1",
-        "file_output": "analysis/scan_1/rec_%d",
-        "frame_start": 0,
-        "frame_end": 12,
-        "step": 0.5,
-        "author": "test_user",
-        "notes": "scan notes",
-    }
-    assert {field: updates[field]["value"] for field in expected_values} == expected_values
-    assert updates["alert-scan-loaded"]["color"] == "warning"
-    assert "Still required:" in updates["alert-scan-loaded"]["children"]
-    assert "calibration/focus geometry" in updates["alert-scan-loaded"]["children"]
-
-
-def test_standard_reconstruction_pooling_preserves_per_scan_values():
-    merged = _merge_recon_scan_updates(
-        [
-            {"scanNumber": 12, "file_path": "data/12", "frame_end": 10, "step": 0.5},
-            {"scanNumber": 13, "file_path": "data/13", "frame_end": 20, "step": 0.5},
-        ]
+    submit_button = next(
+        component for component in ca_layout._traverse() if getattr(component, "id", None) == "submit_recon"
     )
-
-    assert merged == {
-        "scanNumber": "12,13",
-        "file_path": "data/12; data/13",
-        "frame_end": "10; 20",
-        "step": 0.5,
-    }
-    assert _parse_pooled_value(merged["frame_end"], 2, lambda value: int(float(value))) == [10, 20]
-    assert _parse_pooled_value(merged["file_path"], 2) == ["data/12", "data/13"]
-
-
-def test_existing_reconstruction_uses_distance_for_ceny(test_database):
-    _engine, _db_file, _metadata, _job, recon, _catalog = test_database
-    updates = {}
-
-    with patch(
-        "laue_portal.components.recon_form.set_props",
-        side_effect=lambda component_id, props: updates.update({component_id: props}),
-    ):
-        set_recon_form_props(recon)
-
-    assert updates["calib_id"]["value"] == recon.calib_id
-    assert updates["ceny"]["value"] == recon.geo_mask_focus_dist
+    assert submit_button.disabled is True
 
 
 # ---------------------------------------------------------------------------
@@ -236,16 +161,16 @@ def test_new_index_without_scan_in_url_falls_back_to_bare_href():
 
 def test_selected_rows_still_take_priority_over_page_scan():
     # A ticked row must win over the page-level fallback.
-    rows = [{"scanNumber": 999, "wirerecon_id": 5, "recon_id": "", "aperture": "wire"}]
+    rows = [{"scan_number": 999, "reconstruction_id": 5, "method": "wire"}]
     with _patch_aperture("wire"):
         recon_href, _ = scan_page.selected_recon_href(rows, [], _SCAN_PAGE_URL, "/create-wire-reconstruction")
-    assert recon_href == "/create-wire-reconstruction?scan_id=999&wirerecon_id=5"
+    assert recon_href == "/create-wire-reconstruction?scan_id=999&reconstruction_id=5"
 
 
 def test_selected_index_rows_still_take_priority_over_page_scan():
-    rows = [{"scanNumber": 999, "wirerecon_id": 5, "recon_id": "", "peakindex_id": 7}]
+    rows = [{"scan_number": 999, "reconstruction_id": 5, "indexing_id": 7}]
     _, index_href = scan_page.selected_peakindex_href([], rows, _SCAN_PAGE_URL, "/create-peakindexing")
-    assert index_href == "/create-peakindexing?scan_id=999&wirerecon_id=5&peakindex_id=7"
+    assert index_href == "/create-peakindexing?scan_id=999&reconstruction_id=5&indexing_id=7"
 
 
 def test_href_rewrite_is_idempotent():

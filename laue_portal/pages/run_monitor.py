@@ -131,15 +131,15 @@ layout = html.Div(
 
 REFERENCE_COLS = [
     db_schema.Calib.calib_id,
-    db_schema.Recon.recon_id,
-    db_schema.WireRecon.wirerecon_id,
-    db_schema.PeakIndex.peakindex_id,
+    db_schema.ReconstructionRun.id.label("reconstruction_id"),
+    db_schema.IndexingRun.id.label("indexing_id"),
 ]
 
 CUSTOM_HEADER_NAMES = {
     "job_id": "Job ID",
-    "wirerecon_id": "Recon ID (Wire)",
-    "scanNumber": "Scan ID",
+    "reconstruction_id": "Reconstruction ID",
+    "indexing_id": "Indexing ID",
+    "scan_number": "Scan ID",
     "calib_id": "Calibration ID",
     "submit_time": "Date",
     "subjob_id": "SubJob ID",
@@ -200,42 +200,40 @@ def _get_jobs():
         )
 
         catalog_calib = aliased(db_schema.Catalog)
-        catalog_recon = aliased(db_schema.Catalog)
-        catalog_wirerecon = aliased(db_schema.Catalog)
-        catalog_peakindex = aliased(db_schema.Catalog)
+        catalog_reconstruction = aliased(db_schema.Catalog)
+        catalog_indexing = aliased(db_schema.Catalog)
 
         # Main query for jobs with related entities
         jobs = pd.read_sql(
             session.query(
                 db_schema.Job,
                 *REFERENCE_COLS,
+                db_schema.ReconstructionRun.method.label("reconstruction_method"),
                 func.coalesce(
                     db_schema.Calib.scanNumber,
-                    db_schema.Recon.scanNumber,
-                    db_schema.WireRecon.scanNumber,
-                    db_schema.PeakIndex.scanNumber,
-                ).label("scanNumber"),
+                    db_schema.ReconstructionRun.scan_number,
+                    db_schema.IndexingRun.scan_number,
+                ).label("scan_number"),
                 func.coalesce(
                     catalog_calib.aperture,
-                    catalog_recon.aperture,
-                    catalog_wirerecon.aperture,
-                    catalog_peakindex.aperture,
+                    catalog_reconstruction.aperture,
+                    catalog_indexing.aperture,
                 ).label("aperture"),
                 func.coalesce(
                     db_schema.Calib.author,
-                    db_schema.Recon.author,
-                    db_schema.WireRecon.author,
-                    db_schema.PeakIndex.author,
+                    db_schema.ReconstructionRun.author,
+                    db_schema.IndexingRun.author,
                 ).label("author"),
             )
             .outerjoin(db_schema.Calib, db_schema.Job.job_id == db_schema.Calib.job_id)
-            .outerjoin(db_schema.Recon, db_schema.Job.job_id == db_schema.Recon.job_id)
-            .outerjoin(db_schema.WireRecon, db_schema.Job.job_id == db_schema.WireRecon.job_id)
-            .outerjoin(db_schema.PeakIndex, db_schema.Job.job_id == db_schema.PeakIndex.job_id)
+            .outerjoin(db_schema.ReconstructionRun, db_schema.Job.job_id == db_schema.ReconstructionRun.job_id)
+            .outerjoin(db_schema.IndexingRun, db_schema.Job.job_id == db_schema.IndexingRun.job_id)
             .outerjoin(catalog_calib, db_schema.Calib.scanNumber == catalog_calib.scanNumber)
-            .outerjoin(catalog_recon, db_schema.Recon.scanNumber == catalog_recon.scanNumber)
-            .outerjoin(catalog_wirerecon, db_schema.WireRecon.scanNumber == catalog_wirerecon.scanNumber)
-            .outerjoin(catalog_peakindex, db_schema.PeakIndex.scanNumber == catalog_peakindex.scanNumber)
+            .outerjoin(
+                catalog_reconstruction,
+                db_schema.ReconstructionRun.scan_number == catalog_reconstruction.scanNumber,
+            )
+            .outerjoin(catalog_indexing, db_schema.IndexingRun.scan_number == catalog_indexing.scanNumber)
             .order_by(db_schema.Job.job_id.desc())
             .statement,
             session.bind,
@@ -328,7 +326,7 @@ def _get_jobs():
             col_def["width"] = 175
         elif field_key == "dataset_id":
             col_def["cellRenderer"] = "DatasetIdScanLinkRenderer"
-        elif field_key == "scanNumber":
+        elif field_key == "scan_number":
             col_def["cellRenderer"] = "ScanLinkRenderer"  # Use the custom JS renderer
         elif field_key in ["submit_time", "start_time", "finish_time"]:
             col_def["cellRenderer"] = "DateFormatter"  # Use the date formatter for datetime fields
@@ -343,9 +341,8 @@ def _get_jobs():
         "valueGetter": {
             "function": """ [
                     'calib_id',
-                    'recon_id',
-                    'wirerecon_id',
-                    'peakindex_id'
+                    'reconstruction_id',
+                    'indexing_id'
         ];"""
         },
         "cellRenderer": "JobRefsRenderer",

@@ -25,9 +25,10 @@ layout = html.Div(
                             [
                                 dbc.NavItem(
                                     dbc.NavLink(
-                                        "New Recon",
+                                        "New CA Recon (Unavailable)",
                                         href="/create-reconstruction",
                                         active=False,
+                                        disabled=True,
                                         id="mask-recons-page-mask-recon",
                                     )
                                 ),
@@ -89,11 +90,10 @@ layout = html.Div(
 )
 
 VISIBLE_COLS = [
-    db_schema.Recon.recon_id,
-    db_schema.Recon.scanNumber,
-    db_schema.Recon.calib_id,
-    db_schema.Recon.author,
-    db_schema.Recon.notes,
+    db_schema.ReconstructionRun.id.label("reconstruction_id"),
+    db_schema.ReconstructionRun.scan_number,
+    db_schema.ReconstructionRun.author,
+    db_schema.ReconstructionRun.notes,
     db_schema.Catalog.sample_name,
     db_schema.Catalog.aperture,
     db_schema.Job.submit_time,
@@ -103,9 +103,8 @@ VISIBLE_COLS = [
 ]
 
 CUSTOM_HEADER_NAMES = {
-    "recon_id": "Recon ID",
-    "scanNumber": "Scan ID",
-    "calib_id": "Calibration ID",
+    "reconstruction_id": "Reconstruction ID",
+    "scan_number": "Scan ID",
     "submit_time": "Date",
 }
 
@@ -114,8 +113,9 @@ def _get_recons():
     with Session(session_utils.get_engine()) as session:
         recons = pd.read_sql(
             session.query(*VISIBLE_COLS)
-            .join(db_schema.Catalog, db_schema.Recon.scanNumber == db_schema.Catalog.scanNumber)
-            .join(db_schema.Job, db_schema.Recon.job_id == db_schema.Job.job_id)
+            .outerjoin(db_schema.Catalog, db_schema.ReconstructionRun.scan_number == db_schema.Catalog.scanNumber)
+            .join(db_schema.Job, db_schema.ReconstructionRun.job_id == db_schema.Job.job_id)
+            .filter(db_schema.ReconstructionRun.method == "ca")
             .statement,
             session.bind,
         )
@@ -159,11 +159,11 @@ def _get_recons():
             "unSortIcon": True,
         }
 
-        if field_key == "recon_id":
-            col_def["cellRenderer"] = "ReconLinkRenderer"
+        if field_key == "reconstruction_id":
+            col_def["cellRenderer"] = "ReconstructionLinkRenderer"
         elif field_key == "dataset_id":
             col_def["cellRenderer"] = "DatasetIdScanLinkRenderer"
-        elif field_key == "scanNumber":
+        elif field_key == "scan_number":
             col_def["cellRenderer"] = "ScanLinkRenderer"
         elif field_key in ["submit_time", "start_time", "finish_time"]:
             col_def["cellRenderer"] = "DateFormatter"
@@ -172,19 +172,6 @@ def _get_recons():
 
         cols.append(col_def)
 
-    # Add the custom actions column
-    cols.append(
-        {
-            "headerName": "Actions",
-            "field": "actions",  # This field doesn't need to exist in the data
-            "cellRenderer": "ActionButtonsRenderer",
-            "sortable": False,
-            "filter": False,
-            "resizable": True,  # Or False, depending on preference
-            "suppressMenu": True,  # Or False
-            "width": 200,  # Adjusted width for DBC buttons
-        }
-    )
     return cols, recons.to_dict("records")
 
 
@@ -200,6 +187,14 @@ def get_recons(path):
         return cols, recons
     else:
         raise PreventUpdate
+
+
+def _query_id(value):
+    if value is None or pd.isna(value):
+        return None
+    if isinstance(value, (int, float)):
+        return str(int(value))
+    return str(value)
 
 
 @dash.callback(
@@ -219,16 +214,18 @@ def selected_hrefs(rows, recon_href, peakindex_href):
     scan_ids, recon_ids = [], []
 
     for row in rows:
-        if row.get("scanNumber"):
-            scan_ids.append(str(row["scanNumber"]))
-        else:
+        scan_id = _query_id(row.get("scan_number"))
+        reconstruction_id = _query_id(row.get("reconstruction_id"))
+        if not scan_id and not reconstruction_id:
             return base_recon_href, base_peakindex_href
+        scan_ids.append(scan_id or "")
+        recon_ids.append(reconstruction_id or "")
 
-        recon_ids.append(str(row["recon_id"]) if row.get("recon_id") else "")
-
-    query_params = [f"scan_id={','.join(scan_ids)}"]
+    query_params = []
+    if any(scan_ids):
+        query_params.append(f"scan_id={','.join(scan_ids)}")
     if any(recon_ids):
-        query_params.append(f"recon_id={','.join(recon_ids)}")
+        query_params.append(f"reconstruction_id={','.join(recon_ids)}")
 
     query_string = "&".join(query_params)
 

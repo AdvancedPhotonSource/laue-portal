@@ -1,142 +1,89 @@
-"""
-Smoke tests for peak index retrieval functions in the Laue Portal application.
+"""Focused smoke tests for unified indexing list retrieval."""
 
-This test module verifies that peak index retrieval functions like _get_peakindexs
-can execute without errors and return properly formatted data.
-"""
-
-import os
-import sys
+from datetime import datetime
 from unittest.mock import patch
 
+import dash
 import pytest
 from dash.exceptions import PreventUpdate
+from sqlalchemy.orm import Session
 
-# Add the project root to the Python path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, project_root)
+import lau_dash  # noqa: F401
+from laue_portal.database import db_schema
+from laue_portal.pages.peakindexings import (
+    _get_peakindexings,
+    get_peakindexings,
+    handle_peakindex_button,
+    handle_recon_button,
+)
+from tests.conftest import create_test_indexing_run, create_test_lauego_parameters
 
 
-class TestPeakIndexRetrievers:
-    """Test class for peak index retrieval functions in the Laue Portal application."""
+def _add_indexing(engine):
+    with Session(engine) as session:
+        job = db_schema.Job(
+            job_id=2,
+            computer_name="localhost",
+            status=2,
+            priority=0,
+            submit_time=datetime(2026, 8, 1),
+        )
+        run = create_test_indexing_run(scan_number=None, job_id=2)
+        run.lauego_parameters = create_test_lauego_parameters()
+        session.add_all([job, run])
+        session.commit()
+        return run.id
 
-    def test_get_peakindexs_function_smoke(self, test_peakindex_database):
-        """Test that _get_peakindexs function can execute without errors."""
-        test_engine, test_db_file, test_metadata, test_job, test_recon, test_peakindex = test_peakindex_database
 
-        # Mock the config to use test database
-        with patch("laue_portal.config.db_file", test_db_file):
-            # Import after patching config
-            from sqlalchemy.orm import Session
+def test_get_indexings_uses_canonical_fields(empty_test_database):
+    engine, _ = empty_test_database
+    indexing_id = _add_indexing(engine)
 
-            import lau_dash  # noqa: F401
-            from laue_portal.pages.peakindexings import _get_peakindexings
+    with patch("laue_portal.database.session_utils.get_engine", return_value=engine):
+        columns, rows = _get_peakindexings()
 
-            # Patch the central engine getter to return our test engine
-            with patch("laue_portal.database.session_utils.get_engine", lambda: test_engine):
-                # Add test data to the database
-                with Session(test_engine) as session:
-                    session.add(test_metadata)
-                    session.add(test_job)
-                    session.add(test_recon)
-                    session.commit()
+    assert len(rows) == 1
+    assert rows[0]["indexing_id"] == indexing_id
+    assert rows[0]["scan_number"] is None
+    assert rows[0]["reconstruction_id"] is None
+    assert rows[0]["method"] == "lauego"
+    assert "peakindex_id" not in rows[0]
+    assert "wirerecon_id" not in rows[0]
+    assert "recon_id" not in rows[0]
 
-                    # Update peakindex with the correct recon_id
-                    test_peakindex.recon_id = test_recon.recon_id
-                    session.add(test_peakindex)
-                    session.commit()
+    id_column = next(column for column in columns if column["field"] == "indexing_id")
+    assert id_column["cellRenderer"] == "IndexingLinkRenderer"
 
-                # Test the _get_peakindexings function
-                cols, peakindexs = _get_peakindexings()
 
-            # Verify that the function returns the expected structure
-            assert isinstance(cols, list), "Columns should be returned as a list"
-            assert isinstance(peakindexs, list), "PeakIndexs should be returned as a list"
+def test_get_indexings_callback(empty_test_database):
+    engine, _ = empty_test_database
+    _add_indexing(engine)
 
-            # Check that columns are properly formatted
-            for col in cols:
-                assert isinstance(col, dict), "Each column should be a dictionary"
-                assert "headerName" in col, "Each column should have a headerName"
-                assert "field" in col, "Each column should have a field"
+    with patch("laue_portal.database.session_utils.get_engine", return_value=engine):
+        columns, rows = get_peakindexings("/peakindexings")
+    assert columns
+    assert len(rows) == 1
 
-            # Check that we have at least one peakindex record
-            assert len(peakindexs) >= 1, "Should have at least one peak index record"
+    with pytest.raises(PreventUpdate):
+        get_peakindexings("/wrong-path")
 
-            # Check that each peakindex record has the expected fields
-            for peakindex in peakindexs:
-                assert isinstance(peakindex, dict), "Each peakindex should be a dictionary"
-                # Check for some expected fields based on VISIBLE_COLS (note: dataset_id is commented out in VISIBLE_COLS)
-                expected_fields = ["peakindex_id", "submit_time", "scanNumber", "recon_id", "wirerecon_id", "notes"]
-                for field in expected_fields:
-                    assert field in peakindex, f"PeakIndex record should contain field: {field}"
 
-    def test_get_peakindexs_callback_smoke(self, test_peakindex_database):
-        """Test that get_peakindexs callback function can execute without errors."""
-        test_engine, test_db_file, test_metadata, test_job, test_recon, test_peakindex = test_peakindex_database
+def test_get_indexings_handles_empty_database(empty_test_database):
+    engine, _ = empty_test_database
+    with patch("laue_portal.database.session_utils.get_engine", return_value=engine):
+        columns, rows = _get_peakindexings()
 
-        # Mock the config to use test database
-        with patch("laue_portal.config.db_file", test_db_file):
-            # Import after patching config
-            from sqlalchemy.orm import Session
+    assert columns
+    assert rows == []
 
-            import lau_dash  # noqa: F401
-            from laue_portal.pages.peakindexings import get_peakindexings
 
-            # Patch the central engine getter to return our test engine
-            with patch("laue_portal.database.session_utils.get_engine", lambda: test_engine):
-                # Add test data to the database
-                with Session(test_engine) as session:
-                    session.add(test_metadata)
-                    session.add(test_job)
-                    session.add(test_recon)
-                    session.commit()
-
-                    # Update peakindex with the correct recon_id
-                    test_peakindex.recon_id = test_recon.recon_id
-                    session.add(test_peakindex)
-                    session.commit()
-
-                # Test the callback with correct path
-                cols, peakindexs = get_peakindexings("/peakindexings")
-
-            # Verify that the callback returns the expected structure
-            assert isinstance(cols, list), "Callback should return columns as a list"
-            assert isinstance(peakindexs, list), "Callback should return peakindexs as a list"
-            assert len(peakindexs) >= 1, "Should have at least one peak index record"
-
-            # Test the callback with incorrect path (should raise PreventUpdate)
-            with pytest.raises(PreventUpdate):
-                get_peakindexings("/wrong_path")
-
-    def test_get_peakindexs_empty_database_smoke(self, empty_peakindex_database):
-        """Test that _get_peakindexs function handles empty database gracefully."""
-        test_engine, test_db_file = empty_peakindex_database
-
-        # Mock the config to use test database
-        with patch("laue_portal.config.db_file", test_db_file):
-            # Import after patching config
-            import lau_dash  # noqa: F401
-            from laue_portal.pages.peakindexings import _get_peakindexings
-
-            # Patch the central engine getter to return our test engine
-            with patch("laue_portal.database.session_utils.get_engine", lambda: test_engine):
-                # Test the _get_peakindexings function with empty database
-                cols, peakindexs = _get_peakindexings()
-
-            # Verify that the function handles empty database gracefully
-            assert isinstance(cols, list), "Columns should be returned as a list even with empty database"
-            assert isinstance(peakindexs, list), "PeakIndexs should be returned as a list even with empty database"
-            assert len(peakindexs) == 0, "Empty database should return empty peakindexs list"
-
-            # Check that columns are still properly formatted
-            assert len(cols) > 0, "Should still have column definitions even with empty database"
-            for col in cols:
-                assert isinstance(col, dict), "Each column should be a dictionary"
-                assert "headerName" in col, "Each column should have a headerName"
-                assert "field" in col, "Each column should have a field"
-
-            # Verify specific expected columns are present
-            column_fields = [col["field"] for col in cols]
-            expected_columns = ["peakindex_id", "submit_time", "source", "notes"]
-            for expected_col in expected_columns:
-                assert expected_col in column_fields, f"Column {expected_col} should be present in column definitions"
+def test_actions_do_not_serialize_pandas_nan_as_an_id():
+    direct_indexing = {
+        "scan_number": float("nan"),
+        "reconstruction_id": float("nan"),
+        "indexing_id": 7.0,
+        "reconstruction_method": None,
+        "aperture": None,
+    }
+    assert handle_recon_button(1, [direct_indexing]) is dash.no_update
+    assert handle_peakindex_button(1, [direct_indexing]) == "/create-peakindexing?indexing_id=7"

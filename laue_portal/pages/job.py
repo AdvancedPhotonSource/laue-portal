@@ -287,62 +287,44 @@ def load_job_data(href):
                             )
                         )
 
-                    # Check for Reconstruction
-                    recon_data = session.query(db_schema.Recon).filter(db_schema.Recon.job_id == job_id).first()
-                    if recon_data:
+                    reconstruction = (
+                        session.query(db_schema.ReconstructionRun)
+                        .filter(db_schema.ReconstructionRun.job_id == job_id)
+                        .first()
+                    )
+                    if reconstruction:
+                        detail_path = "/wire_reconstruction" if reconstruction.method == "wire" else "/reconstruction"
                         related_links.append(
                             html.Span(
                                 [
                                     html.A(
-                                        f"Reconstruction ID: {recon_data.recon_id}",
-                                        href=f"/reconstruction?recon_id={recon_data.recon_id}",
+                                        f"Reconstruction R{reconstruction.id}",
+                                        href=f"{detail_path}?reconstruction_id={reconstruction.id}",
                                     ),
                                     " | ",
                                     html.A(
-                                        f"Scan ID: {recon_data.scanNumber}",
-                                        href=f"/scan?scan_id={recon_data.scanNumber}",
+                                        f"Scan ID: {reconstruction.scan_number}",
+                                        href=f"/scan?scan_id={reconstruction.scan_number}",
                                     ),
                                 ]
                             )
                         )
 
-                    # Check for Wire Reconstruction
-                    wirerecon_data = (
-                        session.query(db_schema.WireRecon).filter(db_schema.WireRecon.job_id == job_id).first()
+                    indexing = (
+                        session.query(db_schema.IndexingRun).filter(db_schema.IndexingRun.job_id == job_id).first()
                     )
-                    if wirerecon_data:
+                    if indexing:
                         related_links.append(
                             html.Span(
                                 [
                                     html.A(
-                                        f"Wire Reconstruction ID: {wirerecon_data.wirerecon_id}",
-                                        href=f"/wire_reconstruction?wirerecon_id={wirerecon_data.wirerecon_id}",
+                                        f"Indexing I{indexing.id}",
+                                        href=f"/peakindexing?indexing_id={indexing.id}",
                                     ),
                                     " | ",
                                     html.A(
-                                        f"Scan ID: {wirerecon_data.scanNumber}",
-                                        href=f"/scan?scan_id={wirerecon_data.scanNumber}",
-                                    ),
-                                ]
-                            )
-                        )
-
-                    # Check for Peak Index
-                    peakindex_data = (
-                        session.query(db_schema.PeakIndex).filter(db_schema.PeakIndex.job_id == job_id).first()
-                    )
-                    if peakindex_data:
-                        related_links.append(
-                            html.Span(
-                                [
-                                    html.A(
-                                        f"Peak Indexing ID: {peakindex_data.peakindex_id}",
-                                        href=f"/peakindexing?peakindex_id={peakindex_data.peakindex_id}",
-                                    ),
-                                    " | ",
-                                    html.A(
-                                        f"Scan ID: {peakindex_data.scanNumber}",
-                                        href=f"/scan?scan_id={peakindex_data.scanNumber}",
+                                        f"Scan ID: {indexing.scan_number}",
+                                        href=f"/scan?scan_id={indexing.scan_number}",
                                     ),
                                 ]
                             )

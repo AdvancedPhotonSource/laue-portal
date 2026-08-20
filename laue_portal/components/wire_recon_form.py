@@ -10,7 +10,6 @@ from laue_portal.components.form_layout import (
     section_card,
     section_sidebar,
 )
-from laue_portal.database.db_utils import make_IDnumber
 
 WIRE_RECON_SECTIONS = [
     (
@@ -42,7 +41,7 @@ def build_wire_recon_form(readonly=False, show_actions=True):
                             "IDnumber",
                             "wirerecon-update-path-fields-btn",
                             "Update Paths",
-                            placeholder="SN123456 | WR1",
+                            placeholder="SN123456 | R1",
                             readonly=readonly,
                             show_button=show_actions,
                         ),
@@ -156,13 +155,29 @@ wire_recon_readonly_form = build_wire_recon_form(readonly=True, show_actions=Fal
 
 
 def set_wire_recon_form_props(wirerecon, read_only=False):
-    IDnumber = make_IDnumber(wirerecon.scanNumber, wirerecon.wirerecon_id)
+    parameters = getattr(wirerecon, "wire_parameters", None) or wirerecon
+    scan_number = getattr(wirerecon, "scan_number", None)
+    reconstruction_id = getattr(wirerecon, "id", None)
+    IDnumber = getattr(wirerecon, "identity_value", None)
+    if IDnumber is None:
+        identity_parts = []
+        if scan_number is not None:
+            identity_parts.append(f"SN{scan_number}")
+        if reconstruction_id is not None:
+            identity_parts.append(f"R{reconstruction_id}")
+        IDnumber = " | ".join(identity_parts)
     set_props("IDnumber", {"value": IDnumber, "readonly": read_only})
-    set_props("root_path", {"value": wirerecon.root_path, "readonly": read_only})
-    set_props("data_path", {"value": wirerecon.data_path, "readonly": read_only})
+    set_props("root_path", {"value": getattr(wirerecon, "root_path", ""), "readonly": read_only})
+    set_props(
+        "data_path",
+        {
+            "value": getattr(wirerecon, "data_path", None) or getattr(wirerecon, "input_path", ""),
+            "readonly": read_only,
+        },
+    )
 
     # Convert list to comma-separated string for form display
-    filename_value = wirerecon.filenamePrefix
+    filename_value = parameters.filename_prefixes
     if isinstance(filename_value, list):
         filename_value = ", ".join(filename_value)
     set_props("filenamePrefix", {"value": filename_value, "readonly": read_only})
@@ -170,14 +185,20 @@ def set_wire_recon_form_props(wirerecon, read_only=False):
     set_props("author", {"value": wirerecon.author, "readonly": read_only})
     set_props("notes", {"value": wirerecon.notes, "readonly": read_only})
 
-    set_props("geoFile", {"value": wirerecon.geoFile, "readonly": read_only})
-    set_props("percent_brightest", {"value": wirerecon.percent_brightest, "readonly": read_only})
-    set_props("wire_edges", {"value": wirerecon.wire_edges, "disabled": read_only})
+    set_props("geoFile", {"value": parameters.geometry_file, "readonly": read_only})
+    set_props("percent_brightest", {"value": parameters.percent_brightest, "readonly": read_only})
+    set_props("wire_edges", {"value": parameters.wire_edges, "disabled": read_only})
 
-    set_props("depth_start", {"value": wirerecon.depth_start, "readonly": read_only})
-    set_props("depth_end", {"value": wirerecon.depth_end, "readonly": read_only})
-    set_props("depth_resolution", {"value": wirerecon.depth_resolution, "readonly": read_only})
+    set_props("depth_start", {"value": parameters.depth_start, "readonly": read_only})
+    set_props("depth_end", {"value": parameters.depth_end, "readonly": read_only})
+    set_props("depth_resolution", {"value": parameters.depth_resolution, "readonly": read_only})
 
-    set_props("scanPoints", {"value": wirerecon.scanPoints, "readonly": read_only})
-    set_props("outputFolder", {"value": wirerecon.outputFolder, "readonly": read_only})
+    set_props("scanPoints", {"value": parameters.scan_points, "readonly": read_only})
+    set_props(
+        "outputFolder",
+        {
+            "value": getattr(wirerecon, "output_path", None) or getattr(wirerecon, "output_path_template", ""),
+            "readonly": read_only,
+        },
+    )
     set_props("detector", {"value": None, "readonly": True})

@@ -185,6 +185,76 @@ def create_test_wire_reconstruction_parameters(reconstruction_id: int | None = N
     return db_schema.WireReconstructionParameters(**values)
 
 
+def create_test_indexing_run(
+    scan_number: int | None = 1,
+    job_id: int = 2,
+    reconstruction_id: int | None = None,
+) -> Any:
+    """Create a unified LaueGo indexing run for tests."""
+    import laue_portal.database.db_schema as db_schema
+
+    return db_schema.IndexingRun(
+        scan_number=scan_number,
+        reconstruction_id=reconstruction_id,
+        job_id=job_id,
+        method="lauego",
+        input_path="/test/input",
+        output_path="/test/output/index_1",
+        author="test_user",
+        notes="test indexing",
+        algorithm_version="test-version",
+        created_at=datetime.datetime(2022, 1, 1, 0, 0, 0),
+    )
+
+
+def create_test_lauego_parameters(indexing_id: int | None = None) -> Any:
+    """Create LaueGo-specific parameters for a unified indexing run."""
+    import laue_portal.database.db_schema as db_schema
+
+    values = {
+        "filename_prefixes": ["test_%d.h5"],
+        "threshold": 250,
+        "threshold_ratio": None,
+        "max_rfactor": 0.5,
+        "box_size": 18,
+        "max_number": 300,
+        "min_separation": 20,
+        "peak_shape": "Lorentzian",
+        "scan_points": "1-2",
+        "scan_points_len": 2,
+        "depth_range": None,
+        "depth_range_len": None,
+        "detector_crop_x1": 0,
+        "detector_crop_x2": 2047,
+        "detector_crop_y1": 0,
+        "detector_crop_y2": 2047,
+        "min_size": 3.0,
+        "max_peaks": 200,
+        "smooth": False,
+        "mask_file": None,
+        "index_kev_max_calc": 17.2,
+        "index_kev_max_test": 35.0,
+        "index_angle_tolerance": 0.1,
+        "index_h": 0,
+        "index_k": 0,
+        "index_l": 1,
+        "index_cone": 72.0,
+        "energy_unit": "keV",
+        "exposure_unit": "sec",
+        "cosmic_filter": True,
+        "reciprocal_lattice_unit": "1/nm",
+        "lattice_parameters_unit": "nm",
+        "output_xml": "output.xml",
+        "geometry_file": "/test/geometry.xml",
+        "crystal_file": "/test/crystal.xtal",
+        "depth": None,
+        "beamline": "34ID-E",
+    }
+    if indexing_id is not None:
+        values["indexing_id"] = indexing_id
+    return db_schema.LaueGoIndexingParameters(**values)
+
+
 def create_test_catalog(scan_number: int = 1) -> Any:
     """
     Factory function to create a test Catalog record.

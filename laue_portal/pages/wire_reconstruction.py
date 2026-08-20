@@ -7,12 +7,12 @@ from dash.exceptions import PreventUpdate
 from sqlalchemy.orm import Session
 
 import laue_portal.components.navbar as navbar
-import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
 from laue_portal.components.detail_layout import detail_header, detail_header_content
 from laue_portal.components.wire_recon_form import set_wire_recon_form_props, wire_recon_readonly_form
 from laue_portal.config import DEFAULT_VARIABLES
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix
+from laue_portal.workflows.reconstruction import get_reconstruction
 
 dash.register_page(__name__, path="/wire_reconstruction")
 
@@ -51,64 +51,59 @@ def load_wire_recon_data(href):
     parsed_url = urllib.parse.urlparse(href)
     query_params = urllib.parse.parse_qs(parsed_url.query)
 
-    wirerecon_id_str = query_params.get("wirerecon_id", [None])[0]
+    reconstruction_id_str = query_params.get("reconstruction_id", [None])[0]
 
     root_path = DEFAULT_VARIABLES.get("root_path", "")
 
-    if wirerecon_id_str:
+    if reconstruction_id_str:
         try:
-            wirerecon_id = int(wirerecon_id_str)
-            with Session(session_utils.get_engine()) as session:
-                wirerecon_data = (
-                    session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == wirerecon_id).first()
-                )
-                if wirerecon_data:
+            reconstruction_id = int(reconstruction_id_str)
+            reconstruction = get_reconstruction(reconstruction_id)
+            if reconstruction and reconstruction.method == "wire" and reconstruction.wire_parameters:
+                with Session(session_utils.get_engine()) as session:
                     # Add root_path from DEFAULT_VARIABLES
                     root_path = DEFAULT_VARIABLES.get("root_path", "")
-                    wirerecon_data.root_path = root_path
+                    reconstruction.root_path = root_path
 
                     # Convert full paths back to relative paths for display
-                    if wirerecon_data.geoFile:
-                        wirerecon_data.geoFile = remove_root_path_prefix(wirerecon_data.geoFile, root_path)
-                    if wirerecon_data.outputFolder:
-                        wirerecon_data.outputFolder = remove_root_path_prefix(wirerecon_data.outputFolder, root_path)
+                    if reconstruction.wire_parameters.geometry_file:
+                        reconstruction.wire_parameters.geometry_file = remove_root_path_prefix(
+                            reconstruction.wire_parameters.geometry_file, root_path
+                        )
+                    if reconstruction.output_path:
+                        reconstruction.output_path = remove_root_path_prefix(reconstruction.output_path, root_path)
 
-                    if wirerecon_data.filefolder:
-                        wirerecon_data.data_path = remove_root_path_prefix(wirerecon_data.filefolder, root_path)
+                    reconstruction.data_path = remove_root_path_prefix(reconstruction.input_path, root_path)
 
-                    if any([not hasattr(wirerecon_data, field) for field in ["data_path", "filenamePrefix"]]):
-                        # Retrieve data_path and filenamePrefix from catalog data
-                        catalog_data = get_catalog_data(session, wirerecon_data.scanNumber, root_path)
-                    if not hasattr(wirerecon_data, "data_path"):
-                        wirerecon_data.data_path = catalog_data.get("data_path", "")
-                    if not hasattr(wirerecon_data, "filenamePrefix"):
-                        wirerecon_data.filenamePrefix = catalog_data.get("filenamePrefix", [])
+                    if not reconstruction.input_path:
+                        catalog_data = get_catalog_data(session, reconstruction.scan_number, root_path)
+                        reconstruction.data_path = catalog_data.get("data_path", "")
 
                     # Populate the form with the data
-                    set_wire_recon_form_props(wirerecon_data, read_only=True)
+                    set_wire_recon_form_props(reconstruction, read_only=True)
 
                     # Get related links
                     related_links = []
 
                     # Add job link if it exists
-                    if wirerecon_data.job_id:
+                    if reconstruction.job_id:
                         related_links.append(
-                            (f"Job ID: {wirerecon_data.job_id}", f"/job?job_id={wirerecon_data.job_id}")
+                            (f"Job ID: {reconstruction.job_id}", f"/job?job_id={reconstruction.job_id}")
                         )
 
                     # Add scan link
-                    if wirerecon_data.scanNumber:
+                    if reconstruction.scan_number:
                         related_links.append(
                             (
-                                f"Scan ID: {wirerecon_data.scanNumber}",
-                                f"/scan?scan_id={wirerecon_data.scanNumber}",
+                                f"Scan ID: {reconstruction.scan_number}",
+                                f"/scan?scan_id={reconstruction.scan_number}",
                             )
                         )
 
-                    return detail_header_content(f"Wire Reconstruction ID: {wirerecon_id}", related_links)
+                    return detail_header_content(f"Reconstruction R{reconstruction_id}", related_links)
 
         except Exception as e:
             print(f"Error loading wire reconstruction data: {e}")
-            return detail_header_content(f"Error loading data for Wire Recon ID: {wirerecon_id_str}")
+            return detail_header_content(f"Error loading reconstruction R{reconstruction_id_str}")
 
-    return detail_header_content("No Wire Recon ID provided")
+    return detail_header_content("No reconstruction ID provided")
