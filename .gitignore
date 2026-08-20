@@ -145,6 +145,8 @@ sandbox/
 
 # Databases
 *.db
+*.db-shm
+*.db-wal
 
 # Working env
 laue-portal-env

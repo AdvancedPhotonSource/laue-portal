@@ -5,7 +5,7 @@ import pandas as pd
 from dash import Input, Output, State, dcc, html
 from dash.exceptions import PreventUpdate
 from sqlalchemy import case, func
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session
 
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
@@ -80,33 +80,30 @@ layout = html.Div(
 )
 
 VISIBLE_COLS = [
-    db_schema.PeakIndex.peakindex_id,
-    db_schema.PeakIndex.scanNumber,
-    db_schema.PeakIndex.scanPointslen,
-    db_schema.PeakIndex.author,
-    db_schema.PeakIndex.notes,
-    db_schema.PeakIndex.recon_id,
-    db_schema.PeakIndex.wirerecon_id,
-    db_schema.PeakIndex.boxsize,
+    db_schema.IndexingRun.id.label("indexing_id"),
+    db_schema.IndexingRun.scan_number,
+    db_schema.LaueGoIndexingParameters.scan_points_len,
+    db_schema.IndexingRun.author,
+    db_schema.IndexingRun.notes,
+    db_schema.IndexingRun.reconstruction_id,
+    db_schema.LaueGoIndexingParameters.box_size,
     db_schema.Job.submit_time,
     db_schema.Job.status,
 ]
 
 # Columns to condense into the single "Source" column
-SOURCE_COLS = {"scanNumber", "recon_id", "wirerecon_id"}
+SOURCE_COLS = {"scan_number", "reconstruction_id"}
 
 CUSTOM_HEADER_NAMES = {
-    "peakindex_id": "Peak Indexing ID",
-    "scanPointslen": "Points",
-    "boxsize": "Box",
+    "indexing_id": "Indexing ID",
+    "scan_points_len": "Points",
+    "box_size": "Box",
     "submit_time": "Date",
 }
 
 
 def _get_peakindexings():
     with Session(session_utils.get_engine()) as session:
-        catalog_recon = aliased(db_schema.Catalog)
-        catalog_wirerecon = aliased(db_schema.Catalog)
         running_status = STATUS_REVERSE_MAPPING["Running"]
         finished_status = STATUS_REVERSE_MAPPING["Finished"]
 
@@ -117,7 +114,7 @@ def _get_peakindexings():
                 func.sum(case((db_schema.SubJob.status == finished_status, 1), else_=0)).label("completed_subjobs"),
             )
             .join(db_schema.Job, db_schema.SubJob.job_id == db_schema.Job.job_id)
-            .join(db_schema.PeakIndex, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
+            .join(db_schema.IndexingRun, db_schema.IndexingRun.job_id == db_schema.Job.job_id)
             .filter(db_schema.Job.status == running_status)
             .group_by(db_schema.SubJob.job_id)
             .subquery()
@@ -126,16 +123,21 @@ def _get_peakindexings():
         peakindexings = pd.read_sql(
             session.query(
                 *VISIBLE_COLS,
-                func.coalesce(catalog_recon.aperture, catalog_wirerecon.aperture).label("aperture"),
+                db_schema.IndexingRun.method,
+                db_schema.ReconstructionRun.method.label("reconstruction_method"),
+                db_schema.Catalog.aperture,
                 func.coalesce(subjob_progress.c.completed_subjobs, 0).label("completed_subjobs"),
                 func.coalesce(subjob_progress.c.total_subjobs, 0).label("total_subjobs"),
             )
-            .join(db_schema.Job, db_schema.PeakIndex.job_id == db_schema.Job.job_id)
+            .join(db_schema.LaueGoIndexingParameters)
+            .join(db_schema.Job, db_schema.IndexingRun.job_id == db_schema.Job.job_id)
             .outerjoin(subjob_progress, db_schema.Job.job_id == subjob_progress.c.job_id)
-            .outerjoin(db_schema.Recon, db_schema.PeakIndex.recon_id == db_schema.Recon.recon_id)
-            .outerjoin(db_schema.WireRecon, db_schema.PeakIndex.wirerecon_id == db_schema.WireRecon.wirerecon_id)
-            .outerjoin(catalog_recon, db_schema.Recon.scanNumber == catalog_recon.scanNumber)
-            .outerjoin(catalog_wirerecon, db_schema.WireRecon.scanNumber == catalog_wirerecon.scanNumber)
+            .outerjoin(
+                db_schema.ReconstructionRun,
+                db_schema.IndexingRun.reconstruction_id == db_schema.ReconstructionRun.id,
+            )
+            .outerjoin(db_schema.Catalog, db_schema.IndexingRun.scan_number == db_schema.Catalog.scanNumber)
+            .filter(db_schema.IndexingRun.method == "lauego")
             .statement,
             session.bind,
         )
@@ -175,7 +177,7 @@ def _get_peakindexings():
     for col in VISIBLE_COLS:
         field_key = col.key
 
-        # Replace scanNumber, recon_id, wirerecon_id with a single "Source" column
+        # Replace scan and parent reconstruction IDs with a single source column.
         if field_key in SOURCE_COLS:
             if not source_col_inserted:
                 cols.append(
@@ -188,12 +190,10 @@ def _get_peakindexings():
                         "resizable": True,
                         "floatingFilter": True,
                         "unSortIcon": True,
-                        # Build a display string for filtering/sorting: "SN<id> MR<id>" or "SN<id> WR<id>"
                         "valueGetter": {
                             "function": """
-                        (params.data.scanNumber != null ? 'SN' + params.data.scanNumber : '') +
-                        (params.data.recon_id != null ? ' MR' + params.data.recon_id : '') +
-                        (params.data.wirerecon_id != null ? ' WR' + params.data.wirerecon_id : '')
+                        (params.data.scan_number != null ? 'SN' + params.data.scan_number : '') +
+                        (params.data.reconstruction_id != null ? ' R' + params.data.reconstruction_id : '')
                         || 'Unlinked'
                     """
                         },
@@ -213,8 +213,8 @@ def _get_peakindexings():
             "floatingFilter": True,
             "unSortIcon": True,
         }
-        if field_key == "peakindex_id":
-            col_def["cellRenderer"] = "PeakIndexLinkRenderer"
+        if field_key == "indexing_id":
+            col_def["cellRenderer"] = "IndexingLinkRenderer"
             col_def["sort"] = "desc"
         elif field_key == "dataset_id":
             col_def["cellRenderer"] = "DatasetIdScanLinkRenderer"
@@ -277,6 +277,15 @@ def update_button_states(selected_rows):
         )
 
 
+def _query_id(value):
+    """Format an AG Grid numeric ID, treating pandas NaN as missing."""
+    if value is None or pd.isna(value):
+        return None
+    if isinstance(value, (int, float)):
+        return str(int(value))
+    return str(value)
+
+
 @dash.callback(
     Output("peakindexings-url", "href"),
     Input("peakindexings-page-wire-recon-btn", "n_clicks"),
@@ -292,48 +301,27 @@ def handle_recon_button(n_clicks, rows):
     if not rows:
         return base_href
 
-    scan_ids, wirerecon_ids, recon_ids = [], [], []
-    any_wirerecon_scans, any_recon_scans = False, False
+    scan_ids, reconstruction_ids = [], []
 
     for row in rows:
-        if row.get("scanNumber"):
-            scan_ids.append(str(row["scanNumber"]))
-        else:
+        scan_id = _query_id(row.get("scan_number"))
+        reconstruction_id = _query_id(row.get("reconstruction_id"))
+        if not scan_id and not reconstruction_id:
             return dash.no_update
-
-        wirerecon_ids.append(str(row["wirerecon_id"]) if row.get("wirerecon_id") else "")
-        any_wirerecon_scans = any(wirerecon_ids)
-        recon_ids.append(str(row["recon_id"]) if row.get("recon_id") else "")
-        any_recon_scans = any(recon_ids)
-
-        # Conflict condition: mixture of wirerecon and recon
-        if any_wirerecon_scans and any_recon_scans:
-            return dash.no_update
-
-        # Missing Recon ID condition
-        if not any_wirerecon_scans and not any_recon_scans and row.get("aperture"):
+        scan_ids.append(scan_id or "")
+        method = row.get("reconstruction_method")
+        if method is None and row.get("aperture") is not None and pd.notna(row["aperture"]):
             aperture = str(row["aperture"]).lower()
-            if aperture == "none":
-                return dash.no_update  # Conflict condition: cannot be reconstructed
-            elif "wire" in aperture:
-                any_wirerecon_scans = True
-            else:
-                any_recon_scans = True
+            method = "wire" if "wire" in aperture else "ca"
+        # Do not ask the wire form to copy a CA reconstruction.  The scan still
+        # provides a valid source for the new wire reconstruction.
+        reconstruction_ids.append(reconstruction_id if method in (None, "wire") else "")
 
-            # Conflict condition: mixture of wirerecon and recon (copied from above)
-            if any_wirerecon_scans and any_recon_scans:
-                return dash.no_update
-
-    if any_recon_scans:
-        base_href = "/create-reconstruction"
-    elif any_wirerecon_scans:
-        base_href = "/create-wire-reconstruction"
-
-    query_params = [f"scan_id={','.join(scan_ids)}"]
-    if any_wirerecon_scans:
-        query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
-    if any_recon_scans:
-        query_params.append(f"recon_id={','.join(recon_ids)}")
+    query_params = []
+    if any(scan_ids):
+        query_params.append(f"scan_id={','.join(scan_ids)}")
+    if any(reconstruction_ids):
+        query_params.append(f"reconstruction_id={','.join(reconstruction_ids)}")
 
     return f"{base_href}?{'&'.join(query_params)}"
 
@@ -353,28 +341,21 @@ def handle_peakindex_button(n_clicks, rows):
     if not rows:
         return base_href
 
-    scan_ids, wirerecon_ids, recon_ids, peakindex_ids = [], [], [], []
+    scan_ids, reconstruction_ids, indexing_ids = [], [], []
 
     for row in rows:
-        # scanNumber can be None for unlinked peakindexes - that's okay
-        if row.get("scanNumber"):
-            scan_ids.append(str(row["scanNumber"]))
-        # Note: We don't return base_href here anymore - unlinked peakindexes are valid
-
-        wirerecon_ids.append(str(row["wirerecon_id"]) if row.get("wirerecon_id") else "")
-        recon_ids.append(str(row["recon_id"]) if row.get("recon_id") else "")
-        peakindex_ids.append(str(row["peakindex_id"]) if row.get("peakindex_id") else "")
+        scan_ids.append(_query_id(row.get("scan_number")) or "")
+        reconstruction_ids.append(_query_id(row.get("reconstruction_id")) or "")
+        indexing_ids.append(_query_id(row.get("indexing_id")) or "")
 
     # Build query params - only include non-empty lists
     query_params = []
     if any(scan_ids):
         query_params.append(f"scan_id={','.join(scan_ids)}")
-    if any(wirerecon_ids):
-        query_params.append(f"wirerecon_id={','.join(wirerecon_ids)}")
-    if any(recon_ids):
-        query_params.append(f"recon_id={','.join(recon_ids)}")
-    if any(peakindex_ids):
-        query_params.append(f"peakindex_id={','.join(peakindex_ids)}")
+    if any(reconstruction_ids):
+        query_params.append(f"reconstruction_id={','.join(reconstruction_ids)}")
+    if any(indexing_ids):
+        query_params.append(f"indexing_id={','.join(indexing_ids)}")
 
     # If no query params at all, return base href
     if not query_params:

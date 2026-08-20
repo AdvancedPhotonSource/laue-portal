@@ -1,71 +1,31 @@
-import os
-import re
+"""Shared database-adjacent form and path helpers."""
 
-import sqlalchemy
+import os
 
 import laue_portal.database.db_schema as db_schema
 
 
 def resolve_path_with_root(path, root_path):
-    """
-    Resolve a path, using root_path only if the path is relative.
-    If path is absolute, return it as-is (overriding root_path).
-
-    This is the inverse of remove_root_path_prefix().
-
-    Args:
-        path: The path to resolve (can be relative or absolute)
-        root_path: The root path to prepend if path is relative
-
-    Returns:
-        str: The resolved full path
-    """
+    """Resolve a relative path under ``root_path`` while preserving absolute paths."""
     if not path:
         return ""
-
-    # Check if path is absolute
     if os.path.isabs(path):
-        # Path is absolute - use it directly, ignore root_path
         return path
-    else:
-        # Path is relative - combine with root_path
-        return os.path.join(root_path, path.lstrip("/"))
+    return os.path.join(root_path, path.lstrip("/"))
 
 
 def remove_root_path_prefix(file_path, root_path):
-    """
-    Remove root_path prefix from a file path.
-
-    If the file_path starts with root_path, returns the relative path.
-    If the file_path is an absolute path that doesn't start with root_path,
-    returns it as-is (preserving the leading '/').
-
-    Args:
-        file_path: The full file path
-        root_path: The root path prefix to remove
-
-    Returns:
-        str: The file path with root_path prefix removed (if present),
-             or the original path if it doesn't start with root_path
-    """
+    """Return ``file_path`` relative to ``root_path`` when it is below that root."""
     if not file_path:
         return ""
-
-    # Remove root_path from file_path if it starts with it
     if root_path and file_path.startswith(root_path):
-        result_path = file_path[len(root_path) :]
-        # Only remove leading slash if we actually stripped the root_path
-        # This ensures we return a proper relative path
-        if result_path.startswith("/"):
-            result_path = result_path[1:]
-        return result_path
-
-    # Path doesn't start with root_path - return as-is (could be absolute or already relative)
+        return file_path[len(root_path) :].lstrip("/")
     return file_path
 
 
 def import_catalog_row(catalog_object):
-    catalog_row = db_schema.Catalog(
+    """Create a catalog row from imported scan-catalog data."""
+    return db_schema.Catalog(
         scanNumber=catalog_object["scanNumber"],
         filefolder=catalog_object["filefolder"],
         filenamePrefix=catalog_object["filenamePrefix"],
@@ -73,764 +33,60 @@ def import_catalog_row(catalog_object):
         sample_name=catalog_object["sample_name"],
         notes=catalog_object["notes"],
     )
-    return catalog_row
 
 
-def import_recon_row(recon_object):
-    """
-    Reads a yaml file and creates a new Recon ORM object with
-    the base data of the file
-    """
-
-    # Optional Params
-    use_gpu = recon_object["comp"]["use_gpu"] if "use_gpu" in recon_object["comp"] else False
-    batch_size = recon_object["comp"]["batch_size"] if "batch_size" in recon_object["comp"] else 1
-
-    recon_row = db_schema.Recon(
-        file_path=recon_object["file"]["path"],
-        file_output=recon_object["file"]["output"],
-        file_range=recon_object["file"]["range"],
-        file_threshold=recon_object["file"]["threshold"],
-        file_frame=recon_object["file"]["frame"],
-        # file_offset=recon_object['file']['offset'],
-        file_ext=recon_object["file"]["ext"],
-        file_stacked=recon_object["file"]["stacked"],
-        file_h5_key=recon_object["file"]["h5"]["key"],
-        comp_server=recon_object["comp"]["server"],
-        comp_workers=recon_object["comp"]["workers"],
-        comp_usegpu=use_gpu,
-        comp_batch_size=batch_size,
-        geo_mask_path=recon_object["geo"]["mask"]["path"],
-        geo_mask_reversed=recon_object["geo"]["mask"]["reversed"],
-        geo_mask_bitsizes=recon_object["geo"]["mask"]["bitsizes"],
-        geo_mask_thickness=recon_object["geo"]["mask"]["thickness"],
-        geo_mask_resolution=recon_object["geo"]["mask"]["resolution"],
-        geo_mask_smoothness=recon_object["geo"]["mask"]["smoothness"],
-        geo_mask_alpha=recon_object["geo"]["mask"]["alpha"],
-        geo_mask_widening=recon_object["geo"]["mask"]["widening"],
-        geo_mask_pad=recon_object["geo"]["mask"]["pad"],
-        geo_mask_stretch=recon_object["geo"]["mask"]["stretch"],
-        geo_mask_shift=recon_object["geo"]["mask"]["shift"],
-        geo_mask_focus_cenx=recon_object["geo"]["mask"]["focus"]["cenx"],
-        geo_mask_focus_dist=recon_object["geo"]["mask"]["focus"]["dist"],
-        geo_mask_focus_anglez=recon_object["geo"]["mask"]["focus"]["anglez"],
-        geo_mask_focus_angley=recon_object["geo"]["mask"]["focus"]["angley"],
-        geo_mask_focus_anglex=recon_object["geo"]["mask"]["focus"]["anglex"],
-        geo_mask_focus_cenz=recon_object["geo"]["mask"]["focus"]["cenz"],
-        geo_mask_cal_id=recon_object["geo"]["mask"]["cal"]["id"],
-        geo_mask_cal_path=recon_object["geo"]["mask"]["cal"]["path"],
-        geo_scanner_step=recon_object["geo"]["scanner"]["step"],
-        geo_scanner_rot=recon_object["geo"]["scanner"]["rot"],
-        geo_scanner_axis=recon_object["geo"]["scanner"]["axis"],
-        geo_detector_shape=recon_object["geo"]["detector"]["shape"],
-        geo_detector_size=recon_object["geo"]["detector"]["size"],
-        geo_detector_rot=recon_object["geo"]["detector"]["rot"],
-        geo_detector_pos=recon_object["geo"]["detector"]["pos"],
-        geo_source_offset=recon_object["geo"]["source"]["offset"],
-        geo_source_grid=recon_object["geo"]["source"]["grid"],
-        algo_iter=recon_object["algo"]["iter"],
-        algo_pos_method=recon_object["algo"]["pos"]["method"],
-        algo_pos_regpar=recon_object["algo"]["pos"]["regpar"],
-        algo_pos_init=recon_object["algo"]["pos"]["init"],
-        algo_sig_recon=recon_object["algo"]["sig"]["recon"],
-        algo_sig_method=recon_object["algo"]["sig"]["method"],
-        algo_sig_order=recon_object["algo"]["sig"]["order"],
-        algo_sig_scale=recon_object["algo"]["sig"]["scale"],
-        algo_sig_init_maxsize=recon_object["algo"]["sig"]["init"]["maxsize"],
-        algo_sig_init_avgsize=recon_object["algo"]["sig"]["init"]["avgsize"],
-        algo_sig_init_atol=recon_object["algo"]["sig"]["init"]["atol"],
-        algo_ene_recon=recon_object["algo"]["ene"]["recon"],
-        algo_ene_exact=recon_object["algo"]["ene"]["exact"],
-        algo_ene_method=recon_object["algo"]["ene"]["method"],
-        algo_ene_range=recon_object["algo"]["ene"]["range"],
-    )
-    return recon_row
-
-
-def create_config_obj(recon):
-    config_dict = {
-        "file": {
-            "path": recon.file_path,
-            "output": recon.file_output,
-            "range": recon.file_range + [1],  # temp
-            "threshold": recon.file_threshold,
-            "frame": recon.file_frame,
-            #':recon.file_offset, #temp
-            "ext": recon.file_ext,
-            "stacked": recon.file_stacked,
-            "h5": {
-                "key": recon.file_h5_key,
-            },
-        },
-        "comp": {
-            "server": recon.comp_server,
-            "workers": recon.comp_workers,
-            "functionid": "d8461388-9442-4008-a5f1-2cfa112f6923",  # temp
-            "usegpu": recon.comp_usegpu,
-            "batch_size": recon.comp_batch_size,
-        },
-        "geo": {
-            "mask": {
-                "path": recon.geo_mask_path,
-                "reversed": recon.geo_mask_reversed,
-                "bitsizes": recon.geo_mask_bitsizes,
-                "thickness": recon.geo_mask_thickness,
-                "resolution": recon.geo_mask_resolution,
-                "smoothness": recon.geo_mask_smoothness,
-                "alpha": recon.geo_mask_alpha,
-                "widening": recon.geo_mask_widening,
-                "pad": recon.geo_mask_pad,
-                "stretch": recon.geo_mask_stretch,
-                "shift": recon.geo_mask_shift,
-                "focus": {
-                    "cenx": recon.geo_mask_focus_cenx,
-                    "dist": recon.geo_mask_focus_dist,
-                    "anglez": recon.geo_mask_focus_anglez,
-                    "angley": recon.geo_mask_focus_angley,
-                    "anglex": recon.geo_mask_focus_anglex,
-                    "cenz": recon.geo_mask_focus_cenz,
-                },
-                "cal": {
-                    "id": recon.geo_mask_cal_id,
-                    "path": recon.geo_mask_cal_path,
-                },
-            },
-            "scanner": {
-                "step": recon.geo_scanner_step,
-                "rot": recon.geo_scanner_rot,
-                "axis": recon.geo_scanner_axis,
-            },
-            "detector": {
-                "shape": recon.geo_detector_shape,
-                "size": recon.geo_detector_size,
-                "rot": recon.geo_detector_rot,
-                "pos": recon.geo_detector_pos,
-            },
-            "source": {
-                "offset": recon.geo_source_offset,
-                "grid": recon.geo_source_grid,
-            },
-        },
-        "algo": {
-            "iter": recon.algo_iter,
-            "pos": {
-                "method": recon.algo_pos_method,
-                "regpar": recon.algo_pos_regpar,
-                "init": recon.algo_pos_init,
-            },
-            "sig": {
-                "recon": recon.algo_sig_recon,
-                "method": recon.algo_sig_method,
-                "order": recon.algo_sig_order,
-                "scale": recon.algo_sig_scale,
-                "init": {
-                    "maxsize": recon.algo_sig_init_maxsize,
-                    "avgsize": recon.algo_sig_init_avgsize,
-                    "atol": recon.algo_sig_init_atol,
-                },
-            },
-            "ene": {
-                "recon": recon.algo_ene_recon,
-                "exact": recon.algo_ene_exact,
-                "method": recon.algo_ene_method,
-                "range": recon.algo_ene_range,
-            },
-        },
-    }
-    return config_dict
-
-
-def import_peakindex_row(peakindex_object):
-    """Create a PeakIndex ORM object from a peakindex dictionary."""
-    peakindex_row = db_schema.PeakIndex(
-        threshold=peakindex_object["threshold"],
-        thresholdRatio=peakindex_object["thresholdRatio"],
-        maxRfactor=peakindex_object["maxRfactor"],
-        boxsize=peakindex_object["boxsize"],
-        max_number=peakindex_object["max_peaks"],
-        min_separation=peakindex_object["min_separation"],
-        peakShape=peakindex_object["peakShape"],
-        scanPointStart=peakindex_object["scanPointStart"],
-        scanPointEnd=peakindex_object["scanPointEnd"],
-        detectorCropX1=peakindex_object["detectorCropX1"],
-        detectorCropX2=peakindex_object["detectorCropX2"],
-        detectorCropY1=peakindex_object["detectorCropY1"],
-        detectorCropY2=peakindex_object["detectorCropY2"],
-        min_size=peakindex_object["min_size"],
-        max_peaks=peakindex_object["max_peaks"],
-        smooth=peakindex_object["smooth"],
-        maskFile=peakindex_object["maskFile"],
-        indexKeVmaxCalc=peakindex_object["indexKeVmaxCalc"],
-        indexKeVmaxTest=peakindex_object["indexKeVmaxTest"],
-        indexAngleTolerance=peakindex_object["indexAngleTolerance"],
-        indexH=peakindex_object["indexH"],
-        indexK=peakindex_object["indexK"],
-        indexL=peakindex_object["indexL"],
-        indexCone=peakindex_object["indexCone"],
-        energyUnit=peakindex_object["energyUnit"],
-        exposureUnit=peakindex_object["exposureUnit"],
-        cosmicFilter=peakindex_object["cosmicFilter"],
-        recipLatticeUnit=peakindex_object["recipLatticeUnit"],
-        latticeParametersUnit=peakindex_object["latticeParametersUnit"],
-        peaksearchPath=None,
-        p2qPath=None,
-        indexingPath=None,
-        outputFolder=peakindex_object["outputFolder"],
-        filefolder=peakindex_object["filefolder"],
-        filenamePrefix=peakindex_object["filenamePrefix"],
-        geoFile=peakindex_object["geoFile"],
-        crystFile=peakindex_object["crystFile"],
-        depth=peakindex_object["depth"],
-        beamline=peakindex_object["beamline"],
-    )
-    return peakindex_row
-
-
-def create_peakindex_config_obj(peakindex):
-    config_dict = {
-        "threshold": peakindex.threshold,
-        "thresholdRatio": peakindex.thresholdRatio,
-        "maxRfactor": peakindex.maxRfactor,
-        "boxsize": peakindex.boxsize,
-        "max_number": peakindex.max_number,
-        "min_separation": peakindex.min_separation,
-        "peakShape": peakindex.peakShape,
-        "scanPointStart": peakindex.scanPointStart,
-        "scanPointEnd": peakindex.scanPointEnd,
-        "detectorCropX1": peakindex.detectorCropX1,
-        "detectorCropX2": peakindex.detectorCropX2,
-        "detectorCropY1": peakindex.detectorCropY1,
-        "detectorCropY2": peakindex.detectorCropY2,
-        "min_size": peakindex.min_size,
-        "max_peaks": peakindex.max_peaks,
-        "smooth": peakindex.smooth,
-        "maskFile": peakindex.maskFile,
-        "indexKeVmaxCalc": peakindex.indexKeVmaxCalc,
-        "indexKeVmaxTest": peakindex.indexKeVmaxTest,
-        "indexAngleTolerance": peakindex.indexAngleTolerance,
-        "indexH": peakindex.indexH,
-        "indexK": peakindex.indexK,
-        "indexL": peakindex.indexL,
-        "indexCone": peakindex.indexCone,
-        "energyUnit": peakindex.energyUnit,
-        "exposureUnit": peakindex.exposureUnit,
-        "cosmicFilter": peakindex.cosmicFilter,
-        "recipLatticeUnit": peakindex.recipLatticeUnit,
-        "latticeParametersUnit": peakindex.latticeParametersUnit,
-        "peaksearchPath": peakindex.peaksearchPath,
-        "p2qPath": peakindex.p2qPath,
-        "indexingPath": peakindex.indexingPath,
-        "outputFolder": peakindex.outputFolder,
-        "filefolder": peakindex.filefolder,
-        "filenamePrefix": peakindex.filenamePrefix,
-        "geoFile": peakindex.geoFile,
-        "crystFile": peakindex.crystFile,
-        "depth": peakindex.depth,
-        "beamline": peakindex.beamline,
-    }
-    return config_dict
+def get_catalog_by_scan_number(session, scan_number):
+    """Return the catalog row identified by its unique scan number."""
+    return session.query(db_schema.Catalog).filter(db_schema.Catalog.scanNumber == scan_number).one_or_none()
 
 
 def get_catalog_data(session, scan_number, root_path="", CATALOG_DEFAULTS=None):
-    """
-    Helper function to get catalog data for a scan and compute data_path
-
-    Args:
-        session: SQLAlchemy session object
-        scan_number: The scan number to look up
-        root_path: The root path to use for computing relative data_path (default: "")
-        CATALOG_DEFAULTS: Dictionary with default values (default: None)
-
-    Returns:
-        dict with catalog data including computed data_path
-    """
-    catalog_data = session.query(db_schema.Catalog).filter(db_schema.Catalog.scanNumber == scan_number).first()
-
+    """Return catalog paths and filename prefixes for one scan."""
+    catalog_data = get_catalog_by_scan_number(session, scan_number)
     if catalog_data:
-        # Compute data_path as the portion of filefolder after root_path
         filefolder = catalog_data.filefolder
-
-        # Use the utility function to remove root_path prefix
-        data_path = remove_root_path_prefix(filefolder, root_path)
-
-        return {"filefolder": filefolder, "filenamePrefix": catalog_data.filenamePrefix, "data_path": data_path}
-    else:
-        # Return defaults if no catalog entry found
-        # Use CATALOG_DEFAULTS if provided, otherwise empty strings
-        if CATALOG_DEFAULTS:
-            filefolder = CATALOG_DEFAULTS.get("filefolder", "")
-            return {
-                "filefolder": filefolder,
-                "filenamePrefix": CATALOG_DEFAULTS.get("filenamePrefix", ""),
-                "data_path": filefolder,  # Use full path as data_path for defaults
-            }
-        else:
-            return {"filefolder": "", "filenamePrefix": "", "data_path": ""}
-
-
-def get_data_from_id(session, id_dict, root_path, context="scan", catalog_defaults=None):
-    """
-    Get data_path and filenamePrefix based on ID priority and context.
-
-    This is the analog of get_catalog_data() but with broader scope,
-    querying the appropriate table based on which ID is present.
-
-    Context-aware behavior:
-    - context='scan': Returns original scan data (from Catalog)
-                      Only expects scanNumber in id_dict
-                      Default context (not used for jobs)
-    - context='wire_recon': Returns reconstruction input data paths
-                            Used in create_wire_reconstruction page
-    - context='recon': Returns reconstruction input data paths
-                       Used in create_reconstruction page
-    - context='peakindex': Returns reconstruction output folders (WR/MR outputs)
-                           Used in create_peakindexing page
-
-    For 'scan' context:
-    - Query Catalog for original scan data using scanNumber
-    - Return Catalog data
-
-    For 'wire_recon' and 'recon' contexts:
-    - If recon_id is provided → Query Recon table and return recon_data.file_path (the input data path used for that reconstruction)
-    - If wirerecon_id is provided → Query WireRecon table and return wirerecon_data.filefolder (the input data path used for that wire reconstruction)
-    - If only scanNumber is provided → Query Catalog table and return the original scan data path
-
-    For 'peakindex' context:
-    - If recon_id is provided → Query Recon table and return recon_data.file_output (the output folder from reconstruction)
-    - If wirerecon_id is provided → Query WireRecon table and return wirerecon_data.outputFolder (the output folder from wire reconstruction)
-    - If only scanNumber is provided → Query Catalog table and return the original scan data path
-
-    Args:
-        session: SQLAlchemy session object
-        id_dict: Dict from parse_IDnumber() with keys:
-                 scanNumber, wirerecon_id, recon_id, peakindex_id
-        root_path: Root path for file operations
-        catalog_defaults: Defaults for catalog fallback (optional)
-        context: Required - must be 'scan', 'wire_recon', 'recon', or 'peakindex'
-
-    Returns:
-        dict: {'data_path': str, 'filenamePrefix': list or str, 'source': str}
-              where 'source' indicates which table the data came from
-              ('Recon', 'WireRecon', or 'Catalog')
-
-    Raises:
-        ValueError: If context is not provided or invalid
-    """
-    # Validate context parameter
-    valid_contexts = ["scan", "wire_recon", "recon", "peakindex"]
-    if context not in valid_contexts:
-        raise ValueError(f"context must be one of {valid_contexts}, got: {context}")
-
-    recon_id = id_dict.get("recon_id")
-    wirerecon_id = id_dict.get("wirerecon_id")
-    scanNumber = id_dict.get("scanNumber")
-
-    # For 'scan' context: Return original scan data (no reconstruction IDs expected)
-    if context == "scan":
-        # Query Catalog for original scan data
-        if scanNumber:
-            catalog_result = get_catalog_data(session, int(scanNumber), root_path, catalog_defaults)
-            catalog_result["source"] = "Catalog"
-            return catalog_result
-
-    # For 'wire_recon' and 'recon' contexts: Return reconstruction input data paths
-    elif context in ["wire_recon", "recon"]:
-        # Priority 1: Mask reconstruction (MR) - use input path
-        if recon_id:
-            recon_data = session.query(db_schema.Recon).filter_by(recon_id=int(recon_id)).first()
-            if recon_data and recon_data.file_path:
-                return {
-                    "data_path": remove_root_path_prefix(recon_data.file_path, root_path),
-                    "filenamePrefix": getattr(recon_data, "filenamePrefix", []) or [],
-                    "source": "Recon",
-                }
-
-        # Priority 2: Wire reconstruction (WR) - use input path
-        if wirerecon_id:
-            wirerecon_data = session.query(db_schema.WireRecon).filter_by(wirerecon_id=int(wirerecon_id)).first()
-            if wirerecon_data and wirerecon_data.filefolder:
-                return {
-                    "data_path": remove_root_path_prefix(wirerecon_data.filefolder, root_path),
-                    "filenamePrefix": wirerecon_data.filenamePrefix or [],
-                    "source": "WireRecon",
-                }
-
-        # Fallback: Query Catalog for original scan data if only scanNumber provided
-        if scanNumber:
-            catalog_result = get_catalog_data(session, int(scanNumber), root_path, catalog_defaults)
-            catalog_result["source"] = "Catalog"
-            return catalog_result
-
-    # For 'peakindex' context: Return reconstruction output folders
-    elif context == "peakindex":
-        # Priority 1: Regular reconstruction (MR)
-        if recon_id:
-            recon_data = session.query(db_schema.Recon).filter_by(recon_id=int(recon_id)).first()
-            if recon_data and recon_data.file_output:
-                return {
-                    "data_path": remove_root_path_prefix(recon_data.file_output, root_path),
-                    "filenamePrefix": getattr(recon_data, "filenamePrefix", []) or [],
-                    "source": "Recon",
-                }
-
-        # Priority 2: Wire reconstruction (WR)
-        if wirerecon_id:
-            wirerecon_data = session.query(db_schema.WireRecon).filter_by(wirerecon_id=int(wirerecon_id)).first()
-            if wirerecon_data and wirerecon_data.outputFolder:
-                return {
-                    "data_path": remove_root_path_prefix(wirerecon_data.outputFolder, root_path),
-                    "filenamePrefix": wirerecon_data.filenamePrefix or [],
-                    "source": "WireRecon",
-                }
-
-        # Fallback to query Catalog for original scan data if no reconstruction IDs
-        if scanNumber:
-            catalog_result = get_catalog_data(session, int(scanNumber), root_path, catalog_defaults)
-            catalog_result["source"] = "Catalog"
-            return catalog_result
-
-    # No valid ID found
-    return {"data_path": "", "filenamePrefix": [], "source": "Unknown"}
-
-
-def get_next_id(session, table_class):
-    """
-    Get the next available ID for a given table by finding the maximum ID and incrementing it.
-
-    Args:
-        session: SQLAlchemy session object
-        table_class: The SQLAlchemy table class (e.g., db_schema.WireRecon)
-
-    Returns:
-        int: The next available ID (max_id + 1, or 1 if table is empty)
-    """
-    # Get the primary key column dynamically
-    primary_key_columns = list(table_class.__table__.primary_key.columns)
-
-    if not primary_key_columns:
-        raise ValueError(f"Table {table_class.__name__} has no primary key")
-
-    # Assume single column primary key
-    primary_key_column = primary_key_columns[0]
-
-    # Query for the maximum value of the primary key
-    max_id = session.query(sqlalchemy.func.max(primary_key_column)).scalar()
-
-    # Return next ID (1 if table is empty, otherwise max_id + 1)
-    return 1 if max_id is None else max_id + 1
+        return {
+            "filefolder": filefolder,
+            "filenamePrefix": catalog_data.filenamePrefix,
+            "data_path": remove_root_path_prefix(filefolder, root_path),
+        }
+    if CATALOG_DEFAULTS:
+        filefolder = CATALOG_DEFAULTS.get("filefolder", "")
+        return {
+            "filefolder": filefolder,
+            "filenamePrefix": CATALOG_DEFAULTS.get("filenamePrefix", ""),
+            "data_path": filefolder,
+        }
+    return {"filefolder": "", "filenamePrefix": "", "data_path": ""}
 
 
 def parse_parameter(parameter_value, num_inputs=None, delimiter=";"):
-    """
-    Parse a single parameter, splitting delimiter-separated values into a list.
-    Optionally expand single values to match the number of inputs.
-
-    This function is used to handle pooled scan submissions where multiple
-    inputs are submitted together with their parameters separated by delimiters.
-
-    Args:
-        parameter_value: The parameter value (can be None, single value, or delimiter-separated string)
-        num_inputs: Optional number of inputs to expand single values to match
-        delimiter: Delimiter character used for splitting (default ";")
-
-    Returns:
-        list: A list of values for this parameter
-
-    Raises:
-        ValueError: If the parameter has multiple values that don't match num_inputs
-    """
+    """Split one pooled form value and optionally broadcast it to every input."""
     if parameter_value is None:
         values = [None]
     else:
-        # Convert to string and check for delimiters
         str_value = str(parameter_value)
         if delimiter in str_value:
-            # Split and strip whitespace from each value
-            values = []
-            for v in str_value.split(delimiter):
-                v = v.strip()
-                if v.lower() in ["none", ""]:
-                    values.append(None)
-                else:
-                    # v is a string from the split operation
-                    # SQLAlchemy will handle type conversion when inserting
-                    values.append(v)
+            values = [
+                None if value.strip().lower() in {"none", ""} else value.strip() for value in str_value.split(delimiter)
+            ]
+        elif str_value.lower() in {"none", ""}:
+            values = [None]
         else:
-            # Single value - check if it's a 'None' string
-            if str_value.lower() in ["none", ""]:
-                values = [None]
-            else:
-                # Keep the original value (before string conversion)
-                # This preserves the original type for single values
-                values = [parameter_value]
+            values = [parameter_value]
 
-    # If num_inputs is provided, handle expansion or validation
     if num_inputs is not None:
         if len(values) == 1 and num_inputs > 1:
-            # Expand single value to match number of inputs
-            values = values * num_inputs
+            values *= num_inputs
         elif len(values) != num_inputs and len(values) != 1:
-            # Error: mismatched lengths
             raise ValueError(f"Parameter has {len(values)} values but there are {num_inputs} inputs")
-
     return values
 
 
 def get_num_inputs_from_fields(fields_dict, delimiter=";"):
-    """
-    Determine the number of inputs by finding the maximum number of
-    delimiter-separated entries across all form fields.
-
-    This handles the case where pooled data may have identical values
-    that get collapsed to a single value during pooling, while other
-    fields retain their delimiter-separated format.
-
-    Parameters:
-    - fields_dict: Dictionary of field names to values
-    - delimiter: Delimiter character used for splitting (default ";")
-
-    Returns:
-    - int: The maximum number of inputs found across all fields (minimum 1)
-
-    Example:
-        fields = {
-            'data_path': 'data/scan_276994',  # Same for all (collapsed)
-            'scanNumber': '276994; 276995; 276996',  # Different (3 entries)
-            'threshold': '250'  # Same for all (collapsed)
-        }
-        num_inputs = get_num_inputs_from_fields(fields)  # Returns 3
-    """
-    num_inputs = 1  # Default to 1
-
-    # Scan all fields to find the maximum number of delimiter-separated entries
-    for _field_name, field_value in fields_dict.items():
+    """Return the largest pooled-value count across a set of form fields."""
+    num_inputs = 1
+    for field_value in fields_dict.values():
         if field_value is not None and field_value != "":
-            # Count delimiter-separated entries
-            value_str = str(field_value)
-            entries = [s.strip() for s in value_str.split(delimiter)]
-            num_inputs = max(num_inputs, len(entries))
-
+            num_inputs = max(num_inputs, len(str(field_value).split(delimiter)))
     return num_inputs
-
-
-def make_IDnumber(SN=None, WR=None, MR=None, PI=None, delimiter=";"):
-    """
-    Create ID number string from scan, wire recon, recon, and peakindex IDs.
-    Handles None values, "None" strings, and pooled values.
-
-    Parameters:
-    - SN: Scan number(s) - can be single value or delimiter-separated string
-    - WR: Wire recon ID(s) - can be single value or delimiter-separated string
-    - MR: Recon ID(s) - can be single value or delimiter-separated string
-    - PI: Peak index ID(s) - can be single value or delimiter-separated string
-    - delimiter: Delimiter character used for splitting and joining (default ";")
-
-    Returns:
-    - String with ID number(s) in priority order (PI > MR > WR > SN), joined with delimiter + space
-    - Returns None if all inputs are None or no valid entries found
-    - Deduplicates if all entries are identical
-
-    Raises:
-    - ValueError: If field lengths don't match expected pattern (1 or max_len)
-    """
-
-    # Helper function to check if value is None or "None"
-    def is_none_value(val):
-        return val is None or str(val).strip().lower() == "none"
-
-    # Build params dict for get_num_inputs_from_fields
-    params_dict = {"SN": SN, "WR": WR, "MR": MR, "PI": PI}
-
-    # Get max length across all parameters
-    max_len = get_num_inputs_from_fields(params_dict, delimiter)
-
-    # Build ID_lists directly from params_dict, excluding None values
-    ID_lists = {}
-    for key, value in params_dict.items():
-        if not is_none_value(value):
-            # Split into entries and strip whitespace
-            entries = [s.strip() for s in str(value).split(delimiter)]
-
-            # Validate and pad to max_len
-            if len(entries) == 1 and max_len > 1:
-                # Duplicate single value (collapsed from pooling)
-                ID_lists[key] = entries * max_len
-            elif len(entries) == max_len:
-                # Already correct length
-                ID_lists[key] = entries
-            else:
-                # Unexpected length - this shouldn't happen with proper pooling
-                raise ValueError(f"Field {key} has {len(entries)} entries but expected 1 or {max_len}. Value: {value}")
-
-    # If all are None, return None
-    if not ID_lists:
-        return None
-
-    # Build ID strings with priority: PI > MR > WR > SN
-    IDnumbers = []
-    for i in range(max_len):
-        if "PI" in ID_lists and ID_lists["PI"][i] and not is_none_value(ID_lists["PI"][i]):
-            IDnumbers.append(f"PI{ID_lists['PI'][i]}")
-        elif "MR" in ID_lists and ID_lists["MR"][i] and not is_none_value(ID_lists["MR"][i]):
-            IDnumbers.append(f"MR{ID_lists['MR'][i]}")
-        elif "WR" in ID_lists and ID_lists["WR"][i] and not is_none_value(ID_lists["WR"][i]):
-            IDnumbers.append(f"WR{ID_lists['WR'][i]}")
-        elif "SN" in ID_lists and ID_lists["SN"][i] and not is_none_value(ID_lists["SN"][i]):
-            IDnumbers.append(f"SN{ID_lists['SN'][i]}")
-
-    # If no valid entries were found, return None
-    if not IDnumbers:
-        return None
-
-    # If all entries are identical, return just one
-    if all(id_num == IDnumbers[0] for id_num in IDnumbers):
-        return IDnumbers[0]
-
-    # Join with delimiter + space for consistent output format
-    return f"{delimiter} ".join(IDnumbers)
-
-
-def parse_IDnumber(IDnumber, session, delimiter=";"):
-    """
-    Parse IDnumber string and query database for parent IDs.
-    Reverses the operation of make_IDnumber and fills in parent relationships.
-
-    Parameters:
-    - IDnumber: String like "PI5", "MR3; MR4", "WR1", "SN276994", etc.
-                Can also be None or empty string.
-    - session: SQLAlchemy session for database queries
-    - delimiter: Delimiter used in the IDnumber string (default ";")
-
-    Returns:
-    - dict: {'scanNumber': value, 'wirerecon_id': value, 'recon_id': value, 'peakindex_id': value}
-      where value can be:
-      - None (if that ID type wasn't present in any entry)
-      - Single value string (if all entries were identical, e.g., "5")
-      - Delimiter-separated string (if multiple different values, e.g., "3; 4; 5")
-      - Delimiter-separated string with None (e.g., "3; None; 5" for pooled data where some entries lack that parent ID)
-
-    Database Lookup Rules:
-    - If peakindex_id is provided: Queries PeakIndex table for scanNumber, recon_id, wirerecon_id
-    - If recon_id is provided: Queries Recon table for scanNumber
-    - If wirerecon_id is provided: Queries WireRecon table for scanNumber
-    - If scanNumber is provided: No database query needed (it's the root)
-    - Does NOT query for child IDs (e.g., if scanNumber provided, doesn't look up wirerecon_id/recon_id/peakindex_id)
-
-    Raises:
-    - ValueError: If IDnumber format is invalid
-
-    Examples:
-    - parse_IDnumber("PI5", session)
-      → Queries PeakIndex.peakindex_id=5
-      → Returns {'scanNumber': '276994', 'wirerecon_id': None, 'recon_id': '3', 'peakindex_id': '5'}
-
-    - parse_IDnumber("MR3; MR4", session)
-      → Queries Recon.recon_id IN (3,4)
-      → Returns {'scanNumber': '100; 101', 'wirerecon_id': None, 'recon_id': '3; 4', 'peakindex_id': None}
-
-    - parse_IDnumber("WR1", session)
-      → Queries WireRecon.wirerecon_id=1
-      → Returns {'scanNumber': '276994', 'wirerecon_id': '1', 'recon_id': None, 'peakindex_id': None}
-
-    - parse_IDnumber("SN276994", session)
-      → No database query
-      → Returns {'scanNumber': '276994', 'wirerecon_id': None, 'recon_id': None, 'peakindex_id': None}
-
-    - parse_IDnumber("PI5; PI6", session)
-      → Queries PeakIndex.peakindex_id IN (5,6)
-      → If PI5 has recon_id=3 but PI6 has recon_id=None
-      → Returns {'scanNumber': '276994; 276995', 'wirerecon_id': None, 'recon_id': '3; None', 'peakindex_id': '5; 6'}
-    """
-    # Initialize result dict with proper field names, each containing a list
-    result = {"scanNumber": [], "wirerecon_id": [], "recon_id": [], "peakindex_id": []}
-
-    # Handle None or empty input
-    if not IDnumber or str(IDnumber).strip().lower() in ["none", ""]:
-        return {k: None for k in result.keys()}
-
-    # Split by delimiter to get individual ID entries and strip whitespace
-    entries = [s.strip() for s in str(IDnumber).split(delimiter)]
-
-    # Define prefix to field name mapping
-    prefix_map = {"SN": "scanNumber", "WR": "wirerecon_id", "MR": "recon_id", "PI": "peakindex_id"}
-
-    # Process each entry
-    for entry in entries:
-        if not entry or entry.lower() == "none":
-            # Add None to all fields for this entry
-            for field in result.keys():
-                result[field].append(None)
-            continue
-
-        # Use regex to match prefix and number
-        # Pattern: (SN|WR|MR|PI) followed by one or more digits
-        match = re.match(r"^(SN|WR|MR|PI)(\d+)$", entry.upper())
-
-        if match:
-            prefix = match.group(1)
-            number_str = match.group(2)
-            field_name = prefix_map[prefix]
-
-            # Initialize this entry with None for all fields
-            entry_data = {k: None for k in result.keys()}
-
-            # Set the current field
-            entry_data[field_name] = number_str
-
-            # Query database for parent IDs based on field_name
-            if field_name == "peakindex_id":
-                pi_id_int = int(number_str)
-                peakindex_data = (
-                    session.query(db_schema.PeakIndex).filter(db_schema.PeakIndex.peakindex_id == pi_id_int).first()
-                )
-
-                if peakindex_data:
-                    entry_data["scanNumber"] = str(peakindex_data.scanNumber)
-                    if peakindex_data.recon_id:
-                        entry_data["recon_id"] = str(peakindex_data.recon_id)
-                    if peakindex_data.wirerecon_id:
-                        entry_data["wirerecon_id"] = str(peakindex_data.wirerecon_id)
-                else:
-                    raise ValueError(f"PeakIndex ID {number_str} not found in database")
-
-            elif field_name == "recon_id":
-                mr_id_int = int(number_str)
-                recon_data = session.query(db_schema.Recon).filter(db_schema.Recon.recon_id == mr_id_int).first()
-
-                if recon_data:
-                    entry_data["scanNumber"] = str(recon_data.scanNumber)
-                else:
-                    raise ValueError(f"Recon ID {number_str} not found in database")
-
-            elif field_name == "wirerecon_id":
-                wr_id_int = int(number_str)
-                wirerecon_data = (
-                    session.query(db_schema.WireRecon).filter(db_schema.WireRecon.wirerecon_id == wr_id_int).first()
-                )
-
-                if wirerecon_data:
-                    entry_data["scanNumber"] = str(wirerecon_data.scanNumber)
-                else:
-                    raise ValueError(f"WireRecon ID {number_str} not found in database")
-
-            # If field_name == 'scanNumber', no database query needed
-
-            # Append entry_data to result lists
-            for field in result.keys():
-                result[field].append(entry_data[field])
-        else:
-            raise ValueError(f"Invalid IDnumber entry: '{entry}' - expected format: (SN|WR|MR|PI)###")
-
-    # Convert lists to final format (None, single value, or delimited string)
-    final_result = {}
-    for field_name, id_list in result.items():
-        if not id_list:
-            final_result[field_name] = None
-        elif all(id_val == id_list[0] for id_val in id_list):
-            # All values are identical, return single value
-            final_result[field_name] = id_list[0]
-        else:
-            # Return delimiter-separated string with space, converting None to empty string for joining
-            final_result[field_name] = f"{delimiter} ".join(str(v) if v is not None else "" for v in id_list)
-
-    return final_result

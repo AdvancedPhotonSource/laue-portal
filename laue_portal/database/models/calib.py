@@ -3,7 +3,7 @@ Contains calibration data for mask reconstructions.
 """
 
 from sqlalchemy import JSON, Float, ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from laue_portal.database.base import Base
 
@@ -31,10 +31,6 @@ class Calib(Base):
     anglex: Mapped[float] = mapped_column(Float)
     cenz: Mapped[float] = mapped_column(Float)
     shift_parameter: Mapped[float] = mapped_column(Float)
-
-    # Parent of:
-    recon_: Mapped["Recon"] = relationship(backref="calib")  # noqa: F821
-    # wirerecon_: Mapped["WireRecon"] = relationship(backref="calib")
 
     def __repr__(self) -> str:
         pass  # TODO: Consider implemeting for debugging

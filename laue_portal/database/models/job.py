@@ -24,8 +24,11 @@ class Job(Base):
     messages: Mapped[str] = mapped_column(String, nullable=True)
 
     # Parent of:
-    subjob_: Mapped["SubJob"] = relationship(backref="job")  # noqa: F821
+    subjobs: Mapped[list["SubJob"]] = relationship(back_populates="job")  # noqa: F821
     calib_: Mapped["Calib"] = relationship(backref="job")  # noqa: F821
-    recon_: Mapped["Recon"] = relationship(backref="job")  # noqa: F821
-    wirerecon_: Mapped["WireRecon"] = relationship(backref="job")  # noqa: F821
-    peakindex_: Mapped["PeakIndex"] = relationship(backref="job")  # noqa: F821
+    reconstruction_run: Mapped["ReconstructionRun | None"] = relationship(  # noqa: F821
+        back_populates="job", uselist=False
+    )
+    indexing_run: Mapped["IndexingRun | None"] = relationship(  # noqa: F821
+        back_populates="job", uselist=False
+    )

@@ -3,7 +3,7 @@ Table for sub-jobs within a computation jobs.
 """
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from laue_portal.database.base import Base
 
@@ -27,3 +27,7 @@ class SubJob(Base):
 
     messages: Mapped[str] = mapped_column(String, nullable=True)
     command: Mapped[str] = mapped_column(Text, nullable=True)  # CLI command(s) used to execute the job
+    input_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    output_path: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    job: Mapped["Job"] = relationship(back_populates="subjobs")  # noqa: F821

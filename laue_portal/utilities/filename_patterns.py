@@ -13,11 +13,86 @@ create_wire_reconstruction pages.
 import logging
 import os
 import re
+from dataclasses import dataclass
+from fnmatch import translate as translate_glob
 from itertools import combinations
+from typing import Pattern, Sequence
 
 from laue_portal.utilities.srange import srange
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class FilenameTemplateMatch:
+    """The template branch and numeric indices captured from one filename."""
+
+    template_index: int
+    indices: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class FilenameTemplateMatcher:
+    """One compiled regular expression for a collection of filename templates."""
+
+    pattern: Pattern[str]
+    template_group_names: tuple[str, ...]
+    index_group_names: tuple[tuple[str, ...], ...]
+
+    def match(self, filename: str) -> FilenameTemplateMatch | None:
+        match = self.pattern.fullmatch(filename)
+        if match is None:
+            return None
+
+        for template_index, template_group in enumerate(self.template_group_names):
+            if match.group(template_group) is not None:
+                indices = tuple(int(match.group(group_name)) for group_name in self.index_group_names[template_index])
+                return FilenameTemplateMatch(template_index, indices)
+        return None
+
+
+def compile_filename_templates(
+    templates: Sequence[str], *, append_suffix_wildcard: bool = False
+) -> FilenameTemplateMatcher:
+    """Compile ``%d`` and glob-aware filename templates into one regex.
+
+    The existing filename-pattern UI emits ``%d`` index placeholders and glob
+    wildcards. This compiler keeps that dialect in one utility module while
+    adding named captures for the numeric indices needed by workflow creation.
+    """
+
+    normalized_templates = tuple(str(template).strip() for template in templates)
+    if not normalized_templates or any(not template for template in normalized_templates):
+        raise ValueError("At least one non-empty filename template is required")
+
+    branches = []
+    template_groups = []
+    index_groups = []
+    for template_index, original_template in enumerate(normalized_templates):
+        template = f"{original_template}*" if append_suffix_wildcard else original_template
+        placeholder_count = template.count("%d")
+        markers = [chr(0xE000 + template_index * 16 + index) for index in range(placeholder_count)]
+        marked_template = template
+        for marker in markers:
+            marked_template = marked_template.replace("%d", marker, 1)
+
+        translated = translate_glob(marked_template)
+        branch_index_groups = []
+        for index, marker in enumerate(markers):
+            group_name = f"template_{template_index}_index_{index}"
+            translated = translated.replace(marker, f"(?P<{group_name}>\\d+)")
+            branch_index_groups.append(group_name)
+
+        template_group = f"template_{template_index}"
+        branches.append(f"(?P<{template_group}>{translated})")
+        template_groups.append(template_group)
+        index_groups.append(tuple(branch_index_groups))
+
+    return FilenameTemplateMatcher(
+        pattern=re.compile("|".join(branches)),
+        template_group_names=tuple(template_groups),
+        index_group_names=tuple(index_groups),
+    )
 
 
 def filter_files_by_extension(directory_path, valid_extensions):

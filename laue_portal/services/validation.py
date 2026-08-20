@@ -1,20 +1,20 @@
 """Dash-independent validation helpers for create-page workflows."""
 
-import glob
 import os
 
 from sqlalchemy.orm import Session
 
 import laue_portal.database.session_utils as session_utils
+from laue_portal.database import db_schema
 from laue_portal.database.db_utils import (
-    get_data_from_id,
+    get_catalog_by_scan_number,
     get_num_inputs_from_fields,
-    parse_IDnumber,
     parse_parameter,
     resolve_path_with_root,
 )
 from laue_portal.utilities.hkl_parse import str2hkl
 from laue_portal.utilities.srange import srange
+from laue_portal.workflows.identity import merged_identity_value, parse_workflow_identities
 
 PEAKINDEX_FIELD_IDS = [
     "data_path",
@@ -47,14 +47,13 @@ PEAKINDEX_FIELD_IDS = [
 ]
 
 PEAKINDEX_OPTIONAL_FIELDS = [
-    "scanPoints",
     "depthRange",
     "threshold",
     "thresholdRatio",
     "max_peaks",
-    "scanNumber",
-    "wirerecon_id",
-    "recon_id",
+    "scan_number",
+    "reconstruction_id",
+    "indexing_id",
 ]
 
 PEAKINDEX_NUMERIC_FIELDS = [
@@ -362,27 +361,19 @@ def validate_peakindexing(fields, catalog_defaults=None):
     with Session(session_utils.get_engine()) as session:
         if IDnumber:
             try:
-                id_dict = parse_IDnumber(IDnumber, session)
-                for key, value in id_dict.items():
+                identities = parse_workflow_identities(IDnumber, session)
+                for key in ("scan_number", "reconstruction_id", "indexing_id"):
+                    value = merged_identity_value(identities, key)
                     if value is not None:
                         parsed_fields[key] = parse_parameter(value, num_inputs)
                 add_validation_message(validation_result, "successes", "IDnumber")
             except ValueError as e:
-                error_message = str(e)
-                if "not found in database" in error_message:
-                    add_validation_message(
-                        validation_result,
-                        "warnings",
-                        "IDnumber",
-                        custom_message=f"ID Number warning: {error_message}. This will create an unlinked peak indexing.",
-                    )
-                else:
-                    add_validation_message(
-                        validation_result,
-                        "errors",
-                        "IDnumber",
-                        custom_message=f"ID Number parsing error: {error_message}",
-                    )
+                add_validation_message(
+                    validation_result,
+                    "errors",
+                    "IDnumber",
+                    custom_message=f"ID Number parsing error: {e}",
+                )
         else:
             add_validation_message(
                 validation_result,
@@ -403,7 +394,7 @@ def validate_peakindexing(fields, catalog_defaults=None):
                 is_missing = True
 
             if is_missing:
-                if field_name == "scanNumber":
+                if field_name == "scan_number":
                     add_validation_message(validation_result, "warnings", field_name, display_name="Scan Number")
                     continue
                 elif field_name in PEAKINDEX_OPTIONAL_FIELDS:
@@ -415,7 +406,7 @@ def validate_peakindexing(fields, catalog_defaults=None):
             try:
                 parsed_list = parse_parameter(field_value, num_inputs)
             except ValueError as e:
-                if field_name == "scanNumber":
+                if field_name == "scan_number":
                     add_validation_message(
                         validation_result, "warnings", field_name, custom_message=f"Scan Number parsing error: {str(e)}"
                     )
@@ -427,7 +418,7 @@ def validate_peakindexing(fields, catalog_defaults=None):
                     continue
 
             if len(parsed_list) != num_inputs:
-                if field_name == "scanNumber":
+                if field_name == "scan_number":
                     add_validation_message(
                         validation_result,
                         "warnings",
@@ -462,11 +453,11 @@ def validate_peakindexing(fields, catalog_defaults=None):
                 return validate_for_input(field_name, _i, _input_prefix, **kwargs)
 
             scan_num_int = None
-            if "scanNumber" in parsed_fields:
-                current_scanNumber = validate_field("scanNumber", required=False, display_name="Scan Number")
-                if current_scanNumber:
+            if "scan_number" in parsed_fields:
+                current_scan_number = validate_field("scan_number", required=False, display_name="Scan Number")
+                if current_scan_number:
                     try:
-                        scan_num_int = int(current_scanNumber)
+                        scan_num_int = int(current_scan_number)
                     except (ValueError, TypeError):
                         add_validation_message(
                             validation_result,
@@ -476,34 +467,36 @@ def validate_peakindexing(fields, catalog_defaults=None):
                             custom_message="Scan Number is not a valid integer",
                         )
 
-            wirerecon_id_int = None
-            if "wirerecon_id" in parsed_fields:
-                wirerecon_val = validate_field("wirerecon_id", required=False, display_name="Wire Recon ID")
-                if wirerecon_val:
+            reconstruction_id = None
+            if "reconstruction_id" in parsed_fields:
+                reconstruction_value = validate_field(
+                    "reconstruction_id", required=False, display_name="Reconstruction ID"
+                )
+                if reconstruction_value:
                     try:
-                        wirerecon_id_int = int(wirerecon_val)
+                        reconstruction_id = int(reconstruction_value)
                     except (ValueError, TypeError):
                         add_validation_message(
                             validation_result,
                             "warnings",
                             "IDnumber",
                             input_prefix,
-                            custom_message="Wire Recon ID is not a valid integer",
+                            custom_message="Reconstruction ID is not a valid integer",
                         )
 
-            recon_id_int = None
-            if "recon_id" in parsed_fields:
-                recon_val = validate_field("recon_id", required=False, display_name="Recon ID")
-                if recon_val:
+            indexing_id = None
+            if "indexing_id" in parsed_fields:
+                indexing_value = validate_field("indexing_id", required=False, display_name="Indexing ID")
+                if indexing_value:
                     try:
-                        recon_id_int = int(recon_val)
+                        indexing_id = int(indexing_value)
                     except (ValueError, TypeError):
                         add_validation_message(
                             validation_result,
                             "warnings",
                             "IDnumber",
                             input_prefix,
-                            custom_message="Recon ID is not a valid integer",
+                            custom_message="Indexing ID is not a valid integer",
                         )
 
             if "root_path" not in validation_result["errors"]:
@@ -529,39 +522,36 @@ def validate_peakindexing(fields, catalog_defaults=None):
                             custom_message="Data Path directory not found",
                         )
                     else:
-                        if any([scan_num_int, wirerecon_id_int, recon_id_int]):
-                            id_dict = {
-                                "scanNumber": scan_num_int,
-                                "wirerecon_id": wirerecon_id_int,
-                                "recon_id": recon_id_int,
-                            }
-                            id_data = get_data_from_id(session, id_dict, root_path, "peakindex", catalog_defaults)
+                        source_path = None
+                        source_label = None
+                        if indexing_id is not None:
+                            indexing = session.get(db_schema.IndexingRun, indexing_id)
+                            if indexing is not None:
+                                source_path = indexing.input_path
+                                source_label = f"I{indexing_id}"
+                        elif reconstruction_id is not None:
+                            reconstruction = session.get(db_schema.ReconstructionRun, reconstruction_id)
+                            if reconstruction is not None:
+                                source_path = reconstruction.output_path
+                                source_label = f"R{reconstruction_id}"
+                        elif scan_num_int is not None:
+                            catalog = get_catalog_by_scan_number(session, scan_num_int)
+                            if catalog is not None:
+                                source_path = catalog.filefolder
+                                source_label = f"SN{scan_num_int}"
 
-                            if id_data and id_data.get("data_path"):
-                                id_full_data_path = resolve_path_with_root(id_data["data_path"], root_path)
-                                if id_full_data_path != current_full_data_path:
-                                    add_validation_message(
-                                        validation_result,
-                                        "warnings",
-                                        "data_path",
-                                        input_prefix,
-                                        custom_message=f"{id_data['source']} database entry has different path ({id_data['data_path']})",
-                                    )
-                            else:
-                                add_validation_message(
-                                    validation_result,
-                                    "warnings",
-                                    "IDnumber",
-                                    input_prefix,
-                                    custom_message=f"{id_data.get('source', 'Data')} database entry not found",
-                                )
+                        if source_path and os.path.normpath(source_path) != os.path.normpath(current_full_data_path):
+                            add_validation_message(
+                                validation_result,
+                                "warnings",
+                                "data_path",
+                                input_prefix,
+                                custom_message=f"{source_label} has a different source path ({source_path})",
+                            )
 
-                        all_files = [
-                            f
-                            for f in os.listdir(current_full_data_path)
-                            if os.path.isfile(os.path.join(current_full_data_path, f))
-                        ]
-                        if not all_files:
+                        with os.scandir(current_full_data_path) as entries:
+                            contains_file = any(entry.is_file() for entry in entries)
+                        if not contains_file:
                             add_validation_message(
                                 validation_result,
                                 "errors",
@@ -569,263 +559,67 @@ def validate_peakindexing(fields, catalog_defaults=None):
                                 input_prefix,
                                 custom_message="Data Path directory contains no files",
                             )
-                        else:
-                            current_filename_prefix_str = validate_field(
-                                "filenamePrefix", display_name="Filename Prefix"
-                            )
-                            if current_filename_prefix_str is not None:
-                                current_filename_prefix = (
-                                    [s.strip() for s in current_filename_prefix_str.split(",")]
-                                    if current_filename_prefix_str
-                                    else []
-                                )
 
-                                for current_filename_prefix_i in current_filename_prefix:
-                                    prefix_pattern = os.path.join(
-                                        current_full_data_path, current_filename_prefix_i.replace("%d", "*")
+                        current_filename_prefix_str = validate_field("filenamePrefix", display_name="Filename Prefix")
+                        current_scan_points = validate_field("scanPoints", required=False, display_name="Scan Points")
+                        current_depth_range = validate_field("depthRange", required=False, display_name="Depth Range")
+
+                        for field_name, field_value, display_name in (
+                            ("scanPoints", current_scan_points, "Scan Points"),
+                            ("depthRange", current_depth_range, "Depth Range"),
+                        ):
+                            if field_value:
+                                try:
+                                    if srange(field_value).len() == 0:
+                                        raise ValueError
+                                except Exception:
+                                    add_validation_message(
+                                        validation_result,
+                                        "errors",
+                                        field_name,
+                                        input_prefix,
+                                        custom_message=f"{display_name} entry has invalid or empty range",
                                     )
-                                    prefix_matches = glob.glob(prefix_pattern)
 
-                                    if not prefix_matches:
-                                        add_validation_message(
-                                            validation_result,
-                                            "errors",
-                                            "filenamePrefix",
-                                            input_prefix,
-                                            custom_message=f"No files match Filename prefix pattern '{current_filename_prefix_i}'",
-                                        )
-                                    else:
-                                        num_placeholders = current_filename_prefix_i.count("%d")
-
-                                        if num_placeholders == 0:
-                                            continue
-
-                                        if num_placeholders == 1:
-                                            current_scanPoints = validate_field(
-                                                "scanPoints", required=False, display_name="Scan Points"
-                                            )
-                                            current_depthRange = validate_field(
-                                                "depthRange", required=False, display_name="Depth Range"
-                                            )
-
-                                            has_scanPoints = current_scanPoints is not None
-                                            has_depthRange = current_depthRange is not None
-
-                                            if has_scanPoints and has_depthRange:
-                                                error_msg = f"Filename prefix '{current_filename_prefix_i}' has 1 %d placeholder but both Scan Points and Depth Range were provided (only one allowed)"
-                                                add_validation_message(
-                                                    validation_result,
-                                                    "errors",
-                                                    "filenamePrefix",
-                                                    input_prefix,
-                                                    custom_message=error_msg,
-                                                )
-                                                add_validation_message(
-                                                    validation_result,
-                                                    "errors",
-                                                    "scanPoints",
-                                                    input_prefix,
-                                                    custom_message=error_msg,
-                                                )
-                                                add_validation_message(
-                                                    validation_result,
-                                                    "errors",
-                                                    "depthRange",
-                                                    input_prefix,
-                                                    custom_message=error_msg,
-                                                )
-                                                continue
-                                            elif not has_scanPoints and not has_depthRange:
-                                                error_msg = f"Filename prefix '{current_filename_prefix_i}' has 1 %d placeholder but neither Scan Points nor Depth Range was provided"
-                                                add_validation_message(
-                                                    validation_result,
-                                                    "errors",
-                                                    "filenamePrefix",
-                                                    input_prefix,
-                                                    custom_message=error_msg,
-                                                )
-                                                add_validation_message(
-                                                    validation_result,
-                                                    "errors",
-                                                    "scanPoints",
-                                                    input_prefix,
-                                                    custom_message=error_msg,
-                                                )
-                                                add_validation_message(
-                                                    validation_result,
-                                                    "errors",
-                                                    "depthRange",
-                                                    input_prefix,
-                                                    custom_message=error_msg,
-                                                )
-                                                continue
-
-                                            if has_scanPoints:
-                                                try:
-                                                    scanPoints_srange = srange(current_scanPoints)
-                                                    scanPoint_nums = scanPoints_srange.list()
-                                                    if not scanPoint_nums:
-                                                        add_validation_message(
-                                                            validation_result,
-                                                            "errors",
-                                                            "scanPoints",
-                                                            input_prefix,
-                                                            custom_message="Scan Points range is empty",
-                                                        )
-                                                        continue
-                                                    depthRange_nums = [None]
-                                                except Exception:
-                                                    add_validation_message(
-                                                        validation_result,
-                                                        "errors",
-                                                        "scanPoints",
-                                                        input_prefix,
-                                                        custom_message="Scan Points entry has invalid format",
-                                                    )
-                                                    continue
-                                            else:
-                                                try:
-                                                    depthRange_srange = srange(current_depthRange)
-                                                    depthRange_nums = depthRange_srange.list()
-                                                    if not depthRange_nums:
-                                                        add_validation_message(
-                                                            validation_result,
-                                                            "errors",
-                                                            "depthRange",
-                                                            input_prefix,
-                                                            custom_message="Depth Range is empty",
-                                                        )
-                                                        continue
-                                                    scanPoint_nums = [None]
-                                                except Exception:
-                                                    add_validation_message(
-                                                        validation_result,
-                                                        "errors",
-                                                        "depthRange",
-                                                        input_prefix,
-                                                        custom_message="Depth Range entry has invalid format",
-                                                    )
-                                                    continue
-
-                                        elif num_placeholders == 2:
-                                            current_scanPoints = validate_field(
-                                                "scanPoints", display_name="Scan Points"
-                                            )
-                                            current_depthRange = validate_field(
-                                                "depthRange", required=True, display_name="Depth Range"
-                                            )
-
-                                            if current_scanPoints is None:
-                                                if "scanPoints" not in validation_result["errors"]:
-                                                    add_validation_message(
-                                                        validation_result,
-                                                        "errors",
-                                                        "scanPoints",
-                                                        input_prefix,
-                                                        display_name="Scan Points",
-                                                    )
-                                                continue
-
-                                            if current_depthRange is None:
-                                                if "depthRange" not in validation_result["errors"]:
-                                                    add_validation_message(
-                                                        validation_result,
-                                                        "errors",
-                                                        "depthRange",
-                                                        input_prefix,
-                                                        display_name="Depth Range",
-                                                    )
-                                                continue
-
-                                            try:
-                                                scanPoints_srange = srange(current_scanPoints)
-                                                scanPoint_nums = scanPoints_srange.list()
-                                                if not scanPoint_nums:
-                                                    add_validation_message(
-                                                        validation_result,
-                                                        "errors",
-                                                        "scanPoints",
-                                                        input_prefix,
-                                                        custom_message="Scan Points range is empty",
-                                                    )
-                                                    continue
-                                            except Exception:
-                                                add_validation_message(
-                                                    validation_result,
-                                                    "errors",
-                                                    "scanPoints",
-                                                    input_prefix,
-                                                    custom_message="Scan Points entry has invalid format",
-                                                )
-                                                continue
-
-                                            try:
-                                                depthRange_srange = srange(current_depthRange)
-                                                depthRange_nums = depthRange_srange.list()
-                                                if not depthRange_nums:
-                                                    add_validation_message(
-                                                        validation_result,
-                                                        "errors",
-                                                        "depthRange",
-                                                        input_prefix,
-                                                        custom_message="Depth Range is empty",
-                                                    )
-                                                    continue
-                                            except Exception:
-                                                add_validation_message(
-                                                    validation_result,
-                                                    "errors",
-                                                    "depthRange",
-                                                    input_prefix,
-                                                    custom_message="Depth Range entry has invalid format",
-                                                )
-                                                continue
-
-                                        else:
-                                            continue
-
-                                        missing_files = []
-                                        for scanPoint_num in scanPoint_nums:
-                                            for depthRange_num in depthRange_nums:
-                                                try:
-                                                    file_str = format_filename_with_indices(
-                                                        current_filename_prefix_i, scanPoint_num, depthRange_num
-                                                    )
-                                                except ValueError as e:
-                                                    add_validation_message(
-                                                        validation_result,
-                                                        "errors",
-                                                        "filenamePrefix",
-                                                        input_prefix,
-                                                        custom_message=str(e),
-                                                    )
-                                                    break
-
-                                                scanpoint_pattern = os.path.join(current_full_data_path, file_str)
-                                                scanpoint_matches = glob.glob(scanpoint_pattern)
-
-                                                if not scanpoint_matches:
-                                                    if depthRange_num is not None:
-                                                        missing_files.append(f"{scanPoint_num}_{depthRange_num}")
-                                                    else:
-                                                        missing_files.append(str(scanPoint_num))
-
-                                        if missing_files:
-                                            if len(missing_files) <= 5:
-                                                files_str = ", ".join(missing_files)
-                                            else:
-                                                files_str = (
-                                                    ", ".join(missing_files[:5])
-                                                    + f", ... and {len(missing_files) - 5} more"
-                                                )
-
-                                            add_validation_message(
-                                                validation_result,
-                                                "errors",
-                                                "scanPoints",
-                                                input_prefix,
-                                                custom_message=f"Missing files for Filename prefix '{current_filename_prefix_i}' (indices: {files_str})",
-                                            )
+                        prefixes = [
+                            value.strip()
+                            for value in str(current_filename_prefix_str or "").split(",")
+                            if value.strip()
+                        ]
+                        for prefix in prefixes:
+                            placeholder_count = prefix.count("%d")
+                            has_scan_points = bool(current_scan_points)
+                            has_depth_range = bool(current_depth_range)
+                            if placeholder_count > 2:
+                                add_validation_message(
+                                    validation_result,
+                                    "errors",
+                                    "filenamePrefix",
+                                    input_prefix,
+                                    custom_message=f"Filename prefix '{prefix}' has more than two %d placeholders",
+                                )
+                            elif placeholder_count == 1 and has_scan_points == has_depth_range:
+                                add_validation_message(
+                                    validation_result,
+                                    "errors",
+                                    "filenamePrefix",
+                                    input_prefix,
+                                    custom_message=(
+                                        f"Filename prefix '{prefix}' has one %d placeholder; "
+                                        "provide exactly one of Scan Points or Depth Range"
+                                    ),
+                                )
+                            elif placeholder_count == 2 and not (has_scan_points and has_depth_range):
+                                add_validation_message(
+                                    validation_result,
+                                    "errors",
+                                    "filenamePrefix",
+                                    input_prefix,
+                                    custom_message=(
+                                        f"Filename prefix '{prefix}' has two %d placeholders; "
+                                        "provide both Scan Points and Depth Range"
+                                    ),
+                                )
 
             current_outputFolder = validate_field("outputFolder", display_name="Output Folder")
             if current_outputFolder is not None:

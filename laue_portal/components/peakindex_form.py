@@ -13,7 +13,6 @@ from laue_portal.components.form_layout import (
     section_card,
     section_sidebar,
 )
-from laue_portal.database.db_utils import make_IDnumber
 
 PEAKINDEX_SECTIONS = [
     (
@@ -48,7 +47,7 @@ def build_peakindex_form(readonly=False, show_actions=True):
                             "IDnumber",
                             "peakindex-update-path-fields-btn",
                             "Update Paths",
-                            placeholder="SN123456 | WR1 | MR3 | PI4",
+                            placeholder="SN123456 | R3 | I4",
                             readonly=readonly,
                             show_button=show_actions,
                         ),
@@ -223,51 +222,79 @@ peakindex_readonly_form = build_peakindex_form(readonly=True, show_actions=False
 
 
 def set_peakindex_form_props(peakindex, read_only=False):
-    IDnumber = make_IDnumber(peakindex.scanNumber, peakindex.wirerecon_id, peakindex.recon_id, peakindex.peakindex_id)
+    parameters = getattr(peakindex, "lauego_parameters", None) or peakindex
+    scan_number = getattr(peakindex, "scan_number", None)
+    reconstruction_id = getattr(peakindex, "reconstruction_id", None)
+    indexing_id = getattr(peakindex, "id", None)
+    IDnumber = getattr(peakindex, "identity_value", None)
+    if IDnumber is None:
+        identity_parts = []
+        if scan_number is not None:
+            identity_parts.append(f"SN{scan_number}")
+        if reconstruction_id is not None:
+            identity_parts.append(f"R{reconstruction_id}")
+        if indexing_id is not None:
+            identity_parts.append(f"I{indexing_id}")
+        IDnumber = " | ".join(identity_parts)
     set_props("IDnumber", {"value": IDnumber, "readonly": read_only})
-    set_props("root_path", {"value": peakindex.root_path, "readonly": read_only})
-    set_props("data_path", {"value": peakindex.data_path, "readonly": read_only})
+    set_props("root_path", {"value": getattr(peakindex, "root_path", ""), "readonly": read_only})
+    set_props(
+        "data_path",
+        {
+            "value": getattr(peakindex, "data_path", None) or getattr(peakindex, "input_path", ""),
+            "readonly": read_only,
+        },
+    )
 
-    filename_value = peakindex.filenamePrefix
+    filename_value = parameters.filename_prefixes
     if isinstance(filename_value, list):
         filename_value = ", ".join(filename_value)
     set_props("filenamePrefix", {"value": filename_value, "readonly": read_only})
 
-    set_props("threshold", {"value": peakindex.threshold, "readonly": read_only})
-    set_props("thresholdRatio", {"value": peakindex.thresholdRatio, "readonly": read_only})
-    set_props("maxRfactor", {"value": peakindex.maxRfactor, "readonly": read_only})
-    set_props("boxsize", {"value": peakindex.boxsize, "readonly": read_only})
-    set_props("max_number", {"value": peakindex.max_number, "readonly": read_only})
-    set_props("min_separation", {"value": peakindex.min_separation, "readonly": read_only})
-    set_props("peakShape", {"value": peakindex.peakShape, "disabled": read_only})
-    set_props("scanPoints", {"value": peakindex.scanPoints, "readonly": read_only})
-    set_props("depthRange", {"value": peakindex.depthRange, "readonly": read_only})
-    set_props("min_size", {"value": peakindex.min_size, "readonly": read_only})
-    set_props("max_peaks", {"value": peakindex.max_peaks, "readonly": read_only})
-    set_props("smooth", {"value": peakindex.smooth, "disabled": read_only})
-    set_props("maskFile", {"value": peakindex.maskFile, "readonly": read_only})
-    set_props("indexKeVmaxCalc", {"value": peakindex.indexKeVmaxCalc, "readonly": read_only})
-    set_props("indexKeVmaxTest", {"value": peakindex.indexKeVmaxTest, "readonly": read_only})
-    set_props("indexAngleTolerance", {"value": peakindex.indexAngleTolerance, "readonly": read_only})
+    set_props("threshold", {"value": parameters.threshold, "readonly": read_only})
+    set_props("thresholdRatio", {"value": parameters.threshold_ratio, "readonly": read_only})
+    set_props("maxRfactor", {"value": parameters.max_rfactor, "readonly": read_only})
+    set_props("boxsize", {"value": parameters.box_size, "readonly": read_only})
+    set_props("max_number", {"value": parameters.max_number, "readonly": read_only})
+    set_props("min_separation", {"value": parameters.min_separation, "readonly": read_only})
+    set_props("peakShape", {"value": parameters.peak_shape, "disabled": read_only})
+    set_props("scanPoints", {"value": parameters.scan_points, "readonly": read_only})
+    set_props("depthRange", {"value": parameters.depth_range, "readonly": read_only})
+    set_props("min_size", {"value": parameters.min_size, "readonly": read_only})
+    set_props("max_peaks", {"value": parameters.max_peaks, "readonly": read_only})
+    set_props("smooth", {"value": parameters.smooth, "disabled": read_only})
+    set_props("maskFile", {"value": parameters.mask_file, "readonly": read_only})
+    set_props("indexKeVmaxCalc", {"value": parameters.index_kev_max_calc, "readonly": read_only})
+    set_props("indexKeVmaxTest", {"value": parameters.index_kev_max_test, "readonly": read_only})
+    set_props("indexAngleTolerance", {"value": parameters.index_angle_tolerance, "readonly": read_only})
     set_props(
         "indexHKL",
         {
-            "value": "".join([str(idx) for idx in [peakindex.indexH, peakindex.indexK, peakindex.indexL]]),
+            "value": "".join([str(idx) for idx in [parameters.index_h, parameters.index_k, parameters.index_l]]),
             "readonly": read_only,
         },
     )
-    set_props("indexCone", {"value": peakindex.indexCone, "readonly": read_only})
-    set_props("energyUnit", {"value": peakindex.energyUnit, "readonly": read_only})
-    set_props("exposureUnit", {"value": peakindex.exposureUnit, "readonly": read_only})
-    set_props("cosmicFilter", {"value": peakindex.cosmicFilter, "disabled": read_only})
-    set_props("recipLatticeUnit", {"value": peakindex.recipLatticeUnit, "readonly": read_only})
-    set_props("latticeParametersUnit", {"value": peakindex.latticeParametersUnit, "readonly": read_only})
-    set_props("outputFolder", {"value": peakindex.outputFolder, "readonly": read_only})
-    set_props("outputXML", {"value": peakindex.outputXML or "", "readonly": read_only})
-    set_props("geoFile", {"value": peakindex.geoFile, "readonly": read_only})
-    set_props("crystFile", {"value": peakindex.crystFile, "readonly": read_only})
-    set_props("depth", {"value": peakindex.depth, "readonly": read_only})
-    set_props("beamline", {"value": peakindex.beamline, "readonly": read_only})
+    set_props("indexCone", {"value": parameters.index_cone, "readonly": read_only})
+    set_props("energyUnit", {"value": parameters.energy_unit, "readonly": read_only})
+    set_props("exposureUnit", {"value": parameters.exposure_unit, "readonly": read_only})
+    set_props("cosmicFilter", {"value": parameters.cosmic_filter, "disabled": read_only})
+    set_props("recipLatticeUnit", {"value": parameters.reciprocal_lattice_unit, "readonly": read_only})
+    set_props(
+        "latticeParametersUnit",
+        {"value": parameters.lattice_parameters_unit, "readonly": read_only},
+    )
+    set_props(
+        "outputFolder",
+        {
+            "value": getattr(peakindex, "output_path", None) or getattr(peakindex, "output_path_template", ""),
+            "readonly": read_only,
+        },
+    )
+    set_props("outputXML", {"value": parameters.output_xml or "", "readonly": read_only})
+    set_props("geoFile", {"value": parameters.geometry_file, "readonly": read_only})
+    set_props("crystFile", {"value": parameters.crystal_file, "readonly": read_only})
+    set_props("depth", {"value": parameters.depth, "readonly": read_only})
+    set_props("beamline", {"value": parameters.beamline, "readonly": read_only})
 
     set_props("author", {"value": peakindex.author, "readonly": read_only})
     set_props("notes", {"value": peakindex.notes, "readonly": read_only})

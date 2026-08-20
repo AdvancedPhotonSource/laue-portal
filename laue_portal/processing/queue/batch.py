@@ -16,20 +16,34 @@ from laue_portal.processing.xml_merge import merge_xml_files
 logger = logging.getLogger(__name__)
 
 
-def execute_peakindexing_batch_coordinator(job_id: int, output_dir: str, output_xml: str):
+def execute_peakindexing_batch_coordinator(job_id: int):
     """
     Execute peakindexing batch coordinator logic.
     Updates the main job status based on subjob statuses and merges XML output files.
 
     Args:
-        job_id: Database job ID
-        output_dir: Output directory for the peakindexing job
-        output_xml: Output XML filename or path
-            - If absolute path: saves directly to that path
-            - If relative path or filename: saves to output_dir
+        job_id: Database job ID. Output settings are loaded from its indexing run.
     """
     try:
         with Session(session_utils.get_engine()) as session:
+            indexing_data = (
+                session.query(db_schema.IndexingRun, db_schema.LaueGoIndexingParameters)
+                .outerjoin(
+                    db_schema.LaueGoIndexingParameters,
+                    db_schema.LaueGoIndexingParameters.indexing_id == db_schema.IndexingRun.id,
+                )
+                .filter(db_schema.IndexingRun.job_id == job_id)
+                .one_or_none()
+            )
+            if indexing_data is None:
+                raise ValueError(f"Job {job_id} is not attached to an indexing run")
+
+            indexing_run, parameters = indexing_data
+            if indexing_run.output_path is None:
+                raise ValueError(f"Indexing I{indexing_run.id} has no output path")
+            output_dir = indexing_run.output_path
+            output_xml = parameters.output_xml if parameters and parameters.output_xml else "output.xml"
+
             # Query for all subjobs of this job
             subjob_data = session.query(db_schema.SubJob).filter(db_schema.SubJob.job_id == job_id).all()
 
@@ -233,6 +247,15 @@ def setup_batch_counter(
     redis_conn.set(_batch_counter_key(job_id), 0)
     redis_conn.delete(_batch_coordinator_enqueued_key(job_id))
     logger.info(f"Set up batch counter for job {job_id}: {total_subjobs} subjobs, coordinator={coordinator_func_name}")
+
+
+def clear_batch_counter(job_id: int) -> None:
+    """Remove all Redis bookkeeping for a batch that could not be enqueued."""
+    redis_conn.delete(
+        _batch_counter_key(job_id),
+        _batch_meta_key(job_id),
+        _batch_coordinator_enqueued_key(job_id),
+    )
 
 
 def notify_subjobs_completed(parent_job_id: int, completed_count: int = 1):

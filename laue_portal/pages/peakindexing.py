@@ -10,7 +10,6 @@ from dash.exceptions import PreventUpdate
 from sqlalchemy.orm import Session
 
 import laue_portal.components.navbar as navbar
-import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
 from laue_portal.components.detail_layout import detail_header, detail_header_content
 from laue_portal.components.peakindex_form import peakindex_readonly_form, set_peakindex_form_props
@@ -37,6 +36,7 @@ from laue_portal.components.visualization.scope_bar import (
 )
 from laue_portal.config import DEFAULT_VARIABLES
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix
+from laue_portal.workflows.indexing import get_indexing
 
 dash.register_page(__name__, path="/peakindexing")  # Simplified path
 
@@ -1074,132 +1074,87 @@ def load_peakindexing_data(href):
     parsed_url = urllib.parse.urlparse(href)
     query_params = urllib.parse.parse_qs(parsed_url.query)
 
-    peakindex_id_str = query_params.get("peakindex_id", [None])[0]
+    indexing_id_str = query_params.get("indexing_id", [None])[0]
 
     root_path = DEFAULT_VARIABLES.get("root_path", "")
 
     xml_path = None  # Will be set if we find an XML file
     path_context = {"root_path": root_path}
 
-    if peakindex_id_str:
+    if indexing_id_str:
         try:
-            peakindex_id = int(peakindex_id_str)
-            with Session(session_utils.get_engine()) as session:
-                peakindex_data = (
-                    session.query(db_schema.PeakIndex).filter(db_schema.PeakIndex.peakindex_id == peakindex_id).first()
-                )
-                if peakindex_data:
+            indexing_id = int(indexing_id_str)
+            indexing = get_indexing(indexing_id)
+            if indexing and indexing.method == "lauego" and indexing.lauego_parameters:
+                with Session(session_utils.get_engine()) as session:
                     # Add root_path from DEFAULT_VARIABLES
-                    peakindex_data.root_path = root_path
+                    indexing.root_path = root_path
+                    parameters = indexing.lauego_parameters
 
                     # Convert full paths back to relative paths for display
-                    if peakindex_data.geoFile:
-                        peakindex_data.geoFile = remove_root_path_prefix(peakindex_data.geoFile, root_path)
-                    if peakindex_data.crystFile:
-                        peakindex_data.crystFile = remove_root_path_prefix(peakindex_data.crystFile, root_path)
+                    if parameters.geometry_file:
+                        parameters.geometry_file = remove_root_path_prefix(parameters.geometry_file, root_path)
+                    if parameters.crystal_file:
+                        parameters.crystal_file = remove_root_path_prefix(parameters.crystal_file, root_path)
 
                     # Resolve XML/image paths before stripping root_path from display fields.
-                    xml_path = _resolve_xml_path(peakindex_data, root_path)
-                    output_folder_full = peakindex_data.outputFolder
-                    data_folder_full = peakindex_data.filefolder
+                    xml_path = _resolve_xml_path(indexing, root_path)
+                    output_folder_full = indexing.output_path
+                    data_folder_full = indexing.input_path
                     if output_folder_full:
                         path_context["output_folder"] = str(output_folder_full)
                     if data_folder_full:
                         path_context["data_folder"] = str(data_folder_full)
 
-                    if peakindex_data.outputFolder:
-                        peakindex_data.outputFolder = remove_root_path_prefix(peakindex_data.outputFolder, root_path)
-
-                    if peakindex_data.filefolder:
-                        peakindex_data.data_path = remove_root_path_prefix(peakindex_data.filefolder, root_path)
-
-                    if any([not hasattr(peakindex_data, field) for field in ["data_path", "filenamePrefix"]]):
-                        # If processing reconstruction data, use the reconstruction output folder as data path
-                        if peakindex_data.wirerecon_id:
-                            wirerecon_data = (
-                                session.query(db_schema.WireRecon)
-                                .filter(db_schema.WireRecon.wirerecon_id == peakindex_data.wirerecon_id)
-                                .first()
-                            )
-                            if wirerecon_data:
-                                if wirerecon_data.outputFolder:
-                                    # Use the wire reconstruction output folder as the data path
-                                    peakindex_data.data_path = remove_root_path_prefix(
-                                        wirerecon_data.outputFolder, root_path
-                                    )
-                                if wirerecon_data.filenamePrefix:
-                                    peakindex_data.filenamePrefix = wirerecon_data.filenamePrefix
-                        elif peakindex_data.recon_id:
-                            recon_data = (
-                                session.query(db_schema.Recon)
-                                .filter(db_schema.Recon.recon_id == peakindex_data.recon_id)
-                                .first()
-                            )
-                            if recon_data:
-                                if recon_data.file_output:
-                                    # Use the reconstruction output folder as the data path
-                                    peakindex_data.data_path = remove_root_path_prefix(
-                                        recon_data.file_output, root_path
-                                    )
-                                if hasattr(recon_data, "filenamePrefix") and recon_data.filenamePrefix:
-                                    peakindex_data.filenamePrefix = recon_data.filenamePrefix
-
-                        if any([not hasattr(peakindex_data, field) for field in ["data_path", "filenamePrefix"]]):
-                            # Retrieve data_path and filenamePrefix from catalog data
-                            catalog_data = get_catalog_data(session, peakindex_data.scanNumber, root_path)
-                        if not hasattr(peakindex_data, "data_path"):
-                            peakindex_data.data_path = catalog_data.get("data_path", "")
-                        if not hasattr(peakindex_data, "filenamePrefix"):
-                            peakindex_data.filenamePrefix = catalog_data.get("filenamePrefix", [])
+                    if indexing.output_path:
+                        indexing.output_path = remove_root_path_prefix(indexing.output_path, root_path)
+                    indexing.data_path = remove_root_path_prefix(indexing.input_path, root_path)
+                    if not indexing.input_path:
+                        catalog_data = get_catalog_data(session, indexing.scan_number, root_path)
+                        indexing.data_path = catalog_data.get("data_path", "")
 
                     # Populate the form with the data
-                    set_peakindex_form_props(peakindex_data, read_only=True)
+                    set_peakindex_form_props(indexing, read_only=True)
 
                     # Get related links for header
                     related_links = []
 
                     # Add job link if it exists
-                    if peakindex_data.job_id:
-                        related_links.append(
-                            (f"Job ID: {peakindex_data.job_id}", f"/job?job_id={peakindex_data.job_id}")
-                        )
+                    if indexing.job_id:
+                        related_links.append((f"Job ID: {indexing.job_id}", f"/job?job_id={indexing.job_id}"))
 
-                    if peakindex_data.recon_id:
-                        related_links.append(
-                            (
-                                f"Reconstruction ID: {peakindex_data.recon_id}",
-                                f"/reconstruction?recon_id={peakindex_data.recon_id}",
-                            )
+                    if indexing.reconstruction:
+                        detail_path = (
+                            "/wire_reconstruction" if indexing.reconstruction.method == "wire" else "/reconstruction"
                         )
-                    elif peakindex_data.wirerecon_id:
                         related_links.append(
                             (
-                                f"Wire Reconstruction ID: {peakindex_data.wirerecon_id}",
-                                f"/wire_reconstruction?wirerecon_id={peakindex_data.wirerecon_id}",
+                                f"Reconstruction R{indexing.reconstruction_id}",
+                                f"{detail_path}?reconstruction_id={indexing.reconstruction_id}",
                             )
                         )
 
                     # Add scan link
-                    if peakindex_data.scanNumber:
+                    if indexing.scan_number:
                         related_links.append(
                             (
-                                f"Scan ID: {peakindex_data.scanNumber}",
-                                f"/scan?scan_id={peakindex_data.scanNumber}",
+                                f"Scan ID: {indexing.scan_number}",
+                                f"/scan?scan_id={indexing.scan_number}",
                             )
                         )
 
-                    header_content = detail_header_content(f"Peak Indexing ID: {peakindex_id}", related_links)
+                    header_content = detail_header_content(f"Indexing I{indexing_id}", related_links)
                     return header_content, xml_path, path_context
         except Exception as e:
             print(f"Error loading peak indexing data: {e}")
             traceback.print_exc()
             return (
-                detail_header_content(f"Error loading data for Peak Indexing ID: {peakindex_id}"),
+                detail_header_content(f"Error loading indexing I{indexing_id_str}"),
                 None,
                 path_context,
             )
 
-    return detail_header_content("No Peak Indexing ID provided"), None, path_context
+    return detail_header_content("No indexing ID provided"), None, path_context
 
 
 # ---------------------------------------------------------------------------
@@ -2737,30 +2692,32 @@ def reset_data_scope_controls(n_clicks):
 # ---------------------------------------------------------------------------
 
 
-def _resolve_xml_path(peakindex_data, root_path: str) -> str | None:
+def _resolve_xml_path(indexing, root_path: str) -> str | None:
     """
-    Resolve the full path to the output XML file from the PeakIndex record.
+    Resolve the full path to the output XML file from an indexing run.
 
     Checks in order:
-    1. peakindex_data.outputXML as an absolute path
-    2. peakindex_data.outputFolder / peakindex_data.outputXML
-    3. Glob for *.xml in outputFolder
+    1. The configured output XML as an absolute path
+    2. The run output directory joined to the configured XML path
+    3. Glob for ``*.xml`` in the run output directory
     """
-    # Try outputXML directly
-    if peakindex_data.outputXML:
-        candidate = Path(peakindex_data.outputXML)
+    del root_path  # Paths are persisted as fully resolved paths.
+    parameters = indexing.lauego_parameters
+    output_xml = parameters.output_xml if parameters else None
+    if output_xml:
+        candidate = Path(output_xml)
         if candidate.is_file():
             return str(candidate)
 
         # Try relative to outputFolder
-        if peakindex_data.outputFolder:
-            candidate = Path(peakindex_data.outputFolder) / peakindex_data.outputXML
+        if indexing.output_path:
+            candidate = Path(indexing.output_path) / output_xml
             if candidate.is_file():
                 return str(candidate)
 
     # Fallback: look for XML files in outputFolder
-    if peakindex_data.outputFolder:
-        output_dir = Path(peakindex_data.outputFolder)
+    if indexing.output_path:
+        output_dir = Path(indexing.output_path)
         if output_dir.is_dir():
             xml_files = sorted(output_dir.glob("*.xml"))
             if xml_files:

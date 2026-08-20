@@ -1,136 +1,106 @@
-"""
-Smoke tests for data retrieval functions in the Laue Portal application.
+"""Focused tests for the unified reconstruction list."""
 
-This test module verifies that data retrieval functions like _get_recons
-can execute without errors and return properly formatted data.
-"""
-
-import os
-import sys
+from datetime import datetime
 from unittest.mock import patch
 
 import pytest
 from dash.exceptions import PreventUpdate
+from sqlalchemy.orm import Session
 
-# Add the project root to the Python path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, project_root)
+import lau_dash
+from laue_portal.database import db_schema
+from laue_portal.pages.reconstructions import _get_recons, get_recons
 
 
-class TestDataRetrievers:
-    """Test class for data retrieval functions in the Laue Portal application."""
+def _add_ca_run(engine):
+    with Session(engine) as session:
+        job = db_schema.Job(
+            computer_name="localhost",
+            status=2,
+            priority=0,
+            submit_time=datetime(2026, 8, 1),
+        )
+        session.add(job)
+        session.flush()
+        run = db_schema.ReconstructionRun(
+            scan_number=None,
+            job_id=job.job_id,
+            method="ca",
+            input_path="/data/input",
+            output_path="/data/output",
+            author="tester",
+            notes="reserved CA row",
+            created_at=datetime(2026, 8, 1),
+        )
+        session.add(run)
+        session.commit()
+        return run.id
 
-    def test_get_recons_function_smoke(self, test_database):
-        """Test that _get_recons function can execute without errors."""
-        test_engine, test_db_file, test_metadata, test_job, test_recon, test_catalog = test_database
 
-        # Mock the config to use test database
-        with patch("laue_portal.config.db_file", test_db_file):
-            # Import after patching config
-            from sqlalchemy.orm import Session
+def test_reconstruction_list_reads_ca_rows_without_wire_parameters(empty_test_database):
+    engine, _ = empty_test_database
+    reconstruction_id = _add_ca_run(engine)
 
-            import lau_dash  # noqa: F401
-            from laue_portal.pages.reconstructions import _get_recons
+    with patch("laue_portal.database.session_utils.get_engine", return_value=engine):
+        columns, rows = _get_recons()
 
-            # Patch the central engine getter to return our test engine
-            with patch("laue_portal.database.session_utils.get_engine", lambda: test_engine):
-                # Add test data to the database
-                with Session(test_engine) as session:
-                    session.add(test_metadata)
-                    session.add(test_job)
-                    session.add(test_catalog)
-                    session.add(test_recon)
-                    session.commit()
+    assert rows == [
+        {
+            "reconstruction_id": reconstruction_id,
+            "method": "ca",
+            "scan_number": None,
+            "scan_points_len": None,
+            "author": "tester",
+            "notes": "reserved CA row",
+            "submit_time": datetime(2026, 8, 1),
+            "start_time": None,
+            "finish_time": None,
+            "status": 2,
+            "completed_subjobs": 0,
+            "total_subjobs": 0,
+            "status_progress": None,
+        }
+    ]
+    id_column = next(column for column in columns if column["field"] == "reconstruction_id")
+    assert id_column["cellRenderer"] == "ReconstructionLinkRenderer"
+    assert "Actions" not in {column["headerName"] for column in columns}
 
-                # Test the _get_recons function
-                cols, recons = _get_recons()
 
-            # Verify that the function returns the expected structure
-            assert isinstance(cols, list), "Columns should be returned as a list"
-            assert isinstance(recons, list), "Recons should be returned as a list"
+def test_reconstruction_list_includes_wire_runs(empty_test_database):
+    engine, _ = empty_test_database
+    with Session(engine) as session:
+        job = db_schema.Job(computer_name="localhost", status=0, priority=0)
+        session.add(job)
+        session.flush()
+        session.add(
+            db_schema.ReconstructionRun(
+                job_id=job.job_id,
+                method="wire",
+                input_path="/data/input",
+                output_path="/data/output",
+                created_at=datetime(2026, 8, 1),
+            )
+        )
+        session.commit()
 
-            # Check that columns are properly formatted
-            for col in cols:
-                assert isinstance(col, dict), "Each column should be a dictionary"
-                assert "headerName" in col, "Each column should have a headerName"
-                assert "field" in col, "Each column should have a field"
+    with patch("laue_portal.database.session_utils.get_engine", return_value=engine):
+        _, rows = _get_recons()
+    assert len(rows) == 1
+    assert rows[0]["method"] == "wire"
 
-            # Check that we have at least one recon record
-            assert len(recons) >= 1, "Should have at least one reconstruction record"
 
-            # Check that each recon record has the expected fields
-            for recon in recons:
-                assert isinstance(recon, dict), "Each recon should be a dictionary"
-                # Check for some expected fields based on VISIBLE_COLS (note: dataset_id is commented out in VISIBLE_COLS)
-                expected_fields = [
-                    "recon_id",
-                    "submit_time",
-                    "calib_id",
-                    "scanNumber",
-                    "sample_name",
-                    "aperture",
-                    "notes",
-                ]
-                for field in expected_fields:
-                    assert field in recon, f"Recon record should contain field: {field}"
+def test_reconstruction_list_callback_and_empty_database(empty_test_database):
+    engine, _ = empty_test_database
+    with patch("laue_portal.database.session_utils.get_engine", return_value=engine):
+        columns, rows = get_recons("/reconstructions")
+    assert columns
+    assert rows == []
 
-    def test_get_recons_callback_smoke(self, test_database):
-        """Test that get_recons callback function can execute without errors."""
-        test_engine, test_db_file, test_metadata, test_job, test_recon, test_catalog = test_database
+    with pytest.raises(PreventUpdate):
+        get_recons("/wrong-path")
 
-        # Mock the config to use test database
-        with patch("laue_portal.config.db_file", test_db_file):
-            # Import after patching config
-            from sqlalchemy.orm import Session
 
-            import lau_dash  # noqa: F401
-            from laue_portal.pages.reconstructions import get_recons
+def test_legacy_wire_reconstruction_list_redirects_to_unified_page():
+    routes = {str(rule) for rule in lau_dash.app.server.url_map.iter_rules()}
 
-            # Patch the central engine getter to return our test engine
-            with patch("laue_portal.database.session_utils.get_engine", lambda: test_engine):
-                # Add test data to the database
-                with Session(test_engine) as session:
-                    session.add(test_metadata)
-                    session.add(test_job)
-                    session.add(test_catalog)
-                    session.add(test_recon)
-                    session.commit()
-
-                # Test the callback with correct path
-                cols, recons = get_recons("/reconstructions")
-
-            # Verify that the callback returns the expected structure
-            assert isinstance(cols, list), "Callback should return columns as a list"
-            assert isinstance(recons, list), "Callback should return recons as a list"
-            assert len(recons) >= 1, "Should have at least one reconstruction record"
-
-            # Test the callback with incorrect path (should raise PreventUpdate)
-            with pytest.raises(PreventUpdate):
-                get_recons("/wrong_path")
-
-    def test_get_recons_empty_database_smoke(self, empty_test_database):
-        """Test that _get_recons function handles empty database gracefully."""
-        test_engine, test_db_file = empty_test_database
-
-        # Mock the config to use test database
-        with patch("laue_portal.config.db_file", test_db_file):
-            # Import after patching config
-            import lau_dash  # noqa: F401
-            from laue_portal.pages.reconstructions import _get_recons
-
-            # Patch the central engine getter to return our test engine
-            with patch("laue_portal.database.session_utils.get_engine", lambda: test_engine):
-                # Test the _get_recons function with empty database
-                cols, recons = _get_recons()
-
-            # Verify that the function handles empty database gracefully
-            assert isinstance(cols, list), "Columns should be returned as a list even with empty database"
-            assert isinstance(recons, list), "Recons should be returned as a list even with empty database"
-            assert len(recons) == 0, "Empty database should return empty recons list"
-
-            # Check that columns are still properly formatted
-            assert len(cols) > 0, "Should still have column definitions even with empty database"
-            for col in cols:
-                assert isinstance(col, dict), "Each column should be a dictionary"
-                assert "headerName" in col, "Each column should have a headerName"
-                assert "field" in col, "Each column should have a field"
+    assert "/wire-reconstructions" in routes

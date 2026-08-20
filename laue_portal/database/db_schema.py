@@ -13,13 +13,14 @@ from laue_portal.database.base import Base
 from laue_portal.database.models import (
     Calib,
     Catalog,
+    IndexingRun,
     Job,
+    LaueGoIndexingParameters,
     Metadata,
-    PeakIndex,
-    Recon,
+    ReconstructionRun,
     Scan,
     SubJob,
-    WireRecon,
+    WireReconstructionParameters,
 )
 
 __all__ = [
@@ -29,10 +30,11 @@ __all__ = [
     "Catalog",
     "Job",
     "SubJob",
+    "ReconstructionRun",
+    "WireReconstructionParameters",
+    "IndexingRun",
+    "LaueGoIndexingParameters",
     "Calib",
-    "Recon",
-    "WireRecon",
-    "PeakIndex",
     "MASK_FOCUS_TABLE",
 ]
 

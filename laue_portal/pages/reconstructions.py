@@ -1,56 +1,42 @@
+"""Unified reconstruction-run list page."""
+
 import dash
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import pandas as pd
 from dash import Input, Output, State, dcc, html
 from dash.exceptions import PreventUpdate
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
+from laue_portal.processing.queue.core import STATUS_REVERSE_MAPPING
 
-dash.register_page(__name__)
+dash.register_page(__name__, path="/reconstructions", redirect_from=["/wire-reconstructions"])
 
 layout = html.Div(
     [
         navbar.navbar,
-        dcc.Location(id="url", refresh=False),
-        # Secondary action bar aligned to right
+        dcc.Location(id="recons-url", refresh=True),
         dbc.Row(
             [
                 dbc.Col(
                     [
                         dbc.Nav(
                             [
-                                dbc.NavItem(
-                                    dbc.NavLink(
-                                        "New Recon",
-                                        href="/create-reconstruction",
-                                        active=False,
-                                        id="mask-recons-page-mask-recon",
-                                    )
+                                dbc.Button(
+                                    "New Wire Recon",
+                                    id="recons-page-wire-recon-btn",
+                                    style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
+                                    className="me-2",
                                 ),
-                                html.Span("|", className="mx-2 text-muted"),
-                                dbc.NavItem(
-                                    dbc.NavLink(
-                                        "New Index",
-                                        href="/create-peakindexing",
-                                        active=False,
-                                        id="mask-recons-page-peakindex",
-                                    )
-                                ),
-                                html.Span("|", className="mx-2 text-muted"),
-                                dbc.NavItem(
-                                    dbc.NavLink("New Recon with selected (only 1 sel)", href="#", active=False)
-                                ),
-                                html.Span("|", className="mx-2 text-muted"),
-                                dbc.NavItem(dbc.NavLink("Stop ALL", href="#", active=False)),
-                                html.Span("|", className="mx-2 text-muted"),
-                                dbc.NavItem(dbc.NavLink("Stop Selected", href="#", active=False)),
-                                html.Span("|", className="mx-2 text-muted"),
-                                dbc.NavItem(
-                                    dbc.NavLink("Set high Priority for selected (only 1 sel)", href="#", active=False)
+                                dbc.Button(
+                                    "New Index",
+                                    id="recons-page-peakindex-btn",
+                                    style={"backgroundColor": "#6c757d", "borderColor": "#6c757d"},
+                                    className="me-2",
                                 ),
                             ],
                             className="bg-light px-2 py-2 d-flex justify-content-end w-100",
@@ -68,9 +54,7 @@ layout = html.Div(
                 dag.AgGrid(
                     id="recon-table",
                     columnSize="responsiveSizeToFit",
-                    defaultColDef={
-                        "filter": True,
-                    },
+                    defaultColDef={"filter": True},
                     dashGridOptions={
                         "pagination": True,
                         "paginationPageSize": 20,
@@ -89,42 +73,73 @@ layout = html.Div(
 )
 
 VISIBLE_COLS = [
-    db_schema.Recon.recon_id,
-    db_schema.Recon.scanNumber,
-    db_schema.Recon.calib_id,
-    db_schema.Recon.author,
-    db_schema.Recon.notes,
-    db_schema.Catalog.sample_name,
-    db_schema.Catalog.aperture,
+    db_schema.ReconstructionRun.id.label("reconstruction_id"),
+    db_schema.ReconstructionRun.method,
+    db_schema.ReconstructionRun.scan_number,
+    db_schema.WireReconstructionParameters.scan_points_len,
+    db_schema.ReconstructionRun.author,
+    db_schema.ReconstructionRun.notes,
     db_schema.Job.submit_time,
     db_schema.Job.start_time,
     db_schema.Job.finish_time,
     db_schema.Job.status,
 ]
 
+SOURCE_COLS = {"scan_number"}
+
 CUSTOM_HEADER_NAMES = {
-    "recon_id": "Recon ID",
-    "scanNumber": "Scan ID",
-    "calib_id": "Calibration ID",
+    "reconstruction_id": "Reconstruction ID",
+    "scan_points_len": "Points",
     "submit_time": "Date",
 }
 
 
 def _get_recons():
+    """Return all reconstruction methods with running-subjob progress."""
     with Session(session_utils.get_engine()) as session:
-        recons = pd.read_sql(
-            session.query(*VISIBLE_COLS)
-            .join(db_schema.Catalog, db_schema.Recon.scanNumber == db_schema.Catalog.scanNumber)
-            .join(db_schema.Job, db_schema.Recon.job_id == db_schema.Job.job_id)
+        running_status = STATUS_REVERSE_MAPPING["Running"]
+        finished_status = STATUS_REVERSE_MAPPING["Finished"]
+
+        subjob_progress = (
+            session.query(
+                db_schema.SubJob.job_id.label("job_id"),
+                func.count(db_schema.SubJob.subjob_id).label("total_subjobs"),
+                func.sum(case((db_schema.SubJob.status == finished_status, 1), else_=0)).label("completed_subjobs"),
+            )
+            .join(db_schema.Job, db_schema.SubJob.job_id == db_schema.Job.job_id)
+            .join(db_schema.ReconstructionRun, db_schema.ReconstructionRun.job_id == db_schema.Job.job_id)
+            .filter(db_schema.Job.status == running_status)
+            .group_by(db_schema.SubJob.job_id)
+            .subquery()
+        )
+
+        reconstructions = pd.read_sql(
+            session.query(
+                *VISIBLE_COLS,
+                func.coalesce(subjob_progress.c.completed_subjobs, 0).label("completed_subjobs"),
+                func.coalesce(subjob_progress.c.total_subjobs, 0).label("total_subjobs"),
+            )
+            .outerjoin(
+                db_schema.WireReconstructionParameters,
+                db_schema.WireReconstructionParameters.reconstruction_id == db_schema.ReconstructionRun.id,
+            )
+            .join(db_schema.Job, db_schema.ReconstructionRun.job_id == db_schema.Job.job_id)
+            .outerjoin(subjob_progress, db_schema.Job.job_id == subjob_progress.c.job_id)
             .statement,
             session.bind,
         )
 
-    # Format columns for ag-grid
-    cols = []
+    progress_cols = ["completed_subjobs", "total_subjobs"]
+    reconstructions[progress_cols] = reconstructions[progress_cols].fillna(0).astype(int)
+    reconstructions["status_progress"] = None
+    running_rows = (reconstructions["status"] == running_status) & (reconstructions["total_subjobs"] > 0)
+    reconstructions.loc[running_rows, "status_progress"] = (
+        reconstructions.loc[running_rows, "completed_subjobs"].astype(str)
+        + "/"
+        + reconstructions.loc[running_rows, "total_subjobs"].astype(str)
+    )
 
-    # Add explicit checkbox column as the first column
-    cols.append(
+    cols = [
         {
             "headerName": "",
             "field": "checkbox",
@@ -140,17 +155,33 @@ def _get_recons():
             "cellClass": "ag-checkbox-cell",
             "headerClass": "ag-checkbox-header",
         }
-    )
+    ]
 
+    source_col_inserted = False
     for col in VISIBLE_COLS:
         field_key = col.key
-        if field_key in ["aperture"]:
+        if field_key in SOURCE_COLS:
+            if not source_col_inserted:
+                cols.append(
+                    {
+                        "headerName": "Source",
+                        "field": "source",
+                        "cellRenderer": "ScanSourceLinkRenderer",
+                        "filter": True,
+                        "sortable": True,
+                        "resizable": True,
+                        "floatingFilter": True,
+                        "unSortIcon": True,
+                        "valueGetter": {
+                            "function": "params.data.scan_number != null ? 'SN' + params.data.scan_number : 'Unlinked'"
+                        },
+                    }
+                )
+                source_col_inserted = True
             continue
 
-        header_name = CUSTOM_HEADER_NAMES.get(field_key, field_key.replace("_", " ").title())
-
         col_def = {
-            "headerName": header_name,
+            "headerName": CUSTOM_HEADER_NAMES.get(field_key, field_key.replace("_", " ").title()),
             "field": field_key,
             "filter": True,
             "sortable": True,
@@ -158,78 +189,95 @@ def _get_recons():
             "floatingFilter": True,
             "unSortIcon": True,
         }
-
-        if field_key == "recon_id":
-            col_def["cellRenderer"] = "ReconLinkRenderer"
-        elif field_key == "dataset_id":
-            col_def["cellRenderer"] = "DatasetIdScanLinkRenderer"
-        elif field_key == "scanNumber":
-            col_def["cellRenderer"] = "ScanLinkRenderer"
+        if field_key == "reconstruction_id":
+            col_def["cellRenderer"] = "ReconstructionLinkRenderer"
+            col_def["sort"] = "desc"
         elif field_key in ["submit_time", "start_time", "finish_time"]:
             col_def["cellRenderer"] = "DateFormatter"
         elif field_key == "status":
             col_def["cellRenderer"] = "StatusRenderer"
-
         cols.append(col_def)
 
-    # Add the custom actions column
-    cols.append(
-        {
-            "headerName": "Actions",
-            "field": "actions",  # This field doesn't need to exist in the data
-            "cellRenderer": "ActionButtonsRenderer",
-            "sortable": False,
-            "filter": False,
-            "resizable": True,  # Or False, depending on preference
-            "suppressMenu": True,  # Or False
-            "width": 200,  # Adjusted width for DBC buttons
-        }
-    )
-    return cols, recons.to_dict("records")
+    return cols, reconstructions.to_dict("records")
 
 
 @dash.callback(
     Output("recon-table", "columnDefs"),
     Output("recon-table", "rowData"),
-    Input("url", "pathname"),
+    Input("recons-url", "pathname"),
     prevent_initial_call=True,
 )
 def get_recons(path):
     if path == "/reconstructions":
-        cols, recons = _get_recons()
-        return cols, recons
-    else:
-        raise PreventUpdate
+        return _get_recons()
+    raise PreventUpdate
 
 
 @dash.callback(
-    Output("mask-recons-page-mask-recon", "href"),
-    Output("mask-recons-page-peakindex", "href"),
+    Output("recons-page-wire-recon-btn", "disabled"),
+    Output("recons-page-wire-recon-btn", "style"),
+    Output("recons-page-peakindex-btn", "disabled"),
+    Output("recons-page-peakindex-btn", "style"),
     Input("recon-table", "selectedRows"),
-    State("mask-recons-page-mask-recon", "href"),
-    State("mask-recons-page-peakindex", "href"),
+    prevent_initial_call=False,
+)
+def update_button_states(selected_rows):
+    enabled_style = {"backgroundColor": "#1abc9c", "borderColor": "#1abc9c"}
+    disabled_style = {"backgroundColor": "#6c757d", "borderColor": "#6c757d"}
+    has_single_selection = bool(selected_rows and len(selected_rows) == 1)
+    can_copy_wire = has_single_selection and selected_rows[0].get("method") == "wire"
+    return (
+        not can_copy_wire,
+        enabled_style if can_copy_wire else disabled_style,
+        not has_single_selection,
+        enabled_style if has_single_selection else disabled_style,
+    )
+
+
+def _query_id(value):
+    """Format an AG Grid numeric ID without a possible pandas ``.0`` suffix."""
+    if value is None or pd.isna(value):
+        return None
+    if isinstance(value, (int, float)):
+        return str(int(value))
+    return str(value)
+
+
+def _selected_run_href(rows, base_href):
+    if not rows:
+        return base_href
+    row = rows[0]
+    reconstruction_id = _query_id(row.get("reconstruction_id"))
+    if not reconstruction_id:
+        return dash.no_update
+    query_params = [f"reconstruction_id={reconstruction_id}"]
+    scan_id = _query_id(row.get("scan_number"))
+    if scan_id:
+        query_params.insert(0, f"scan_id={scan_id}")
+    return f"{base_href}?{'&'.join(query_params)}"
+
+
+@dash.callback(
+    Output("recons-url", "href"),
+    Input("recons-page-wire-recon-btn", "n_clicks"),
+    State("recon-table", "selectedRows"),
     prevent_initial_call=True,
 )
-def selected_hrefs(rows, recon_href, peakindex_href):
-    base_recon_href = recon_href.split("?")[0]
-    base_peakindex_href = peakindex_href.split("?")[0]
-    if not rows:
-        return base_recon_href, base_peakindex_href
+def handle_recon_button(n_clicks, rows):
+    if not n_clicks:
+        return dash.no_update
+    if not rows or rows[0].get("method") != "wire":
+        return dash.no_update
+    return _selected_run_href(rows, "/create-wire-reconstruction")
 
-    scan_ids, recon_ids = [], []
 
-    for row in rows:
-        if row.get("scanNumber"):
-            scan_ids.append(str(row["scanNumber"]))
-        else:
-            return base_recon_href, base_peakindex_href
-
-        recon_ids.append(str(row["recon_id"]) if row.get("recon_id") else "")
-
-    query_params = [f"scan_id={','.join(scan_ids)}"]
-    if any(recon_ids):
-        query_params.append(f"recon_id={','.join(recon_ids)}")
-
-    query_string = "&".join(query_params)
-
-    return f"{base_recon_href}?{query_string}", f"{base_peakindex_href}?{query_string}"
+@dash.callback(
+    Output("recons-url", "href", allow_duplicate=True),
+    Input("recons-page-peakindex-btn", "n_clicks"),
+    State("recon-table", "selectedRows"),
+    prevent_initial_call=True,
+)
+def handle_peakindex_button(n_clicks, rows):
+    if not n_clicks:
+        return dash.no_update
+    return _selected_run_href(rows, "/create-peakindexing")

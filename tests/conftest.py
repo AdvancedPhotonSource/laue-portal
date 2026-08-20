@@ -9,7 +9,7 @@ import datetime
 import os
 import sys
 import tempfile
-from typing import Any, List, Optional, Tuple
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -67,82 +67,114 @@ def create_test_metadata(scan_number: int = 1) -> Any:
     )
 
 
-def create_test_recon(scan_number: int = 1) -> Any:
-    """
-    Factory function to create a test Recon record.
-
-    Args:
-        scan_number: The scan number for the recon record
-
-    Returns:
-        db_schema.Recon: A test reconstruction record
-    """
+def create_test_reconstruction_run(scan_number: int | None = 1, job_id: int = 1) -> Any:
+    """Create a unified wire reconstruction run for tests."""
     import laue_portal.database.db_schema as db_schema
 
-    return db_schema.Recon(
-        scanNumber=scan_number,
-        calib_id=1,
-        job_id=1,
-        # Required file parameters
-        file_path="/test/path",
-        file_output="/test/output",
-        file_range=[1, 100],
-        file_threshold=50,
-        file_frame=[0, 100, 0, 100],
-        file_ext="h5",
-        file_stacked=False,
-        file_h5_key="data",
-        # Required comp parameters
-        comp_server="test_server",
-        comp_workers=1,
-        comp_usegpu=False,
-        comp_batch_size=1,
-        # Required geo parameters
-        geo_mask_path="/test/mask",
-        geo_mask_reversed=False,
-        geo_mask_bitsizes=[1.0, 1.0, 1.0],
-        geo_mask_thickness=1.0,
-        geo_mask_resolution=1.0,
-        geo_mask_smoothness=1.0,
-        geo_mask_alpha=1.0,
-        geo_mask_widening=1.0,
-        geo_mask_pad=1.0,
-        geo_mask_stretch=1.0,
-        geo_mask_shift=1.0,
-        geo_mask_focus_cenx=1.0,
-        geo_mask_focus_dist=1.0,
-        geo_mask_focus_anglez=1.0,
-        geo_mask_focus_angley=1.0,
-        geo_mask_focus_anglex=1.0,
-        geo_mask_focus_cenz=1.0,
-        geo_mask_cal_id=1,
-        geo_mask_cal_path="/test/cal",
-        geo_scanner_step=1.0,
-        geo_scanner_rot=[0.0, 0.0, 0.0],
-        geo_scanner_axis=[1.0, 0.0, 0.0],
-        geo_detector_shape=[100, 100],
-        geo_detector_size=[10.0, 10.0],
-        geo_detector_rot=[0.0, 0.0, 0.0],
-        geo_detector_pos=[0.0, 0.0, 100.0],
-        geo_source_offset=1.0,
-        geo_source_grid=[1.0, 1.0, 1.0],
-        # Required algo parameters
-        algo_iter=10,
-        algo_pos_method="test",
-        algo_pos_regpar=1,
-        algo_pos_init="test",
-        algo_sig_recon=True,
-        algo_sig_method="test",
-        algo_sig_order=1,
-        algo_sig_scale=1,
-        algo_sig_init_maxsize=1,
-        algo_sig_init_avgsize=1,
-        algo_sig_init_atol=1,
-        algo_ene_recon=True,
-        algo_ene_exact=True,
-        algo_ene_method="test",
-        algo_ene_range=[1, 100],
+    return db_schema.ReconstructionRun(
+        scan_number=scan_number,
+        job_id=job_id,
+        method="wire",
+        input_path="/test/input",
+        output_path="/test/output/rec_1",
+        author="test_user",
+        notes="test reconstruction",
+        algorithm_version="test-version",
+        created_at=datetime.datetime(2022, 1, 1, 0, 0, 0),
     )
+
+
+def create_test_wire_reconstruction_parameters(reconstruction_id: int | None = None) -> Any:
+    """Create wire-specific parameters for a unified reconstruction run."""
+    import laue_portal.database.db_schema as db_schema
+
+    values = {
+        "filename_prefixes": ["test_*.h5"],
+        "geometry_file": "/test/geometry.xml",
+        "percent_brightest": 10.0,
+        "wire_edges": "0 1",
+        "depth_start": -10.0,
+        "depth_end": 10.0,
+        "depth_resolution": 0.5,
+        "num_threads": 4,
+        "memory_limit_mb": 1024,
+        "scan_points": "1-10",
+        "scan_points_len": 10,
+        "verbose": 1,
+    }
+    if reconstruction_id is not None:
+        values["reconstruction_id"] = reconstruction_id
+    return db_schema.WireReconstructionParameters(**values)
+
+
+def create_test_indexing_run(
+    scan_number: int | None = 1,
+    job_id: int = 2,
+    reconstruction_id: int | None = None,
+) -> Any:
+    """Create a unified LaueGo indexing run for tests."""
+    import laue_portal.database.db_schema as db_schema
+
+    return db_schema.IndexingRun(
+        scan_number=scan_number,
+        reconstruction_id=reconstruction_id,
+        job_id=job_id,
+        method="lauego",
+        input_path="/test/input",
+        output_path="/test/output/index_1",
+        author="test_user",
+        notes="test indexing",
+        algorithm_version="test-version",
+        created_at=datetime.datetime(2022, 1, 1, 0, 0, 0),
+    )
+
+
+def create_test_lauego_parameters(indexing_id: int | None = None) -> Any:
+    """Create LaueGo-specific parameters for a unified indexing run."""
+    import laue_portal.database.db_schema as db_schema
+
+    values = {
+        "filename_prefixes": ["test_%d.h5"],
+        "threshold": 250,
+        "threshold_ratio": None,
+        "max_rfactor": 0.5,
+        "box_size": 18,
+        "max_number": 300,
+        "min_separation": 20,
+        "peak_shape": "Lorentzian",
+        "scan_points": "1-2",
+        "scan_points_len": 2,
+        "depth_range": None,
+        "depth_range_len": None,
+        "detector_crop_x1": 0,
+        "detector_crop_x2": 2047,
+        "detector_crop_y1": 0,
+        "detector_crop_y2": 2047,
+        "min_size": 3.0,
+        "max_peaks": 200,
+        "smooth": False,
+        "mask_file": None,
+        "index_kev_max_calc": 17.2,
+        "index_kev_max_test": 35.0,
+        "index_angle_tolerance": 0.1,
+        "index_h": 0,
+        "index_k": 0,
+        "index_l": 1,
+        "index_cone": 72.0,
+        "energy_unit": "keV",
+        "exposure_unit": "sec",
+        "cosmic_filter": True,
+        "reciprocal_lattice_unit": "1/nm",
+        "lattice_parameters_unit": "nm",
+        "output_xml": "output.xml",
+        "geometry_file": "/test/geometry.xml",
+        "crystal_file": "/test/crystal.xtal",
+        "depth": None,
+        "beamline": "34ID-E",
+    }
+    if indexing_id is not None:
+        values["indexing_id"] = indexing_id
+    return db_schema.LaueGoIndexingParameters(**values)
 
 
 def create_test_catalog(scan_number: int = 1) -> Any:
@@ -211,63 +243,6 @@ def create_test_scan(scan_number: int = 1) -> Any:
     )
 
 
-def create_test_peakindex(scan_number: int = 1, recon_id: Optional[int] = None) -> Any:
-    """
-    Factory function to create a test PeakIndex record.
-
-    Args:
-        scan_number: The scan number for the peakindex record
-        recon_id: The recon_id for the peakindex record (will be set after recon is saved if None)
-
-    Returns:
-        db_schema.PeakIndex: A test peakindex record
-    """
-    import laue_portal.database.db_schema as db_schema
-
-    return db_schema.PeakIndex(
-        scanNumber=scan_number,
-        job_id=scan_number,
-        filefolder="tests/data/input",
-        filenamePrefix=["test_file"],
-        recon_id=recon_id,  # This will be set after recon is saved if None
-        # Required peak search and indexing parameters
-        threshold=250,
-        thresholdRatio=-1,
-        maxRfactor=0.5,
-        boxsize=18,
-        max_number=50,  # maps to max_peaks from defaults
-        min_separation=40,
-        peakShape="Lorentzian",
-        scanPoints="1-2",
-        scanPointslen=2,
-        detectorCropX1=0,
-        detectorCropX2=2047,
-        detectorCropY1=0,
-        detectorCropY2=2047,
-        min_size=1.13,
-        max_peaks=50,
-        smooth=False,  # Boolean field
-        maskFile=None,  # Optional field
-        indexKeVmaxCalc=17.2,
-        indexKeVmaxTest=30.0,
-        indexAngleTolerance=0.1,
-        indexH=1,
-        indexK=1,
-        indexL=1,
-        indexCone=72.0,
-        energyUnit="keV",
-        exposureUnit="sec",
-        cosmicFilter=True,  # Boolean field
-        recipLatticeUnit="1/nm",
-        latticeParametersUnit="nm",
-        outputFolder="tests/data/output",
-        geoFile="tests/data/geo/geoN_2022-03-29_14-15-05.xml",
-        crystFile="tests/data/crystal/Al.xtal",
-        depth="2D",  # String field, using '2D' instead of NaN
-        beamline="34ID-E",
-    )
-
-
 def create_test_job(scan_number: int = 1) -> Any:
     """
     Factory function to create a test Job record.
@@ -292,12 +267,12 @@ def create_test_job(scan_number: int = 1) -> Any:
     )
 
 
-def create_test_database_with_entities(entities: List[str], scan_number: int = 1) -> Tuple[Any, str, List[Any]]:
+def create_test_database_with_entities(entities: list[str], scan_number: int = 1) -> tuple[Any, str, list[Any]]:
     """
     Create a temporary database with specified entities.
 
     Args:
-        entities: List of entity types to create ('metadata', 'recon', 'catalog', 'scan', 'peakindex')
+        entities: Entity types to create (metadata, catalog, scan, or job)
         scan_number: The scan number to use for all entities
 
     Returns:
@@ -322,10 +297,8 @@ def create_test_database_with_entities(entities: List[str], scan_number: int = 1
         created_entities = []
         entity_map = {
             "metadata": create_test_metadata,
-            "recon": create_test_recon,
             "catalog": create_test_catalog,
             "scan": create_test_scan,
-            "peakindex": create_test_peakindex,
             "job": create_test_job,
         }
 
@@ -337,25 +310,6 @@ def create_test_database_with_entities(entities: List[str], scan_number: int = 1
                 raise ValueError(f"Unknown entity type: {entity_type}")
 
         return test_engine, test_db_file, created_entities
-
-
-@pytest.fixture
-def test_database():
-    """
-    Pytest fixture that creates a temporary database with metadata, job, recon, and catalog data.
-    Compatible with existing test_recon_table.py tests.
-
-    Returns:
-        tuple: (test_engine, test_db_file, test_metadata, test_job, test_recon, test_catalog)
-    """
-    test_engine, test_db_file, entities = create_test_database_with_entities(["metadata", "job", "recon", "catalog"])
-
-    try:
-        yield test_engine, test_db_file, entities[0], entities[1], entities[2], entities[3]
-    finally:
-        # Clean up temporary database file
-        if os.path.exists(test_db_file):
-            os.unlink(test_db_file)
 
 
 @pytest.fixture
@@ -371,25 +325,6 @@ def test_metadata_database():
 
     try:
         yield test_engine, test_db_file, entities[0], entities[1], entities[2]
-    finally:
-        # Clean up temporary database file
-        if os.path.exists(test_db_file):
-            os.unlink(test_db_file)
-
-
-@pytest.fixture
-def test_peakindex_database():
-    """
-    Pytest fixture that creates a temporary database with metadata, job, recon, and peakindex data.
-    Compatible with existing test_peakindex_retrievers.py tests.
-
-    Returns:
-        tuple: (test_engine, test_db_file, test_metadata, test_job, test_recon, test_peakindex)
-    """
-    test_engine, test_db_file, entities = create_test_database_with_entities(["metadata", "job", "recon", "peakindex"])
-
-    try:
-        yield test_engine, test_db_file, entities[0], entities[1], entities[2], entities[3]
     finally:
         # Clean up temporary database file
         if os.path.exists(test_db_file):
@@ -431,4 +366,3 @@ def empty_test_database():
 
 # Alias fixtures for backward compatibility with different names used in test files
 empty_metadata_database = empty_test_database
-empty_peakindex_database = empty_test_database
