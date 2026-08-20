@@ -1,6 +1,3 @@
-from unittest.mock import patch
-
-import dash
 import pytest
 
 import lau_dash  # noqa: F401
@@ -46,17 +43,17 @@ def test_scan_action_buttons_follow_selection_state(selected_rows, expected_disa
 @pytest.mark.parametrize(
     ("rows", "expected_href"),
     [
-        ([], "/create-reconstruction"),
+        ([], "/create-wire-reconstruction"),
         ([{"scanNumber": 12, "aperture": "wire"}], "/create-wire-reconstruction?scan_id=12"),
-        ([{"scanNumber": 12, "aperture": "mask"}], "/create-reconstruction?scan_id=12"),
-        ([{"scanNumber": 13, "aperture": "none"}], "/create-reconstruction?scan_id=13"),
-        ([{"scanNumber": 14, "aperture": None}], "/create-reconstruction?scan_id=14"),
+        ([{"scanNumber": 12, "aperture": "mask"}], "/create-wire-reconstruction?scan_id=12"),
+        ([{"scanNumber": 13, "aperture": "none"}], "/create-wire-reconstruction?scan_id=13"),
+        ([{"scanNumber": 14, "aperture": None}], "/create-wire-reconstruction?scan_id=14"),
         (
             [
                 {"scanNumber": 12, "aperture": "wire"},
                 {"scanNumber": 13, "aperture": "mask"},
             ],
-            dash.no_update,
+            "/create-wire-reconstruction?scan_id=12,13",
         ),
     ],
 )
@@ -100,16 +97,10 @@ def test_ca_creation_page_is_an_unavailable_shim():
 # With nothing ticked in either table these buttons used to drop the user on
 # a bare create page with no scan filled in, and "New Recon" always went to
 # the coded-aperture form.  They should instead prefill the scan currently
-# open on the page and route by that scan's aperture.
+# open on the page and use the standard wire form.
 
 _SCAN_PAGE_URL = "http://host/scan?scan_id=276514"
 _SCAN_PAGE_URL_NO_ID = "http://host/scan"
-
-
-def _patch_aperture(aperture):
-    """Force ``_recon_page_for_scan`` to resolve to *aperture*'s page."""
-    page = "/create-wire-reconstruction" if "wire" in aperture else "/create-reconstruction"
-    return patch.object(scan_page, "_recon_page_for_scan", return_value=page)
 
 
 @pytest.mark.parametrize(
@@ -130,21 +121,13 @@ def test_scan_id_from_href(href, expected):
 
 
 def test_new_recon_with_no_selection_prefills_current_scan():
-    with _patch_aperture("wire"):
-        recon_href, index_href = scan_page.selected_recon_href([], [], _SCAN_PAGE_URL, "/create-wire-reconstruction")
+    recon_href, index_href = scan_page.selected_recon_href([], [], _SCAN_PAGE_URL, "/create-wire-reconstruction")
     assert recon_href == "/create-wire-reconstruction?scan_id=276514"
     assert index_href == "/create-wire-reconstruction?scan_id=276514"
 
 
-def test_new_recon_with_no_selection_routes_by_aperture():
-    with _patch_aperture("mask"):
-        recon_href, _ = scan_page.selected_recon_href([], [], _SCAN_PAGE_URL, "/create-wire-reconstruction")
-    assert recon_href == "/create-reconstruction?scan_id=276514"
-
-
 def test_new_recon_without_scan_in_url_falls_back_to_bare_href():
-    with _patch_aperture("wire"):
-        recon_href, _ = scan_page.selected_recon_href([], [], _SCAN_PAGE_URL_NO_ID, "/create-wire-reconstruction")
+    recon_href, _ = scan_page.selected_recon_href([], [], _SCAN_PAGE_URL_NO_ID, "/create-wire-reconstruction")
     assert recon_href == "/create-wire-reconstruction"
 
 
@@ -162,9 +145,14 @@ def test_new_index_without_scan_in_url_falls_back_to_bare_href():
 def test_selected_rows_still_take_priority_over_page_scan():
     # A ticked row must win over the page-level fallback.
     rows = [{"scan_number": 999, "reconstruction_id": 5, "method": "wire"}]
-    with _patch_aperture("wire"):
-        recon_href, _ = scan_page.selected_recon_href(rows, [], _SCAN_PAGE_URL, "/create-wire-reconstruction")
+    recon_href, _ = scan_page.selected_recon_href(rows, [], _SCAN_PAGE_URL, "/create-wire-reconstruction")
     assert recon_href == "/create-wire-reconstruction?scan_id=999&reconstruction_id=5"
+
+
+def test_selected_ca_row_uses_scan_without_copying_incompatible_run():
+    rows = [{"scan_number": 999, "reconstruction_id": 5, "method": "ca"}]
+    recon_href, _ = scan_page.selected_recon_href(rows, [], _SCAN_PAGE_URL, "/create-wire-reconstruction")
+    assert recon_href == "/create-wire-reconstruction?scan_id=999"
 
 
 def test_selected_index_rows_still_take_priority_over_page_scan():
@@ -176,55 +164,19 @@ def test_selected_index_rows_still_take_priority_over_page_scan():
 def test_href_rewrite_is_idempotent():
     # The callback reads the button's own href via State and also writes it,
     # so a second firing must not accumulate query strings.
-    with _patch_aperture("wire"):
-        recon_href, _ = scan_page.selected_recon_href([], [], _SCAN_PAGE_URL, "/create-wire-reconstruction?scan_id=111")
+    recon_href, _ = scan_page.selected_recon_href([], [], _SCAN_PAGE_URL, "/create-wire-reconstruction?scan_id=111")
     assert recon_href == "/create-wire-reconstruction?scan_id=276514"
 
     _, index_href = scan_page.selected_peakindex_href([], [], _SCAN_PAGE_URL, "/create-peakindexing?scan_id=111")
     assert index_href == "/create-peakindexing?scan_id=276514"
 
 
-def test_recon_page_for_scan_defaults_to_wire_on_unknown_scan():
-    # Missing/garbage scans must degrade to the wire form, not raise.
-    assert scan_page._recon_page_for_scan(None) == "/create-wire-reconstruction"
-    assert scan_page._recon_page_for_scan("not-a-number") == "/create-wire-reconstruction"
-
-
 @pytest.mark.parametrize(
-    "aperture, expected",
-    [
-        ("wire", "/create-wire-reconstruction"),
-        ("Wire", "/create-wire-reconstruction"),
-        ("mask", "/create-reconstruction"),
-        ("CA", "/create-reconstruction"),
-        # Absent / placeholder apertures default to wire rather than CA.
-        (None, "/create-wire-reconstruction"),
-        ("None", "/create-wire-reconstruction"),
-        ("", "/create-wire-reconstruction"),
-    ],
+    "scan_id",
+    [None, "not-a-number", 276514],
 )
-def test_recon_page_for_scan_maps_aperture_to_form(aperture, expected):
-    # Exercises the real aperture lookup (not the _patch_aperture stub) by
-    # faking only the DB read, so a routing regression can't slip through.
-    class _FakeQuery:
-        def filter(self, *_args, **_kwargs):
-            return self
-
-        def scalar(self):
-            return aperture
-
-    class _FakeSession:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_exc):
-            return False
-
-        def query(self, *_args, **_kwargs):
-            return _FakeQuery()
-
-    with patch.object(scan_page, "Session", lambda *_a, **_k: _FakeSession()):
-        assert scan_page._recon_page_for_scan(276514) == expected
+def test_recon_page_for_scan_always_uses_wire(scan_id):
+    assert scan_page._recon_page_for_scan(scan_id) == "/create-wire-reconstruction"
 
 
 @pytest.mark.parametrize(

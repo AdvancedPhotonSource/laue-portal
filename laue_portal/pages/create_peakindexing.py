@@ -21,6 +21,7 @@ from laue_portal.components.validation_alerts import (
 )
 from laue_portal.config import DEFAULT_VARIABLES, PEAKINDEX_DEFAULTS
 from laue_portal.database.db_utils import (
+    get_catalog_by_scan_number,
     parse_parameter,
     remove_root_path_prefix,
     resolve_path_with_root,
@@ -861,7 +862,7 @@ def load_scan_data_from_url(href):
                             scan_number, reconstruction.output_path, reconstruction_id
                         )
                     elif scan_number is not None:
-                        catalog = session.get(db_schema.Catalog, scan_number)
+                        catalog = get_catalog_by_scan_number(session, scan_number)
                         if catalog is not None:
                             form_data.input_path = catalog.filefolder
                             form_data.data_path = remove_root_path_prefix(catalog.filefolder, root_path)

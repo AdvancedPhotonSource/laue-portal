@@ -231,10 +231,3 @@ def enqueue_indexing(
         len(chunks),
     )
     return f"batch_{run.job_id}"
-
-
-# The create pages move to the new workflow services in the next checkpoint. Keep
-# their imports valid during this intermediate commit, while exposing only the
-# identifier-based signatures.
-enqueue_wire_reconstruction = enqueue_reconstruction
-enqueue_peakindexing = enqueue_indexing

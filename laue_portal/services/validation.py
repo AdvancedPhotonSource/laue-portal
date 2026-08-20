@@ -6,7 +6,12 @@ from sqlalchemy.orm import Session
 
 import laue_portal.database.session_utils as session_utils
 from laue_portal.database import db_schema
-from laue_portal.database.db_utils import get_num_inputs_from_fields, parse_parameter, resolve_path_with_root
+from laue_portal.database.db_utils import (
+    get_catalog_by_scan_number,
+    get_num_inputs_from_fields,
+    parse_parameter,
+    resolve_path_with_root,
+)
 from laue_portal.utilities.hkl_parse import str2hkl
 from laue_portal.utilities.srange import srange
 from laue_portal.workflows.identity import merged_identity_value, parse_workflow_identities
@@ -530,7 +535,7 @@ def validate_peakindexing(fields, catalog_defaults=None):
                                 source_path = reconstruction.output_path
                                 source_label = f"R{reconstruction_id}"
                         elif scan_num_int is not None:
-                            catalog = session.get(db_schema.Catalog, scan_num_int)
+                            catalog = get_catalog_by_scan_number(session, scan_num_int)
                             if catalog is not None:
                                 source_path = catalog.filefolder
                                 source_label = f"SN{scan_num_int}"

@@ -2,7 +2,7 @@
 
 The indexing XML stores the source detector file in ``<inputImage>``.  In
 practice that value may be absolute, relative to the indexing output folder,
-or relative to the original data folder stored on the PeakIndex record.  This
+or relative to the original data folder stored on the indexing run.  This
 module resolves those common locations and loads a 2-D HDF5 dataset for use as
 an image background.
 """
@@ -64,7 +64,7 @@ def load_detector_image(
         Current indexing XML path.  Used to resolve paths relative to the
         output folder.
     data_folder:
-        Original PeakIndex data folder from the DB.  Used when the XML stores
+        Original indexing-run data folder from the DB.  Used when the XML stores
         only a detector filename.
     root_path:
         Portal workspace root from configuration.  Used for DB-relative paths.

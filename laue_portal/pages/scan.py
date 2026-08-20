@@ -1393,30 +1393,8 @@ def _scan_id_from_href(href):
 
 
 def _recon_page_for_scan(scan_id):
-    """
-    Choose the reconstruction page matching *scan_id*'s aperture.
-
-    Mirrors the aperture test in ``_get_scan_recons``: a wire aperture uses
-    the wire form, anything else uses the coded-aperture form.  Defaults to
-    the wire page when the aperture is missing or unreadable, since that is
-    the common case at 34ID-E.
-    """
-    default_page = "/create-wire-reconstruction"
-    if scan_id is None:
-        return default_page
-    try:
-        with Session(session_utils.get_engine()) as session:
-            aperture = (
-                session.query(db_schema.Catalog.aperture).filter(db_schema.Catalog.scanNumber == int(scan_id)).scalar()
-            )
-    except Exception:
-        return default_page
-    if aperture is None:
-        return default_page
-    aperture = str(aperture).lower()
-    if aperture in ("", "none", "nan"):
-        return default_page
-    return default_page if "wire" in aperture else "/create-reconstruction"
+    """Return the standard destination for a generic New Recon action."""
+    return "/create-wire-reconstruction"
 
 
 @callback(
@@ -1444,25 +1422,19 @@ def selected_recon_href(recon_rows, peakindex_rows, page_href, href):
         if not scan_ids:
             return base_href
 
-        methods = {
-            row.get("method") or row.get("reconstruction_method")
+        # A wire run can be copied into the wire form.  A CA run cannot, so
+        # retain its scan as the source without passing the incompatible run.
+        reconstruction_ids = [
+            str(row["reconstruction_id"])
+            if row.get("reconstruction_id")
+            and (row.get("method") or row.get("reconstruction_method") or "wire") == "wire"
+            else ""
             for row in rows
-            if row.get("method") or row.get("reconstruction_method")
-        }
-        if not methods:
-            methods = {
-                "wire" if _recon_page_for_scan(scan_id) == "/create-wire-reconstruction" else "ca"
-                for scan_id in scan_ids
-            }
-        if len(methods) != 1:
-            return base_href
-
-        destination = "/create-wire-reconstruction" if "wire" in methods else "/create-reconstruction"
-        reconstruction_ids = [str(row["reconstruction_id"]) if row.get("reconstruction_id") else "" for row in rows]
+        ]
         query_params = [f"scan_id={','.join(sorted(scan_ids, key=int))}"]
         if any(reconstruction_ids):
             query_params.append(f"reconstruction_id={','.join(reconstruction_ids)}")
-        return f"{destination}?{'&'.join(query_params)}"
+        return f"/create-wire-reconstruction?{'&'.join(query_params)}"
 
     return build_href(recon_rows or []), build_href(peakindex_rows or [])
 

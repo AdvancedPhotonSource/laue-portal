@@ -78,9 +78,6 @@ class Metadata(Base):
     scan_: Mapped["Scan"] = relationship(backref="metadata")  # noqa: F821
     catalog_: Mapped["Catalog"] = relationship(backref="metadata")  # noqa: F821
     calib_: Mapped["Calib"] = relationship(backref="metadata")  # noqa: F821
-    recon_: Mapped["Recon"] = relationship(backref="metadata")  # noqa: F821
-    wirerecon_: Mapped["WireRecon"] = relationship(backref="metadata")  # noqa: F821
-    peakindex_: Mapped["PeakIndex"] = relationship(backref="metadata")  # noqa: F821
     reconstruction_runs: Mapped[list["ReconstructionRun"]] = relationship(  # noqa: F821
         back_populates="scan"
     )

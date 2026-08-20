@@ -1,4 +1,4 @@
-"""Focused tests for unified wire reconstruction UI paths."""
+"""Focused tests for unified reconstruction UI paths."""
 
 from datetime import datetime
 from types import SimpleNamespace
@@ -13,7 +13,7 @@ import lau_dash  # noqa: F401
 import laue_portal.pages.create_peakindexing as create_peakindexing
 import laue_portal.pages.create_wire_reconstruction as create_wire_reconstruction
 from laue_portal.database import db_schema
-from laue_portal.pages.wire_reconstructions import (
+from laue_portal.pages.reconstructions import (
     _get_recons,
     get_recons,
     handle_peakindex_button,
@@ -21,6 +21,7 @@ from laue_portal.pages.wire_reconstructions import (
     update_button_states,
 )
 from tests.conftest import (
+    create_test_catalog,
     create_test_metadata,
     create_test_reconstruction_run,
     create_test_wire_reconstruction_parameters,
@@ -52,21 +53,45 @@ def _add_wire_reconstruction(engine, scan_number=12):
         return reconstruction.id
 
 
+def _add_scan_catalog(engine, scan_number=12):
+    with Session(engine) as session:
+        catalog = create_test_catalog(scan_number)
+        # Make the regression condition explicit: Session.get(Catalog, 12)
+        # must not accidentally find this row by its primary key.
+        catalog.catalog_id = 99
+        catalog.filefolder = "/workspace/raw"
+        catalog.filenamePrefix = ["scan_%d.h5"]
+        session.add_all([create_test_metadata(scan_number), catalog])
+        session.commit()
+
+
 @pytest.mark.parametrize(
     ("selected_rows", "expected_disabled"),
-    [([], True), ([{"reconstruction_id": 3, "scan_number": 12}], False)],
+    [
+        ([], (True, True)),
+        ([{"reconstruction_id": 3, "scan_number": 12, "method": "wire"}], (False, False)),
+        ([{"reconstruction_id": 4, "scan_number": 12, "method": "ca"}], (True, False)),
+        (
+            [
+                {"reconstruction_id": 3, "scan_number": 12, "method": "wire"},
+                {"reconstruction_id": 4, "scan_number": 12, "method": "ca"},
+            ],
+            (True, True),
+        ),
+    ],
 )
 def test_wire_reconstruction_action_buttons_follow_selection(selected_rows, expected_disabled):
     states = update_button_states(selected_rows)
-    assert states[::2] == (expected_disabled, expected_disabled)
+    assert states[::2] == expected_disabled
 
 
 def test_wire_reconstruction_actions_use_canonical_urls():
-    rows = [{"reconstruction_id": 3, "scan_number": 12}]
+    rows = [{"reconstruction_id": 3, "scan_number": 12, "method": "wire"}]
     assert handle_recon_button(1, rows) == "/create-wire-reconstruction?scan_id=12&reconstruction_id=3"
     assert handle_peakindex_button(1, rows) == "/create-peakindexing?scan_id=12&reconstruction_id=3"
     assert handle_recon_button(0, rows) is dash.no_update
     assert handle_peakindex_button(0, rows) is dash.no_update
+    assert handle_recon_button(1, [{"reconstruction_id": 4, "method": "ca"}]) is dash.no_update
 
 
 def test_wire_reconstruction_table_reads_unified_rows(empty_test_database):
@@ -90,7 +115,7 @@ def test_wire_reconstruction_table_reads_unified_rows(empty_test_database):
 def test_wire_reconstruction_table_callback(empty_test_database):
     engine, _ = empty_test_database
     with patch("laue_portal.database.session_utils.get_engine", return_value=engine):
-        columns, rows = get_recons("/wire-reconstructions")
+        columns, rows = get_recons("/reconstructions")
     assert columns
     assert rows == []
     with pytest.raises(PreventUpdate):
@@ -123,6 +148,44 @@ def test_wire_create_loader_copies_selected_r_run(empty_test_database):
     assert form_data.geometry_file == "geometries/wire.xml"
     assert form_data.scan_points == "4-7"
     assert form_data.output_path_template == "analysis/scan_12/rec_%d/data"
+
+
+def test_wire_create_loader_reads_catalog_by_scan_number(empty_test_database):
+    engine, _ = empty_test_database
+    _add_scan_catalog(engine)
+    loaded = []
+
+    with (
+        patch("laue_portal.database.session_utils.get_engine", return_value=engine),
+        patch.dict(create_wire_reconstruction.DEFAULT_VARIABLES, {"root_path": "/workspace"}),
+        patch.object(create_wire_reconstruction, "set_wire_recon_form_props", side_effect=loaded.append),
+        patch.object(create_wire_reconstruction, "set_props"),
+    ):
+        create_wire_reconstruction.load_scan_data_from_url("http://localhost/create-wire-reconstruction?scan_id=12")
+
+    form_data = loaded[0]
+    assert form_data.data_path == "raw"
+    assert form_data.input_path == "/workspace/raw"
+    assert form_data.filename_prefixes == ["scan_%d.h5"]
+
+
+def test_index_create_loader_reads_catalog_by_scan_number(empty_test_database):
+    engine, _ = empty_test_database
+    _add_scan_catalog(engine)
+    loaded = []
+
+    with (
+        patch("laue_portal.database.session_utils.get_engine", return_value=engine),
+        patch.dict(create_peakindexing.DEFAULT_VARIABLES, {"root_path": "/workspace"}),
+        patch.object(create_peakindexing, "set_peakindex_form_props", side_effect=loaded.append),
+        patch.object(create_peakindexing, "set_props"),
+    ):
+        create_peakindexing.load_scan_data_from_url("http://localhost/create-peakindexing?scan_id=12")
+
+    form_data = loaded[0]
+    assert form_data.data_path == "raw"
+    assert form_data.input_path == "/workspace/raw"
+    assert form_data.filename_prefixes == ["scan_%d.h5"]
 
 
 def test_index_create_loader_uses_one_optional_reconstruction_parent(empty_test_database):

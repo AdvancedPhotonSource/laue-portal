@@ -231,8 +231,3 @@ def execute_indexing_chunk(job_id: int, subjob_ids: list[int]):
     notify_subjobs_completed(job_id, len(results))
     publish_job_update(job_id, "running", f"Indexing chunk completed {len(results)} subjob(s)")
     return results
-
-
-# Retain the established worker name in Redis metadata and old imports until the
-# final cleanup checkpoint. Its payload is now identifiers only.
-execute_peakindexing_chunk = execute_indexing_chunk

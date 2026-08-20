@@ -1,6 +1,8 @@
 """Tests for reconstruction and indexing creation services."""
 
 import os
+import threading
+import time
 from datetime import datetime
 
 import pytest
@@ -8,7 +10,7 @@ from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from laue_portal.database import db_schema
+from laue_portal.database import db_schema, session_utils
 from laue_portal.workflows import FileResolutionError, WorkflowValidationError
 from laue_portal.workflows import indexing as indexing_workflow
 from laue_portal.workflows import reconstruction as reconstruction_workflow
@@ -20,8 +22,8 @@ def workflow_engine(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'services.db'}")
 
     @event.listens_for(engine, "connect")
-    def enable_foreign_keys(dbapi_connection, connection_record):
-        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+    def enable_sqlite_pragmas(dbapi_connection, connection_record):
+        session_utils.enable_sqlite_pragmas(dbapi_connection, connection_record)
 
     db_schema.Base.metadata.create_all(engine)
     try:
@@ -276,6 +278,73 @@ def test_large_resolved_run_bulk_inserts_subjobs_in_bounded_batches(workflow_eng
 
     assert _count(workflow_engine, db_schema.SubJob) == 20_001
     assert subjob_inserts == [(True, 10_000), (True, 10_000), (False, 6)]
+
+
+def test_100k_submission_keeps_reads_responsive_and_finishes_inside_busy_timeout(
+    workflow_engine, tmp_path, monkeypatch
+):
+    _add_metadata(workflow_engine, 1)
+    input_files = tuple(os.fspath(tmp_path / f"wire_{index}.h5") for index in range(100_000))
+    monkeypatch.setattr(reconstruction_workflow, "resolve_input_files", lambda *args, **kwargs: input_files)
+    first_subjob_insert = threading.Event()
+    allow_write_to_continue = threading.Event()
+    errors = []
+
+    @event.listens_for(workflow_engine, "before_cursor_execute")
+    def pause_first_subjob_insert(connection, cursor, statement, parameters, context, executemany):
+        if statement.startswith("INSERT INTO subjob") and not first_subjob_insert.is_set():
+            first_subjob_insert.set()
+            if not allow_write_to_continue.wait(timeout=10):
+                raise TimeoutError("test did not release the workflow write")
+
+    def create_large_run():
+        try:
+            reconstruction_workflow.create_reconstruction(
+                _wire_request(tmp_path / "unlisted", tmp_path / "rec_%d", scan_points="1"),
+                engine=workflow_engine,
+            )
+        except Exception as error:  # pragma: no cover - reported by the main thread
+            errors.append(error)
+
+    started_at = time.monotonic()
+    creator = threading.Thread(target=create_large_run, daemon=True)
+    creator.start()
+    assert first_subjob_insert.wait(timeout=10)
+
+    read_started_at = time.monotonic()
+    assert _count(workflow_engine, db_schema.ReconstructionRun) == 0
+    read_duration = time.monotonic() - read_started_at
+
+    allow_write_to_continue.set()
+    creator.join(timeout=30)
+    total_duration = time.monotonic() - started_at
+
+    assert not creator.is_alive()
+    assert errors == []
+    assert read_duration < 2
+    assert total_duration < 20
+    assert _count(workflow_engine, db_schema.SubJob) == 100_000
+
+
+def test_multi_prefix_submission_creates_one_subjob_per_resolved_file(workflow_engine, tmp_path):
+    _add_metadata(workflow_engine, 1)
+    input_path = tmp_path / "wire-input"
+    _create_files(input_path, ["left_1.h5", "right_1.h5"])
+
+    run = reconstruction_workflow.create_reconstruction(
+        _wire_request(
+            input_path,
+            tmp_path / "rec_%d",
+            filename_prefixes=["left_%d.h5", "right_%d.h5"],
+            scan_points="1",
+        ),
+        engine=workflow_engine,
+    )
+
+    assert [os.path.basename(subjob.input_path) for subjob in _subjobs_for(workflow_engine, run.job_id)] == [
+        "left_1.h5",
+        "right_1.h5",
+    ]
 
 
 def test_resolution_failure_writes_no_database_rows(workflow_engine, tmp_path):

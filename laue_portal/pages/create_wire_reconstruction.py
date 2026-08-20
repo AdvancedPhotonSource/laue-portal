@@ -21,6 +21,7 @@ from laue_portal.components.validation_alerts import (
 from laue_portal.components.wire_recon_form import set_wire_recon_form_props, wire_recon_form
 from laue_portal.config import DEFAULT_VARIABLES, WIRERECON_DEFAULTS
 from laue_portal.database.db_utils import (
+    get_catalog_by_scan_number,
     get_catalog_data,
     parse_parameter,
     remove_root_path_prefix,
@@ -1036,7 +1037,7 @@ def load_scan_data_from_url(href):
                         metadata = session.get(db_schema.Metadata, scan_number)
                         if metadata is None:
                             raise ValueError(f"Scan SN{scan_number} was not found")
-                        catalog = session.get(db_schema.Catalog, scan_number)
+                        catalog = get_catalog_by_scan_number(session, scan_number)
                         if catalog is not None:
                             form_data.data_path = remove_root_path_prefix(catalog.filefolder, root_path)
                             form_data.input_path = catalog.filefolder

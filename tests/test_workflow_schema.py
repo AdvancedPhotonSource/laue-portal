@@ -34,16 +34,27 @@ def workflow_engine(tmp_path):
 
 def test_fresh_database_contains_unified_workflow_tables_and_subjob_paths(workflow_engine):
     inspector = inspect(workflow_engine)
+    table_names = set(inspector.get_table_names())
 
     assert {
         "reconstruction_run",
         "wire_reconstruction_parameters",
         "indexing_run",
         "lauego_indexing_parameters",
-    } <= set(inspector.get_table_names())
+    } <= table_names
+    assert {"recon", "wirerecon", "peakindex"}.isdisjoint(table_names)
     subjob_columns = {column["name"]: column for column in inspector.get_columns("subjob")}
     assert subjob_columns["input_path"]["nullable"] is True
     assert subjob_columns["output_path"]["nullable"] is True
+
+
+def test_legacy_workflow_models_and_helpers_are_not_exported():
+    from laue_portal.database import db_utils
+
+    for name in ("Recon", "WireRecon", "PeakIndex"):
+        assert not hasattr(db_schema, name)
+    for name in ("make_IDnumber", "parse_IDnumber", "get_data_from_id"):
+        assert not hasattr(db_utils, name)
 
 
 def test_reconstruction_relationships_are_one_to_one(workflow_engine):

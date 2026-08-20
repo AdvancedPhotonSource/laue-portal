@@ -81,7 +81,7 @@ def test_resolution_combines_multiple_filename_templates(tmp_path):
 
 
 def test_resolution_performs_one_match_per_directory_entry(monkeypatch):
-    entry_count = 20_000
+    entry_count = 100_000
     filenames = [f"image_{index}.h5" for index in range(entry_count)]
     match_calls = 0
     list_calls = 0

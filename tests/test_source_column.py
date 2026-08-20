@@ -103,6 +103,17 @@ def test_source_renderer_uses_canonical_urls():
     assert "recon_id" not in renderer
 
 
+def test_reconstruction_renderer_labels_a_null_parent_as_direct():
+    javascript = Path("assets/customAgGridFunctions.js").read_text()
+
+    renderer_start = javascript.index("dagcomponentfuncs.ReconstructionLinkRenderer")
+    renderer_end = javascript.index("};", renderer_start)
+    renderer = javascript[renderer_start:renderer_end]
+
+    assert "props.value == null" in renderer
+    assert "'Direct'" in renderer
+
+
 def test_indexing_renderer_uses_i_identity():
     javascript = Path("assets/customAgGridFunctions.js").read_text()
 

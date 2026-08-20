@@ -1,12 +1,16 @@
 import datetime
 import importlib
 import json
+import os
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from laue_portal.database import db_schema, session_utils
 from laue_portal.processing.queue import batch, controls, core, enqueue, executors, lifecycle
+from laue_portal.workflows import reconstruction as reconstruction_workflow
+from tests.conftest import create_test_metadata
 
 
 class FakeRedis:
@@ -222,6 +226,10 @@ def test_queue_modules_are_importable_and_redis_utils_is_removed():
     assert hasattr(executors, "execute_indexing_chunk")
     assert hasattr(controls, "cancel_batch_job")
     assert hasattr(lifecycle, "execute_with_status_updates")
+    assert not hasattr(enqueue, "enqueue_wire_reconstruction")
+    assert not hasattr(enqueue, "enqueue_peakindexing")
+    assert not hasattr(executors, "execute_peakindexing_chunk")
+    assert not hasattr(executors, "execute_peakindexing_job")
 
     with pytest.raises(ModuleNotFoundError):
         importlib.import_module("laue_portal.processing.redis_utils")
@@ -631,6 +639,94 @@ def test_execute_reconstruction_subjob_loads_and_dispatches_wire_method(queue_db
         subjob = session.get(db_schema.SubJob, subjob_ids[0])
         assert subjob.status == core.STATUS_REVERSE_MAPPING["Finished"]
         assert subjob.command == "wire command"
+
+
+def test_reconstruction_service_enqueue_worker_and_coordinator_integration(queue_db, monkeypatch, tmp_path):
+    fake_redis = FakeRedis()
+    fake_queue = FakeQueue()
+    result = SimpleNamespace(success=True, output_files=["result.h5"], log=None, command="wire command")
+    monkeypatch.setattr(batch, "redis_conn", fake_redis)
+    monkeypatch.setattr(lifecycle, "redis_conn", fake_redis)
+    monkeypatch.setattr(enqueue, "job_queue", fake_queue)
+    monkeypatch.setattr(executors, "wire_reconstruct", lambda *args, **kwargs: result)
+
+    input_path = tmp_path / "service-input"
+    input_path.mkdir()
+    for scan_point in (1, 2):
+        (input_path / f"wire_{scan_point}.h5").write_text("", encoding="utf-8")
+    geometry_file = tmp_path / "geometry.xml"
+    geometry_file.write_text("geometry", encoding="utf-8")
+    with session_utils.get_session() as session:
+        session.add(create_test_metadata(1))
+        session.commit()
+
+    run = reconstruction_workflow.create_reconstruction(
+        reconstruction_workflow.WireReconstructionRequest(
+            scan_number=1,
+            input_path=str(input_path),
+            output_path_template=str(tmp_path / "service-output-%d"),
+            filename_prefixes=["wire_%d.h5"],
+            geometry_file=str(geometry_file),
+            percent_brightest=5,
+            wire_edges="0 1",
+            depth_start=-5,
+            depth_end=5,
+            depth_resolution=0.5,
+            num_threads=2,
+            memory_limit_mb=512,
+            scan_points="1-2",
+            verbose=1,
+        ),
+        engine=queue_db,
+    )
+
+    enqueue.enqueue_reconstruction(run.id)
+    assert len(fake_queue.enqueued) == 2
+    assert all(len(queued["args"]) == 1 for queued in fake_queue.enqueued)
+
+    for queued in list(fake_queue.enqueued):
+        queued["func"](queued["db_job_id"], *queued["args"])
+    assert len(fake_queue.enqueued) == 3
+    coordinator = fake_queue.enqueued[-1]
+    coordinator["func"](coordinator["db_job_id"], *coordinator["args"])
+
+    with session_utils.get_session() as session:
+        job = session.get(db_schema.Job, run.job_id)
+        subjobs = session.query(db_schema.SubJob).filter_by(job_id=run.job_id).all()
+        assert job.status == core.STATUS_REVERSE_MAPPING["Finished"]
+        assert job.start_time is not None
+        assert job.finish_time is not None
+        assert all(subjob.status == core.STATUS_REVERSE_MAPPING["Finished"] for subjob in subjobs)
+        assert all(subjob.start_time is not None and subjob.finish_time is not None for subjob in subjobs)
+
+
+def test_disappeared_reconstruction_input_fails_cleanly(queue_db, monkeypatch, tmp_path):
+    fake_redis = FakeRedis()
+    notifications = []
+    monkeypatch.setattr(lifecycle, "redis_conn", fake_redis)
+    monkeypatch.setattr(batch, "notify_subjob_completed", lambda job_id: notifications.append(job_id))
+
+    with session_utils.get_session() as session:
+        _, job_id, subjob_ids, _ = add_reconstruction_workflow(session, tmp_path, count=1)
+        missing_path = session.get(db_schema.SubJob, subjob_ids[0]).input_path
+    Path(missing_path).write_text("resolved", encoding="utf-8")
+    Path(missing_path).unlink()
+
+    def fail_if_missing(input_path, *args, **kwargs):
+        if not os.path.exists(input_path):
+            raise FileNotFoundError(input_path)
+
+    monkeypatch.setattr(executors, "wire_reconstruct", fail_if_missing)
+
+    with pytest.raises(FileNotFoundError, match=os.path.basename(missing_path)):
+        executors.execute_reconstruction_subjob(job_id, subjob_ids[0])
+
+    assert notifications == [job_id]
+    with session_utils.get_session() as session:
+        subjob = session.get(db_schema.SubJob, subjob_ids[0])
+        assert subjob.status == core.STATUS_REVERSE_MAPPING["Failed"]
+        assert subjob.finish_time is not None
+        assert missing_path in subjob.messages
 
 
 def test_execute_reconstruction_subjob_fails_explicitly_for_ca(queue_db, monkeypatch, tmp_path):

@@ -1,4 +1,4 @@
-"""Focused tests for the CA reconstruction list shim."""
+"""Focused tests for the unified reconstruction list."""
 
 from datetime import datetime
 from unittest.mock import patch
@@ -7,7 +7,7 @@ import pytest
 from dash.exceptions import PreventUpdate
 from sqlalchemy.orm import Session
 
-import lau_dash  # noqa: F401
+import lau_dash
 from laue_portal.database import db_schema
 from laue_portal.pages.reconstructions import _get_recons, get_recons
 
@@ -37,7 +37,7 @@ def _add_ca_run(engine):
         return run.id
 
 
-def test_ca_list_reads_unified_reconstruction_rows(empty_test_database):
+def test_reconstruction_list_reads_ca_rows_without_wire_parameters(empty_test_database):
     engine, _ = empty_test_database
     reconstruction_id = _add_ca_run(engine)
 
@@ -47,15 +47,18 @@ def test_ca_list_reads_unified_reconstruction_rows(empty_test_database):
     assert rows == [
         {
             "reconstruction_id": reconstruction_id,
+            "method": "ca",
             "scan_number": None,
+            "scan_points_len": None,
             "author": "tester",
             "notes": "reserved CA row",
-            "sample_name": None,
-            "aperture": None,
             "submit_time": datetime(2026, 8, 1),
             "start_time": None,
             "finish_time": None,
             "status": 2,
+            "completed_subjobs": 0,
+            "total_subjobs": 0,
+            "status_progress": None,
         }
     ]
     id_column = next(column for column in columns if column["field"] == "reconstruction_id")
@@ -63,7 +66,7 @@ def test_ca_list_reads_unified_reconstruction_rows(empty_test_database):
     assert "Actions" not in {column["headerName"] for column in columns}
 
 
-def test_ca_list_is_empty_when_only_wire_runs_exist(empty_test_database):
+def test_reconstruction_list_includes_wire_runs(empty_test_database):
     engine, _ = empty_test_database
     with Session(engine) as session:
         job = db_schema.Job(computer_name="localhost", status=0, priority=0)
@@ -82,10 +85,11 @@ def test_ca_list_is_empty_when_only_wire_runs_exist(empty_test_database):
 
     with patch("laue_portal.database.session_utils.get_engine", return_value=engine):
         _, rows = _get_recons()
-    assert rows == []
+    assert len(rows) == 1
+    assert rows[0]["method"] == "wire"
 
 
-def test_ca_list_callback_and_empty_database(empty_test_database):
+def test_reconstruction_list_callback_and_empty_database(empty_test_database):
     engine, _ = empty_test_database
     with patch("laue_portal.database.session_utils.get_engine", return_value=engine):
         columns, rows = get_recons("/reconstructions")
@@ -94,3 +98,9 @@ def test_ca_list_callback_and_empty_database(empty_test_database):
 
     with pytest.raises(PreventUpdate):
         get_recons("/wrong-path")
+
+
+def test_legacy_wire_reconstruction_list_redirects_to_unified_page():
+    routes = {str(rule) for rule in lau_dash.app.server.url_map.iter_rules()}
+
+    assert "/wire-reconstructions" in routes

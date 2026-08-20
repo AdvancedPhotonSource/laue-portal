@@ -17,12 +17,9 @@ from laue_portal.database.models import (
     Job,
     LaueGoIndexingParameters,
     Metadata,
-    PeakIndex,
-    Recon,
     ReconstructionRun,
     Scan,
     SubJob,
-    WireRecon,
     WireReconstructionParameters,
 )
 
@@ -38,9 +35,6 @@ __all__ = [
     "IndexingRun",
     "LaueGoIndexingParameters",
     "Calib",
-    "Recon",
-    "WireRecon",
-    "PeakIndex",
     "MASK_FOCUS_TABLE",
 ]
 

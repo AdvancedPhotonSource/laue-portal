@@ -33,7 +33,12 @@ from sqlalchemy.orm import Session
 import laue_portal.database.session_utils as session_utils
 from laue_portal.config import DEFAULT_VARIABLES, VALID_HDF_EXTENSIONS
 from laue_portal.database import db_schema
-from laue_portal.database.db_utils import parse_parameter, remove_root_path_prefix, resolve_path_with_root
+from laue_portal.database.db_utils import (
+    get_catalog_by_scan_number,
+    parse_parameter,
+    remove_root_path_prefix,
+    resolve_path_with_root,
+)
 from laue_portal.utilities.filename_patterns import (
     build_pattern_label,
     extract_index_patterns,
@@ -68,7 +73,7 @@ def _workflow_source_data(session, identity, root_path, context, catalog_default
             }
 
     if identity.scan_number is not None:
-        catalog = session.get(db_schema.Catalog, identity.scan_number)
+        catalog = get_catalog_by_scan_number(session, identity.scan_number)
         if catalog is not None:
             return {
                 "data_path": remove_root_path_prefix(catalog.filefolder, root_path),

@@ -302,7 +302,6 @@ def handle_recon_button(n_clicks, rows):
         return base_href
 
     scan_ids, reconstruction_ids = [], []
-    selected_methods = set()
 
     for row in rows:
         scan_id = _query_id(row.get("scan_number"))
@@ -310,26 +309,13 @@ def handle_recon_button(n_clicks, rows):
         if not scan_id and not reconstruction_id:
             return dash.no_update
         scan_ids.append(scan_id or "")
-        reconstruction_ids.append(reconstruction_id or "")
-        if row.get("reconstruction_method"):
-            selected_methods.add(row["reconstruction_method"])
-        elif row.get("aperture") is not None and pd.notna(row["aperture"]):
+        method = row.get("reconstruction_method")
+        if method is None and row.get("aperture") is not None and pd.notna(row["aperture"]):
             aperture = str(row["aperture"]).lower()
-            if aperture == "none":
-                return dash.no_update
-            elif "wire" in aperture:
-                selected_methods.add("wire")
-            else:
-                selected_methods.add("ca")
-        else:
-            selected_methods.add("wire")
-
-    if len(selected_methods) != 1:
-        return dash.no_update
-    if "ca" in selected_methods:
-        base_href = "/create-reconstruction"
-    else:
-        base_href = "/create-wire-reconstruction"
+            method = "wire" if "wire" in aperture else "ca"
+        # Do not ask the wire form to copy a CA reconstruction.  The scan still
+        # provides a valid source for the new wire reconstruction.
+        reconstruction_ids.append(reconstruction_id if method in (None, "wire") else "")
 
     query_params = []
     if any(scan_ids):

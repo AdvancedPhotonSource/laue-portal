@@ -87,3 +87,28 @@ def test_actions_do_not_serialize_pandas_nan_as_an_id():
     }
     assert handle_recon_button(1, [direct_indexing]) is dash.no_update
     assert handle_peakindex_button(1, [direct_indexing]) == "/create-peakindexing?indexing_id=7"
+
+
+def test_new_recon_always_uses_wire_form():
+    wire_indexing = {
+        "scan_number": 12,
+        "reconstruction_id": 3,
+        "reconstruction_method": "wire",
+        "aperture": "wire",
+    }
+    ca_indexing = {
+        "scan_number": 13,
+        "reconstruction_id": 4,
+        "reconstruction_method": "ca",
+        "aperture": "mask",
+    }
+    direct_indexing = {
+        "scan_number": 14,
+        "reconstruction_id": None,
+        "reconstruction_method": None,
+        "aperture": None,
+    }
+
+    assert handle_recon_button(1, [wire_indexing]) == ("/create-wire-reconstruction?scan_id=12&reconstruction_id=3")
+    assert handle_recon_button(1, [ca_indexing]) == "/create-wire-reconstruction?scan_id=13"
+    assert handle_recon_button(1, [direct_indexing]) == "/create-wire-reconstruction?scan_id=14"

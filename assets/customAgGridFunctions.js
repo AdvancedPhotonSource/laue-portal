@@ -57,6 +57,9 @@ dagcomponentfuncs.IndexingLinkRenderer = function (props) {
 };
 
 dagcomponentfuncs.ReconstructionLinkRenderer = function (props) {
+    if (props.value == null) {
+        return React.createElement('span', { className: 'text-muted' }, 'Direct');
+    }
     const method = props.data && (props.data.method || props.data.reconstruction_method);
     const page = method === 'wire' ? '/wire_reconstruction' : '/reconstruction';
     const url = `${page}?reconstruction_id=${props.value}`;
@@ -134,7 +137,7 @@ dagcomponentfuncs.JobRefsRenderer = function (props) {
             }
             else if (field_key === 'reconstruction_id') {
                 id_link = dagcomponentfuncs.ReconstructionLinkRenderer({ value: value, data: data });
-                table_link = make_table_link('Reconstruction', data.reconstruction_method === 'wire' ? `/wire-reconstructions` : `/reconstructions`)
+                table_link = make_table_link('Reconstruction', `/reconstructions`)
             }
             else if (field_key === 'indexing_id') {
                 id_link = dagcomponentfuncs.IndexingLinkRenderer({ value: value });

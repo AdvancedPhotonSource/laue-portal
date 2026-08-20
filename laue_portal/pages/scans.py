@@ -254,10 +254,9 @@ def handle_recon_button(n_clicks, rows):
         return dash.no_update
 
     if not rows:
-        return "/create-reconstruction"
+        return "/create-wire-reconstruction"
 
     scan_ids = []
-    reconstruction_types = set()
 
     for row in rows:
         if row.get("scanNumber"):
@@ -265,16 +264,7 @@ def handle_recon_button(n_clicks, rows):
         else:
             return dash.no_update
 
-        aperture = str(row.get("aperture") or "").lower()
-        reconstruction_types.add("wire" if "wire" in aperture else "standard")
-
-    # The two reconstruction forms cannot accept a mixed wire/non-wire batch.
-    if len(reconstruction_types) > 1:
-        return dash.no_update
-
-    base_href = "/create-wire-reconstruction" if "wire" in reconstruction_types else "/create-reconstruction"
-
-    url = f"{base_href}?scan_id={','.join(scan_ids)}"
+    url = f"/create-wire-reconstruction?scan_id={','.join(scan_ids)}"
     return url
 
 
