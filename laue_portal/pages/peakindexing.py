@@ -207,10 +207,23 @@ def _parse_stereo_hkl(h, k, l):
     return hkl
 
 
-def _viz_graph_with_loading(graph, target_id, text="Updating\u2026"):
+def _viz_graph_with_loading(graph, target_id, text="Updating\u2026", cursor_readout_id=None):
     """Wrap a dcc.Graph in a dcc.Loading overlay shown during callbacks."""
+    children = [graph, html.Div(id=target_id)]
+    if cursor_readout_id:
+        children.append(
+            html.Div(
+                "x: —   y: —",
+                id=cursor_readout_id,
+                className="pi-viz-cursor-readout",
+                **{"aria-live": "polite"},
+            )
+        )
     return dcc.Loading(
         type="circle",
+        # Only the callback's dedicated sentinel should activate the overlay.
+        # Client-side cursor-readout updates must remain visually silent.
+        target_components={target_id: "children"},
         overlay_style={"visibility": "visible", "opacity": 1},
         custom_spinner=html.Div(
             [
@@ -224,7 +237,7 @@ def _viz_graph_with_loading(graph, target_id, text="Updating\u2026"):
                 "padding": "2rem",
             },
         ),
-        children=[graph, html.Div(id=target_id)],
+        children=children,
     )
 
 
@@ -552,6 +565,24 @@ _viz_tabs = dbc.Tabs(
                                                 className="form-control",
                                             ),
                                         ),
+                                        _viz_control(
+                                            "Non-indexed",
+                                            dbc.Select(
+                                                id="orientation-nonindexed-style",
+                                                options=[
+                                                    {"label": "Gray", "value": "gray"},
+                                                    {"label": "Red", "value": "red"},
+                                                    {"label": "Blue", "value": "blue"},
+                                                    {"label": "Green", "value": "green"},
+                                                    {
+                                                        "label": "Transparent (removed in 3D)",
+                                                        "value": "transparent",
+                                                    },
+                                                ],
+                                                value="gray",
+                                                className="form-select",
+                                            ),
+                                        ),
                                     ],
                                 ),
                             ],
@@ -567,6 +598,7 @@ _viz_tabs = dbc.Tabs(
                                         style={"height": "100%", "minHeight": 0},
                                     ),
                                     "orientation-loading-target",
+                                    cursor_readout_id="orientation-cursor-readout",
                                 ),
                                 html.Div(
                                     id="orientation-point-details",
@@ -730,6 +762,7 @@ _viz_tabs = dbc.Tabs(
                                         style={"height": "100%", "minHeight": 0},
                                     ),
                                     "poles-loading-target",
+                                    cursor_readout_id="stereo-cursor-readout",
                                 ),
                                 html.Div(
                                     className="pi-viz-details",
@@ -1236,6 +1269,7 @@ def apply_stereo_hkl(n_clicks, h, k, l):
     Input("orientation-surface-normal-y", "value"),
     Input("orientation-surface-normal-z", "value"),
     Input("orientation-marker-size", "value"),
+    Input("orientation-nonindexed-style", "value"),
     Input("orientation-view-toggle", "value"),
     Input("selected-grain-indices", "data"),
     Input("pole-figure-center", "data"),
@@ -1289,6 +1323,7 @@ def update_orientation_map(
     surface_normal_y,
     surface_normal_z,
     input_size,
+    nonindexed_style,
     view_mode,
     selected_grains,
     pole_center,
@@ -1429,7 +1464,7 @@ def update_orientation_map(
         # here so the figure callback stays out of the auto-range
         # dependency chain (otherwise Dash sees a cycle:
         # Min/Max -> figure -> Store -> Min/Max).
-        auto_vmin, auto_vmax = get_scalar_auto_range(parsed, effective_color)
+        auto_vmin, auto_vmax = get_scalar_auto_range(parsed, effective_color, indexed_only=True)
         cmin = user_vmin if (user_vmin is not None and user_vmin != "") else auto_vmin
         cmax = user_vmax if (user_vmax is not None and user_vmax != "") else auto_vmax
 
@@ -1475,6 +1510,7 @@ def update_orientation_map(
                 rgb_reference_step=rgb_reference_step,
                 rgb_reference_matrix=rgb_reference_matrix,
                 surface_vectors=surface_vectors,
+                nonindexed_style=nonindexed_style or "gray",
             )
         else:
             fig = make_orientation_map(
@@ -1497,6 +1533,7 @@ def update_orientation_map(
                 rgb_reference_step=rgb_reference_step,
                 rgb_reference_matrix=rgb_reference_matrix,
                 surface_vectors=surface_vectors,
+                nonindexed_style=nonindexed_style or "gray",
             )
 
         # Cross-plot highlighting: dim unselected points, ring selected ones
@@ -1510,6 +1547,7 @@ def update_orientation_map(
                 x_axis=plot_x_axis,
                 y_axis=plot_y_axis,
                 z_axis=z_axis_val,
+                nonindexed_style=nonindexed_style or "gray",
             )
 
         return fig, marker_size, ""
@@ -2261,7 +2299,7 @@ def compute_orientation_auto_range(color_mode, xml_path, scope):
         )
 
         parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
-        auto_vmin, auto_vmax = get_scalar_auto_range(parsed, effective_color)
+        auto_vmin, auto_vmax = get_scalar_auto_range(parsed, effective_color, indexed_only=True)
         return {"mode": effective_color, "min": auto_vmin, "max": auto_vmax}
     except Exception as e:
         print(f"Error computing scalar auto-range: {e}")
@@ -2673,7 +2711,15 @@ def collect_data_scope(pattern0_only, min_peaks, reset_clicks):
     """Gather the scope controls into the single global scope store."""
     if dash.ctx.triggered_id == SCOPE_RESET_ID:
         return dict(DEFAULT_SCOPE)
-    return normalize_scope({"pattern0_only": pattern0_only, "min_peaks": min_peaks})
+    # The control shows the inclusive maximum to skip (for example, <= 3),
+    # while consumers use the minimum peak count to retain (4). Zero is the
+    # special off value and keeps every step.
+    try:
+        displayed_maximum = int(min_peaks)
+        minimum_to_keep = displayed_maximum + 1 if displayed_maximum > 0 else 0
+    except (TypeError, ValueError):
+        minimum_to_keep = DEFAULT_SCOPE["min_peaks"]
+    return normalize_scope({"pattern0_only": pattern0_only, "min_peaks": minimum_to_keep})
 
 
 @callback(
@@ -2684,7 +2730,7 @@ def collect_data_scope(pattern0_only, min_peaks, reset_clicks):
 )
 def reset_data_scope_controls(n_clicks):
     """Return the scope widgets to their neutral values."""
-    return DEFAULT_SCOPE["pattern0_only"], DEFAULT_SCOPE["min_peaks"]
+    return DEFAULT_SCOPE["pattern0_only"], DEFAULT_SCOPE["min_peaks"] - 1
 
 
 # ---------------------------------------------------------------------------

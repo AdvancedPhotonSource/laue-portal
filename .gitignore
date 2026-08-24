@@ -182,6 +182,7 @@ assets/*
 !assets/04-form-layout.css
 !assets/04-form-layout.js
 !assets/05-peakindex-viz.css
+!assets/06-plotly-cursor-readout.js
 !assets/accordion.css
 !assets/favicon.ico
 !assets/portal_icon.svg

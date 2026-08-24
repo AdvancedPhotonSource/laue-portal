@@ -47,6 +47,17 @@ _ORIENTATION_MODES = {"cubic_ipf", "rodrigues", "misorientation", "pole_hsv"}
 # Scalar color modes (use Viridis colorscale + colorbar)
 _SCALAR_MODES = {"n_indexed", "goodness", "rms_error", "n_patterns"}
 
+# Opaque colors are mandatory in Scatter3d: even alpha=1 RGBA values can
+# corrupt WebGL depth sorting.  The "transparent" option is therefore
+# implemented by removing non-indexed points from the 3-D traces entirely.
+_NONINDEXED_COLORS = {
+    "gray": "rgb(128,128,128)",
+    "red": "rgb(220,53,69)",
+    "blue": "rgb(13,110,253)",
+    "green": "rgb(25,135,84)",
+}
+_NONINDEXED_STYLES = frozenset((*_NONINDEXED_COLORS, "transparent"))
+
 # ---------------------------------------------------------------------------
 # Axis selection
 # ---------------------------------------------------------------------------
@@ -98,6 +109,42 @@ _AXIS_LABELS = {
 
 # Column index into ``parsed["positions_lab"]`` for each lab axis name.
 _LAB_AXIS_COLUMNS = {"Xlab": 0, "Ylab": 1, "Zlab": 2, "Hlab": 3, "Flab": 4}
+
+
+def _normalize_nonindexed_style(style):
+    """Return a supported non-indexed appearance, defaulting to gray."""
+    return style if style in _NONINDEXED_STYLES else "gray"
+
+
+def indexed_point_mask(parsed):
+    """Return True for steps carrying a finite, usable reciprocal lattice."""
+    n_points = len(parsed["positions"])
+    lattices = parsed.get("recip_lattices")
+    if lattices is None:
+        return np.asarray(parsed.get("n_indexed", np.zeros(n_points))) > 0
+
+    lattices = np.asarray(lattices, dtype=float)
+    if lattices.shape != (n_points, 3, 3):
+        return np.zeros(n_points, dtype=bool)
+
+    finite = np.all(np.isfinite(lattices), axis=(1, 2))
+    valid = np.zeros(n_points, dtype=bool)
+    for index in np.flatnonzero(finite):
+        valid[index] = np.linalg.matrix_rank(lattices[index]) == 3
+    return valid
+
+
+def _filter_marker_points(marker, mask):
+    """Copy a marker dict and filter any per-point color array by *mask*."""
+    filtered = dict(marker)
+    colors = filtered.get("color")
+    if not isinstance(colors, str):
+        try:
+            if len(colors) == len(mask):
+                filtered["color"] = np.asarray(colors)[mask].tolist()
+        except TypeError:
+            pass
+    return filtered
 
 
 def _lab_positions(parsed):
@@ -176,6 +223,7 @@ def make_orientation_map(
     rgb_reference_matrix=None,
     surface_vectors=None,
     aspect_ratio_point_limit=_ASPECT_RATIO_POINT_LIMIT,
+    nonindexed_style: str = "gray",
 ) -> go.Figure:
     """
     Create a 2D orientation scatter plot.
@@ -222,6 +270,9 @@ def make_orientation_map(
         Disable 1:1 axis scaling above this many points for Scattergl zoom
         performance. Defaults to 50,000. Use ``None`` to keep scaling enabled
         at every size.
+    nonindexed_style : str
+        Appearance of steps without a usable reciprocal lattice: ``"gray"``,
+        ``"red"``, ``"blue"``, ``"green"``, or ``"transparent"``.
 
     Returns
     -------
@@ -259,12 +310,17 @@ def make_orientation_map(
         surface_vectors=surface_vectors,
     )
 
+    indexed_mask = indexed_point_mask(parsed)
+    nonindexed_style = _normalize_nonindexed_style(nonindexed_style)
+    indexed_marker = _filter_marker_points(marker_dict, indexed_mask)
+    customdata = _build_customdata(parsed)
+
     fig.add_trace(
         go.Scattergl(
-            x=x_vals,
-            y=y_vals,
+            x=np.asarray(x_vals)[indexed_mask],
+            y=np.asarray(y_vals)[indexed_mask],
             mode="markers",
-            marker=marker_dict,
+            marker=indexed_marker,
             hovertemplate=(
                 "<b>Step %{customdata[0]}</b><br>"
                 "Motor position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
@@ -273,10 +329,40 @@ def make_orientation_map(
                 "RMS error: %{customdata[7]:.5f}<br>"
                 "<extra></extra>"
             ),
-            customdata=_build_customdata(parsed),
+            customdata=customdata[indexed_mask],
+            showlegend=False,
             uid="orientation-2d-main",
         )
     )
+
+    nonindexed_mask = ~indexed_mask
+    if np.any(nonindexed_mask):
+        nonindexed_color = _NONINDEXED_COLORS.get(nonindexed_style, "rgba(128,128,128,0)")
+        fig.add_trace(
+            go.Scattergl(
+                x=np.asarray(x_vals)[nonindexed_mask],
+                y=np.asarray(y_vals)[nonindexed_mask],
+                mode="markers",
+                marker=dict(
+                    size=marker_size,
+                    symbol=marker_symbol,
+                    color=nonindexed_color,
+                    line=dict(width=0),
+                ),
+                hovertemplate=(
+                    "<b>Step %{customdata[0]}</b><br>"
+                    "Motor position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
+                    "Patterns: %{customdata[4]}<br>"
+                    "Indexed: %{customdata[5]}  Goodness: %{customdata[6]:.1f}<br>"
+                    "RMS error: %{customdata[7]:.5f}<br>"
+                    "<extra></extra>"
+                ),
+                customdata=customdata[nonindexed_mask],
+                name=f"Not indexed ({int(nonindexed_mask.sum())})",
+                showlegend=nonindexed_style != "transparent",
+                uid="orientation-2d-nonindexed",
+            )
+        )
 
     aspect_ratio_disabled = aspect_ratio_point_limit is not None and len(positions) > aspect_ratio_point_limit
     yaxis = dict(uirevision="orientation-2d-y")
@@ -284,6 +370,7 @@ def make_orientation_map(
         yaxis.update(scaleanchor="x", scaleratio=1)
 
     fig.update_layout(
+        hoveranywhere=True,
         xaxis_title=x_label,
         yaxis_title=y_label,
         xaxis=dict(uirevision="orientation-2d-x"),
@@ -334,6 +421,7 @@ def make_orientation_map_3d(
     rgb_reference_step: int = None,
     rgb_reference_matrix=None,
     surface_vectors=None,
+    nonindexed_style: str = "gray",
 ) -> go.Figure:
     """
     Create a 3D orientation scatter plot using all three sample coordinates.
@@ -364,6 +452,10 @@ def make_orientation_map_3d(
         Names of the three axes.  Each is one of ``"X"``, ``"Y"``, ``"Z"``,
         ``"H"``, ``"F"``, or ``"depth"``.  Defaults reproduce the legacy
         X / Y / Z Cartesian layout.
+    nonindexed_style : str
+        Appearance of steps without a usable reciprocal lattice. The
+        ``"transparent"`` option removes them because Scatter3d cannot safely
+        render per-point alpha colors.
 
     Returns
     -------
@@ -375,7 +467,7 @@ def make_orientation_map_3d(
 
     fig = go.Figure()
 
-    marker_dict, valid_mask = _build_marker_dict(
+    marker_dict, _ = _build_marker_dict(
         parsed,
         color_by,
         max(2, marker_size // 3),
@@ -398,29 +490,18 @@ def make_orientation_map_3d(
     )
     marker_dict["opacity"] = 1.0
 
-    # Drop un-indexed steps entirely rather than fading them out: Plotly's
-    # 3-D WebGL renderer mis-sorts markers that carry an alpha channel, so
-    # transparency of any kind corrupts the whole scene.  ``customdata``
-    # still carries the original step index, so click/hover stay correct.
+    indexed_mask = indexed_point_mask(parsed)
+    nonindexed_style = _normalize_nonindexed_style(nonindexed_style)
     customdata = _build_customdata(parsed)
-    if not np.all(valid_mask):
-        x_vals = np.asarray(x_vals)[valid_mask]
-        y_vals = np.asarray(y_vals)[valid_mask]
-        z_vals = np.asarray(z_vals)[valid_mask]
-        customdata = customdata[valid_mask]
-        colors = marker_dict.get("color")
-        if isinstance(colors, (list, tuple)):
-            marker_dict["color"] = [c for c, keep in zip(colors, valid_mask, strict=False) if keep]
-        elif isinstance(colors, np.ndarray):
-            marker_dict["color"] = colors[valid_mask]
+    indexed_marker = _filter_marker_points(marker_dict, indexed_mask)
 
     fig.add_trace(
         go.Scatter3d(
-            x=x_vals,
-            y=y_vals,
-            z=z_vals,
+            x=np.asarray(x_vals)[indexed_mask],
+            y=np.asarray(y_vals)[indexed_mask],
+            z=np.asarray(z_vals)[indexed_mask],
             mode="markers",
-            marker=marker_dict,
+            marker=indexed_marker,
             hovertemplate=(
                 "<b>Step %{customdata[0]}</b><br>"
                 "Motor position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
@@ -429,10 +510,41 @@ def make_orientation_map_3d(
                 "RMS error: %{customdata[7]:.5f}<br>"
                 "<extra></extra>"
             ),
-            customdata=customdata,
+            customdata=customdata[indexed_mask],
+            showlegend=False,
             uid="orientation-3d-main",
         )
     )
+
+    nonindexed_mask = ~indexed_mask
+    if nonindexed_style != "transparent" and np.any(nonindexed_mask):
+        fig.add_trace(
+            go.Scatter3d(
+                x=np.asarray(x_vals)[nonindexed_mask],
+                y=np.asarray(y_vals)[nonindexed_mask],
+                z=np.asarray(z_vals)[nonindexed_mask],
+                mode="markers",
+                marker=dict(
+                    size=max(2, marker_size // 3),
+                    symbol="square",
+                    color=_NONINDEXED_COLORS[nonindexed_style],
+                    line=dict(width=0),
+                    opacity=1.0,
+                ),
+                hovertemplate=(
+                    "<b>Step %{customdata[0]}</b><br>"
+                    "Motor position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
+                    "Patterns: %{customdata[4]}<br>"
+                    "Indexed: %{customdata[5]}  Goodness: %{customdata[6]:.1f}<br>"
+                    "RMS error: %{customdata[7]:.5f}<br>"
+                    "<extra></extra>"
+                ),
+                customdata=customdata[nonindexed_mask],
+                name=f"Not indexed ({int(nonindexed_mask.sum())})",
+                showlegend=True,
+                uid="orientation-3d-nonindexed",
+            )
+        )
 
     fig.update_layout(
         scene=dict(
@@ -632,7 +744,7 @@ def is_scalar_mode(color_by: str) -> bool:
     return color_by in _SCALAR_MODES
 
 
-def get_scalar_auto_range(parsed: dict, color_by: str):
+def get_scalar_auto_range(parsed: dict, color_by: str, indexed_only: bool = False):
     """
     Return ``(vmin, vmax)`` from the data for a scalar coloring mode.
 
@@ -644,6 +756,8 @@ def get_scalar_auto_range(parsed: dict, color_by: str):
 
     values, _ = _get_scalar_color_values(parsed, color_by)
     arr = np.asarray(values, dtype=float)
+    if indexed_only:
+        arr = arr[indexed_point_mask(parsed)]
     finite = arr[np.isfinite(arr)]
     if finite.size == 0:
         return (None, None)
@@ -852,6 +966,7 @@ def apply_selection_highlight(
     x_axis="auto",
     y_axis="auto",
     z_axis="Z",
+    nonindexed_style="gray",
 ):
     """
     Modify a figure in-place to highlight selected grains.
@@ -886,74 +1001,73 @@ def apply_selection_highlight(
     step_indices = np.asarray(parsed.get("_step_indices", np.arange(n_points)), dtype=int)
     selected_set = set(selected_grains)
 
-    # Dim unselected points on the main trace
-    main_trace = fig.data[0]
-    current_colors = main_trace.marker.color
-
     if not is_3d:
-        # Build opacity array: 0.2 for unselected, 1.0 for selected
-        opacity_arr = np.where(
-            np.isin(step_indices, list(selected_set)),
-            1.0,
-            0.2,
-        )
+        # Dim every visible base trace.  Each trace may now contain only a
+        # subset of steps, so derive its mask from customdata rather than
+        # assuming it is aligned with the full parsed arrays.
+        import plotly.colors as pc
 
-        # Determine if colors are per-point RGB strings or scalar values
-        is_rgb_strings = (
-            isinstance(current_colors, (list, tuple))
-            and len(current_colors) == n_points
-            and isinstance(current_colors[0], str)
-        )
+        for trace in fig.data:
+            if trace.uid not in {"orientation-2d-main", "orientation-2d-nonindexed"}:
+                continue
+            trace_customdata = np.asarray(trace.customdata)
+            if trace_customdata.size == 0:
+                continue
+            trace_step_indices = trace_customdata[:, 0].astype(int)
+            opacity_arr = np.where(
+                np.isin(trace_step_indices, list(selected_set)),
+                1.0,
+                0.2,
+            )
+            current_colors = trace.marker.color
 
-        if is_rgb_strings:
-            # Per-point RGB strings -- convert to RGBA with opacity
-            new_colors = []
-            for i, c in enumerate(current_colors):
-                if c.startswith("rgb("):
-                    new_colors.append(c.replace("rgb(", "rgba(").replace(")", f",{opacity_arr[i]:.2f})"))
-                else:
-                    new_colors.append(c)
-            main_trace.marker.color = new_colors
-        else:
+            if isinstance(current_colors, str):
+                if current_colors.startswith("rgb("):
+                    trace.marker.color = [
+                        current_colors.replace("rgb(", "rgba(").replace(")", f",{opacity:.2f})")
+                        for opacity in opacity_arr
+                    ]
+                continue
+
+            is_rgb_strings = (
+                isinstance(current_colors, (list, tuple))
+                and len(current_colors) == len(trace_step_indices)
+                and len(current_colors) > 0
+                and isinstance(current_colors[0], str)
+            )
+            if is_rgb_strings:
+                trace.marker.color = [
+                    color.replace("rgb(", "rgba(").replace(")", f",{opacity:.2f})")
+                    if color.startswith("rgb(")
+                    else color
+                    for color, opacity in zip(current_colors, opacity_arr, strict=True)
+                ]
+                continue
+
             # Scalar colorscale mode -- Scattergl doesn't support per-point
-            # opacity, so sample the colorscale to get per-point RGB strings,
-            # then apply per-point opacity via RGBA.
-            import plotly.colors as pc
-
+            # opacity, so sample the colorscale and convert to RGBA strings.
             color_vals = np.asarray(current_colors, dtype=float)
-            colorscale = main_trace.marker.colorscale
-
-            # Resolve colorscale to list-of-lists format expected by
-            # pc.sample_colorscale.  Plotly stores it as tuple-of-tuples
-            # after figure creation; convert back.
+            colorscale = trace.marker.colorscale
             if isinstance(colorscale, str):
                 colorscale = pc.get_colorscale(colorscale)
             else:
                 colorscale = [[pos, col] for pos, col in colorscale]
-
-            # Normalize values to [0, 1]
             vmin = np.nanmin(color_vals)
             vmax = np.nanmax(color_vals)
-            if vmax - vmin > 0:
-                normed = (color_vals - vmin) / (vmax - vmin)
-            else:
-                normed = np.zeros_like(color_vals)
-            normed = np.clip(normed, 0, 1)
-
-            # Sample colorscale to get per-point RGB, then apply opacity
-            sampled = pc.sample_colorscale(colorscale, normed, colortype="rgb")
-            new_colors = []
-            for i, c in enumerate(sampled):
-                if c.startswith("rgb("):
-                    new_colors.append(c.replace("rgb(", "rgba(").replace(")", f",{opacity_arr[i]:.2f})"))
-                else:
-                    new_colors.append(c)
-            main_trace.marker.color = new_colors
-            # Remove colorscale since we're now using per-point colors
-            main_trace.marker.colorscale = None
+            normed = (color_vals - vmin) / (vmax - vmin) if vmax > vmin else np.zeros_like(color_vals)
+            sampled = pc.sample_colorscale(colorscale, np.clip(normed, 0, 1), colortype="rgb")
+            trace.marker.color = [
+                color.replace("rgb(", "rgba(").replace(")", f",{opacity:.2f})")
+                for color, opacity in zip(sampled, opacity_arr, strict=True)
+            ]
+            trace.marker.colorscale = None
 
     # Add highlight ring trace for selected grains
     sel_mask = np.isin(step_indices, list(selected_set))
+    if _normalize_nonindexed_style(nonindexed_style) == "transparent":
+        # Invisible 2-D points and removed 3-D points must not reappear as
+        # selection rings.
+        sel_mask &= indexed_point_mask(parsed)
     if not np.any(sel_mask):
         return
 

@@ -20,7 +20,7 @@ from laue_portal.components.visualization.scope_bar import (
 
 
 def test_default_scope_loads_pattern_zero_only():
-    assert normalize_scope(DEFAULT_SCOPE) == {"pattern0_only": True, "min_peaks": 0}
+    assert normalize_scope(DEFAULT_SCOPE) == {"pattern0_only": True, "min_peaks": 4}
 
 
 @pytest.mark.parametrize("payload", [None, {}, {"unknown_key": 123}])
@@ -32,12 +32,12 @@ def test_normalize_scope_defaults_missing_fields(payload):
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        (None, 0),
-        ("", 0),
+        (None, 4),
+        ("", 4),
         ("35", 35),
         (12.7, 12),
         (-5, 0),  # negative thresholds are meaningless
-        ("abc", 0),  # never raise on garbage
+        ("abc", 4),  # never raise on garbage
         (20, 20),
     ],
 )
@@ -97,7 +97,19 @@ def test_scope_bar_reflects_supplied_scope():
 
     widgets = {getattr(c, "id", None): c for c in _walk(bar)}
     assert widgets[SCOPE_PATTERN0_ID].value is True
-    assert widgets[SCOPE_MIN_PEAKS_ID].value == 20
+    assert widgets[SCOPE_MIN_PEAKS_ID].value == 19
+
+
+def test_scope_bar_defaults_to_skipping_three_or_fewer_peaks():
+    bar = scope_bar()
+    widgets = {getattr(c, "id", None): c for c in _walk(bar)}
+
+    assert widgets[SCOPE_MIN_PEAKS_ID].value == 3
+    label = next(c for c in _walk(bar) if isinstance(c, html.Label))
+    assert label.children == "Skip steps with peaks ≤"
+
+    help_text = next(c for c in _walk(bar) if isinstance(c, html.Small))
+    assert help_text.children == "0 keeps every step."
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +155,27 @@ def test_pole_hkl_has_manual_update_state(peakindexing_page):
     assert widgets["stereo-applied-hkl"].data == [1, 0, 0]
     assert widgets["stereo-hkl-update-btn"].children == "Update"
     assert widgets["stereo-hkl-update-btn"].disabled is True
+
+
+def test_map_graphs_have_cursor_readouts(peakindexing_page):
+    widgets = {getattr(c, "id", None): c for c in _walk(peakindexing_page.layout)}
+
+    assert widgets["orientation-cursor-readout"].children == "x: —   y: —"
+    assert widgets["stereo-cursor-readout"].children == "x: —   y: —"
+
+
+def test_color_map_has_nonindexed_appearance_choices(peakindexing_page):
+    widgets = {getattr(c, "id", None): c for c in _walk(peakindexing_page.layout)}
+    select = widgets["orientation-nonindexed-style"]
+
+    assert select.value == "gray"
+    assert [option["value"] for option in select.options] == [
+        "gray",
+        "red",
+        "blue",
+        "green",
+        "transparent",
+    ]
 
 
 def test_apply_stereo_hkl_validates_and_stores_integer_triplet(peakindexing_page):

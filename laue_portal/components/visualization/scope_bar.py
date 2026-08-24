@@ -31,8 +31,8 @@ SCOPE_RESET_ID = "scope-reset-btn"
 SCOPE_PATTERN0_ID = "scope-pattern0-only"
 SCOPE_MIN_PEAKS_ID = "scope-min-peaks"
 
-#: Default scope -- every step, pattern 0 only.
-DEFAULT_SCOPE = {"pattern0_only": True, "min_peaks": 0}
+#: Default scope -- skip steps with 3 or fewer peaks, pattern 0 only.
+DEFAULT_SCOPE = {"pattern0_only": True, "min_peaks": 4}
 
 
 # ---------------------------------------------------------------------------
@@ -49,17 +49,22 @@ def normalize_scope(data: Optional[dict]) -> dict:
     """
     data = data or {}
 
-    raw_min = data.get("min_peaks", 0)
+    raw_min = data.get("min_peaks", DEFAULT_SCOPE["min_peaks"])
     try:
-        min_peaks = int(raw_min) if raw_min not in (None, "") else 0
+        min_peaks = int(raw_min) if raw_min not in (None, "") else DEFAULT_SCOPE["min_peaks"]
     except (TypeError, ValueError):
-        min_peaks = 0
+        min_peaks = DEFAULT_SCOPE["min_peaks"]
 
     return {
         "pattern0_only": bool(data.get("pattern0_only", DEFAULT_SCOPE["pattern0_only"])),
         # Negative thresholds are meaningless; 0 is the "off" value.
         "min_peaks": max(0, min_peaks),
     }
+
+
+def max_skipped_peaks(scope: Optional[dict] = None) -> int:
+    """Convert the internal minimum-kept threshold to the displayed maximum."""
+    return max(0, normalize_scope(scope)["min_peaks"] - 1)
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +110,7 @@ def scope_bar(scope: Optional[dict] = None, is_open: bool = False) -> html.Div:
                                         className="pi-scope-inline",
                                         children=[
                                             html.Label(
-                                                "Skip steps with peaks <",
+                                                "Skip steps with peaks ≤",
                                                 htmlFor=SCOPE_MIN_PEAKS_ID,
                                                 className="pi-scope-label",
                                             ),
@@ -114,13 +119,16 @@ def scope_bar(scope: Optional[dict] = None, is_open: bool = False) -> html.Div:
                                                 type="number",
                                                 min=0,
                                                 step=1,
-                                                value=scope["min_peaks"],
+                                                value=max_skipped_peaks(scope),
                                                 debounce=True,
                                                 className="pi-scope-input",
                                             ),
                                         ],
                                     ),
-                                    html.Small("0 keeps every step.", className="pi-scope-help"),
+                                    html.Small(
+                                        "0 keeps every step.",
+                                        className="pi-scope-help",
+                                    ),
                                 ],
                             ),
                             dbc.Button(

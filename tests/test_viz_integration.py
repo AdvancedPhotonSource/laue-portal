@@ -18,6 +18,8 @@ from laue_portal.components.visualization.orientation_map import (
     _AXIS_CHOICES,
     _resolve_axis,
     apply_selection_highlight,
+    get_scalar_auto_range,
+    indexed_point_mask,
     make_orientation_map,
     make_orientation_map_3d,
 )
@@ -302,30 +304,104 @@ def test_3d_highlight_trace_has_no_alpha():
     parsed = _parsed_with_unindexed()
     fig = make_orientation_map_3d(parsed, color_by="rodrigues")
     apply_selection_highlight(fig, parsed, [0, 2], marker_size=10, is_3d=True)
-    assert len(fig.data) == 2
+    assert len(fig.data) == 3
     assert _rgba_count(fig) == 0
 
 
-def test_2d_rodrigues_still_fades_unindexed_points():
-    # The 2-D Scattergl path is unaffected by the WebGL sorting bug, so it
-    # keeps every point and fades un-indexed ones via alpha=0.
+def test_2d_defaults_to_gray_unindexed_points():
     parsed = _parsed_with_unindexed()
     fig = make_orientation_map(parsed, color_by="rodrigues")
-    assert len(fig.data[0].x) == len(parsed["positions"])
-    assert _rgba_count(fig) > 0
+    assert len(fig.data) == 2
+    assert len(fig.data[0].x) == 2
+    assert len(fig.data[1].x) == 2
+    assert fig.data[1].marker.color == "rgb(128,128,128)"
 
 
-def test_3d_other_orientation_modes_keep_all_points():
+def test_2d_transparent_style_retains_invisible_nonindexed_trace():
+    parsed = _parsed_with_unindexed()
+    fig = make_orientation_map(parsed, color_by="rodrigues", nonindexed_style="transparent")
+    assert len(fig.data) == 2
+    assert len(fig.data[1].x) == 2
+    assert fig.data[1].marker.color == "rgba(128,128,128,0)"
+
+
+def test_3d_other_orientation_modes_partition_all_points():
     parsed = _parsed_with_unindexed()
     n = len(parsed["positions"])
     for mode in ("cubic_ipf", "pole_hsv"):
         fig = make_orientation_map_3d(parsed, color_by=mode)
-        assert len(fig.data[0].x) == n, mode
+        assert sum(len(trace.x) for trace in fig.data) == n, mode
         assert _rgba_count(fig) == 0, mode
 
 
-def test_3d_scalar_mode_unaffected():
+def test_3d_scalar_mode_partitions_nonindexed_points():
     parsed = _parsed_with_unindexed()
     fig = make_orientation_map_3d(parsed, color_by="n_indexed")
-    assert len(fig.data[0].x) == len(parsed["positions"])
+    assert sum(len(trace.x) for trace in fig.data) == len(parsed["positions"])
+    assert _rgba_count(fig) == 0
+
+
+def test_nonindexed_color_choices_are_opaque_in_3d():
+    parsed = _parsed_with_unindexed()
+    expected = {
+        "gray": "rgb(128,128,128)",
+        "red": "rgb(220,53,69)",
+        "blue": "rgb(13,110,253)",
+        "green": "rgb(25,135,84)",
+    }
+    for style, color in expected.items():
+        fig = make_orientation_map_3d(parsed, nonindexed_style=style)
+        assert fig.data[1].marker.color == color
+        assert _rgba_count(fig) == 0
+
+
+def test_nonindexed_color_choices_apply_in_2d():
+    parsed = _parsed_with_unindexed()
+    expected = {
+        "gray": "rgb(128,128,128)",
+        "red": "rgb(220,53,69)",
+        "blue": "rgb(13,110,253)",
+        "green": "rgb(25,135,84)",
+    }
+    for style, color in expected.items():
+        fig = make_orientation_map(parsed, nonindexed_style=style)
+        assert fig.data[1].marker.color == color
+
+
+def test_3d_transparent_style_removes_nonindexed_points_completely():
+    parsed = _parsed_with_unindexed()
+    fig = make_orientation_map_3d(parsed, nonindexed_style="transparent")
+    assert len(fig.data) == 1
+    assert len(fig.data[0].x) == 2
+    assert [int(row[0]) for row in fig.data[0].customdata] == [0, 2]
+    assert _rgba_count(fig) == 0
+
+    apply_selection_highlight(
+        fig,
+        parsed,
+        [1],
+        marker_size=10,
+        is_3d=True,
+        nonindexed_style="transparent",
+    )
+    assert len(fig.data) == 1
+
+
+def test_indexed_point_mask_requires_usable_reciprocal_lattice():
+    parsed = _parsed_with_unindexed()
+    assert indexed_point_mask(parsed).tolist() == [True, False, True, False]
+
+
+def test_scalar_auto_range_can_exclude_nonindexed_points():
+    parsed = _parsed_with_unindexed()
+    assert get_scalar_auto_range(parsed, "n_indexed", indexed_only=True) == (4.0, 9.0)
+
+
+def test_visible_nonindexed_point_can_be_highlighted_in_3d():
+    parsed = _parsed_with_unindexed()
+    fig = make_orientation_map_3d(parsed, nonindexed_style="gray")
+    apply_selection_highlight(fig, parsed, [1], marker_size=10, is_3d=True)
+
+    assert len(fig.data) == 3
+    assert list(fig.data[2].x) == [parsed["positions"][1, 0]]
     assert _rgba_count(fig) == 0

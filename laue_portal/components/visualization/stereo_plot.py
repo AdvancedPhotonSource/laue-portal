@@ -295,6 +295,7 @@ def make_pole_figure(
         )
 
     fig.update_layout(
+        hoveranywhere=True,
         xaxis=dict(
             range=[-1.1, 1.1],
             scaleanchor="y",

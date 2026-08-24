@@ -200,10 +200,9 @@ def test_orientation_map_rodrigues_invalid_points_are_transparent():
         "rms_errors": np.array([0.0, np.nan]),
     }
 
-    fig = make_orientation_map(parsed, color_by="rodrigues")
-    colors = fig.data[0].marker.color
-    assert colors[0] == "rgba(0,0,0,1)"
-    assert colors[1] == "rgba(0,0,0,0)"
+    fig = make_orientation_map(parsed, color_by="rodrigues", nonindexed_style="transparent")
+    assert fig.data[0].marker.color[0] == "rgba(0,0,0,1)"
+    assert fig.data[1].marker.color == "rgba(128,128,128,0)"
 
 
 def test_orientation_map_3d_cubic_ipf():
