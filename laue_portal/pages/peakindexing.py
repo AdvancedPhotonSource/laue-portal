@@ -839,8 +839,16 @@ _viz_tabs = dbc.Tabs(
                                         _viz_control(
                                             "",
                                             dbc.Checkbox(
-                                                id="detector-show-predicted",
-                                                label="Show predicted (XML back-projected)",
+                                                id="detector-show-detected",
+                                                label="Show detected peaks",
+                                                value=True,
+                                            ),
+                                        ),
+                                        _viz_control(
+                                            "",
+                                            dbc.Checkbox(
+                                                id="detector-show-indexed",
+                                                label="Show indexed peaks",
                                                 value=True,
                                             ),
                                         ),
@@ -848,7 +856,7 @@ _viz_tabs = dbc.Tabs(
                                             "",
                                             dbc.Checkbox(
                                                 id="detector-show-missing",
-                                                label="Show simulated missing",
+                                                label="Show simulated missing peaks",
                                                 value=False,
                                             ),
                                         ),
@@ -857,14 +865,6 @@ _viz_tabs = dbc.Tabs(
                                             dbc.Checkbox(
                                                 id="detector-show-hkl",
                                                 label="Show hkl labels",
-                                                value=True,
-                                            ),
-                                        ),
-                                        _viz_control(
-                                            "",
-                                            dbc.Checkbox(
-                                                id="detector-show-unindexed",
-                                                label="Show un-indexed peaks",
                                                 value=True,
                                             ),
                                         ),
@@ -2513,10 +2513,10 @@ def populate_detector_pattern_checklist(xml_path, scope, step_value):
     Input(SCOPE_STORE_ID, "data"),
     Input("peakindexing-path-context", "data"),
     Input("detector-step-select", "value"),
-    Input("detector-show-predicted", "value"),
+    Input("detector-show-detected", "value"),
+    Input("detector-show-indexed", "value"),
     Input("detector-show-missing", "value"),
     Input("detector-show-hkl", "value"),
-    Input("detector-show-unindexed", "value"),
     Input("detector-marker-size", "value"),
     Input("detector-label-size", "value"),
     Input("detector-pattern-checklist", "value"),
@@ -2532,10 +2532,10 @@ def update_detector_view(
     scope,
     path_context,
     step_value,
-    show_predicted,
+    show_detected,
+    show_indexed,
     show_missing,
     show_hkl,
-    show_unindexed,
     marker_size,
     label_size,
     selected_patterns,
@@ -2601,9 +2601,9 @@ def update_detector_view(
 
         fig = make_detector_view(
             overlay,
-            show_predicted=bool(show_predicted),
+            show_detected=bool(show_detected),
+            show_indexed=bool(show_indexed),
             show_missing=bool(show_missing),
-            show_unindexed=bool(show_unindexed),
             show_hkl_labels=bool(show_hkl),
             marker_size=max(1, int(marker_size or 10)),
             label_size=max(6, int(label_size or 10)),
@@ -2647,8 +2647,8 @@ def _detector_step_summary(parsed, step_idx, overlay, overlay_statistics, image_
         f"  Motor position: ({x_pos:.1f}, {y_pos:.1f}, {z_pos:.1f})",
         html.Br(),
         f"Detector: {overlay.detector_id or '?'}  |  ",
-        f"Measured: {stats['n_measured']}  |  ",
-        f"Indexed: {stats['n_indexed']} ({stats['indexed_fraction'] * 100:.0f}%)",
+        f"Detected: {stats['n_measured']}  |  ",
+        f"Indexed assignments: {stats['n_indexed']} ({stats['indexed_fraction'] * 100:.0f}%)",
     ]
     pattern_rows = []
     for p in stats["patterns"]:

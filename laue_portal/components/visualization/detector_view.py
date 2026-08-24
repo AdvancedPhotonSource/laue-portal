@@ -1,23 +1,19 @@
 """
-Detector-pixel view of indexed and measured Laue peaks.
+Detector-pixel view of detected, indexed, and simulated Laue peaks.
 
 This component projects every indexed reflection (h, k, l) from the
 reciprocal lattice in the indexing XML back onto the detector via
-:mod:`laue_portal.analysis.back_projection`, then overlays the predicted
-positions on top of the *measured* peaks from ``<peaksXY>``.
+:mod:`laue_portal.analysis.back_projection`, then overlays those positions
+and simulated missing reflections on the detected peaks from ``<peaksXY>``.
 
-Visual conventions mirror Igor Pro's ``DisplayResultOfIndexing`` and
-``xmlPixelinfoForMovies``:
+The three independently visible peak layers are:
 
-    - Measured peaks, NOT matched to any indexed reflection
-        light-blue open squares
-    - Measured peaks, matched to pattern 0 (the best grain)
-        green circles
-    - Measured peaks, matched to pattern ≥ 1 (extra grains)
-        blue diamonds
-    - Back-projected predicted positions
-        orange "X" markers
-        with optional hkl text labels (overlines for negatives)
+    - Detected peaks
+        light-blue open squares at measured detector coordinates
+    - Indexed peaks
+        orange "X" markers at back-projected positions, with optional HKLs
+    - Simulated missing peaks
+        purple open triangles at simulated positions, with optional HKLs
 
 The figure is plotted in detector-pixel coordinates (Y axis inverted so
 pixel (0, 0) is at the top-left, matching detector image convention).
@@ -35,21 +31,10 @@ from laue_portal.analysis.back_projection import StepOverlay
 
 # Colours chosen to match Igor Pro's ``DisplayResultOfIndexing`` defaults
 # (RGB / 65535 in Igor; we use CSS rgb() so they read well in Plotly).
-_COLOR_MEASURED_UNINDEXED = "rgb(140, 200, 240)"  # light blue
-_COLOR_MATCHED_PATTERN0 = "rgb(0, 170, 0)"  # green
-_COLOR_MATCHED_PATTERN1PLUS = "rgb(40, 80, 220)"  # deep blue
-_COLOR_PREDICTED = "rgb(214, 19, 0)"  # orange-red (Igor X)
-_COLOR_PREDICTED_OFFDETECTOR = "rgba(214, 19, 0, 0.25)"  # faded for off-chip
+_COLOR_DETECTED = "rgb(140, 200, 240)"  # light blue
+_COLOR_INDEXED = "rgb(214, 19, 0)"  # orange-red (Igor X)
+_COLOR_INDEXED_OFFDETECTOR = "rgba(214, 19, 0, 0.25)"  # faded for off-chip
 _COLOR_MISSING = "rgb(130, 45, 210)"
-
-# Pattern colours after the first are cycled for the "matched" markers.
-_PATTERN_COLOURS = [
-    _COLOR_MATCHED_PATTERN0,
-    _COLOR_MATCHED_PATTERN1PLUS,
-    "rgb(200, 120, 0)",
-    "rgb(160, 0, 180)",
-    "rgb(0, 160, 160)",
-]
 
 # Unicode combining overline for negative Miller indices.
 _OVERLINE = "\u0305"
@@ -80,9 +65,9 @@ def _format_hkl(h: int, k: int, l: int) -> str:
 
 def make_detector_view(
     overlay: Optional[StepOverlay],
-    show_predicted: bool = True,
+    show_detected: bool = True,
+    show_indexed: bool = True,
     show_missing: bool = False,
-    show_unindexed: bool = True,
     show_hkl_labels: bool = True,
     marker_size: int = 10,
     label_size: int = 10,
@@ -103,14 +88,14 @@ def make_detector_view(
         Output of
         :func:`laue_portal.analysis.back_projection.build_step_overlay`.
         ``None`` produces an empty figure with a helpful annotation.
-    show_predicted : bool
-        Draw the orange "X" markers at each predicted pixel position.
+    show_detected : bool
+        Draw all measured detector peaks as one layer.
+    show_indexed : bool
+        Draw indexed reflections at their back-projected pixel positions.
     show_missing : bool
-        Draw simulated on-detector reflections not already indexed/matched.
-    show_unindexed : bool
-        Draw measured peaks that did not match any indexed reflection.
+        Draw simulated on-detector reflections not already indexed.
     show_hkl_labels : bool
-        Annotate each predicted marker with its ``(h k l)`` string.
+        Annotate indexed and simulated markers with their ``(h k l)`` strings.
     marker_size : int
         Marker diameter in px.
     label_size : int
@@ -205,88 +190,40 @@ def make_detector_view(
         )
     )
 
-    # ── Measured peaks ────────────────────────────────────────────────
+    # ── Detected peaks ────────────────────────────────────────────────
     n_meas = len(overlay.measured_xy)
-    if n_meas:
-        matched_mask = overlay.measured_indexed_mask
-        meas_intens = overlay.measured_intensity
-
-        if show_unindexed and np.any(~matched_mask):
-            xs = overlay.measured_xy[~matched_mask, 0]
-            ys = overlay.measured_xy[~matched_mask, 1]
-            ints = meas_intens[~matched_mask] if len(meas_intens) == n_meas else None
-            # Use Scatter (SVG) -- a few hundred points at most -- and a
-            # transparent fill + coloured stroke so the "open square"
-            # look renders consistently across browsers / Plotly versions.
-            fig.add_trace(
-                go.Scatter(
-                    x=xs,
-                    y=ys,
-                    mode="markers",
-                    name=f"Measured, un-indexed ({len(xs)})",
-                    marker=dict(
-                        size=marker_size,
-                        symbol="square",
-                        color="rgba(0,0,0,0)",
-                        line=dict(width=1.5, color=_COLOR_MEASURED_UNINDEXED),
-                    ),
-                    customdata=ints.reshape(-1, 1) if ints is not None else None,
-                    hovertemplate=(
-                        "x: %{x:.2f} px<br>y: %{y:.2f} px"
-                        + ("<br>I: %{customdata[0]:.0f}" if ints is not None else "")
-                        + "<extra>un-indexed</extra>"
-                    ),
-                )
+    if show_detected and n_meas:
+        xs = overlay.measured_xy[:, 0]
+        ys = overlay.measured_xy[:, 1]
+        intensities = overlay.measured_intensity
+        intensities = intensities if len(intensities) == n_meas else None
+        fig.add_trace(
+            go.Scatter(
+                x=xs,
+                y=ys,
+                mode="markers",
+                name=f"Detected ({n_meas})",
+                marker=dict(
+                    size=marker_size,
+                    symbol="square",
+                    color="rgba(0,0,0,0)",
+                    line=dict(width=1.5, color=_COLOR_DETECTED),
+                ),
+                customdata=intensities.reshape(-1, 1) if intensities is not None else None,
+                hovertemplate=(
+                    "x: %{x:.2f} px<br>y: %{y:.2f} px"
+                    + ("<br>I: %{customdata[0]:.0f}" if intensities is not None else "")
+                    + "<extra>detected</extra>"
+                ),
             )
+        )
 
-    # ── Per-pattern overlays ──────────────────────────────────────────
-    # Track which measured peak belongs to which pattern so we can colour
-    # the "matched" markers separately.  When a measured peak is matched
-    # by more than one pattern (rare) the *first* pattern wins -- same as
-    # Igor's loop order.
-    measured_pattern = -np.ones(n_meas, dtype=int)
+    # ── Indexed peaks, grouped by pattern ─────────────────────────────
     for pat in overlay.patterns:
         if selected_patterns is not None and pat.pattern_num not in selected_patterns:
             continue
-        for k in range(len(pat.predicted_xy)):
-            j = int(pat.measured_index[k])
-            if j >= 0 and measured_pattern[j] == -1:
-                measured_pattern[j] = pat.pattern_num
 
-    for pat in overlay.patterns:
-        if selected_patterns is not None and pat.pattern_num not in selected_patterns:
-            continue
-        colour = _PATTERN_COLOURS[pat.pattern_num % len(_PATTERN_COLOURS)]
-
-        # Matched measured peaks (this pattern)
-        mask_pat = measured_pattern == pat.pattern_num
-        if np.any(mask_pat):
-            xs = overlay.measured_xy[mask_pat, 0]
-            ys = overlay.measured_xy[mask_pat, 1]
-            fig.add_trace(
-                go.Scatter(
-                    x=xs,
-                    y=ys,
-                    mode="markers",
-                    name=(f"Measured, indexed (pattern {pat.pattern_num}, {int(mask_pat.sum())})"),
-                    marker=dict(
-                        size=marker_size + 2,
-                        # Filled symbol + transparent fill + coloured stroke
-                        # renders the "open" look reliably (avoids the
-                        # ``*-open`` symbol variants whose stroke can vanish
-                        # at small line widths).
-                        symbol="circle" if pat.pattern_num == 0 else "diamond",
-                        color="rgba(0,0,0,0)",
-                        line=dict(width=2.0, color=colour),
-                    ),
-                    hovertemplate=(
-                        f"pattern {pat.pattern_num}<br>x: %{{x:.2f}} px<br>y: %{{y:.2f}} px<extra>matched</extra>"
-                    ),
-                )
-            )
-
-        # Predicted (back-projected) positions with hkl labels
-        if show_predicted and len(pat.predicted_xy):
+        if show_indexed and len(pat.predicted_xy):
             px = pat.predicted_xy[:, 0]
             py = pat.predicted_xy[:, 1]
             finite = np.isfinite(px) & np.isfinite(py)
@@ -294,14 +231,14 @@ def make_detector_view(
             hkl_labels = [_format_hkl(*hkl) for hkl in pat.hkl] if show_hkl_labels else None
             customdata = np.column_stack([pat.hkl.astype(int), pat.measured_index])
 
-            # On-detector vs off-detector (we still draw both, but off-detector
-            # uses a faded colour and is hidden by default).
+            # Off-detector indexed positions remain available through the
+            # legend without obscuring the detector view by default.
             on_chip = finite & (px >= 0) & (py >= 0) & (px <= x_max) & (py <= y_max)
             off_chip = finite & ~on_chip
 
             for sub_mask, sub_color, sub_visible, sub_suffix in (
-                (on_chip, _COLOR_PREDICTED, True, "on-detector"),
-                (off_chip, _COLOR_PREDICTED_OFFDETECTOR, "legendonly", "off-detector"),
+                (on_chip, _COLOR_INDEXED, True, "on-detector"),
+                (off_chip, _COLOR_INDEXED_OFFDETECTOR, "legendonly", "off-detector"),
             ):
                 if not np.any(sub_mask):
                     continue
@@ -314,7 +251,7 @@ def make_detector_view(
                         x=xs,
                         y=ys,
                         mode="markers+text" if (show_hkl_labels and texts) else "markers",
-                        name=f"Predicted (pat {pat.pattern_num}, {sub_suffix}, {len(xs)})",
+                        name=f"Indexed (pat {pat.pattern_num}, {sub_suffix}, {len(xs)})",
                         visible=sub_visible,
                         text=texts,
                         textposition="top right",
@@ -338,7 +275,7 @@ def make_detector_view(
                             "hkl: (%{customdata[0]} %{customdata[1]} %{customdata[2]})<br>"
                             "x: %{x:.2f} px<br>y: %{y:.2f} px<br>"
                             "PkIndex: %{customdata[3]}"
-                            f"<extra>predicted ({sub_suffix})</extra>"
+                            f"<extra>indexed ({sub_suffix})</extra>"
                         ),
                     )
                 )
@@ -381,7 +318,7 @@ def make_detector_view(
 
     if n_meas == 0 and not overlay.patterns:
         fig.add_annotation(
-            text="This step has no measured peaks or indexed patterns.",
+            text="This step has no detected peaks or indexed patterns.",
             xref="paper",
             yref="paper",
             x=0.5,

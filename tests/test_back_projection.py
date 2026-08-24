@@ -24,6 +24,8 @@ sys.path.insert(0, project_root)
 
 from laue_portal.analysis.back_projection import (  # noqa: E402
     ROI,
+    MissingSpotOverlay,
+    PatternOverlay,
     StepOverlay,
     _centering_allowed_mask,
     build_step_overlay,
@@ -40,6 +42,7 @@ from laue_portal.analysis.geometry import (  # noqa: E402
     rho_from_R,
 )
 from laue_portal.analysis.xml_parser import parse_indexing_xml  # noqa: E402
+from laue_portal.components.visualization.detector_view import make_detector_view  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Synthetic geometry fixture: writes a tiny geoN-style XML next to a
@@ -490,3 +493,63 @@ def test_build_step_overlay_empty_step(tmp_path, syn_geo_path):
     assert overlay is not None
     assert len(overlay.measured_xy) == 0
     assert len(overlay.patterns) == 0
+
+
+def _three_layer_overlay():
+    return StepOverlay(
+        Nx=100,
+        Ny=100,
+        measured_xy=np.array([[10.0, 20.0], [30.0, 40.0]]),
+        measured_intensity=np.array([100.0, 200.0]),
+        measured_indexed_mask=np.array([True, False]),
+        patterns=[
+            PatternOverlay(
+                pattern_num=0,
+                hkl=np.array([[1, 0, 0]]),
+                predicted_xy=np.array([[10.0, 20.0]]),
+                measured_index=np.array([0]),
+            )
+        ],
+        missing_spots=[
+            MissingSpotOverlay(
+                pattern_num=0,
+                hkl=np.array([[1, 1, 1]]),
+                predicted_xy=np.array([[50.0, 60.0]]),
+                energy_kev=np.array([12.0]),
+            )
+        ],
+    )
+
+
+def _peak_trace_names(fig):
+    return [trace.name for trace in fig.data if trace.name != "Detector chip"]
+
+
+def test_detector_view_renders_three_independent_peak_layers():
+    overlay = _three_layer_overlay()
+
+    detected = make_detector_view(overlay, show_detected=True, show_indexed=False, show_missing=False)
+    assert _peak_trace_names(detected) == ["Detected (2)"]
+    assert list(detected.data[1].x) == [10.0, 30.0]
+
+    indexed = make_detector_view(overlay, show_detected=False, show_indexed=True, show_missing=False)
+    assert _peak_trace_names(indexed) == ["Indexed (pat 0, on-detector, 1)"]
+    assert indexed.data[1].mode == "markers+text"
+    assert indexed.data[1].text == ("(1 0 0)",)
+
+    missing = make_detector_view(overlay, show_detected=False, show_indexed=False, show_missing=True)
+    assert _peak_trace_names(missing) == ["Simulated missing (pat 0, 1)"]
+
+
+def test_detector_view_hkl_toggle_does_not_hide_indexed_peaks():
+    fig = make_detector_view(
+        _three_layer_overlay(),
+        show_detected=False,
+        show_indexed=True,
+        show_missing=False,
+        show_hkl_labels=False,
+    )
+
+    assert _peak_trace_names(fig) == ["Indexed (pat 0, on-detector, 1)"]
+    assert fig.data[1].mode == "markers"
+    assert fig.data[1].text is None
