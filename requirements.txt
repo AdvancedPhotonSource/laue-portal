@@ -43,5 +43,6 @@ pre-commit==4.5.1
 cold @ git+https://github.com/dgursoy/cold.git@29b587fce2d7565decd030f1d873dd830a97f8ae
 dxchange @ git+https://github.com/data-exchange/dxchange.git@10c9d870bd403f1ea5fbba4c8194b9c8d9295aca
 dxfile @ git+https://github.com/data-exchange/dxfile.git@392ba204966befc39c6c78e60bcb70a588859775
-# lauelab builds its native library from source: the installer needs cmake >= 3.24 and a C compiler.
+# lauelab builds from source in the conda-forge environment documented in README.md.
+# Native prerequisites: C compiler/OpenMP, CMake >= 3.24, GSL 2.8, HDF5 1.14, and zlib.
 lauelab @ git+https://github.com/AdvancedPhotonSource/lauelab.git@d9ff8d1e8b7ffe4415d402a58445a15cf8010f85

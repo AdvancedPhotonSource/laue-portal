@@ -21,6 +21,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     needs: lint
+    defaults:
+      run:
+        shell: bash -el {0}
     strategy:
       matrix:
         python-version: ["3.12"]
@@ -28,9 +31,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: conda-incubator/setup-miniconda@v4
       with:
+        miniforge-version: latest
+        activate-environment: laue-portal-test
         python-version: ${{ matrix.python-version }}
+        channels: conda-forge
+        conda-remove-defaults: true
+        auto-activate: false
+    - name: Install native build dependencies
+      run: |
+        conda install --yes c-compiler 'cmake>=3.24' ninja patchelf 'gsl=2.8.*' 'hdf5=1.14.*' zlib
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
