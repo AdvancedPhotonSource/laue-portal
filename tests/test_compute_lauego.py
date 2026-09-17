@@ -357,13 +357,21 @@ def test_depth_override_reaches_every_frame(engine, tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize(("detected", "indexed"), [(7, 40), (None, 200)])
-def test_saved_request_retains_distinct_spot_limits_and_disables_filter(engine, tmp_path, monkeypatch, detected, indexed):
+def test_saved_request_retains_distinct_spot_limits_and_disables_filter(
+    engine, tmp_path, monkeypatch, detected, indexed
+):
     import json
 
     frames_dir = _frames_dir(tmp_path, FRAMES[:1])
     run = _indexing_run(
-        engine, tmp_path, frames_dir, count=1, monkeypatch=monkeypatch,
-        max_number=detected, max_peaks=indexed, cosmic_filter=True,
+        engine,
+        tmp_path,
+        frames_dir,
+        count=1,
+        monkeypatch=monkeypatch,
+        max_number=detected,
+        max_peaks=indexed,
+        cosmic_filter=True,
     )
     saved = json.loads(Path(run.output_path, "request.json").read_text())["request"]
     assert (saved["max_number"], saved["max_peaks"], saved["cosmic_filter"]) == (detected, indexed, False)

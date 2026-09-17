@@ -65,7 +65,9 @@ def test_page_loader_reports_xml_only_then_results_after_conversion(engine, tmp_
     text, convertible = peakindexing.artifact_status_text(artifacts)
     assert text == "XML only:" and convertible is True
     assert peakindexing.render_artifact_status(artifacts) == (
-        text, {}, "lp-artifact-bar d-flex align-items-center gap-2 px-3 py-1"
+        text,
+        {},
+        "lp-artifact-bar d-flex align-items-center gap-2 px-3 py-1",
     )
 
     message, icon, is_open, new_href = peakindexing.convert_results(1, artifacts, href)

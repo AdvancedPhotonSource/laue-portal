@@ -67,11 +67,13 @@ def check_database(db_path: Path) -> list[Check]:
             return checks
         checks.append(Check("schema stage", True, "compact (run counters on the job table)"))
         relaxed = required_nullable_columns(connection)
-        checks.append(Check(
-            "optional peak limit",
-            not relaxed,
-            "nullable" if not relaxed else "peak limit is NOT NULL; run the upgrade migration",
-        ))
+        checks.append(
+            Check(
+                "optional peak limit",
+                not relaxed,
+                "nullable" if not relaxed else "peak limit is NOT NULL; run the upgrade migration",
+            )
+        )
         missing = missing_columns(connection)
         checks.append(
             Check(
