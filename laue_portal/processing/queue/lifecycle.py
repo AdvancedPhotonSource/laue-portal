@@ -1,200 +1,254 @@
-"""Job lifecycle updates and Redis pub/sub notifications."""
+"""Run lifecycle support for the executor: heartbeat, progress persistence, cleanup, reconciliation.
 
-import json
+Every database write here goes through ``laue_portal.workflows.execution`` so
+the counters stay consistent. The monitor thread owns its own sessions; the
+progress recorder runs on the executor's thread.
+"""
+
+from __future__ import annotations
+
 import logging
-from datetime import datetime
+import os
+import signal
+import threading
+import time
+from collections.abc import Callable
+from datetime import datetime, timedelta
 
-from rq.job import Job
-from sqlalchemy.inspection import inspect
+import psutil
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
-import laue_portal.database.session_utils as session_utils
 from laue_portal.database import db_schema
-from laue_portal.processing.queue.core import STATUS_MAPPING, STATUS_REVERSE_MAPPING, redis_conn
+from laue_portal.processing.queue.core import RunPolicy
+from laue_portal.workflows import execution
+from laue_portal.workflows.execution import JobStatus, RunPhase
 
 logger = logging.getLogger(__name__)
 
+STOP_REASON_CANCELLED = "cancelled"
+STOP_REASON_SHUTDOWN = "shutdown"
 
-def publish_job_update(job_id: int, status: str, message: str = None):
+# The worker sends this to its horse when the service is asked to stop; the
+# executor then stops admitting inputs, drains, and finalizes as interrupted.
+SHUTDOWN_SIGNAL = signal.SIGUSR1
+
+
+class RunMonitor(threading.Thread):
+    """Background heartbeat and cancellation polling for one running job.
+
+    The heartbeat continues while the compute is inside a long native call, so
+    a stale heartbeat always means the run process is gone. ``stop_requested``
+    becomes True when the job's persisted cancellation flag is set or when the
+    executor receives the shutdown signal.
     """
-    Publish a job status update for real-time monitoring.
 
-    Args:
-        job_id: Database job ID
-        status: Job status
-        message: Optional status message
-    """
-    update_data = {"job_id": job_id, "status": status, "timestamp": datetime.now().isoformat()}
-    if message:
-        update_data["message"] = message
+    def __init__(self, engine: Engine, job_id: int, policy: RunPolicy, *, clock: Callable[[], float] = time.monotonic):
+        super().__init__(name=f"run-monitor-{job_id}", daemon=True)
+        self._engine = engine
+        self._job_id = job_id
+        self._policy = policy
+        self._clock = clock
+        self._closed = threading.Event()
+        self._cancel = threading.Event()
+        self._shutdown = threading.Event()
+        self.heartbeats = 0
+        self.errors: list[str] = []
 
-    # Publish notifications are best-effort; job state is already persisted in the database.
+    @property
+    def stop_requested(self) -> bool:
+        return self._cancel.is_set() or self._shutdown.is_set()
+
+    @property
+    def stop_reason(self) -> str | None:
+        if self._shutdown.is_set():
+            return STOP_REASON_SHUTDOWN
+        if self._cancel.is_set():
+            return STOP_REASON_CANCELLED
+        return None
+
+    def request_shutdown(self) -> None:
+        self._shutdown.set()
+
+    def poll(self) -> None:
+        """One heartbeat write plus one cancellation check; called periodically and on demand."""
+
+        try:
+            with Session(self._engine) as session, session.begin():
+                job = session.get(db_schema.Job, self._job_id)
+                if job is None:
+                    return
+                if job.cancel_requested_at is not None:
+                    self._cancel.set()
+                if not execution.is_terminal(job):
+                    execution.heartbeat(job)
+                    self.heartbeats += 1
+        except Exception as error:  # the run must not die because a heartbeat write failed
+            self.errors.append(str(error))
+            logger.warning("Run %s heartbeat failed: %s", self._job_id, error)
+
+    def run(self) -> None:
+        interval = min(self._policy.heartbeat_seconds, self._policy.cancel_poll_seconds)
+        next_heartbeat = self._clock()
+        while not self._closed.is_set():
+            now = self._clock()
+            if now >= next_heartbeat:
+                self.poll()
+                next_heartbeat = now + self._policy.heartbeat_seconds
+            elif not self._cancel.is_set():
+                self._check_cancellation()
+            self._closed.wait(interval)
+
+    def _check_cancellation(self) -> None:
+        try:
+            with Session(self._engine) as session:
+                flag = session.scalar(
+                    select(db_schema.Job.cancel_requested_at).where(db_schema.Job.job_id == self._job_id)
+                )
+            if flag is not None:
+                self._cancel.set()
+        except Exception as error:
+            self.errors.append(str(error))
+
+    def close(self, timeout: float = 10.0) -> None:
+        self._closed.set()
+        if self.is_alive():
+            self.join(timeout)
+
+
+class ProgressRecorder:
+    """Rate-limited persistence of absolute processed counts."""
+
+    def __init__(
+        self, engine: Engine, job_id: int, interval_seconds: float, *, clock: Callable[[], float] = time.monotonic
+    ):
+        self._engine = engine
+        self._job_id = job_id
+        self._interval = interval_seconds
+        self._clock = clock
+        self._last_flush = clock()
+        self.succeeded = 0
+        self.failed = 0
+        self.flushes = 0
+        self.errors: list[str] = []
+
+    def report(self, *, succeeded: int, failed: int) -> None:
+        if succeeded < self.succeeded or failed < self.failed:
+            raise execution.ExecutionStateError(
+                f"progress went backwards: {succeeded}/{failed} after {self.succeeded}/{self.failed}"
+            )
+        self.succeeded = int(succeeded)
+        self.failed = int(failed)
+        if self._clock() - self._last_flush >= self._interval:
+            self.flush()
+
+    def flush(self) -> None:
+        self._last_flush = self._clock()
+        try:
+            with Session(self._engine) as session, session.begin():
+                job = session.get(db_schema.Job, self._job_id)
+                if job is not None and job.phase in (RunPhase.RUNNING, RunPhase.FINALIZING):
+                    execution.record_progress(job, succeeded=self.succeeded, failed=self.failed)
+                    self.flushes += 1
+        except Exception as error:
+            self.errors.append(str(error))
+            logger.warning("Run %s progress write failed: %s", self._job_id, error)
+
+
+_HELPER_MARKERS = ("multiprocessing.resource_tracker", "multiprocessing.semaphore_tracker")
+
+
+def _is_helper_process(process: psutil.Process) -> bool:
+    """Python's multiprocessing trackers are not compute work and exit with their parent."""
+
     try:
-        redis_conn.publish("laue:job_updates", json.dumps(update_data))
-    except Exception as e:
-        logger.warning(f"Failed to publish job update for job {job_id}: {e}")
+        command = " ".join(process.cmdline())
+    except psutil.Error:
+        return False
+    return any(marker in command for marker in _HELPER_MARKERS)
 
 
-def update_job_progress(rq_job_id: str, progress: int, message: str = None):
-    """
-    Update job progress (for long-running jobs).
-
-    Args:
-        rq_job_id: RQ job ID
-        progress: Progress percentage (0-100)
-        message: Optional status message
-    """
-    try:
-        job = Job.fetch(rq_job_id, connection=redis_conn)
-        job.meta["progress"] = progress
-        if message:
-            job.meta["progress_message"] = message
-        job.meta["last_updated"] = datetime.now().isoformat()
-        job.save_meta()
-
-        # Publish progress update for real-time monitoring
-        redis_conn.publish(f"job_progress:{rq_job_id}", f"{progress}|{message or ''}")
-
-    except Exception as e:
-        logger.error(f"Error updating job progress {rq_job_id}: {e}")
-
-
-# Helper function that wraps job execution with status updates
-def execute_with_status_updates(job_id: int, job_type: str, job_func, table=db_schema.Job, *args, **kwargs):
-    """
-    Execute a job function with automatic status updates.
-
-    Args:
-        job_id: Database job ID (can be Job.job_id or SubJob.subjob_id)
-        job_type: Type of job (for logging)
-        job_func: The actual job function to execute
-        table: Database table class (db_schema.Job or db_schema.SubJob)
-        *args, **kwargs: Arguments to pass to job_func
-    """
-    # Get the primary key column dynamically
-    mapper = inspect(table)
-    pk_col = list(mapper.primary_key)[0]  # Get first primary key column
-
-    is_subjob = table == db_schema.SubJob
-    parent_job_id = None  # Will be set for subjobs to trigger batch counter
+def terminate_descendants(grace_seconds: float = 5.0) -> int:
+    """Terminate every descendant of this process; returns how many had to be dealt with."""
 
     try:
-        # Update job status to running
-        with Session(session_utils.get_engine()) as session:
-            # Query using the primary key
-            job_data = session.query(table).filter(pk_col == job_id).first()
-            if job_data:
-                if job_data.status in {
-                    STATUS_REVERSE_MAPPING["Finished"],
-                    STATUS_REVERSE_MAPPING["Failed"],
-                    STATUS_REVERSE_MAPPING["Cancelled"],
-                }:
-                    logger.info(
-                        "Skipping %s job %s because it is already %s",
-                        job_type,
-                        job_id,
-                        STATUS_MAPPING.get(job_data.status, f"Unknown ({job_data.status})"),
+        children = [child for child in psutil.Process().children(recursive=True) if not _is_helper_process(child)]
+    except psutil.Error:
+        return 0
+    if not children:
+        return 0
+    for child in children:
+        try:
+            child.terminate()
+        except psutil.Error:
+            pass
+    _, alive = psutil.wait_procs(children, timeout=grace_seconds)
+    for child in alive:
+        try:
+            child.kill()
+        except psutil.Error:
+            pass
+    psutil.wait_procs(alive, timeout=grace_seconds)
+    return len(children)
+
+
+def sweep_process_group(pgid: int) -> bool:
+    """Kill everything left in a finished work horse's process group; True when something was there."""
+
+    if not pgid or pgid == os.getpid() or pgid == os.getpgid(0):
+        return False
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        logger.warning("Could not sweep process group %s", pgid)
+        return False
+    return True
+
+
+def reconcile_interrupted_runs(
+    engine: Engine,
+    *,
+    stale_after_seconds: float,
+    queue_entry_exists: Callable[[str], bool] | None = None,
+    now: datetime | None = None,
+) -> list[int]:
+    """Mark runs that cannot still be alive as interrupted; never resumes or re-enqueues them.
+
+    A Running job whose heartbeat is older than ``stale_after_seconds`` lost its
+    process. A Queued job whose queue entry no longer exists (for example after
+    a Redis restart) can never be started. Both become Failed with the
+    ``interrupted`` phase and their counters account for all inputs.
+    """
+
+    moment = now or datetime.now()
+    stale_before = moment - timedelta(seconds=stale_after_seconds)
+    reconciled = []
+    with Session(engine) as session, session.begin():
+        candidates = session.scalars(
+            select(db_schema.Job).where(db_schema.Job.status.in_((int(JobStatus.QUEUED), int(JobStatus.RUNNING))))
+        ).all()
+        for job in candidates:
+            reason = None
+            if job.status == JobStatus.RUNNING:
+                last_sign = job.heartbeat_at or job.start_time or job.updated_at
+                if last_sign is None or last_sign < stale_before:
+                    reason = (
+                        f"Interrupted: no heartbeat since {last_sign.isoformat(timespec='seconds') if last_sign else 'start'}; "
+                        f"the run process is gone and the run is not resumed"
                     )
-                    return None
-
-                job_data.status = STATUS_REVERSE_MAPPING["Running"]
-                job_start_time = datetime.now()
-                job_data.start_time = job_start_time
-
-                # If this is a subjob, also update the parent job status if it's still queued
-                if is_subjob and hasattr(job_data, "job_id"):
-                    parent_job_id = job_data.job_id
-                    parent_job_data = session.query(db_schema.Job).filter(db_schema.Job.job_id == parent_job_id).first()
-                    if parent_job_data and parent_job_data.status == STATUS_REVERSE_MAPPING["Queued"]:
-                        parent_job_data.status = STATUS_REVERSE_MAPPING["Running"]
-                        parent_job_data.start_time = job_start_time
-                        logger.info(f"Updated parent job {parent_job_id} status to Running")
-
-                session.commit()
-
-        publish_job_update(job_id, "running", f"Starting {job_type}")
-
-        # Execute the actual job function
-        result = job_func(*args, **kwargs)
-
-        # Update job status to finished
-        with Session(session_utils.get_engine()) as session:
-            # Query using the primary key
-            job_data = session.query(table).filter(pk_col == job_id).first()
-            if job_data:
-                job_data.status = STATUS_REVERSE_MAPPING["Finished"]
-                job_data.finish_time = datetime.now()
-
-                # Store the CLI command(s) used
-                if hasattr(job_data, "command") and result is not None:
-                    # Extract command based on result type
-                    if hasattr(result, "command") and result.command:
-                        # Wire reconstruction - single command string
-                        job_data.command = result.command
-                    elif hasattr(result, "command_history") and result.command_history:
-                        # Peak indexing - list of commands
-                        job_data.command = "\n".join(result.command_history)
-
-                # Store the job result directly
-                if hasattr(job_data, "messages"):
-                    # Format the result for display
-                    if result is not None:
-                        # Handle wire reconstruction results specially
-                        if job_type == "Wire reconstruction":
-                            result_str = ""
-
-                            if result.success:
-                                result_str += "\n".join(
-                                    [
-                                        "Reconstruction successful!",
-                                        "\nOutput files created:",
-                                        "".join([f"- {f}" for f in result.output_files]),
-                                    ]
-                                )
-                            else:
-                                result_str += "\n".join(["Reconstruction failed.", f"Error: {result.error}"])
-
-                            if result.log:
-                                result_str += "\n".join(["\nLog:", result.log])
-
-                        else:
-                            result_str = str(result)
-
-                        if job_data.messages:
-                            job_data.messages += f"\n\n{result_str}"
-                        else:
-                            job_data.messages = result_str
-
-                session.commit()
-
-        publish_job_update(job_id, "finished", f"{job_type} completed successfully")
-
-        # Notify the batch counter that this subjob is done
-        if is_subjob and parent_job_id is not None:
-            from laue_portal.processing.queue.batch import notify_subjob_completed
-
-            notify_subjob_completed(parent_job_id)
-
-        return result
-
-    except Exception as e:
-        # Update job status to failed
-        with Session(session_utils.get_engine()) as session:
-            # Query using the primary key
-            job_data = session.query(table).filter(pk_col == job_id).first()
-            if job_data:
-                job_data.status = STATUS_REVERSE_MAPPING["Failed"]
-                job_data.finish_time = datetime.now()
-                if hasattr(job_data, "messages"):  # Both Job and SubJob have messages field
-                    job_data.messages = f"Error: {str(e)}"
-                session.commit()
-
-        publish_job_update(job_id, "failed", f"{job_type} failed: {str(e)}")
-
-        # Notify the batch counter even on failure — coordinator needs to know
-        if is_subjob and parent_job_id is not None:
-            from laue_portal.processing.queue.batch import notify_subjob_completed
-
-            notify_subjob_completed(parent_job_id)
-
-        raise
+            elif job.phase == RunPhase.QUEUED and queue_entry_exists is not None and job.queue_job_id:
+                try:
+                    present = queue_entry_exists(job.queue_job_id)
+                except Exception as error:
+                    logger.warning("Could not check queue entry %s: %s", job.queue_job_id, error)
+                    continue
+                if not present:
+                    reason = f"Interrupted: queue entry {job.queue_job_id} no longer exists; the run is not re-enqueued"
+            if reason is None:
+                continue
+            execution.finalize(job, status=JobStatus.FAILED, message=reason, phase=RunPhase.INTERRUPTED, now=moment)
+            reconciled.append(job.job_id)
+            logger.warning("Job %s reconciled as interrupted: %s", job.job_id, reason)
+    return reconciled

@@ -2,10 +2,10 @@
 
 import os
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 
-from sqlalchemy import Engine, insert, select
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, joinedload
 
 from laue_portal.database import db_schema, session_utils
@@ -18,11 +18,12 @@ from laue_portal.workflows.files import (
     normalize_integer_range,
     normalize_optional_integer_range,
     normalize_output_path_template,
-    resolve_input_files,
+    resolve_inputs,
 )
+from laue_portal.workflows.manifest import RESERVED_RUN_FILENAMES, RESULTS_FILENAME
+from laue_portal.workflows.run_records import new_job, publish_run_inputs, request_document
 
-QUEUED_STATUS = 0
-SUBJOB_INSERT_BATCH_SIZE = 10_000
+DEFAULT_OUTPUT_XML = "output.xml"
 
 
 @dataclass(frozen=True)
@@ -38,7 +39,7 @@ class LaueGoIndexingRequest:
     threshold_ratio: int | None
     max_rfactor: float
     box_size: int
-    max_number: int
+    max_number: int | None
     min_separation: int
     peak_shape: str
     scan_points: str
@@ -90,6 +91,13 @@ class LaueGoIndexingRequest:
         if not crystal_file or crystal_file == ".":
             raise WorkflowValidationError("Crystal file is required")
 
+        output_xml = str(self.output_xml).strip() if self.output_xml is not None else None
+        output_xml = output_xml or None
+        if output_xml is not None and os.path.basename(output_xml) in RESERVED_RUN_FILENAMES:
+            raise WorkflowValidationError(
+                f"Output XML name {os.path.basename(output_xml)!r} is reserved for run support files"
+            )
+
         mask_file = str(self.mask_file).strip() if self.mask_file is not None else None
         object.__setattr__(self, "scan_number", int(self.scan_number) if self.scan_number is not None else None)
         object.__setattr__(
@@ -103,6 +111,7 @@ class LaueGoIndexingRequest:
         object.__setattr__(self, "geometry_file", geometry_file)
         object.__setattr__(self, "crystal_file", crystal_file)
         object.__setattr__(self, "mask_file", mask_file or None)
+        object.__setattr__(self, "output_xml", output_xml)
         object.__setattr__(self, "scan_points", scan_points)
         object.__setattr__(self, "scan_point_values", scan_point_values)
         object.__setattr__(self, "depth_range", depth_range)
@@ -111,38 +120,22 @@ class LaueGoIndexingRequest:
         object.__setattr__(self, "priority", int(self.priority))
 
 
-def _persist_subjobs(
-    session: Session,
-    request: LaueGoIndexingRequest,
-    job_id: int,
-    input_files: tuple[str, ...],
-    output_root: str,
-) -> None:
-    for start in range(0, len(input_files), SUBJOB_INSERT_BATCH_SIZE):
-        batch = input_files[start : start + SUBJOB_INSERT_BATCH_SIZE]
-        rows = [
-            {
-                "job_id": job_id,
-                "computer_name": request.computer_name,
-                "status": QUEUED_STATUS,
-                "priority": request.priority,
-                "input_path": input_path,
-                "output_path": output_root,
-            }
-            for input_path in batch
-        ]
-        session.execute(insert(db_schema.SubJob), rows)
-
-
 def create_indexing(
     request: LaueGoIndexingRequest,
     *,
     engine: Engine | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> db_schema.IndexingRun:
-    """Resolve files, then atomically create a LaueGo run, job, and subjobs."""
+    """Resolve files, create the run and its job atomically, then publish the manifest.
 
-    input_files = resolve_input_files(
+    No per-input rows are written. The frozen input list goes to
+    ``inputs.jsonl`` in the run directory and the request to ``request.json``;
+    the job records their location, digest, and count.
+    """
+
+    # Filtering is disabled for new runs, including reruns of historical settings.
+    request = replace(request, cosmic_filter=False)
+    inputs = resolve_inputs(
         request.input_path,
         request.filename_prefixes,
         request.scan_point_values,
@@ -171,13 +164,11 @@ def create_indexing(
             if scan_number is None and parent is not None:
                 scan_number = parent.scan_number
 
-            job = db_schema.Job(
+            job = new_job(
                 computer_name=request.computer_name,
-                status=QUEUED_STATUS,
                 priority=request.priority,
-                submit_time=request.submitted_at,
-                start_time=None,
-                finish_time=None,
+                submitted_at=request.submitted_at,
+                n_inputs=len(inputs),
             )
             session.add(job)
             session.flush()
@@ -197,6 +188,7 @@ def create_indexing(
             session.add(run)
             session.flush()
             run.output_path = format_output_path(request.output_path_template, run.id)
+            job.run_directory = run.output_path
             run.lauego_parameters = db_schema.LaueGoIndexingParameters(
                 filename_prefixes=list(request.filename_prefixes),
                 threshold=request.threshold,
@@ -236,12 +228,40 @@ def create_indexing(
                 depth=request.depth,
                 beamline=request.beamline,
             )
-            _persist_subjobs(session, request, job.job_id, input_files, run.output_path)
-    return run
+        run_id = run.id
+        job_id = job.job_id
+        run_directory = run.output_path
+
+    payload = {
+        "kind": "lauego_indexing",
+        "run": {
+            "indexing_id": run_id,
+            "job_id": job_id,
+            "scan_number": scan_number,
+            "reconstruction_id": request.reconstruction_id,
+            "method": "lauego",
+        },
+        "request": request_document(request),
+        "output": {
+            "directory": run_directory,
+            "results": RESULTS_FILENAME,
+            "xml": request.output_xml or DEFAULT_OUTPUT_XML,
+        },
+    }
+    publish_run_inputs(
+        database_engine,
+        job_id=job_id,
+        display_id=f"Indexing I{run_id}",
+        run_directory=run_directory,
+        inputs=inputs,
+        request_payload=payload,
+        now=request.submitted_at,
+    )
+    return get_indexing(run_id, engine=database_engine)
 
 
 def get_indexing(indexing_id: int, *, engine: Engine | None = None) -> db_schema.IndexingRun | None:
-    """Load an indexing run with its parameters, parent, job, and subjobs."""
+    """Load an indexing run with its parameters, parent, and job."""
 
     database_engine = engine or session_utils.get_engine()
     statement = (

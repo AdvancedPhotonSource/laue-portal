@@ -3,12 +3,30 @@
 import os
 from collections import defaultdict
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from itertools import product
 
 from laue_portal.utilities.filename_patterns import compile_filename_templates
 from laue_portal.utilities.srange import srange
 
 ProgressCallback = Callable[[int, int], None]
+
+
+@dataclass(frozen=True)
+class ResolvedInput:
+    """One selected input file with the identity that selected it."""
+
+    path: str
+    template_index: int
+    indices: tuple[int, ...]
+
+    @property
+    def scan_point(self) -> int | None:
+        return self.indices[0] if self.indices else None
+
+    @property
+    def depth_point(self) -> int | None:
+        return self.indices[1] if len(self.indices) > 1 else None
 
 
 class WorkflowValidationError(ValueError):
@@ -90,7 +108,7 @@ def _expected_index_keys(
     )
 
 
-def resolve_input_files(
+def resolve_inputs(
     directory: str | os.PathLike[str],
     templates: Sequence[str],
     scan_points: Sequence[int],
@@ -99,12 +117,13 @@ def resolve_input_files(
     append_suffix_wildcard: bool = False,
     progress_callback: ProgressCallback | None = None,
     progress_interval: int = 10_000,
-) -> tuple[str, ...]:
+) -> tuple[ResolvedInput, ...]:
     """Resolve requested files with one directory listing and one regex pass.
 
     Matches are bucketed by captured ``%d`` indices, then emitted in template
     and requested-index order. Files within a bucket retain directory-listing
-    order, avoiding a sort that would make the operation super-linear.
+    order, avoiding a sort that would make the operation super-linear. The
+    returned order is the run order recorded in the input manifest.
     """
 
     if progress_interval <= 0:
@@ -151,8 +170,34 @@ def resolve_input_files(
                 full_path = os.path.join(input_directory, filename)
                 if full_path not in seen_paths:
                     seen_paths.add(full_path)
-                    resolved.append(full_path)
+                    resolved.append(ResolvedInput(full_path, template_index, tuple(index_key)))
 
     if not resolved:
         raise FileResolutionError(f"No input files matched in {input_directory!r}")
     return tuple(resolved)
+
+
+def resolve_input_files(
+    directory: str | os.PathLike[str],
+    templates: Sequence[str],
+    scan_points: Sequence[int],
+    *,
+    depth_points: Sequence[int] | None = None,
+    append_suffix_wildcard: bool = False,
+    progress_callback: ProgressCallback | None = None,
+    progress_interval: int = 10_000,
+) -> tuple[str, ...]:
+    """Return only the paths from :func:`resolve_inputs`, in the same order."""
+
+    return tuple(
+        entry.path
+        for entry in resolve_inputs(
+            directory,
+            templates,
+            scan_points,
+            depth_points=depth_points,
+            append_suffix_wildcard=append_suffix_wildcard,
+            progress_callback=progress_callback,
+            progress_interval=progress_interval,
+        )
+    )

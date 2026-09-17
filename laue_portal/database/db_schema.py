@@ -19,7 +19,6 @@ from laue_portal.database.models import (
     Metadata,
     ReconstructionRun,
     Scan,
-    SubJob,
     WireReconstructionParameters,
 )
 
@@ -29,7 +28,6 @@ __all__ = [
     "Scan",
     "Catalog",
     "Job",
-    "SubJob",
     "ReconstructionRun",
     "WireReconstructionParameters",
     "IndexingRun",

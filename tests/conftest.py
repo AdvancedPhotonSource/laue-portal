@@ -366,3 +366,6 @@ def empty_test_database():
 
 # Alias fixtures for backward compatibility with different names used in test files
 empty_metadata_database = empty_test_database
+
+# Session-scoped visualization fixtures (a native results file from the synthetic frames).
+pytest_plugins = ["tests.viz_support"]

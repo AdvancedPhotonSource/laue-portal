@@ -35,7 +35,6 @@ REQUIRED_FIELD_IDS = {
     "max_number",
     "peakShape",
     "smooth",
-    "cosmicFilter",
     "indexKeVmaxCalc",
     "indexKeVmaxTest",
     "indexAngleTolerance",
@@ -105,7 +104,7 @@ def test_peakindex_file_fields_keep_scan_inputs_before_geometry():
 
 
 def test_peakindex_mask_file_is_before_peak_search_checkboxes():
-    expected_order = ["peakShape", "maskFile", "smooth", "cosmicFilter"]
+    expected_order = ["peakShape", "maskFile", "smooth"]
 
     for component in (peakindex_form, peakindex_readonly_form):
         ids = collect_ids(component)

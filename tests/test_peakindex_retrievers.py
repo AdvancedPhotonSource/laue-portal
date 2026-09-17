@@ -60,9 +60,10 @@ def test_get_indexings_callback(empty_test_database):
     _add_indexing(engine)
 
     with patch("laue_portal.database.session_utils.get_engine", return_value=engine):
-        columns, rows = get_peakindexings("/peakindexings")
+        columns, rows, refresh_state = get_peakindexings("/peakindexings")
     assert columns
     assert len(rows) == 1
+    assert refresh_state["max_id"] == rows[0]["indexing_id"] and refresh_state["since"]
 
     with pytest.raises(PreventUpdate):
         get_peakindexings("/wrong-path")

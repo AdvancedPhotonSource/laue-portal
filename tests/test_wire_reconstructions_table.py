@@ -115,9 +115,10 @@ def test_wire_reconstruction_table_reads_unified_rows(empty_test_database):
 def test_wire_reconstruction_table_callback(empty_test_database):
     engine, _ = empty_test_database
     with patch("laue_portal.database.session_utils.get_engine", return_value=engine):
-        columns, rows = get_recons("/reconstructions")
+        columns, rows, refresh_state = get_recons("/reconstructions")
     assert columns
     assert rows == []
+    assert refresh_state["max_id"] == 0
     with pytest.raises(PreventUpdate):
         get_recons("/wrong-path")
 
@@ -307,7 +308,6 @@ def test_index_submission_uses_one_reconstruction_id(empty_test_database, tmp_pa
             0.1,
             "001",
             72,
-            True,
             "raw",
             "image_%d.h5",
             f"analysis/scan_12/rec_{reconstruction_id}/index_%d",

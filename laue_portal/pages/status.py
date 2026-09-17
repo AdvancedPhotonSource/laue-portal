@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 import dash
 import dash_bootstrap_components as dbc
@@ -6,9 +7,11 @@ from dash import dcc, html
 from dash.dependencies import Input, Output
 
 import laue_portal.components.navbar as navbar
+import laue_portal.database.session_utils as session_utils
 from laue_portal import config
 from laue_portal.processing.queue import core as queue_core
 from laue_portal.processing.queue.inspection import get_queue_stats, get_workers_info
+from laue_portal.workflows.progress import ACTIVE_STATUSES, RunProgress, heartbeat_age_seconds
 
 dash.register_page(__name__, path="/")
 
@@ -49,7 +52,7 @@ layout = html.Div(
                                                         html.Li("Wire-based depth reconstruction"),
                                                         html.Li("Coded aperture reconstruction"),
                                                         html.Li("Automated peak indexing"),
-                                                        html.Li("Distributed job queue"),
+                                                        html.Li("Whole-run job queue"),
                                                     ],
                                                     className="mb-0",
                                                 ),
@@ -161,12 +164,111 @@ layout = html.Div(
                         ),
                     ]
                 ),
+                # Row 3: Active runs from the database (the authority for run state)
+                dbc.Row(
+                    [
+                        dbc.Col(
+                            [
+                                dbc.Card(
+                                    [
+                                        dbc.CardHeader(html.H4("Active Runs", className="mb-0")),
+                                        dbc.CardBody([html.Div(id="active-runs-content")]),
+                                    ],
+                                )
+                            ],
+                            md=12,
+                            className="mb-4",
+                        ),
+                    ]
+                ),
             ],
             fluid=True,
             className="mt-4",
         ),
     ]
 )
+
+
+def active_run_rows(now=None):
+    """Queued and running jobs with their counters and liveness, from stored state only."""
+
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+
+    from laue_portal.database import db_schema
+
+    now = now or datetime.now()
+    stale_after = queue_core.RUN_POLICY.stale_heartbeat_seconds
+    rows = []
+    with Session(session_utils.get_engine()) as session:
+        jobs = session.scalars(
+            select(db_schema.Job).where(db_schema.Job.status.in_(ACTIVE_STATUSES)).order_by(db_schema.Job.job_id.desc())
+        ).all()
+        for job in jobs:
+            progress = RunProgress.from_job(job)
+            age = heartbeat_age_seconds(progress, now=now)
+            if job.indexing_run is not None:
+                display = f"Indexing I{job.indexing_run.id}"
+            elif job.reconstruction_run is not None:
+                display = f"Reconstruction R{job.reconstruction_run.id}"
+            else:
+                display = "Job"
+            stale = progress.status == 1 and (age is None or age > stale_after)
+            rows.append(
+                {
+                    "job_id": job.job_id,
+                    "display": display,
+                    "status": progress.status_name,
+                    "phase": progress.phase,
+                    "progress": progress.progress_text() or "no inputs",
+                    "heartbeat_age": None if age is None else int(age),
+                    "stale": stale,
+                    "cancel_requested": progress.cancel_requested_at is not None,
+                }
+            )
+    return rows
+
+
+def active_runs_content(rows):
+    if not rows:
+        return html.P("No queued or running runs.", className="text-muted mb-0")
+    items = []
+    for row in rows:
+        notes = []
+        if row["cancel_requested"]:
+            notes.append(dbc.Badge("stop requested", color="warning", className="ms-2"))
+        if row["status"] == "Running":
+            if row["stale"]:
+                notes.append(
+                    dbc.Badge(
+                        "no heartbeat; reconciled as interrupted at the next worker start",
+                        color="danger",
+                        className="ms-2",
+                    )
+                )
+            elif row["heartbeat_age"] is not None:
+                notes.append(html.Small(f" heartbeat {row['heartbeat_age']} s ago", className="text-muted ms-2"))
+        items.append(
+            html.Li(
+                [
+                    html.A(f"Job {row['job_id']}", href=f"/job?job_id={row['job_id']}"),
+                    html.Span(f" {row['display']}: ", className="text-muted"),
+                    dbc.Badge(row["status"], color="info" if row["status"] == "Running" else "warning"),
+                    html.Span(f" {row['progress']}", className="ms-2"),
+                    *notes,
+                ],
+                className="mb-1",
+            )
+        )
+    return html.Ul(items, className="list-unstyled mb-0 small")
+
+
+@dash.callback(Output("active-runs-content", "children"), Input("status-refresh-interval", "n_intervals"))
+def update_active_runs(n):
+    try:
+        return active_runs_content(active_run_rows())
+    except Exception as error:
+        return dbc.Alert(f"Could not read run state: {error}", color="warning", className="mb-0")
 
 
 # Callback to update connection status
@@ -249,7 +351,7 @@ def update_system_resources(n):
 
         return [
             # Queue Statistics
-            html.H6("Job Queue:", className="mb-2"),
+            html.H6("Queue", className="mb-2"),
             dbc.Row(
                 [
                     dbc.Col(

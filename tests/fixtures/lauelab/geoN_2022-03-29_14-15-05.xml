@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<geoN xmlns="http:example.com/geoN">
+	<dateWritten>Maon, Jan 1, 2020</dateWritten>
+	<timeWritten>12:00:00 (-5)</timeWritten>
+	<EPOCH start="midnight Jan 1, 1904" unit="sec">0</EPOCH>
+
+	<Sample>
+		<Origin unit="micron">0 0 0</Origin>	<!-- sample origin in raw positioner units (micron) -->
+		<R unit="radian">-0.006 0.006 -1.8e-05</R>
+	</Sample>
+
+	<Detectors Ndetectors="3">			<!-- Ndetectors, number of detectors in use, must be <= MAX_Ndetectors -->
+		<Detector N="0">
+			<Npixels>2048 2048</Npixels>		<!-- Nx,Ny is number of un-binned pixels in full detector -->
+			<size unit="mm">409.6 409.6</size>	<!-- sizeX,sizeY otuside size of full detector -->
+			<R unit="radian">-1.20127231 -1.21381742 -1.21879073</R>		<!-- Rotation and translation vector -->
+			<P unit="mm">28.720 3.010 513.097</P>
+			<timeMeasured>Tue, Mar 29, 2022, 14:15:05 (-5)</timeMeasured>	<!-- when this geometry was calculated -->
+			<note>Optimized using CalibrationListOrange0</note>
+			<ID>PE1621 723-3335</ID>				<!-- unique detector ID -->
+		</Detector>
+		<Detector N="1">
+			<Npixels>1024 1024</Npixels>
+			<size unit="mm">204.8 204.8</size>
+			<R unit="radian">-1.74964147 -0.72538764 -1.7707796</R>
+			<P unit="mm">-144.183 26.808 402.341</P>
+			<timeMeasured>Tue, Feb 26, 2019, 12:29:06 (-6)</timeMeasured>
+			<note>Optimized using CalibrationListYellow1</note>
+			<ID>PE0822 883-4841</ID>
+		</Detector>
+		<Detector N="2">
+			<Npixels>1024 1024</Npixels>
+			<size unit="mm">204.8 204.8</size>
+			<R unit="radian">-0.60682911 -1.49103705 -0.61968032</R>
+			<P unit="mm">-143.358 31.515 399.770</P>
+			<timeMeasured>Tue, Oct 29, 2019, 14:10:51 (-5)</timeMeasured>
+			<note>Optimized using CalibrationListPurple2</note>
+			<ID>PE0822 883-4843</ID>
+		</Detector>
+	</Detectors>
+
+	<Wire>
+		<dia unit="micron">101.5</dia>
+		<Knife>0</Knife>				<!-- true if wire on a knife edge, false for free-standing wire -->
+		<Origin unit="micron">0 0 0</Origin>		<!-- wire origin in raw positioner frame (micron) -->
+		<R unit="radian">0.0045 -0.00684 -3.375e-05</R>
+		<Axis>0.99999608 0 0.0028000002</Axis>		<!-- unit vector along wire axis, usually close to (1,0,0) -->
+		<F unit="micron">0</F>		<!-- F of wire for a constant F wire scan (raw positioner units) -->
+	</Wire>
+</geoN>

@@ -6,13 +6,13 @@ import dash_bootstrap_components as dbc
 import pandas as pd
 from dash import Input, Output, State, dcc, html
 from dash.exceptions import PreventUpdate
-from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
-from laue_portal.processing.queue.core import STATUS_REVERSE_MAPPING
+from laue_portal.components import live_rows
+from laue_portal.workflows.progress import active_or_changed_since, progress_columns
 
 dash.register_page(__name__, path="/reconstructions", redirect_from=["/wire-reconstructions"])
 
@@ -47,6 +47,9 @@ layout = html.Div(
             ],
             className="mb-3 mt-0",
         ),
+        # Timed refresh sends only active or newly finalized runs as a row transaction.
+        dcc.Interval(id="recons-refresh-interval", interval=live_rows.REFRESH_SECONDS * 1000, n_intervals=0),
+        dcc.Store(id="recons-refresh-state"),
         dbc.Container(
             fluid=True,
             className="p-0",
@@ -54,6 +57,7 @@ layout = html.Div(
                 dag.AgGrid(
                     id="recon-table",
                     columnSize="responsiveSizeToFit",
+                    getRowId="params.data.reconstruction_id",
                     defaultColDef={"filter": True},
                     dashGridOptions={
                         "pagination": True,
@@ -94,51 +98,27 @@ CUSTOM_HEADER_NAMES = {
 }
 
 
-def _get_recons():
-    """Return all reconstruction methods with running-subjob progress."""
+def _reconstruction_rows(criterion=None) -> list[dict]:
+    """Rows for every reconstruction method; ``criterion`` restricts the query for a partial refresh."""
+
     with Session(session_utils.get_engine()) as session:
-        running_status = STATUS_REVERSE_MAPPING["Running"]
-        finished_status = STATUS_REVERSE_MAPPING["Finished"]
-
-        subjob_progress = (
-            session.query(
-                db_schema.SubJob.job_id.label("job_id"),
-                func.count(db_schema.SubJob.subjob_id).label("total_subjobs"),
-                func.sum(case((db_schema.SubJob.status == finished_status, 1), else_=0)).label("completed_subjobs"),
-            )
-            .join(db_schema.Job, db_schema.SubJob.job_id == db_schema.Job.job_id)
-            .join(db_schema.ReconstructionRun, db_schema.ReconstructionRun.job_id == db_schema.Job.job_id)
-            .filter(db_schema.Job.status == running_status)
-            .group_by(db_schema.SubJob.job_id)
-            .subquery()
-        )
-
-        reconstructions = pd.read_sql(
-            session.query(
-                *VISIBLE_COLS,
-                func.coalesce(subjob_progress.c.completed_subjobs, 0).label("completed_subjobs"),
-                func.coalesce(subjob_progress.c.total_subjobs, 0).label("total_subjobs"),
-            )
+        # Progress comes from the run counters stored on the job; no per-frame rows are joined.
+        query = (
+            session.query(*VISIBLE_COLS, *progress_columns())
             .outerjoin(
                 db_schema.WireReconstructionParameters,
                 db_schema.WireReconstructionParameters.reconstruction_id == db_schema.ReconstructionRun.id,
             )
             .join(db_schema.Job, db_schema.ReconstructionRun.job_id == db_schema.Job.job_id)
-            .outerjoin(subjob_progress, db_schema.Job.job_id == subjob_progress.c.job_id)
-            .statement,
-            session.bind,
         )
+        if criterion is not None:
+            query = query.filter(criterion)
+        reconstructions = pd.read_sql(query.statement, session.bind)
+    return live_rows.add_status_progress(reconstructions).to_dict("records")
 
-    progress_cols = ["completed_subjobs", "total_subjobs"]
-    reconstructions[progress_cols] = reconstructions[progress_cols].fillna(0).astype(int)
-    reconstructions["status_progress"] = None
-    running_rows = (reconstructions["status"] == running_status) & (reconstructions["total_subjobs"] > 0)
-    reconstructions.loc[running_rows, "status_progress"] = (
-        reconstructions.loc[running_rows, "completed_subjobs"].astype(str)
-        + "/"
-        + reconstructions.loc[running_rows, "total_subjobs"].astype(str)
-    )
 
+def _get_recons():
+    """Return all reconstruction methods with run-counter progress."""
     cols = [
         {
             "headerName": "",
@@ -198,19 +178,40 @@ def _get_recons():
             col_def["cellRenderer"] = "StatusRenderer"
         cols.append(col_def)
 
-    return cols, reconstructions.to_dict("records")
+    return cols, _reconstruction_rows()
 
 
 @dash.callback(
     Output("recon-table", "columnDefs"),
     Output("recon-table", "rowData"),
+    Output("recons-refresh-state", "data"),
     Input("recons-url", "pathname"),
     prevent_initial_call=True,
 )
 def get_recons(path):
     if path == "/reconstructions":
-        return _get_recons()
+        cols, rows = _get_recons()
+        return cols, rows, live_rows.initial_state(rows, "reconstruction_id")
     raise PreventUpdate
+
+
+@dash.callback(
+    Output("recon-table", "rowTransaction"),
+    Output("recons-refresh-state", "data", allow_duplicate=True),
+    Input("recons-refresh-interval", "n_intervals"),
+    State("recons-refresh-state", "data"),
+    State("recons-url", "pathname"),
+    running=[(Output("recons-refresh-interval", "disabled"), True, False)],
+    prevent_initial_call=True,
+)
+def refresh_recons(n_intervals, state, path):
+    """Send only active or newly finalized runs; the grid keeps its selection, sort, filters, and page."""
+
+    if path != "/reconstructions" or state is None:
+        raise PreventUpdate
+    rows = _reconstruction_rows(active_or_changed_since(live_rows.since_from_state(state)))
+    transaction, next_state = live_rows.transaction(rows, "reconstruction_id", state)
+    return transaction if transaction else dash.no_update, next_state
 
 
 @dash.callback(

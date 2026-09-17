@@ -4,13 +4,13 @@ import dash_bootstrap_components as dbc
 import pandas as pd
 from dash import Input, Output, State, dcc, html
 from dash.exceptions import PreventUpdate
-from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
-from laue_portal.processing.queue.core import STATUS_REVERSE_MAPPING
+from laue_portal.components import live_rows
+from laue_portal.workflows.progress import active_or_changed_since, progress_columns
 
 dash.register_page(__name__, path="/peakindexings")
 
@@ -52,6 +52,9 @@ layout = html.Div(
             ],
             className="mb-3 mt-0",
         ),
+        # Timed refresh sends only active or newly finalized runs as a row transaction.
+        dcc.Interval(id="peakindexings-refresh-interval", interval=live_rows.REFRESH_SECONDS * 1000, n_intervals=0),
+        dcc.Store(id="peakindexings-refresh-state"),
         dbc.Container(
             fluid=True,
             className="p-0",
@@ -59,6 +62,7 @@ layout = html.Div(
                 dag.AgGrid(
                     id="peakindexing-table",
                     columnSize="responsiveSizeToFit",
+                    getRowId="params.data.indexing_id",
                     defaultColDef={
                         "filter": True,
                     },
@@ -102,56 +106,35 @@ CUSTOM_HEADER_NAMES = {
 }
 
 
-def _get_peakindexings():
+def _peakindexing_rows(criterion=None) -> list[dict]:
+    """Rows for the indexing list; ``criterion`` restricts the query for a partial refresh."""
+
     with Session(session_utils.get_engine()) as session:
-        running_status = STATUS_REVERSE_MAPPING["Running"]
-        finished_status = STATUS_REVERSE_MAPPING["Finished"]
-
-        subjob_progress = (
-            session.query(
-                db_schema.SubJob.job_id.label("job_id"),
-                func.count(db_schema.SubJob.subjob_id).label("total_subjobs"),
-                func.sum(case((db_schema.SubJob.status == finished_status, 1), else_=0)).label("completed_subjobs"),
-            )
-            .join(db_schema.Job, db_schema.SubJob.job_id == db_schema.Job.job_id)
-            .join(db_schema.IndexingRun, db_schema.IndexingRun.job_id == db_schema.Job.job_id)
-            .filter(db_schema.Job.status == running_status)
-            .group_by(db_schema.SubJob.job_id)
-            .subquery()
-        )
-
-        peakindexings = pd.read_sql(
+        # Progress comes from the run counters stored on the job; no per-frame rows are joined.
+        query = (
             session.query(
                 *VISIBLE_COLS,
                 db_schema.IndexingRun.method,
                 db_schema.ReconstructionRun.method.label("reconstruction_method"),
                 db_schema.Catalog.aperture,
-                func.coalesce(subjob_progress.c.completed_subjobs, 0).label("completed_subjobs"),
-                func.coalesce(subjob_progress.c.total_subjobs, 0).label("total_subjobs"),
+                *progress_columns(),
             )
             .join(db_schema.LaueGoIndexingParameters)
             .join(db_schema.Job, db_schema.IndexingRun.job_id == db_schema.Job.job_id)
-            .outerjoin(subjob_progress, db_schema.Job.job_id == subjob_progress.c.job_id)
             .outerjoin(
                 db_schema.ReconstructionRun,
                 db_schema.IndexingRun.reconstruction_id == db_schema.ReconstructionRun.id,
             )
             .outerjoin(db_schema.Catalog, db_schema.IndexingRun.scan_number == db_schema.Catalog.scanNumber)
             .filter(db_schema.IndexingRun.method == "lauego")
-            .statement,
-            session.bind,
         )
+        if criterion is not None:
+            query = query.filter(criterion)
+        peakindexings = pd.read_sql(query.statement, session.bind)
+    return live_rows.add_status_progress(peakindexings).to_dict("records")
 
-        progress_cols = ["completed_subjobs", "total_subjobs"]
-        peakindexings[progress_cols] = peakindexings[progress_cols].fillna(0).astype(int)
-        peakindexings["status_progress"] = None
-        running_rows = (peakindexings["status"] == running_status) & (peakindexings["total_subjobs"] > 0)
-        peakindexings.loc[running_rows, "status_progress"] = (
-            peakindexings.loc[running_rows, "completed_subjobs"].astype(str)
-            + "/"
-            + peakindexings.loc[running_rows, "total_subjobs"].astype(str)
-        )
 
+def _get_peakindexings():
     cols = []
     source_col_inserted = False
 
@@ -224,21 +207,41 @@ def _get_peakindexings():
             col_def["cellRenderer"] = "StatusRenderer"
         cols.append(col_def)
 
-    return cols, peakindexings.to_dict("records")
+    return cols, _peakindexing_rows()
 
 
 @dash.callback(
     Output("peakindexing-table", "columnDefs", allow_duplicate=True),
     Output("peakindexing-table", "rowData", allow_duplicate=True),
+    Output("peakindexings-refresh-state", "data"),
     Input("peakindexings-url", "pathname"),
     prevent_initial_call="initial_duplicate",
 )
 def get_peakindexings(path):
     if path == "/peakindexings":
         cols, peakindexings_records = _get_peakindexings()
-        return cols, peakindexings_records
+        return cols, peakindexings_records, live_rows.initial_state(peakindexings_records, "indexing_id")
     else:
         raise PreventUpdate
+
+
+@dash.callback(
+    Output("peakindexing-table", "rowTransaction"),
+    Output("peakindexings-refresh-state", "data", allow_duplicate=True),
+    Input("peakindexings-refresh-interval", "n_intervals"),
+    State("peakindexings-refresh-state", "data"),
+    State("peakindexings-url", "pathname"),
+    running=[(Output("peakindexings-refresh-interval", "disabled"), True, False)],
+    prevent_initial_call=True,
+)
+def refresh_peakindexings(n_intervals, state, path):
+    """Send only active or newly finalized runs; the grid keeps its selection, sort, filters, and page."""
+
+    if path != "/peakindexings" or state is None:
+        raise PreventUpdate
+    rows = _peakindexing_rows(active_or_changed_since(live_rows.since_from_state(state)))
+    transaction, next_state = live_rows.transaction(rows, "indexing_id", state)
+    return transaction if transaction else dash.no_update, next_state
 
 
 @dash.callback(

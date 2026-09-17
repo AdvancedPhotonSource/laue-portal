@@ -28,6 +28,21 @@ REDIS_CONFIG:
   port: 6379
 
 # Dash application configuration
+# Whole-run execution policy for the RQ worker (one queued item is one run).
+# job_timeout_seconds: wall-clock limit for one run; exceeded runs are finalized as Failed.
+# stale_heartbeat_seconds: a Running job whose heartbeat is older than this is reconciled as interrupted.
+# workers / max_in_flight: bounded compute processes and in-flight inputs inside one run.
+# Set workers to the host's physical core count minus two (peak search is single-threaded per
+# frame, so this is the only indexing parallelism); the template value is deliberately small.
+# Reconstruction threads come from DEFAULT_VARIABLES.num_threads.
+RUN_EXECUTION:
+  job_timeout_seconds: 86400
+  heartbeat_seconds: 15
+  progress_seconds: 5
+  cancel_poll_seconds: 2
+  stale_heartbeat_seconds: 300
+  shutdown_grace_seconds: 600
+  workers: 4
 DASH_CONFIG:
   host: localhost
   port: 2082
@@ -50,7 +65,6 @@ PEAKINDEX_DEFAULTS:
   min_size: 3
   max_peaks: 200
   smooth: false
-  cosmicFilter: true
   
   # Indexing parameters
   indexKeVmaxCalc: 17.2

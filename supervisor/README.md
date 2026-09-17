@@ -92,7 +92,23 @@ supervisor/
 ### Process Management
 - All services auto-start and auto-restart on failure
 - Services are grouped as "laue-portal" for easy management
-- RQ worker starts with 1 process (configurable in template)
+- RQ worker starts with 1 process. One queued item is one whole run and the run
+  itself uses bounded compute processes (`RUN_EXECUTION.workers` in config.yaml),
+  so keep one worker per host unless the host is provisioned for more.
+- Stopping the worker asks the running run to stop cooperatively: it stops
+  admitting inputs, drains work in flight, keeps completed results, and records
+  the run as interrupted. `stopwaitsecs` in the template must be at least
+  `RUN_EXECUTION.shutdown_grace_seconds`. A second stop signal (or a kill after
+  `stopwaitsecs`) is RQ's cold shutdown, which kills the run's whole process
+  group; the next worker start reconciles the run as interrupted from its stale
+  heartbeat. Interrupted runs are never resumed or re-enqueued.
+- The whole-run wall-clock limit is `RUN_EXECUTION.job_timeout_seconds`; there
+  is no per-chunk timeout any more.
+- Never run old per-chunk workers and whole-run workers against the same Redis
+  or database. Before starting the new worker for the first time, run
+  `python scripts/cutover_check.py` (see `dev_docs/CUTOVER_RUNBOOK.md`); it
+  refuses when an old worker, a per-chunk queue entry, or a pre-compaction
+  database is present. Whole-run workers are named `laue-run-<host>-<pid>`.
 
 ## Troubleshooting
 

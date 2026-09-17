@@ -19,6 +19,7 @@ from typing import Optional
 
 import dash_bootstrap_components as dbc
 from dash import dcc, html
+from lauelab.visualization import DataScope
 
 # ---------------------------------------------------------------------------
 # Stable component IDs
@@ -60,6 +61,25 @@ def normalize_scope(data: Optional[dict]) -> dict:
         # Negative thresholds are meaningless; 0 is the "off" value.
         "min_peaks": max(0, min_peaks),
     }
+
+
+def to_data_scope(data: Optional[dict]) -> DataScope:
+    """The explicit lauelab selection behind the scope bar.
+
+    ``pattern0_only`` selects pattern rank 0 (the current primary-pattern
+    meaning), otherwise every pattern; ``min_peaks`` is the minimum number of
+    detected peaks a frame needs; no minimum indexed-assignment filter is
+    applied; and frames left without a selected pattern stay visible as
+    frame-only records so no location disappears from the maps.
+    """
+
+    scope = normalize_scope(data)
+    return DataScope(
+        patterns=(0,) if scope["pattern0_only"] else "all",
+        min_indexed=0,
+        min_detected=scope["min_peaks"] or None,
+        unindexed_frames=True,
+    )
 
 
 def max_skipped_peaks(scope: Optional[dict] = None) -> int:

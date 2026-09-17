@@ -12,7 +12,6 @@ from .job import Job
 from .metadata import Metadata
 from .reconstruction_run import ReconstructionRun, WireReconstructionParameters
 from .scan import Scan
-from .subjob import SubJob
 
 __all__ = [
     "Base",
@@ -20,7 +19,6 @@ __all__ = [
     "Scan",
     "Catalog",
     "Job",
-    "SubJob",
     "ReconstructionRun",
     "WireReconstructionParameters",
     "IndexingRun",

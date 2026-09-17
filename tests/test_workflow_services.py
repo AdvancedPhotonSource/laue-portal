@@ -1,19 +1,37 @@
 """Tests for reconstruction and indexing creation services."""
 
+import json
 import os
 import threading
 import time
 from datetime import datetime
 
 import pytest
-from sqlalchemy import create_engine, event, func, select
+from sqlalchemy import create_engine, event, func, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from laue_portal.database import db_schema, session_utils
-from laue_portal.workflows import FileResolutionError, WorkflowValidationError
+from laue_portal.workflows import (
+    FileResolutionError,
+    RunPhase,
+    RunPublicationError,
+    WorkflowValidationError,
+    run_records,
+)
 from laue_portal.workflows import indexing as indexing_workflow
 from laue_portal.workflows import reconstruction as reconstruction_workflow
+from laue_portal.workflows.execution import ExecutionStateError, JobStatus, assert_enqueueable
+from laue_portal.workflows.files import ResolvedInput
+from laue_portal.workflows.manifest import (
+    MANIFEST_FILENAME,
+    REQUEST_FILENAME,
+    RESULTS_FILENAME,
+    manifest_digest,
+    read_manifest,
+    read_request,
+    verify_manifest,
+)
 from tests.conftest import create_test_metadata
 
 
@@ -128,14 +146,26 @@ def _count(engine, model):
         return session.scalar(select(func.count()).select_from(model))
 
 
-def _subjobs_for(engine, job_id):
+def _row_total(engine):
+    """Rows across every table; the constant-row gate counts all of them."""
+
     with Session(engine) as session:
-        return session.scalars(
-            select(db_schema.SubJob).where(db_schema.SubJob.job_id == job_id).order_by(db_schema.SubJob.subjob_id)
-        ).all()
+        return sum(
+            session.execute(select(func.count()).select_from(table)).scalar_one()
+            for table in db_schema.Base.metadata.sorted_tables
+        )
 
 
-def test_create_reconstruction_persists_one_short_atomic_workflow(workflow_engine, tmp_path):
+def _job(engine, job_id):
+    with Session(engine) as session:
+        return session.get(db_schema.Job, job_id)
+
+
+def _fake_inputs(tmp_path, count, stem="wire"):
+    return tuple(ResolvedInput(os.fspath(tmp_path / f"{stem}_{index}.h5"), 0, (index,)) for index in range(count))
+
+
+def test_create_reconstruction_persists_a_run_and_publishes_its_manifest(workflow_engine, tmp_path):
     _add_metadata(workflow_engine, 1)
     input_path = tmp_path / "wire-input"
     output_template = tmp_path / "analysis" / "rec_%d" / "data"
@@ -157,22 +187,36 @@ def test_create_reconstruction_persists_one_short_atomic_workflow(workflow_engin
     assert run.output_path == expected_output
     assert run.wire_parameters.scan_points_len == 2
     assert run.wire_parameters.filename_prefixes == ["wire_%d.h5"]
-    assert run.job.status == 0
+    assert run.job.status == JobStatus.QUEUED
+    assert run.job.phase == RunPhase.PUBLISHED
     assert run.job.submit_time == datetime(2026, 8, 19, 12, 0, 0)
     assert run.job.start_time is None
     assert run.job.finish_time is None
-    subjobs = _subjobs_for(workflow_engine, run.job_id)
-    assert [os.path.basename(subjob.input_path) for subjob in subjobs] == [
-        "wire_1.h5",
-        "wire_2.h5",
+    assert (run.job.n_inputs, run.job.n_succeeded, run.job.n_failed, run.job.n_not_run) == (2, 0, 0, 0)
+    assert run.job.run_directory == expected_output
+    assert run.job.manifest_path == os.path.join(expected_output, MANIFEST_FILENAME)
+    assert run.job.request_path == os.path.join(expected_output, REQUEST_FILENAME)
+    assert run.job.manifest_digest == manifest_digest(run.job.manifest_path)
+    assert subjob_inserts == []
+    assert "subjob" not in inspect(workflow_engine).get_table_names()
+    assert_enqueueable(run.job)
+
+    entries = list(read_manifest(run.job.manifest_path))
+    assert [(entry.index, entry.input_id, entry.scan_point, entry.depth_point) for entry in entries] == [
+        (0, "wire_1", 1, None),
+        (1, "wire_2", 2, None),
     ]
-    assert [subjob.output_path for subjob in subjobs] == [
-        os.path.join(expected_output, "wire_1_"),
-        os.path.join(expected_output, "wire_2_"),
-    ]
-    assert all(subjob.start_time is None and subjob.finish_time is None for subjob in subjobs)
-    assert subjob_inserts == [True]
-    assert not (tmp_path / "analysis").exists()
+    assert [os.path.basename(entry.source) for entry in entries] == ["wire_1.h5", "wire_2.h5"]
+    verify_manifest(run.job.manifest_path, expected_digest=run.job.manifest_digest, expected_count=2)
+
+    request = read_request(run.job.request_path)
+    assert request["kind"] == "wire_reconstruction"
+    assert request["run"] == {"reconstruction_id": 1, "job_id": 1, "scan_number": 1, "method": "wire"}
+    assert request["request"]["geometry_file"] == "/config/geometry.xml"
+    assert request["request"]["submitted_at"] == "2026-08-19T12:00:00"
+    assert request["manifest"] == {"path": MANIFEST_FILENAME, "n_inputs": 2, "sha256": run.job.manifest_digest}
+    assert sorted(os.listdir(expected_output)) == [MANIFEST_FILENAME, REQUEST_FILENAME]
+
     loaded = reconstruction_workflow.get_reconstruction(run.id, engine=workflow_engine)
     assert loaded.wire_parameters.geometry_file == "/config/geometry.xml"
     assert loaded.job.job_id == run.job_id
@@ -211,9 +255,21 @@ def test_create_indexing_supports_direct_and_reconstruction_parent_runs(workflow
     assert direct.reconstruction_id is None
     assert direct.scan_number == 1
     assert direct.output_path == os.fspath(tmp_path / "analysis" / "index_1")
-    direct_subjobs = _subjobs_for(workflow_engine, direct.job_id)
-    assert len(direct_subjobs) == 4
-    assert all(subjob.output_path == direct.output_path for subjob in direct_subjobs)
+    assert direct.job.n_inputs == 4
+    assert direct.job.phase == RunPhase.PUBLISHED
+    assert direct.n_frames_indexed is None
+    entries = list(read_manifest(direct.job.manifest_path))
+    assert [(entry.index, entry.input_id, entry.scan_point, entry.depth_point) for entry in entries] == [
+        (0, "index_1_0", 1, 0),
+        (1, "index_1_1", 1, 1),
+        (2, "index_2_0", 2, 0),
+        (3, "index_2_1", 2, 1),
+    ]
+    request = read_request(direct.job.request_path)
+    assert request["kind"] == "lauego_indexing"
+    assert request["output"] == {"directory": direct.output_path, "results": RESULTS_FILENAME, "xml": "merged.xml"}
+    assert request["request"]["max_peaks"] == 50
+    assert request["request"]["min_size"] == 1.13
     assert direct.lauego_parameters.depth_range_len == 2
     assert direct.lauego_parameters.output_xml == "merged.xml"
 
@@ -223,6 +279,7 @@ def test_create_indexing_supports_direct_and_reconstruction_parent_runs(workflow
     assert child.scan_number == 1
     assert child.job.start_time is None
     assert child.job.finish_time is None
+    assert read_request(child.job.request_path)["run"]["reconstruction_id"] == reconstruction.id
     loaded = indexing_workflow.get_indexing(child.id, engine=workflow_engine)
     assert loaded.reconstruction.id == reconstruction.id
     assert loaded.lauego_parameters.crystal_file == "/config/Al.xtal"
@@ -232,6 +289,14 @@ def test_create_indexing_supports_direct_and_reconstruction_parent_runs(workflow
 def test_requests_require_an_id_placeholder_in_the_output_path(tmp_path):
     with pytest.raises(WorkflowValidationError, match="exactly one %d"):
         _wire_request(tmp_path, tmp_path / "fixed-output")
+
+
+def test_indexing_request_rejects_reserved_support_file_names(tmp_path):
+    with pytest.raises(WorkflowValidationError, match="reserved"):
+        _indexing_request(tmp_path, tmp_path / "index_%d", output_xml="inputs.jsonl")
+    with pytest.raises(WorkflowValidationError, match="reserved"):
+        _indexing_request(tmp_path, tmp_path / "index_%d", output_xml="/elsewhere/output.h5")
+    assert _indexing_request(tmp_path, tmp_path / "index_%d", output_xml=" ").output_xml is None
 
 
 def test_file_resolution_finishes_before_the_creation_transaction(workflow_engine, tmp_path, monkeypatch):
@@ -245,9 +310,9 @@ def test_file_resolution_finishes_before_the_creation_transaction(workflow_engin
 
     def resolve_before_transaction(*args, **kwargs):
         assert transaction_begins == 0
-        return (os.fspath(tmp_path / "wire_1.h5"),)
+        return _fake_inputs(tmp_path, 1)
 
-    monkeypatch.setattr(reconstruction_workflow, "resolve_input_files", resolve_before_transaction)
+    monkeypatch.setattr(reconstruction_workflow, "resolve_inputs", resolve_before_transaction)
     reconstruction_workflow.create_reconstruction(
         _wire_request(tmp_path / "unlisted", tmp_path / "rec_%d", scan_points="1"),
         engine=workflow_engine,
@@ -256,46 +321,50 @@ def test_file_resolution_finishes_before_the_creation_transaction(workflow_engin
     assert transaction_begins >= 1
 
 
-def test_large_resolved_run_bulk_inserts_subjobs_in_bounded_batches(workflow_engine, tmp_path, monkeypatch):
+def test_100k_input_manifest_creates_a_constant_number_of_rows(workflow_engine, tmp_path, monkeypatch):
+    """P1 exit gate: a 100,000-input run adds three rows, not 100,000."""
+
     _add_metadata(workflow_engine, 1)
-    input_files = tuple(os.fspath(tmp_path / f"wire_{index}.h5") for index in range(20_001))
-    monkeypatch.setattr(
-        reconstruction_workflow,
-        "resolve_input_files",
-        lambda *args, **kwargs: input_files,
-    )
-    subjob_inserts = []
+    inputs = _fake_inputs(tmp_path, 100_000)
+    monkeypatch.setattr(reconstruction_workflow, "resolve_inputs", lambda *args, **kwargs: inputs)
+    rows_before = _row_total(workflow_engine)
 
-    @event.listens_for(workflow_engine, "before_cursor_execute")
-    def observe_subjob_insert(connection, cursor, statement, parameters, context, executemany):
-        if statement.startswith("INSERT INTO subjob"):
-            subjob_inserts.append((executemany, len(parameters)))
-
-    reconstruction_workflow.create_reconstruction(
+    started_at = time.monotonic()
+    run = reconstruction_workflow.create_reconstruction(
         _wire_request(tmp_path / "unlisted", tmp_path / "rec_%d", scan_points="1"),
         engine=workflow_engine,
     )
+    elapsed = time.monotonic() - started_at
 
-    assert _count(workflow_engine, db_schema.SubJob) == 20_001
-    assert subjob_inserts == [(True, 10_000), (True, 10_000), (False, 6)]
+    assert _row_total(workflow_engine) - rows_before == 3  # job, reconstruction_run, wire parameters
+    assert run.job.n_inputs == 100_000
+    assert elapsed < 20
+    with open(run.job.manifest_path, "rb") as handle:
+        line_count = sum(1 for _ in handle)
+    assert line_count == 100_000
+    last = None
+    for entry in read_manifest(run.job.manifest_path):
+        last = entry
+    assert (last.index, last.input_id, last.scan_point) == (99_999, "wire_99999", 99_999)
+    verify_manifest(run.job.manifest_path, expected_digest=run.job.manifest_digest, expected_count=100_000)
 
 
-def test_100k_submission_keeps_reads_responsive_and_finishes_inside_busy_timeout(
-    workflow_engine, tmp_path, monkeypatch
-):
+def test_manifest_publication_keeps_database_reads_responsive(workflow_engine, tmp_path, monkeypatch):
     _add_metadata(workflow_engine, 1)
-    input_files = tuple(os.fspath(tmp_path / f"wire_{index}.h5") for index in range(100_000))
-    monkeypatch.setattr(reconstruction_workflow, "resolve_input_files", lambda *args, **kwargs: input_files)
-    first_subjob_insert = threading.Event()
-    allow_write_to_continue = threading.Event()
+    inputs = _fake_inputs(tmp_path, 20_000)
+    monkeypatch.setattr(reconstruction_workflow, "resolve_inputs", lambda *args, **kwargs: inputs)
+    publication_started = threading.Event()
+    allow_publication = threading.Event()
     errors = []
+    real_write_manifest = run_records.write_manifest
 
-    @event.listens_for(workflow_engine, "before_cursor_execute")
-    def pause_first_subjob_insert(connection, cursor, statement, parameters, context, executemany):
-        if statement.startswith("INSERT INTO subjob") and not first_subjob_insert.is_set():
-            first_subjob_insert.set()
-            if not allow_write_to_continue.wait(timeout=10):
-                raise TimeoutError("test did not release the workflow write")
+    def paused_write_manifest(*args, **kwargs):
+        publication_started.set()
+        if not allow_publication.wait(timeout=10):
+            raise TimeoutError("test did not release the manifest write")
+        return real_write_manifest(*args, **kwargs)
+
+    monkeypatch.setattr(run_records, "write_manifest", paused_write_manifest)
 
     def create_large_run():
         try:
@@ -306,27 +375,25 @@ def test_100k_submission_keeps_reads_responsive_and_finishes_inside_busy_timeout
         except Exception as error:  # pragma: no cover - reported by the main thread
             errors.append(error)
 
-    started_at = time.monotonic()
     creator = threading.Thread(target=create_large_run, daemon=True)
     creator.start()
-    assert first_subjob_insert.wait(timeout=10)
+    assert publication_started.wait(timeout=10)
 
     read_started_at = time.monotonic()
-    assert _count(workflow_engine, db_schema.ReconstructionRun) == 0
+    assert _count(workflow_engine, db_schema.ReconstructionRun) == 1  # committed before publication
+    assert _job(workflow_engine, 1).phase == RunPhase.CREATED
     read_duration = time.monotonic() - read_started_at
 
-    allow_write_to_continue.set()
+    allow_publication.set()
     creator.join(timeout=30)
-    total_duration = time.monotonic() - started_at
 
     assert not creator.is_alive()
     assert errors == []
     assert read_duration < 2
-    assert total_duration < 20
-    assert _count(workflow_engine, db_schema.SubJob) == 100_000
+    assert _job(workflow_engine, 1).phase == RunPhase.PUBLISHED
 
 
-def test_multi_prefix_submission_creates_one_subjob_per_resolved_file(workflow_engine, tmp_path):
+def test_multi_prefix_submission_records_template_identity(workflow_engine, tmp_path):
     _add_metadata(workflow_engine, 1)
     input_path = tmp_path / "wire-input"
     _create_files(input_path, ["left_1.h5", "right_1.h5"])
@@ -341,13 +408,14 @@ def test_multi_prefix_submission_creates_one_subjob_per_resolved_file(workflow_e
         engine=workflow_engine,
     )
 
-    assert [os.path.basename(subjob.input_path) for subjob in _subjobs_for(workflow_engine, run.job_id)] == [
-        "left_1.h5",
-        "right_1.h5",
+    entries = list(read_manifest(run.job.manifest_path))
+    assert [(entry.input_id, entry.template_index, entry.scan_point) for entry in entries] == [
+        ("left_1", 0, 1),
+        ("right_1", 1, 1),
     ]
 
 
-def test_resolution_failure_writes_no_database_rows(workflow_engine, tmp_path):
+def test_resolution_failure_writes_no_database_rows_or_files(workflow_engine, tmp_path):
     _add_metadata(workflow_engine, 1)
     input_path = tmp_path / "wire-input"
     _create_files(input_path, ["wire_1.h5"])
@@ -359,10 +427,10 @@ def test_resolution_failure_writes_no_database_rows(workflow_engine, tmp_path):
 
     assert _count(workflow_engine, db_schema.Job) == 0
     assert _count(workflow_engine, db_schema.ReconstructionRun) == 0
-    assert _count(workflow_engine, db_schema.SubJob) == 0
+    assert not (tmp_path / "rec_1").exists()
 
 
-def test_database_failure_rolls_back_job_run_parameters_and_subjobs(workflow_engine, tmp_path):
+def test_database_failure_rolls_back_job_run_and_parameters_without_files(workflow_engine, tmp_path):
     input_path = tmp_path / "wire-input"
     _create_files(input_path, ["wire_1.h5", "wire_2.h5"])
 
@@ -375,7 +443,48 @@ def test_database_failure_rolls_back_job_run_parameters_and_subjobs(workflow_eng
     assert _count(workflow_engine, db_schema.Job) == 0
     assert _count(workflow_engine, db_schema.ReconstructionRun) == 0
     assert _count(workflow_engine, db_schema.WireReconstructionParameters) == 0
-    assert _count(workflow_engine, db_schema.SubJob) == 0
+    assert not (tmp_path / "rec_1").exists()
+
+
+def test_publication_failure_records_a_failed_non_runnable_run(workflow_engine, tmp_path):
+    _add_metadata(workflow_engine, 1)
+    input_path = tmp_path / "wire-input"
+    _create_files(input_path, ["wire_1.h5", "wire_2.h5"])
+    blocker = tmp_path / "rec_1"
+    blocker.write_text("a file where the run directory should be")
+
+    with pytest.raises(RunPublicationError, match=r"Reconstruction R1: Run publication failed"):
+        reconstruction_workflow.create_reconstruction(
+            _wire_request(input_path, tmp_path / "rec_%d"), engine=workflow_engine
+        )
+
+    job = _job(workflow_engine, 1)
+    assert job.status == JobStatus.FAILED
+    assert job.phase == RunPhase.FAILED
+    assert job.finish_time is not None
+    assert job.manifest_path is None
+    assert (job.n_inputs, job.n_succeeded, job.n_failed, job.n_not_run) == (2, 0, 0, 2)
+    assert job.messages.startswith("Run publication failed:")
+    with pytest.raises(ExecutionStateError, match="only published runs"):
+        assert_enqueueable(job)
+    assert blocker.read_text() == "a file where the run directory should be"
+
+
+def test_a_run_directory_holding_a_manifest_is_never_reused(workflow_engine, tmp_path):
+    _add_metadata(workflow_engine, 1)
+    input_path = tmp_path / "wire-input"
+    _create_files(input_path, ["wire_1.h5", "wire_2.h5"])
+    stale = tmp_path / "rec_1"
+    stale.mkdir()
+    (stale / MANIFEST_FILENAME).write_text(json.dumps({"index": 0}) + "\n")
+
+    with pytest.raises(RunPublicationError, match="never reused"):
+        reconstruction_workflow.create_reconstruction(
+            _wire_request(input_path, tmp_path / "rec_%d"), engine=workflow_engine
+        )
+
+    assert (stale / MANIFEST_FILENAME).read_text() == json.dumps({"index": 0}) + "\n"
+    assert _job(workflow_engine, 1).status == JobStatus.FAILED
 
 
 def test_indexing_rejects_a_scan_that_disagrees_with_its_parent(workflow_engine, tmp_path):
@@ -405,3 +514,4 @@ def test_indexing_rejects_a_scan_that_disagrees_with_its_parent(workflow_engine,
 
     assert _count(workflow_engine, db_schema.Job) == job_count
     assert _count(workflow_engine, db_schema.IndexingRun) == 0
+    assert not (tmp_path / "index_1").exists()

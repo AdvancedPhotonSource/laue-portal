@@ -47,6 +47,7 @@ PEAKINDEX_FIELD_IDS = [
 ]
 
 PEAKINDEX_OPTIONAL_FIELDS = [
+    "max_number",
     "depthRange",
     "threshold",
     "thresholdRatio",
@@ -769,7 +770,7 @@ def validate_peakindexing(fields, catalog_defaults=None):
                     validation_result, "errors", "boxsize", input_prefix, custom_message="Boxsize must be positive"
                 )
 
-            max_number_val = validate_field("max_number", converter=safe_int)
+            max_number_val = validate_field("max_number", converter=safe_int, required=False)
             if max_number_val is not None and max_number_val <= 0:
                 add_validation_message(
                     validation_result,
@@ -790,16 +791,16 @@ def validate_peakindexing(fields, catalog_defaults=None):
                 )
 
             min_size_val = validate_field("min_size", converter=safe_float)
-            if min_size_val is not None and min_size_val < 0:
+            if min_size_val is not None and (min_size_val <= 0 or not min_size_val.is_integer()):
                 add_validation_message(
                     validation_result,
                     "errors",
                     "min_size",
                     input_prefix,
-                    custom_message="Min Size must be non-negative",
+                    custom_message="Min Spot Size must be a positive integer",
                 )
 
-            max_peaks_val = validate_field("max_peaks", converter=safe_int)
+            max_peaks_val = validate_field("max_peaks", converter=safe_int, required=False)
             if max_peaks_val is not None and max_peaks_val <= 0:
                 add_validation_message(
                     validation_result, "errors", "max_peaks", input_prefix, custom_message="Max Peaks must be positive"

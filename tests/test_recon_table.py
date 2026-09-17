@@ -56,8 +56,15 @@ def test_reconstruction_list_reads_ca_rows_without_wire_parameters(empty_test_da
             "start_time": None,
             "finish_time": None,
             "status": 2,
-            "completed_subjobs": 0,
-            "total_subjobs": 0,
+            "phase": None,
+            "n_inputs": 0,
+            "n_succeeded": 0,
+            "n_failed": 0,
+            "n_not_run": 0,
+            "n_processed": 0,
+            "n_pending": 0,
+            "heartbeat_at": None,
+            "cancel_requested_at": None,
             "status_progress": None,
         }
     ]
@@ -92,9 +99,10 @@ def test_reconstruction_list_includes_wire_runs(empty_test_database):
 def test_reconstruction_list_callback_and_empty_database(empty_test_database):
     engine, _ = empty_test_database
     with patch("laue_portal.database.session_utils.get_engine", return_value=engine):
-        columns, rows = get_recons("/reconstructions")
+        columns, rows, refresh_state = get_recons("/reconstructions")
     assert columns
     assert rows == []
+    assert refresh_state["max_id"] == 0
 
     with pytest.raises(PreventUpdate):
         get_recons("/wrong-path")

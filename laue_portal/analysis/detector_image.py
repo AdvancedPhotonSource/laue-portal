@@ -79,12 +79,20 @@ def load_detector_image(
         return DetectorImageResult(warning=f"Could not resolve detector image path: {input_image!r}.")
 
     attempted = tuple(str(path) for path in candidates)
-    image_path = next((path for path in candidates if path.is_file()), None)
+    image_path = None
+    inaccessible = []
+    for path in candidates:
+        try:
+            if path.is_file():
+                image_path = path
+                break
+        except OSError as error:  # a location the portal cannot read (for example another user's tree)
+            inaccessible.append(f"{path} ({error.strerror or type(error).__name__})")
     if image_path is None:
-        return DetectorImageResult(
-            warning="Detector image file was not found. Tried: " + ", ".join(attempted),
-            attempted_paths=attempted,
-        )
+        warning = "Detector image file was not found. Tried: " + ", ".join(attempted)
+        if inaccessible:
+            warning += ". Not accessible: " + "; ".join(inaccessible)
+        return DetectorImageResult(warning=warning, attempted_paths=attempted)
 
     try:
         data, dataset = _read_hdf5_image(image_path, dataset_paths)

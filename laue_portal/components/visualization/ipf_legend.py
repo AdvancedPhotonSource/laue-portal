@@ -10,8 +10,8 @@ per-point RGB values without a Plotly colorbar:
   color wheel.
 
 The pixel arrays are produced once at import time by
-:func:`laue_portal.analysis.coloring.make_cubic_ipf_triangle` and
-:func:`laue_portal.analysis.coloring.make_color_hexagon`, then encoded
+:func:`lauelab.analysis.cubic_ipf_key` and
+:func:`lauelab.analysis.hsv_key`, then encoded
 as base64 PNG data URIs that can be served directly via ``html.Img``.
 
 The corner labels (001 / 101 / 111) and the dynamic caption
@@ -28,12 +28,8 @@ from typing import Optional
 
 import dash_bootstrap_components as dbc
 from dash import html
+from lauelab.analysis import cubic_ipf_key, hsv_key
 from PIL import Image
-
-from laue_portal.analysis.coloring import (
-    make_color_hexagon,
-    make_cubic_ipf_triangle,
-)
 
 # ---------------------------------------------------------------------------
 # Palette options (Plotly built-in colorscale names)
@@ -86,14 +82,14 @@ _hsv_hexagon_uri: Optional[str] = None
 def _get_ipf_triangle_uri() -> str:
     global _ipf_triangle_uri
     if _ipf_triangle_uri is None:
-        _ipf_triangle_uri = _rgba_array_to_data_uri(make_cubic_ipf_triangle(resolution=_IPF_TRIANGLE_RES))
+        _ipf_triangle_uri = _rgba_array_to_data_uri(cubic_ipf_key(resolution=_IPF_TRIANGLE_RES))
     return _ipf_triangle_uri
 
 
 def _get_hsv_hexagon_uri() -> str:
     global _hsv_hexagon_uri
     if _hsv_hexagon_uri is None:
-        _hsv_hexagon_uri = _rgba_array_to_data_uri(make_color_hexagon(resolution=_HSV_HEXAGON_RES))
+        _hsv_hexagon_uri = _rgba_array_to_data_uri(hsv_key(resolution=_HSV_HEXAGON_RES))
     return _hsv_hexagon_uri
 
 
@@ -143,7 +139,7 @@ def ipf_triangle_legend(caption: Optional[str] = None) -> html.Div:
     )
 
     # Corner label positions follow the stereographic 45-90-60 region
-    # produced by ``make_cubic_ipf_triangle``.
+    # produced by ``lauelab.analysis.cubic_ipf_key``.
     corners = [
         html.Span("001", className="pi-ipf-corner-label pi-ipf-corner-001"),
         html.Span("101", className="pi-ipf-corner-label pi-ipf-corner-101"),

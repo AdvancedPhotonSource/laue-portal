@@ -1,4 +1,5 @@
 import math
+import os
 import traceback
 import urllib.parse
 from pathlib import Path
@@ -7,12 +8,17 @@ import dash
 import dash_bootstrap_components as dbc
 from dash import Input, Output, State, callback, dcc, html
 from dash.exceptions import PreventUpdate
+from lauelab.visualization import selection_from_plotly
 from sqlalchemy.orm import Session
 
 import laue_portal.components.navbar as navbar
 import laue_portal.database.session_utils as session_utils
+from laue_portal.analysis.detector_image import load_detector_image
 from laue_portal.components.detail_layout import detail_header, detail_header_content
 from laue_portal.components.peakindex_form import peakindex_readonly_form, set_peakindex_form_props
+from laue_portal.components.visualization import detector_view as detector_adapter
+from laue_portal.components.visualization import orientation_map as map_adapter
+from laue_portal.components.visualization import stereo_plot as pole_adapter
 from laue_portal.components.visualization.ipf_legend import (
     DEFAULT_PALETTE,
     SCALAR_MAX_ID,
@@ -25,6 +31,8 @@ from laue_portal.components.visualization.ipf_legend import (
     scalar_controls_visible,
     stereo_color_key,
 )
+from laue_portal.components.visualization.pattern_table import make_pattern_table, pattern_rows
+from laue_portal.components.visualization.peak_table import make_peak_table, peak_rows
 from laue_portal.components.visualization.scope_bar import (
     DEFAULT_SCOPE,
     SCOPE_MIN_PEAKS_ID,
@@ -33,9 +41,12 @@ from laue_portal.components.visualization.scope_bar import (
     SCOPE_STORE_ID,
     normalize_scope,
     scope_bar,
+    to_data_scope,
 )
 from laue_portal.config import DEFAULT_VARIABLES
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix
+from laue_portal.services import indexing_results
+from laue_portal.services.dataset_cache import get_dataset
 from laue_portal.workflows.indexing import get_indexing
 
 dash.register_page(__name__, path="/peakindexing")  # Simplified path
@@ -160,35 +171,6 @@ def _stereo_hkl_inputs():
         ],
         className="pi-hkl-control",
     )
-
-
-def _parse_surface_frame(values):
-    """Return normalized custom surface vectors in backend order."""
-    from laue_portal.analysis.projection import normalize_surface_frame
-
-    if len(values) != 9:
-        raise ValueError("Surface frame requires 9 values")
-    if any(v is None or v == "" for v in values):
-        raise ValueError("Surface frame requires all tilt, roll, and normal values")
-
-    nums = [float(v) for v in values]
-    return normalize_surface_frame(nums[0:3], nums[3:6], nums[6:9])
-
-
-def _surface_vectors_for(surface, values):
-    """Resolve custom surface vectors, or return None for preset surfaces."""
-    if surface != "custom":
-        return None
-    return _parse_surface_frame(values)
-
-
-def _resolved_surface_vectors(surface, values):
-    """Return concrete surface vectors for preset or custom surfaces."""
-    from laue_portal.analysis.projection import get_surface_vectors
-
-    if surface == "custom":
-        return _parse_surface_frame(values)
-    return get_surface_vectors(surface or "normal")
 
 
 def _parse_stereo_hkl(h, k, l):
@@ -329,9 +311,10 @@ _viz_tabs = dbc.Tabs(
                                                     dbc.Select(
                                                         id="orientation-rgb-symmetry-select",
                                                         options=[
-                                                            {"label": "XML Auto", "value": "auto"},
+                                                            {"label": "Auto (crystal)", "value": "auto"},
                                                             {"label": "Cubic", "value": "cubic"},
                                                             {"label": "Hexagonal", "value": "hexagonal"},
+                                                            {"label": "None", "value": "none"},
                                                         ],
                                                         value="auto",
                                                         className="form-select",
@@ -600,6 +583,7 @@ _viz_tabs = dbc.Tabs(
                                     "orientation-loading-target",
                                     cursor_readout_id="orientation-cursor-readout",
                                 ),
+                                html.Div(id="orientation-map-status", className="pi-viz-status small"),
                                 html.Div(
                                     id="orientation-point-details",
                                     className="pi-viz-details",
@@ -764,6 +748,7 @@ _viz_tabs = dbc.Tabs(
                                     "poles-loading-target",
                                     cursor_readout_id="stereo-cursor-readout",
                                 ),
+                                html.Div(id="stereo-plot-status", className="pi-viz-status small"),
                                 html.Div(
                                     className="pi-viz-details",
                                     children=[
@@ -1003,6 +988,7 @@ _viz_tabs = dbc.Tabs(
                                     ),
                                     "detector-loading-target",
                                 ),
+                                html.Div(id="detector-view-status", className="pi-viz-status small"),
                                 html.Div(
                                     id="detector-step-summary",
                                     className="pi-viz-details",
@@ -1061,11 +1047,11 @@ layout = html.Div(
     [
         navbar.navbar,
         dcc.Location(id="url-peakindexing-page", refresh=False),
-        # Store parsed XML data path so visualization callbacks can load it
-        dcc.Store(id="peakindexing-xml-path"),
+        # Identity of the result artifact shown (path and kind); datasets stay in the server cache.
+        dcc.Store(id="peakindexing-source"),
         # Store DB/config roots used to resolve detector image files.
         dcc.Store(id="peakindexing-path-context", data={}),
-        # Store selected grain indices for cross-plot linking
+        # Selected pattern identities [frame_id, pattern_index] for cross-plot linking
         dcc.Store(id="selected-grain-indices", data=[]),
         # HKL inputs are drafts until the user explicitly applies them.
         dcc.Store(id="stereo-applied-hkl", data=[1, 0, 0]),
@@ -1078,6 +1064,32 @@ layout = html.Div(
         dcc.Store(id="orientation-color-auto-range", data=None),
         # Page header
         detail_header("peakindex-id-header"),
+        # Result artifacts found for this run (results file, historical XML, or nothing).
+        dcc.Store(id="peakindexing-artifacts", data=None),
+        html.Div(
+            [
+                html.Span(id="peakindexing-artifact-status", className="lp-artifact-status text-muted small"),
+                dbc.Button(
+                    "Convert XML to HDF5",
+                    id="peakindexing-convert-btn",
+                    size="sm",
+                    color="primary",
+                    outline=True,
+                    style={"display": "none"},
+                ),
+                dbc.Toast(
+                    id="peakindexing-convert-toast",
+                    header="Result conversion",
+                    is_open=False,
+                    dismissable=True,
+                    duration=10000,
+                    icon="info",
+                    style={"position": "fixed", "top": 66, "right": 10, "width": 420, "zIndex": 1050},
+                ),
+            ],
+            id="peakindexing-artifact-bar",
+            className="lp-artifact-bar d-none",
+        ),
         # Global data-scope filters -- apply across every tab, so they sit
         # above the tab strip rather than in any one tab's sidebar.
         scope_bar(DEFAULT_SCOPE),
@@ -1089,14 +1101,41 @@ layout = html.Div(
 
 
 # ---------------------------------------------------------------------------
-# Callback: load page data from DB + resolve XML path
+# Callback: load page data from DB and resolve the result artifact
+#
+# Callbacks receive only the artifact identity (``peakindexing-source``); the
+# normalized dataset is loaded once per artifact into the server-side cache.
 # ---------------------------------------------------------------------------
+
+
+def _dataset(source):
+    """The cached dataset for the page's source store, or raise PreventUpdate."""
+
+    if not source or not source.get("path"):
+        raise PreventUpdate
+    return get_dataset(source["path"], geometry=source.get("geometry"))
+
+
+def _source_for(resolution, parameters):
+    """Source store payload: the validated results file first, else the historical XML."""
+
+    if resolution.status == indexing_results.STATUS_RESULTS:
+        return {"path": resolution.results_path, "kind": "results"}
+    if resolution.status == indexing_results.STATUS_XML_ONLY:
+        geometry = parameters.geometry_file if parameters is not None else None
+        return {
+            "path": resolution.xml_path,
+            "kind": "xml",
+            "geometry": geometry if geometry and os.path.isfile(geometry) else None,
+        }
+    return None
 
 
 @callback(
     Output("peakindex-id-header", "children"),
-    Output("peakindexing-xml-path", "data"),
+    Output("peakindexing-source", "data"),
     Output("peakindexing-path-context", "data"),
+    Output("peakindexing-artifacts", "data"),
     Input("url-peakindexing-page", "href"),
     prevent_initial_call=True,
 )
@@ -1111,7 +1150,8 @@ def load_peakindexing_data(href):
 
     root_path = DEFAULT_VARIABLES.get("root_path", "")
 
-    xml_path = None  # Will be set if we find an XML file
+    source = None
+    artifacts = None
     path_context = {"root_path": root_path}
 
     if indexing_id_str:
@@ -1124,14 +1164,17 @@ def load_peakindexing_data(href):
                     indexing.root_path = root_path
                     parameters = indexing.lauego_parameters
 
+                    # Resolve artifacts before display fields are rewritten for the form.
+                    resolution = indexing_results.resolve_indexing_artifacts(indexing)
+                    artifacts = resolution.as_dict()
+                    source = _source_for(resolution, parameters)
+
                     # Convert full paths back to relative paths for display
                     if parameters.geometry_file:
                         parameters.geometry_file = remove_root_path_prefix(parameters.geometry_file, root_path)
                     if parameters.crystal_file:
                         parameters.crystal_file = remove_root_path_prefix(parameters.crystal_file, root_path)
 
-                    # Resolve XML/image paths before stripping root_path from display fields.
-                    xml_path = _resolve_xml_path(indexing, root_path)
                     output_folder_full = indexing.output_path
                     data_folder_full = indexing.input_path
                     if output_folder_full:
@@ -1177,7 +1220,7 @@ def load_peakindexing_data(href):
                         )
 
                     header_content = detail_header_content(f"Indexing I{indexing_id}", related_links)
-                    return header_content, xml_path, path_context
+                    return header_content, source, path_context, artifacts
         except Exception as e:
             print(f"Error loading peak indexing data: {e}")
             traceback.print_exc()
@@ -1185,9 +1228,70 @@ def load_peakindexing_data(href):
                 detail_header_content(f"Error loading indexing I{indexing_id_str}"),
                 None,
                 path_context,
+                None,
             )
 
-    return detail_header_content("No indexing ID provided"), None, path_context
+    return detail_header_content("No indexing ID provided"), None, path_context, None
+
+
+def artifact_status_text(artifacts: dict | None) -> tuple[str, bool]:
+    """Human summary of the resolved artifacts and whether conversion is offered."""
+
+    if not artifacts:
+        return "", False
+    status = artifacts.get("status")
+    if status == indexing_results.STATUS_RESULTS:
+        return "", False
+    if status == indexing_results.STATUS_XML_ONLY:
+        return "XML only:", True
+    if status == indexing_results.STATUS_AMBIGUOUS:
+        names = ", ".join(Path(path).name for path in artifacts.get("xml_candidates", []))
+        return f"Several XML files and no recorded name; choose one manually: {names}", False
+    return "No results file or XML document found for this run.", False
+
+
+@callback(
+    Output("peakindexing-artifact-status", "children"),
+    Output("peakindexing-convert-btn", "style"),
+    Output("peakindexing-artifact-bar", "className"),
+    Input("peakindexing-artifacts", "data"),
+)
+def render_artifact_status(artifacts):
+    text, convertible = artifact_status_text(artifacts)
+    bar_class = "lp-artifact-bar d-flex align-items-center gap-2 px-3 py-1" if text else "lp-artifact-bar d-none"
+    return text, {} if convertible else {"display": "none"}, bar_class
+
+
+@callback(
+    Output("peakindexing-convert-toast", "children"),
+    Output("peakindexing-convert-toast", "icon"),
+    Output("peakindexing-convert-toast", "is_open"),
+    Output("url-peakindexing-page", "href", allow_duplicate=True),
+    Input("peakindexing-convert-btn", "n_clicks"),
+    State("peakindexing-artifacts", "data"),
+    State("url-peakindexing-page", "href"),
+    running=[
+        (Output("peakindexing-convert-btn", "disabled"), True, False),
+        (Output("peakindexing-convert-btn", "children"), "Converting...", "Convert XML to HDF5"),
+    ],
+    prevent_initial_call=True,
+)
+def convert_results(n_clicks, artifacts, href):
+    """Convert this run's XML through the shared service and reload the page on success."""
+
+    if not n_clicks or not artifacts or artifacts.get("status") != indexing_results.STATUS_XML_ONLY:
+        raise PreventUpdate
+    report = indexing_results.convert_indexing_results([int(artifacts["indexing_id"])])
+    outcome = report.outcomes[0]
+    succeeded = outcome.outcome in (
+        indexing_results.OUTCOME_CONVERTED,
+        indexing_results.OUTCOME_LINKED,
+        indexing_results.OUTCOME_ALREADY_CONVERTED,
+    )
+    message = f"I{outcome.indexing_id}: {outcome.outcome.replace('_', ' ')}: {outcome.message}"
+    if outcome.destination and succeeded:
+        message += f" -> {outcome.destination}"
+    return message, ("success" if succeeded else "danger"), True, (href if succeeded else dash.no_update)
 
 
 # ---------------------------------------------------------------------------
@@ -1234,8 +1338,25 @@ def apply_stereo_hkl(n_clicks, h, k, l):
         raise PreventUpdate from None
 
 
+def _stale(message: str):
+    """Status line shown when a plot could not be updated and the previous one stays."""
+
+    return html.Span(
+        [html.I(className="bi bi-exclamation-triangle me-1"), f"Not updated: {message} Showing the last valid plot."],
+        className="text-danger",
+    )
+
+
+def _pattern_reference(pole_center):
+    """``(frame_id, pattern_index)`` chosen in the pole figure, or None."""
+
+    if not pole_center or pole_center.get("pattern_index") is None:
+        return None
+    return (pole_center.get("frame_id"), int(pole_center["pattern_index"]))
+
+
 # ---------------------------------------------------------------------------
-# Callback: update orientation map when XML is available or color changes
+# Callback: color map
 # ---------------------------------------------------------------------------
 
 
@@ -1243,7 +1364,8 @@ def apply_stereo_hkl(n_clicks, h, k, l):
     Output("orientation-map-graph", "figure"),
     Output("orientation-marker-size", "value"),
     Output("orientation-loading-target", "children"),
-    Input("peakindexing-xml-path", "data"),
+    Output("orientation-map-status", "children"),
+    Input("peakindexing-source", "data"),
     Input(SCOPE_STORE_ID, "data"),
     Input("orientation-color-select", "value"),
     Input("orientation-rgb-symmetry-select", "value"),
@@ -1297,7 +1419,7 @@ def apply_stereo_hkl(n_clicks, h, k, l):
     prevent_initial_call=True,
 )
 def update_orientation_map(
-    xml_path,
+    source,
     scope,
     color_by,
     rgb_symmetry,
@@ -1325,7 +1447,7 @@ def update_orientation_map(
     input_size,
     nonindexed_style,
     view_mode,
-    selected_grains,
+    selected_patterns,
     pole_center,
     pole_hkl,
     pole_color_rad_deg,
@@ -1349,13 +1471,11 @@ def update_orientation_map(
     y_axis_3d,
     z_axis,
 ):
-    if not xml_path:
+    if not source:
         raise PreventUpdate
 
-    # Skip unnecessary re-renders: if a pole-figure-only control
-    # (hkl, color radius, surface) changed but the orientation map
-    # isn't using pole_hsv mode, there is nothing to update.
     triggered = dash.ctx.triggered_id
+    effective_color = color_by or "cubic_ipf"
     _POLE_ONLY_TRIGGERS = {
         "stereo-applied-hkl",
         "stereo-color-rad",
@@ -1370,34 +1490,44 @@ def update_orientation_map(
         "stereo-surface-normal-y",
         "stereo-surface-normal-z",
     }
-    if triggered in _POLE_ONLY_TRIGGERS and (color_by or "cubic_ipf") != "pole_hsv":
+    if triggered in _POLE_ONLY_TRIGGERS and effective_color != "pole_hsv":
+        raise PreventUpdate
+    if triggered in {
+        SCALAR_PALETTE_ID,
+        SCALAR_REVERSE_ID,
+        SCALAR_MIN_ID,
+        SCALAR_MAX_ID,
+    } and not map_adapter.is_scalar_mode(effective_color):
         raise PreventUpdate
 
-    # Skip when scalar-only controls (palette/reverse/min/max) change but
-    # the orientation map isn't in a scalar mode -- those settings have
-    # no visible effect on per-point RGB modes.
-    _SCALAR_ONLY_TRIGGERS = {SCALAR_PALETTE_ID, SCALAR_REVERSE_ID, SCALAR_MIN_ID, SCALAR_MAX_ID}
-    effective_color = color_by or "cubic_ipf"
-    if triggered in _SCALAR_ONLY_TRIGGERS:
-        from laue_portal.components.visualization.orientation_map import is_scalar_mode
-
-        if not is_scalar_mode(effective_color):
-            raise PreventUpdate
+    marker_size = max(1, int(input_size or 40))
+    is_3d_view = str(view_mode).lower() == "3d"
+    if is_3d_view:
+        axes = (x_axis_3d or "X", y_axis_3d or "Y", z_axis or "Z")
+    else:
+        axes = (x_axis or "X", y_axis or "H")
 
     try:
-        from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
-        from laue_portal.components.visualization.orientation_map import (
-            apply_selection_highlight,
-            get_scalar_auto_range,
-            make_orientation_map,
-            make_orientation_map_3d,
-        )
-
-        parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
-
-        marker_size = max(1, int(input_size or 40))
-        try:
-            surface_vectors = _surface_vectors_for(
+        dataset = _dataset(source)
+        data_scope = to_data_scope(scope)
+        if effective_color == "pole_hsv":
+            surface_value = map_adapter.resolve_surface(
+                pole_surface,
+                [
+                    pole_surface_tilt_x,
+                    pole_surface_tilt_y,
+                    pole_surface_tilt_z,
+                    pole_surface_roll_x,
+                    pole_surface_roll_y,
+                    pole_surface_roll_z,
+                    pole_surface_normal_x,
+                    pole_surface_normal_y,
+                    pole_surface_normal_z,
+                ],
+            )
+            rendered_pole_hkl = _parse_stereo_hkl(*(pole_hkl or (1, 0, 0)))
+        else:
+            surface_value = map_adapter.resolve_surface(
                 surface,
                 [
                     surface_tilt_x,
@@ -1411,157 +1541,47 @@ def update_orientation_map(
                     surface_normal_z,
                 ],
             )
-        except ValueError:
-            raise PreventUpdate from None
-
-        # Determine effective color mode and reference grain.
-        ref_grain_index = None
-        if pole_center and pole_center.get("grain_index") is not None:
-            ref_grain_index = pole_center["grain_index"]
-
-        # Pole figure parameters for pole_hsv mode
-        rendered_pole_hkl = None
-        pole_center_xy = None
-        pole_rad = float(pole_color_rad_deg or 22.5)
-
-        if effective_color == "pole_hsv":
-            try:
-                rendered_pole_hkl = _parse_stereo_hkl(*(pole_hkl or (1, 0, 0)))
-            except (TypeError, ValueError):
-                raise PreventUpdate from None
-
-            # Use pole figure center if available
-            if pole_center:
-                pole_center_xy = (pole_center.get("x", 0.0), pole_center.get("y", 0.0))
-
-            # Use pole figure surface for consistency
-            if pole_surface:
-                surface = pole_surface
-                try:
-                    surface_vectors = _surface_vectors_for(
-                        pole_surface,
-                        [
-                            pole_surface_tilt_x,
-                            pole_surface_tilt_y,
-                            pole_surface_tilt_z,
-                            pole_surface_roll_x,
-                            pole_surface_roll_y,
-                            pole_surface_roll_z,
-                            pole_surface_normal_x,
-                            pole_surface_normal_y,
-                            pole_surface_normal_z,
-                        ],
-                    )
-                except ValueError:
-                    raise PreventUpdate from None
-
-        # ── Scalar color settings ──
-        # If the user hasn't set Min/Max, fall back to the data range so
-        # Plotly's colorbar matches what's actually visible.  The Min/Max
-        # Inputs are populated by the dedicated reset callback (see
-        # compute_orientation_auto_range / reset_scalar_color_range)
-        # whenever the mode or data changes; we don't write to the Store
-        # here so the figure callback stays out of the auto-range
-        # dependency chain (otherwise Dash sees a cycle:
-        # Min/Max -> figure -> Store -> Min/Max).
-        auto_vmin, auto_vmax = get_scalar_auto_range(parsed, effective_color, indexed_only=True)
-        cmin = user_vmin if (user_vmin is not None and user_vmin != "") else auto_vmin
-        cmax = user_vmax if (user_vmax is not None and user_vmax != "") else auto_vmax
-
-        rgb_reference_matrix = None
+            rendered_pole_hkl = (1, 0, 0)
+        pole_center_xy = (0.0, 0.0)
+        if pole_center and pole_center.get("x") is not None:
+            pole_center_xy = (float(pole_center["x"]), float(pole_center["y"]))
+        reference_matrix = None
         if rgb_reference_mode == "custom":
-            custom_ref_values = [ref_a0, ref_a1, ref_a2, ref_b0, ref_b1, ref_b2, ref_c0, ref_c1, ref_c2]
-            if all(v is not None and v != "" for v in custom_ref_values):
-                try:
-                    rgb_reference_matrix = [
-                        [float(ref_a0), float(ref_a1), float(ref_a2)],
-                        [float(ref_b0), float(ref_b1), float(ref_b2)],
-                        [float(ref_c0), float(ref_c1), float(ref_c2)],
-                    ]
-                except (TypeError, ValueError):
-                    rgb_reference_matrix = None
-
-        # Resolve axis selections.  2-D and 3-D controls are separate so each
-        # view retains its own axis state when users toggle modes.
-        is_3d_view = str(view_mode).lower() == "3d"
-        plot_x_axis = (x_axis_3d or "X") if is_3d_view else (x_axis or "X")
-        plot_y_axis = (y_axis_3d or "Y") if is_3d_view else (y_axis or "H")
-        z_axis_val = z_axis or "Z"
-
-        if is_3d_view:
-            fig = make_orientation_map_3d(
-                parsed,
-                color_by=effective_color,
-                marker_size=marker_size,
-                surface=surface or "normal",
-                ref_grain_index=ref_grain_index,
-                pole_hkl=rendered_pole_hkl,
-                pole_center_xy=pole_center_xy,
-                pole_color_rad_deg=pole_rad,
-                palette=palette or DEFAULT_PALETTE,
-                reverse_palette=bool(reverse_palette),
-                cmin=cmin,
-                cmax=cmax,
-                x_axis=plot_x_axis,
-                y_axis=plot_y_axis,
-                z_axis=z_axis_val,
-                rgb_symmetry=rgb_symmetry or "auto",
-                rgb_reference_mode=rgb_reference_mode or "lab",
-                rgb_reference_step=rgb_reference_step,
-                rgb_reference_matrix=rgb_reference_matrix,
-                surface_vectors=surface_vectors,
-                nonindexed_style=nonindexed_style or "gray",
-            )
-        else:
-            fig = make_orientation_map(
-                parsed,
-                color_by=effective_color,
-                marker_size=marker_size,
-                surface=surface or "normal",
-                ref_grain_index=ref_grain_index,
-                pole_hkl=rendered_pole_hkl,
-                pole_center_xy=pole_center_xy,
-                pole_color_rad_deg=pole_rad,
-                palette=palette or DEFAULT_PALETTE,
-                reverse_palette=bool(reverse_palette),
-                cmin=cmin,
-                cmax=cmax,
-                x_axis=plot_x_axis,
-                y_axis=plot_y_axis,
-                rgb_symmetry=rgb_symmetry or "auto",
-                rgb_reference_mode=rgb_reference_mode or "lab",
-                rgb_reference_step=rgb_reference_step,
-                rgb_reference_matrix=rgb_reference_matrix,
-                surface_vectors=surface_vectors,
-                nonindexed_style=nonindexed_style or "gray",
+            reference_matrix = map_adapter.parse_reference_matrix(
+                [ref_a0, ref_a1, ref_a2, ref_b0, ref_b1, ref_b2, ref_c0, ref_c1, ref_c2]
             )
 
-        # Cross-plot highlighting: dim unselected points, ring selected ones
-        if selected_grains:
-            apply_selection_highlight(
-                fig,
-                parsed,
-                selected_grains,
-                marker_size,
-                is_3d=is_3d_view,
-                x_axis=plot_x_axis,
-                y_axis=plot_y_axis,
-                z_axis=z_axis_val,
-                nonindexed_style=nonindexed_style or "gray",
-            )
-
-        return fig, marker_size, ""
+        fig, map_data = map_adapter.build_map(
+            dataset,
+            scope=data_scope,
+            axes=axes,
+            color=effective_color,
+            surface=surface_value,
+            marker_size=marker_size,
+            nonindexed_style=nonindexed_style or "gray",
+            palette=palette or DEFAULT_PALETTE,
+            reverse=bool(reverse_palette),
+            cmin=user_vmin,
+            cmax=user_vmax,
+            symmetry=rgb_symmetry or "auto",
+            reference_mode=rgb_reference_mode or "lab",
+            reference_step=rgb_reference_step,
+            reference_matrix=reference_matrix,
+            pole_hkl=rendered_pole_hkl,
+            pole_center=pole_center_xy,
+            pole_radius_deg=float(pole_color_rad_deg or 22.5),
+            misorientation_reference=_pattern_reference(pole_center),
+        )
+        map_adapter.highlight_selection(fig, map_data, selected_patterns, marker_size=marker_size)
+        return fig, marker_size, "", ""
     except PreventUpdate:
         raise
-    except Exception as e:
-        print(f"Error creating orientation map: {e}")
+    except (ValueError, KeyError) as error:
+        return dash.no_update, marker_size, "", _stale(str(error).strip("'\""))
+    except Exception as error:
+        print(f"Error creating orientation map: {error}")
         traceback.print_exc()
-        raise PreventUpdate from None
-
-
-# ---------------------------------------------------------------------------
-# Callback: toggle axis dropdown visibility based on 2-D / 3-D view mode
-# ---------------------------------------------------------------------------
+        return dash.no_update, marker_size, "", _stale(f"{type(error).__name__}: {error}")
 
 
 @callback(
@@ -1575,95 +1595,60 @@ def toggle_axis_visibility(view_mode):
     return {"display": "block"}, {"display": "none"}
 
 
-# ---------------------------------------------------------------------------
-# Callback: show selected point details on orientation map click
-# ---------------------------------------------------------------------------
-
-
 @callback(
     Output("orientation-point-details", "children"),
     Input("orientation-map-graph", "clickData"),
-    State("peakindexing-xml-path", "data"),
+    State("peakindexing-source", "data"),
     prevent_initial_call=True,
 )
-def show_point_details(click_data, xml_path):
-    if not click_data or not xml_path:
+def show_point_details(click_data, source):
+    if not click_data or not source:
         raise PreventUpdate
-
     try:
-        point = click_data["points"][0]
-        customdata = point.get("customdata", None)
-        if customdata is None or len(customdata) < 8:
-            # Scattergl may not provide customdata -- fall back to pointIndex
-            point_index = point.get("pointIndex", point.get("pointNumber", None))
-            if point_index is None:
-                raise PreventUpdate
-
-            from laue_portal.analysis.xml_parser import get_step_peaks, parse_indexing_xml
-
-            parsed = parse_indexing_xml(xml_path)
-            step_idx = int(point_index)
-            if step_idx >= len(parsed["positions"]):
-                raise PreventUpdate
-
-            x_pos = float(parsed["positions"][step_idx, 0])
-            y_pos = float(parsed["positions"][step_idx, 1])
-            z_pos = float(parsed["positions"][step_idx, 2])
-            n_pat = int(parsed["n_patterns"][step_idx])
-            n_idx = int(parsed["n_indexed"][step_idx])
-            goodness = float(parsed["goodnesses"][step_idx])
-            rms_err = float(parsed["rms_errors"][step_idx])
-            step_peaks = get_step_peaks(parsed, step_idx)
-            n_peaks_total = step_peaks["n_peaks"] if step_peaks else 0
-        else:
-            step_idx = int(customdata[0])
-            x_pos = float(customdata[1])
-            y_pos = float(customdata[2])
-            z_pos = float(customdata[3])
-            n_pat = int(customdata[4])
-            n_idx = int(customdata[5])
-            goodness = float(customdata[6])
-            rms_err = float(customdata[7])
-
-            from laue_portal.analysis.xml_parser import get_step_peaks, parse_indexing_xml
-
-            parsed = parse_indexing_xml(xml_path)
-            step_peaks = get_step_peaks(parsed, step_idx)
-            n_peaks_total = step_peaks["n_peaks"] if step_peaks else 0
-
-        detail_card = dbc.Card(
-            dbc.CardBody(
-                [
-                    html.H6("Clicked Point Details", className="card-title"),
-                    html.P(
-                        [
-                            html.Strong(f"Step #{step_idx}"),
-                            f"  Motor position: ({x_pos:.1f}, {y_pos:.1f}, {z_pos:.1f})",
-                        ]
-                    ),
-                    html.P(
-                        [
-                            f"Patterns: {n_pat}  |  "
-                            f"Indexed: {n_idx}/{n_peaks_total}  |  "
-                            f"Goodness: {goodness:.1f}  |  "
-                            f"RMS error: {rms_err:.5f} deg",
-                        ]
-                    ),
-                ]
-            ),
-            className="mt-2",
-        )
-        return detail_card
+        selection = selection_from_plotly(click_data)
+        if not selection.frame_ids:
+            raise PreventUpdate
+        dataset = _dataset(source)
+        frame_id = selection.frame_ids[0]
+        pattern_index = selection.pattern_ids[0][1] if selection.pattern_ids else None
+        details = map_adapter.point_details(dataset, frame_id, pattern_index)
     except PreventUpdate:
         raise
-    except Exception as e:
-        print(f"Error showing point details: {e}")
+    except Exception as error:
+        print(f"Error showing point details: {error}")
         traceback.print_exc()
         raise PreventUpdate from None
 
+    x_pos, y_pos, z_pos = details["sample_position"]
+    depth = "" if details["depth"] is None else f"  Depth: {details['depth']:.2f} um"
+    if details["pattern_index"] is None:
+        pattern_line = f"Patterns: {details['n_patterns']}  |  Detected peaks: {details['n_peaks']}  |  no indexed pattern at this point"
+    else:
+        pattern_line = (
+            f"Pattern {details['pattern_index']} of {details['n_patterns']}  |  "
+            f"Indexed: {details['n_indexed']}/{details['n_peaks']}  |  "
+            f"Goodness: {details['goodness']:.1f}  |  "
+            f"RMS error: {details['rms_error_deg']:.5f} deg"
+        )
+    return dbc.Card(
+        dbc.CardBody(
+            [
+                html.H6("Clicked Point Details", className="card-title"),
+                html.P(
+                    [
+                        html.Strong(f"Step #{details['step']}"),
+                        f"  (frame {details['frame_id']})  Motor position: ({x_pos:.1f}, {y_pos:.1f}, {z_pos:.1f}){depth}",
+                    ]
+                ),
+                html.P(pattern_line),
+            ]
+        ),
+        className="mt-2",
+    )
+
 
 # ---------------------------------------------------------------------------
-# Callback: update pole figure plot (auto-renders on data/control changes)
+# Callback: pole figure
 # ---------------------------------------------------------------------------
 
 
@@ -1672,7 +1657,8 @@ def show_point_details(click_data, xml_path):
     Output("stereo-marker-size", "value"),
     Output("stereo-color-rad-col", "style"),
     Output("poles-loading-target", "children"),
-    Input("peakindexing-xml-path", "data"),
+    Output("stereo-plot-status", "children"),
+    Input("peakindexing-source", "data"),
     Input(SCOPE_STORE_ID, "data"),
     Input("stereo-applied-hkl", "data"),
     Input("stereo-marker-size", "value"),
@@ -1689,10 +1675,11 @@ def show_point_details(click_data, xml_path):
     Input("stereo-surface-normal-y", "value"),
     Input("stereo-surface-normal-z", "value"),
     Input("pole-figure-center", "data"),
+    Input("selected-grain-indices", "data"),
     prevent_initial_call=True,
 )
 def update_pole_figure(
-    xml_path,
+    source,
     scope,
     applied_hkl,
     input_size,
@@ -1709,131 +1696,100 @@ def update_pole_figure(
     surface_normal_y,
     surface_normal_z,
     pole_center,
+    selected_patterns,
 ):
-    if not xml_path:
+    if not source:
         raise PreventUpdate
 
-    # Show/hide color radius input based on color scheme
     rad_col_style = {"display": "flex", "alignItems": "center"}
     if color_scheme != "hsv_position":
         rad_col_style["display"] = "none"
+    marker_size = max(1, int(input_size or 12))
 
     try:
-        from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
-        from laue_portal.components.visualization.stereo_plot import (
-            make_pole_figure,
+        dataset = _dataset(source)
+        hkl = _parse_stereo_hkl(*(applied_hkl or (1, 0, 0)))
+        surface_value = map_adapter.resolve_surface(
+            surface,
+            [
+                surface_tilt_x,
+                surface_tilt_y,
+                surface_tilt_z,
+                surface_roll_x,
+                surface_roll_y,
+                surface_roll_z,
+                surface_normal_x,
+                surface_normal_y,
+                surface_normal_z,
+            ],
         )
-
-        parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
-
-        marker_size = max(1, int(input_size or 12))
-        try:
-            hkl = _parse_stereo_hkl(*(applied_hkl or (1, 0, 0)))
-            surface_vectors = _surface_vectors_for(
-                surface,
-                [
-                    surface_tilt_x,
-                    surface_tilt_y,
-                    surface_tilt_z,
-                    surface_roll_x,
-                    surface_roll_y,
-                    surface_roll_z,
-                    surface_normal_x,
-                    surface_normal_y,
-                    surface_normal_z,
-                ],
-            )
-        except ValueError:
-            raise PreventUpdate from None
-
-        # Pass center from store if available
-        center_xy = None
-        if pole_center and color_scheme == "hsv_position":
-            center_xy = (pole_center["x"], pole_center["y"])
-
-        fig = make_pole_figure(
-            parsed,
+        center = (0.0, 0.0)
+        if pole_center and color_scheme == "hsv_position" and pole_center.get("x") is not None:
+            center = (float(pole_center["x"]), float(pole_center["y"]))
+        fig, _pole_data = pole_adapter.build_pole_figure(
+            dataset,
+            scope=to_data_scope(scope),
             hkl=hkl,
-            color_scheme=color_scheme or "hsv_position",
-            color_rad_deg=float(color_rad_deg or 22.5),
+            surface=surface_value,
+            color=color_scheme or "hsv_position",
+            radius_deg=float(color_rad_deg or 22.5),
+            center=center,
             marker_size=marker_size,
-            surface=surface or "normal",
-            center_xy=center_xy,
-            surface_vectors=surface_vectors,
         )
-
-        return fig, marker_size, rad_col_style, ""
+        pole_adapter.highlight_pole_selection(fig, selected_patterns, marker_size=marker_size)
+        return fig, marker_size, rad_col_style, "", ""
     except PreventUpdate:
         raise
-    except Exception as e:
-        print(f"Error creating pole figure: {e}")
+    except (ValueError, KeyError) as error:
+        return dash.no_update, marker_size, rad_col_style, "", _stale(str(error).strip("'\""))
+    except Exception as error:
+        print(f"Error creating pole figure: {error}")
         traceback.print_exc()
-        raise PreventUpdate from None
+        return dash.no_update, marker_size, rad_col_style, "", _stale(f"{type(error).__name__}: {error}")
 
 
 # ---------------------------------------------------------------------------
-# Callback: populate indexed peaks table when XML is available
+# Callbacks: tables
+#
+# Row data is still delivered whole to AG Grid (client-side pagination); the
+# payload for the largest historical run is recorded in the P5 report.
 # ---------------------------------------------------------------------------
 
 
 @callback(
     Output("peak-table-container", "children"),
-    Input("peakindexing-xml-path", "data"),
+    Input("peakindexing-source", "data"),
     Input(SCOPE_STORE_ID, "data"),
     prevent_initial_call=True,
 )
-def update_peak_table(xml_path, scope):
-    if not xml_path:
+def update_peak_table(source, scope):
+    if not source:
         raise PreventUpdate
-
     try:
-        from laue_portal.analysis.xml_parser import apply_data_scope, get_all_indexed_peaks, parse_indexing_xml
-        from laue_portal.components.visualization.peak_table import make_peak_table
-
-        parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
-        indexed_peaks = get_all_indexed_peaks(parsed)
-        return make_peak_table(indexed_peaks)
+        dataset = _dataset(source)
+        return make_peak_table(peak_rows(dataset, to_data_scope(scope)))
     except Exception as e:
         print(f"Error creating peak table: {e}")
         traceback.print_exc()
-        return html.Div(
-            dbc.Alert(f"Could not load peak table: {e}", color="warning"),
-        )
-
-
-# ---------------------------------------------------------------------------
-# Callback: populate indexed patterns table when XML is available
-# ---------------------------------------------------------------------------
+        return html.Div(dbc.Alert(f"Could not load peak table: {e}", color="warning"))
 
 
 @callback(
     Output("pattern-table-container", "children"),
-    Input("peakindexing-xml-path", "data"),
+    Input("peakindexing-source", "data"),
     Input(SCOPE_STORE_ID, "data"),
     prevent_initial_call=True,
 )
-def update_pattern_table(xml_path, scope):
-    if not xml_path:
+def update_pattern_table(source, scope):
+    if not source:
         raise PreventUpdate
-
     try:
-        from laue_portal.analysis.xml_parser import apply_data_scope, get_all_patterns, parse_indexing_xml
-        from laue_portal.components.visualization.pattern_table import make_pattern_table
-
-        parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
-        patterns = get_all_patterns(parsed)
-        return make_pattern_table(patterns)
+        dataset = _dataset(source)
+        return make_pattern_table(pattern_rows(dataset, to_data_scope(scope)))
     except Exception as e:
         print(f"Error creating pattern table: {e}")
         traceback.print_exc()
-        return html.Div(
-            dbc.Alert(f"Could not load pattern table: {e}", color="warning"),
-        )
-
-
-# ---------------------------------------------------------------------------
-# Callback: show/hide indexed peak table columns
-# ---------------------------------------------------------------------------
+        return html.Div(dbc.Alert(f"Could not load pattern table: {e}", color="warning"))
 
 
 @callback(
@@ -1841,32 +1797,21 @@ def update_pattern_table(xml_path, scope):
     Input("peak-columns-default", "value"),
     Input("peak-columns-geometry", "value"),
     Input("peak-columns-fit", "value"),
-    Input("peak-columns-search", "value"),
     Input("peak-columns-indexing", "value"),
     State("indexed-peaks-grid", "columnDefs"),
     prevent_initial_call=True,
 )
-def update_peak_columns(default_cols, geometry_cols, fit_cols, search_cols, indexing_cols, column_defs):
+def update_peak_columns(default_cols, geometry_cols, fit_cols, indexing_cols, column_defs):
     if not column_defs:
         raise PreventUpdate
-
     visible = set(default_cols or [])
-    visible.update(geometry_cols or [])
-    visible.update(fit_cols or [])
-    visible.update(search_cols or [])
-    visible.update(indexing_cols or [])
-
+    for group in (geometry_cols, fit_cols, indexing_cols):
+        visible.update(group or [])
     for col_def in column_defs:
         field = col_def.get("field")
         if field:
             col_def["hide"] = field not in visible
-
     return column_defs
-
-
-# ---------------------------------------------------------------------------
-# Callback: show/hide indexed pattern table columns
-# ---------------------------------------------------------------------------
 
 
 @callback(
@@ -1874,29 +1819,24 @@ def update_peak_columns(default_cols, geometry_cols, fit_cols, search_cols, inde
     Input("pattern-columns-default", "value"),
     Input("pattern-columns-position", "value"),
     Input("pattern-columns-run", "value"),
-    Input("pattern-columns-detail", "value"),
     State("indexed-patterns-grid", "columnDefs"),
     prevent_initial_call=True,
 )
-def update_pattern_columns(default_cols, position_cols, run_cols, detail_cols, column_defs):
+def update_pattern_columns(default_cols, position_cols, run_cols, column_defs):
     if not column_defs:
         raise PreventUpdate
-
     visible = set(default_cols or [])
-    visible.update(position_cols or [])
-    visible.update(run_cols or [])
-    visible.update(detail_cols or [])
-
+    for group in (position_cols, run_cols):
+        visible.update(group or [])
     for col_def in column_defs:
         field = col_def.get("field")
         if field:
             col_def["hide"] = field not in visible
-
     return column_defs
 
 
 # ---------------------------------------------------------------------------
-# Callback: handle click on pole figure to set/clear color center
+# Callback: click on pole figure to set/clear the color center and reference pattern
 # ---------------------------------------------------------------------------
 
 
@@ -1908,151 +1848,57 @@ def update_pattern_columns(default_cols, position_cols, run_cols, detail_cols, c
     Input("stereo-plot-graph", "clickData"),
     Input("pole-figure-reset-btn", "n_clicks"),
     State("pole-figure-center", "data"),
-    State("peakindexing-xml-path", "data"),
-    State(SCOPE_STORE_ID, "data"),
-    State("stereo-applied-hkl", "data"),
-    State("stereo-surface-select", "value"),
-    State("stereo-surface-tilt-x", "value"),
-    State("stereo-surface-tilt-y", "value"),
-    State("stereo-surface-tilt-z", "value"),
-    State("stereo-surface-roll-x", "value"),
-    State("stereo-surface-roll-y", "value"),
-    State("stereo-surface-roll-z", "value"),
-    State("stereo-surface-normal-x", "value"),
-    State("stereo-surface-normal-y", "value"),
-    State("stereo-surface-normal-z", "value"),
     State("orientation-color-select", "value"),
     prevent_initial_call=True,
 )
-def handle_pole_figure_click(
-    click_data,
-    reset_clicks,
-    current_center,
-    xml_path,
-    scope,
-    applied_hkl,
-    surface,
-    surface_tilt_x,
-    surface_tilt_y,
-    surface_tilt_z,
-    surface_roll_x,
-    surface_roll_y,
-    surface_roll_z,
-    surface_normal_x,
-    surface_normal_y,
-    surface_normal_z,
-    current_color_by,
-):
-    """Set or clear the HSV color center when a point is clicked or reset is pressed."""
+def handle_pole_figure_click(click_data, reset_clicks, current_center, current_color_by):
+    """Set or clear the HSV color center (and misorientation reference) from a clicked pole."""
+
     triggered = dash.ctx.triggered_id
-    _default_hint = html.Small(
-        "Click a point to set color center.",
-        className="text-muted",
-    )
+    _default_hint = html.Small("Click a point to set color center.", className="text-muted")
     _hide_btn = {"display": "none"}
 
-    # Reset button was clicked -- revert to default IPF coloring
-    if triggered == "pole-figure-reset-btn":
+    def restore():
         restore_color = "cubic_ipf"
         if current_center is not None and current_center.get("prev_color_by"):
             restore_color = current_center["prev_color_by"]
         return None, _default_hint, _hide_btn, restore_color
 
-    # Pole figure click
+    if triggered == "pole-figure-reset-btn":
+        return restore()
+
     if not click_data or not click_data.get("points"):
         raise PreventUpdate
-
     point = click_data["points"][0]
-
-    x = point.get("x")
-    y = point.get("y")
-    customdata = point.get("customdata")
-    if x is None or y is None:
+    x, y = point.get("x"), point.get("y")
+    selection = selection_from_plotly(click_data)
+    if x is None or y is None or not selection.pattern_ids:
         raise PreventUpdate
+    frame_id, pattern_index = selection.pattern_ids[0]
 
-    # Extract grain index -- try customdata first, fall back to pointIndex
-    grain_index = None
-    if customdata is not None and len(customdata) > 0:
-        grain_index = int(customdata[0])
-    else:
-        # Scattergl may omit customdata in clickData.  Use pointIndex to
-        # look up the grain index from the pole figure mapping.
-        point_index = point.get("pointIndex", point.get("pointNumber"))
-        if point_index is not None and xml_path:
-            try:
-                import numpy as np
+    if (
+        current_center is not None
+        and current_center.get("frame_id") == frame_id
+        and current_center.get("pattern_index") == pattern_index
+    ):
+        return restore()  # clicking the current reference clears it
 
-                from laue_portal.analysis.projection import (
-                    cubic_hkl_family,
-                    pole_figure_points,
-                )
-                from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
-
-                parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
-                hkl = _parse_stereo_hkl(*(applied_hkl or (1, 0, 0)))
-                family = cubic_hkl_family(*hkl)
-                surf_normal, surf_roll, surf_tilt = _resolved_surface_vectors(
-                    surface,
-                    [
-                        surface_tilt_x,
-                        surface_tilt_y,
-                        surface_tilt_z,
-                        surface_roll_x,
-                        surface_roll_y,
-                        surface_roll_z,
-                        surface_normal_x,
-                        surface_normal_y,
-                        surface_normal_z,
-                    ],
-                )
-                pts, grain_indices = pole_figure_points(
-                    parsed["recip_lattices"],
-                    family,
-                    surface_normal=surf_normal,
-                    surface_roll=surf_roll,
-                    surface_tilt=surf_tilt,
-                )
-                if len(pts) > 0:
-                    finite_mask = np.all(np.isfinite(pts), axis=1)
-                    grain_indices = grain_indices[finite_mask]
-                if 0 <= point_index < len(grain_indices):
-                    grain_index = int(parsed["_step_indices"][grain_indices[point_index]])
-            except Exception as e:
-                print(f"Error resolving grain index from click: {e}")
-                traceback.print_exc()
-
-    if grain_index is None:
-        raise PreventUpdate
-
-    # Toggle: clicking the current reference clears it
-    if current_center is not None and current_center.get("grain_index") == grain_index:
-        restore_color = "cubic_ipf"
-        if current_center is not None and current_center.get("prev_color_by"):
-            restore_color = current_center["prev_color_by"]
-        return None, _default_hint, _hide_btn, restore_color
-
-    # Save the current color mode so we can restore it on reset
     prev_color = current_color_by if current_color_by not in ("misorientation", "pole_hsv") else "cubic_ipf"
     new_center = {
         "x": float(x),
         "y": float(y),
-        "grain_index": grain_index,
+        "frame_id": frame_id,
+        "pattern_index": int(pattern_index),
         "prev_color_by": prev_color,
     }
-    grain_label = f"grain #{grain_index}"
     info = html.Small(
-        [
-            html.Strong("Color center: "),
-            f"{grain_label} at ({x:.3f}, {y:.3f})",
-        ]
+        [html.Strong("Color center: "), f"frame {frame_id} pattern {pattern_index} at ({x:.3f}, {y:.3f})"]
     )
-    _show_btn = {"display": "flex", "alignItems": "center"}
-
-    return new_center, info, _show_btn, "pole_hsv"
+    return new_center, info, {"display": "flex", "alignItems": "center"}, "pole_hsv"
 
 
 # ---------------------------------------------------------------------------
-# Callback: handle lasso/box selection on pole figure (ROI picking)
+# Callback: lasso/box selection on the pole figure (ROI picking)
 # ---------------------------------------------------------------------------
 
 
@@ -2060,246 +1906,91 @@ def handle_pole_figure_click(
     Output("selected-grain-indices", "data"),
     Output("stereo-selection-info", "children"),
     Input("stereo-plot-graph", "selectedData"),
-    State("peakindexing-xml-path", "data"),
-    State(SCOPE_STORE_ID, "data"),
-    State("stereo-applied-hkl", "data"),
-    State("stereo-surface-select", "value"),
-    State("stereo-surface-tilt-x", "value"),
-    State("stereo-surface-tilt-y", "value"),
-    State("stereo-surface-tilt-z", "value"),
-    State("stereo-surface-roll-x", "value"),
-    State("stereo-surface-roll-y", "value"),
-    State("stereo-surface-roll-z", "value"),
-    State("stereo-surface-normal-x", "value"),
-    State("stereo-surface-normal-y", "value"),
-    State("stereo-surface-normal-z", "value"),
+    State("peakindexing-source", "data"),
     prevent_initial_call=True,
 )
-def handle_pole_selection(
-    selected_data,
-    xml_path,
-    scope,
-    applied_hkl,
-    surface,
-    surface_tilt_x,
-    surface_tilt_y,
-    surface_tilt_z,
-    surface_roll_x,
-    surface_roll_y,
-    surface_roll_z,
-    surface_normal_x,
-    surface_normal_y,
-    surface_normal_z,
-):
-    """Process lasso/box selection on the pole figure to extract grain indices."""
-    # If selection is cleared (double-click to deselect), reset
+def handle_pole_selection(selected_data, source):
+    """Turn a lasso/box selection into stable pattern identities and summarize misorientation."""
+
     if not selected_data or not selected_data.get("points"):
         return [], html.Small(
             "Use lasso or box select on the pole figure to pick regions of interest.",
             className="text-muted",
         )
-
-    # Extract unique grain indices from selected points.
-    #
-    # Plotly Scattergl's selectedData may or may not include customdata
-    # depending on the Plotly/browser version.  We try customdata first;
-    # if it is absent we fall back to pointIndex and look up grain indices
-    # by recomputing the pole figure grain-index mapping.
-    grain_set = set()
-    fallback_point_indices = []
-
-    for pt in selected_data["points"]:
-        customdata = pt.get("customdata")
-        if customdata is not None and len(customdata) > 0:
-            grain_set.add(int(customdata[0]))
-        else:
-            # Collect pointIndex / pointNumber for fallback lookup
-            pi = pt.get("pointIndex", pt.get("pointNumber"))
-            if pi is not None:
-                fallback_point_indices.append(int(pi))
-
-    # Fallback: recompute grain_indices mapping from the pole figure and
-    # use pointIndex to look up grain indices.
-    if not grain_set and fallback_point_indices and xml_path:
-        try:
-            import numpy as np
-
-            from laue_portal.analysis.projection import (
-                cubic_hkl_family,
-                pole_figure_points,
-            )
-            from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
-
-            parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
-
-            hkl = _parse_stereo_hkl(*(applied_hkl or (1, 0, 0)))
-            family = cubic_hkl_family(*hkl)
-            surf_normal, surf_roll, surf_tilt = _resolved_surface_vectors(
-                surface,
-                [
-                    surface_tilt_x,
-                    surface_tilt_y,
-                    surface_tilt_z,
-                    surface_roll_x,
-                    surface_roll_y,
-                    surface_roll_z,
-                    surface_normal_x,
-                    surface_normal_y,
-                    surface_normal_z,
-                ],
-            )
-            points, grain_indices = pole_figure_points(
-                parsed["recip_lattices"],
-                family,
-                surface_normal=surf_normal,
-                surface_roll=surf_roll,
-                surface_tilt=surf_tilt,
-            )
-
-            # Apply same NaN filter as make_pole_figure so point indices
-            # match the rendered trace
-            if len(points) > 0:
-                finite_mask = np.all(np.isfinite(points), axis=1)
-                grain_indices = grain_indices[finite_mask]
-
-            for pi in fallback_point_indices:
-                if 0 <= pi < len(grain_indices):
-                    grain_set.add(int(parsed["_step_indices"][grain_indices[pi]]))
-        except Exception as e:
-            print(f"Error in fallback grain extraction: {e}")
-            traceback.print_exc()
-
-    selected = sorted(grain_set)
-
+    selection = selection_from_plotly(selected_data)
+    selected = [[frame_id, pattern_index] for frame_id, pattern_index in selection.pattern_ids]
     if not selected:
-        return [], html.Small(
-            "No grains in selection.",
-            className="text-muted",
-        )
+        return [], html.Small("No patterns in selection.", className="text-muted")
 
-    # Count selected poles
-    n_poles = len(selected_data["points"])
-
-    # Compute misorientation statistics if we have the XML and >= 2 grains.
-    # Pairwise misorientation is O(k^2 * 24) so cap the grain count to
-    # keep the response interactive.
-    _MAX_GRAINS_FOR_MISORIENTATION = 700
     misorientation_info = []
-    if xml_path and len(selected) >= 2:
-        if len(selected) > _MAX_GRAINS_FOR_MISORIENTATION:
+    if source and len(selected) >= 2:
+        try:
+            summary = pole_adapter.misorientation_summary(_dataset(source), selected)
+        except Exception as error:
+            print(f"Error computing misorientation: {error}")
+            traceback.print_exc()
+            summary = None
+        if summary and summary.get("skipped"):
             misorientation_info = [
                 html.Br(),
                 html.Small(
-                    f"Misorientation stats skipped (>{_MAX_GRAINS_FOR_MISORIENTATION} grains selected).",
+                    f"Misorientation stats skipped (>{summary['limit']} patterns selected).",
                     className="text-muted",
                 ),
             ]
-        else:
-            try:
-                from laue_portal.analysis.orientation import (
-                    batch_orientations,
-                    pairwise_misorientation,
-                )
-                from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
+        elif summary:
+            misorientation_info = [
+                html.Br(),
+                html.Strong("Misorientation: "),
+                f"mean {summary['mean']:.2f}°, range [{summary['min']:.2f}°, {summary['max']:.2f}°] "
+                f"over {summary['n_pairs']} pairs ({summary['symmetry']} symmetry)",
+            ]
 
-                parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
-                orientations = batch_orientations(
-                    parsed["recip_lattices"],
-                    parsed["lattice_params"],
-                )
-
-                local_by_step = {int(step): i for i, step in enumerate(parsed["_step_indices"])}
-                valid_indices = [local_by_step[i] for i in selected if i in local_by_step]
-                if len(valid_indices) >= 2:
-                    mis = pairwise_misorientation(
-                        orientations,
-                        indices=valid_indices,
-                        symmetry_reduce=True,
-                    )
-                    misorientation_info = [
-                        html.Br(),
-                        html.Strong("Misorientation: "),
-                        f"mean {mis['mean']:.2f}\u00b0, range [{mis['min']:.2f}\u00b0, {mis['max']:.2f}\u00b0]",
-                    ]
-            except Exception as e:
-                print(f"Error computing misorientation: {e}")
-                traceback.print_exc()
-
-    # Build summary card
-    summary = dbc.Card(
+    n_poles = len(selected_data["points"])
+    summary_card = dbc.Card(
         dbc.CardBody(
             [
                 html.H6("ROI Selection", className="card-title"),
                 html.P(
                     [
                         html.Strong("Selected: "),
-                        f"{n_poles} poles from {len(selected)} grain{'s' if len(selected) != 1 else ''}",
+                        f"{n_poles} poles from {len(selected)} pattern{'s' if len(selected) != 1 else ''}",
                         *misorientation_info,
                     ]
                 ),
                 html.Small(
-                    "Selected grains are highlighted on the Orientation tab.",
-                    className="text-muted",
+                    "Selected patterns are highlighted on the Color Map and Pole Figure tabs.", className="text-muted"
                 ),
             ]
         ),
         className="mt-2",
     )
-
-    return selected, summary
+    return selected, summary_card
 
 
 # ---------------------------------------------------------------------------
-# Callbacks: scalar color-range auto-fill
-#
-# The flow is:
-#   compute_orientation_auto_range
-#       (color_mode, xml_path) -> orientation-color-auto-range Store
-#   reset_scalar_color_range
-#       (Store changed OR Reset clicked) -> Min/Max input values
-#   update_orientation_map (figure)
-#       (Min/Max as Inputs) -> orientation-map-graph.figure
-#
-# Crucially, the figure callback does NOT write to the auto-range Store.
-# That keeps Dash's dependency graph acyclic (otherwise we'd close the
-# loop: Min -> figure -> Store -> Min).
+# Callbacks: scalar color-range auto-fill (acyclic: Store -> Min/Max -> figure)
 # ---------------------------------------------------------------------------
 
 
 @callback(
     Output("orientation-color-auto-range", "data"),
     Input("orientation-color-select", "value"),
-    Input("peakindexing-xml-path", "data"),
+    Input("peakindexing-source", "data"),
     Input(SCOPE_STORE_ID, "data"),
     prevent_initial_call=True,
 )
-def compute_orientation_auto_range(color_mode, xml_path, scope):
-    """
-    Recompute the data-driven (vmin, vmax) for the current scalar color
-    mode and publish to the auto-range Store.  Fires only on the events
-    that should reset the user's manual Min/Max values: color-mode
-    change or new XML load.
-    """
-    if not xml_path:
+def compute_orientation_auto_range(color_mode, source, scope):
+    """Publish the data range of the current scalar color mode (None for orientation colors)."""
+
+    if not source:
         raise PreventUpdate
-
-    from laue_portal.components.visualization.orientation_map import is_scalar_mode
-
     effective_color = color_mode or "cubic_ipf"
-    if not is_scalar_mode(effective_color):
-        # Non-scalar mode: clear the Store so the reset callback blanks
-        # the Min/Max inputs.
+    if not map_adapter.is_scalar_mode(effective_color):
         return None
-
-    # Only parse XML when we actually need a scalar range.
     try:
-        from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
-        from laue_portal.components.visualization.orientation_map import (
-            get_scalar_auto_range,
-        )
-
-        parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
-        auto_vmin, auto_vmax = get_scalar_auto_range(parsed, effective_color, indexed_only=True)
+        dataset = _dataset(source)
+        auto_vmin, auto_vmax = map_adapter.scalar_range_for(dataset, to_data_scope(scope), effective_color)
         return {"mode": effective_color, "min": auto_vmin, "max": auto_vmax}
     except Exception as e:
         print(f"Error computing scalar auto-range: {e}")
@@ -2316,48 +2007,22 @@ def compute_orientation_auto_range(color_mode, xml_path, scope):
     prevent_initial_call=True,
 )
 def reset_scalar_color_range(auto_range, _reset_clicks, color_mode):
-    """
-    Populate the Min/Max inputs from the auto-computed data range.
+    """Populate the Min/Max inputs from the auto-computed range or on Reset."""
 
-    Triggers:
-      * The figure callback wrote a new ``orientation-color-auto-range``
-        Store value -- this happens whenever the data, color mode, or
-        any other figure input changes.  We only act when the *mode*
-        component of the payload differs from the prior write (or the
-        store transitioned to non-None), which corresponds to a real
-        mode/data change as opposed to incidental redraws.
-      * The user clicked the Reset button -- recompute from the current
-        store value.
-
-    User edits to the palette / reverse / Min / Max inputs do NOT fire
-    this callback, so typed values stay put.
-    """
     triggered = dash.ctx.triggered_id
-
-    # Reset button: re-apply the most recent auto range, whatever it is.
     if triggered == SCALAR_RESET_ID:
         if auto_range and auto_range.get("mode") == (color_mode or ""):
             return auto_range.get("min"), auto_range.get("max")
-        # No auto range available -> blank the fields so the figure
-        # callback falls back to its own auto detection.
         return None, None
-
-    # Store change path: only act when the store payload describes the
-    # currently-selected scalar mode.  For non-scalar modes the figure
-    # callback writes ``None``; we clear the inputs so stale values
-    # don't bleed into a future scalar-mode switch.
     if not auto_range:
         return None, None
     if auto_range.get("mode") != (color_mode or ""):
-        # Figure hasn't caught up yet (rare) or the user is on an
-        # orientation mode -- nothing useful to write.
         raise PreventUpdate
-
     return auto_range.get("min"), auto_range.get("max")
 
 
 # ---------------------------------------------------------------------------
-# Callbacks: color-key (IPF triangle / HSV hexagon) sidebar widgets
+# Callbacks: color keys
 # ---------------------------------------------------------------------------
 
 
@@ -2396,28 +2061,25 @@ def update_stereo_color_key(color_mode, surface):
 
 
 # ---------------------------------------------------------------------------
-# Detector view tab — callbacks
+# Detector view tab
+#
+# "Step #" is the frame position: the manifest index of a native run and the
+# XML step order of a converted historical run. Frame identities travel in
+# customdata and the summary card.
 # ---------------------------------------------------------------------------
 
 
-def _validated_detector_step(step_value, parsed):
-    """Translate an eligible original step ID to the scoped local row."""
-    if step_value is None or step_value == "":
-        raise PreventUpdate
+def _detector_frame(dataset, scope, step_value):
+    """The frame identity for a step input, provided the scope keeps that frame."""
+
     try:
-        step_float = float(step_value)
+        frame_id = map_adapter.frame_id_at(dataset, step_value)
     except (TypeError, ValueError):
         raise PreventUpdate from None
-    if not math.isfinite(step_float) or not step_float.is_integer():
+    position = map_adapter.frame_position(dataset, frame_id)
+    if position not in set(detector_adapter.eligible_frames(dataset, scope).tolist()):
         raise PreventUpdate
-
-    import numpy as np
-
-    step_indices = np.asarray(parsed.get("_step_indices", np.arange(len(parsed["positions"]))))
-    matches = np.flatnonzero(step_indices == int(step_float))
-    if not matches.size:
-        raise PreventUpdate
-    return int(matches[0])
+    return frame_id
 
 
 @callback(
@@ -2425,91 +2087,62 @@ def _validated_detector_step(step_value, parsed):
     Output("detector-step-select", "max"),
     Output("detector-step-select", "value"),
     Output("detector-step-range-text", "children"),
-    Input("peakindexing-xml-path", "data"),
+    Input("peakindexing-source", "data"),
     Input(SCOPE_STORE_ID, "data"),
     prevent_initial_call=True,
 )
-def populate_detector_step_input(xml_path, scope):
-    """
-    Populate the detector step input bounds from the parsed XML.
+def populate_detector_step_input(source, scope):
+    """Bounds for the step input; the first eligible frame with an indexed pattern is preselected."""
 
-    The first step with any indexed reflections is pre-selected so users see
-    something useful immediately.
-    """
-    if not xml_path:
+    if not source:
         raise PreventUpdate
     try:
-        from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
-    except Exception:
-        raise PreventUpdate from None
-
-    try:
-        parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
+        dataset = _dataset(source)
+        eligible = detector_adapter.eligible_frames(dataset, to_data_scope(scope))
     except Exception as e:
-        print(f"Error parsing XML for detector tab: {e}")
+        print(f"Error preparing detector steps: {e}")
         raise PreventUpdate from None
-
-    n_indexed = parsed["n_indexed"]
-    step_indices = parsed.get("_step_indices", [])
-    if len(step_indices) < 1:
+    if not len(eligible):
         return 0, 0, None, "No steps match the data scope"
-
-    default_local = next((i for i, count in enumerate(n_indexed) if int(count) > 0), 0)
-    default_value = int(step_indices[default_local])
-    step_min = int(step_indices[0])
-    step_max = int(step_indices[-1])
-    return step_min, step_max, default_value, f"Eligible steps: {len(step_indices)} ({step_min} to {step_max})"
+    with_patterns = [position for position in eligible if (dataset.pattern_frame_indices == position).any()]
+    default_value = int(with_patterns[0] if with_patterns else eligible[0])
+    step_min, step_max = int(eligible[0]), int(eligible[-1])
+    return step_min, step_max, default_value, f"Eligible steps: {len(eligible)} ({step_min} to {step_max})"
 
 
 @callback(
     Output("detector-pattern-checklist", "options"),
     Output("detector-pattern-checklist", "value"),
-    Input("peakindexing-xml-path", "data"),
+    Input("peakindexing-source", "data"),
     Input(SCOPE_STORE_ID, "data"),
     Input("detector-step-select", "value"),
     prevent_initial_call=True,
 )
-def populate_detector_pattern_checklist(xml_path, scope, step_value):
+def populate_detector_pattern_checklist(source, scope, step_value):
     """Refresh the pattern checklist whenever the step changes."""
-    if not xml_path:
+
+    if not source:
         return [], []
     if step_value is None or step_value == "":
         raise PreventUpdate
     try:
-        from laue_portal.analysis.xml_parser import apply_data_scope, get_step_peaks, parse_indexing_xml
-    except Exception:
-        return [], []
-
-    try:
-        parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
-        step_idx = _validated_detector_step(step_value, parsed)
-        step_peaks = get_step_peaks(parsed, step_idx)
+        dataset = _dataset(source)
+        frame_id = _detector_frame(dataset, to_data_scope(scope), step_value)
+        patterns = detector_adapter.frame_patterns(dataset, frame_id)
     except PreventUpdate:
         raise
     except Exception:
         return [], []
-
-    if step_peaks is None:
-        return [], []
-
-    options = []
-    values = []
-    for pat in step_peaks.get("patterns", []):
-        num = int(pat.get("pattern_num", 0))
-        label = f"Pattern {num}"
-        n_idx = pat.get("n_indexed")
-        if n_idx:
-            label += f" ({int(n_idx)} indexed)"
-        options.append({"label": label, "value": num})
-        values.append(num)
-    return options, values
+    options = [{"label": f"Pattern {rank} ({n_indexed} indexed)", "value": rank} for rank, n_indexed in patterns]
+    return options, [rank for rank, _ in patterns]
 
 
 @callback(
     Output("detector-view-graph", "figure"),
     Output("detector-step-summary", "children"),
     Output("detector-loading-target", "children"),
-    Input("peakindexing-xml-path", "data"),
+    Output("detector-view-status", "children"),
+    Input("peakindexing-source", "data"),
     Input(SCOPE_STORE_ID, "data"),
     Input("peakindexing-path-context", "data"),
     Input("detector-step-select", "value"),
@@ -2528,7 +2161,7 @@ def populate_detector_pattern_checklist(xml_path, scope, step_value):
     prevent_initial_call=True,
 )
 def update_detector_view(
-    xml_path,
+    source,
     scope,
     path_context,
     step_value,
@@ -2546,123 +2179,105 @@ def update_detector_view(
     image_opacity,
 ):
     """Re-render the detector overlay whenever the user changes any control."""
-    if not xml_path or step_value is None:
+
+    if not source or step_value is None:
         raise PreventUpdate
-
     try:
-        from laue_portal.analysis.back_projection import (
-            build_step_overlay,
-            overlay_statistics,
-        )
-        from laue_portal.analysis.detector_image import load_detector_image
-        from laue_portal.analysis.geometry import resolve_geometry_for_indexing
-        from laue_portal.analysis.xml_parser import apply_data_scope, parse_indexing_xml
-        from laue_portal.components.visualization.detector_view import make_detector_view
-
-        parsed = apply_data_scope(parse_indexing_xml(xml_path), normalize_scope(scope))
-        step_idx = _validated_detector_step(step_value, parsed)
-
-        geometry = resolve_geometry_for_indexing(xml_path)
-        if geometry is None or not geometry.detectors:
-            fig = make_detector_view(None)
-            summary = dbc.Alert(
-                "Could not resolve detector geometry from the indexed XML "
-                "or from the linked geometry file. Back-projection cannot "
-                "be computed.",
-                color="warning",
-                className="mb-0",
-            )
-            return fig, summary, ""
-
-        overlay = build_step_overlay(parsed, step_idx, geometry, simulate_missing=bool(show_missing))
-
-        image_result = None
-        detector_image = None
-        image_vmin_eff = image_vmin
-        image_vmax_eff = image_vmax
-        if overlay is not None and show_image:
-            path_context = path_context or {}
-            image_result = load_detector_image(
-                overlay.image_path,
-                xml_path=xml_path,
-                data_folder=path_context.get("data_folder"),
-                root_path=path_context.get("root_path"),
-            )
-            if image_result.image is not None:
-                detector_image = image_result.image.data
-                image_vmin_eff, image_vmax_eff = _detector_image_range(
-                    image_vmin,
-                    image_vmax,
-                    image_result.image.vmin,
-                    image_result.image.vmax,
-                )
-            elif image_result.warning:
-                overlay.warnings.append(image_result.warning)
-
-        fig = make_detector_view(
-            overlay,
-            show_detected=bool(show_detected),
-            show_indexed=bool(show_indexed),
-            show_missing=bool(show_missing),
-            show_hkl_labels=bool(show_hkl),
-            marker_size=max(1, int(marker_size or 10)),
-            label_size=max(6, int(label_size or 10)),
-            selected_patterns=list(selected_patterns) if selected_patterns else None,
-            detector_image=detector_image,
-            image_visible=bool(show_image),
-            image_colorscale=image_colormap or "gray",
-            image_vmin=image_vmin_eff,
-            image_vmax=image_vmax_eff,
-            image_opacity=float(image_opacity if image_opacity is not None else 0.8),
-        )
-
-        summary_children = _detector_step_summary(parsed, step_idx, overlay, overlay_statistics, image_result)
-        return fig, summary_children, ""
-
+        dataset = _dataset(source)
+        frame_id = _detector_frame(dataset, to_data_scope(scope), step_value)
+        position = map_adapter.frame_position(dataset, frame_id)
     except PreventUpdate:
         raise
     except Exception as e:
-        print(f"Error rendering detector view: {e}")
+        print(f"Error resolving detector frame: {e}")
+        raise PreventUpdate from None
+
+    notes = []
+    image = None
+    image_result = None
+    limits = None
+    if show_image:
+        path_context = path_context or {}
+        image_result = load_detector_image(
+            dataset.input_images[position],
+            xml_path=source.get("path"),
+            data_folder=path_context.get("data_folder"),
+            root_path=path_context.get("root_path"),
+        )
+        if image_result.image is not None:
+            image = image_result.image.data
+            limits = detector_adapter.image_limits(
+                image_vmin, image_vmax, image_result.image.vmin, image_result.image.vmax
+            )
+        elif image_result.warning:
+            notes.append(image_result.warning)
+
+    common = dict(
+        frame_id=frame_id,
+        patterns=tuple(selected_patterns) if selected_patterns else (),
+        image=image,
+        show_detected=bool(show_detected),
+        show_indexed=bool(show_indexed),
+        show_hkl_labels=bool(show_hkl),
+        marker_size=max(1, int(marker_size or 10)),
+        label_size=max(6, int(label_size or 10)),
+        image_colormap=image_colormap or "gray",
+        limits=limits,
+        image_opacity=float(image_opacity if image_opacity is not None else 0.8),
+    )
+    try:
+        try:
+            fig, view = detector_adapter.build_detector_view(dataset, show_simulated=bool(show_missing), **common)
+        except (ValueError, RuntimeError) as error:
+            if not show_missing:
+                raise
+            # Keep measured and indexed overlays; report the simulation problem explicitly.
+            notes.append(f"Simulated missing reflections unavailable: {error}")
+            fig, view = detector_adapter.build_detector_view(dataset, show_simulated=False, **common)
+    except (ValueError, KeyError) as error:
+        message = str(error)
+        if "geometry" in message:
+            message = "Detector geometry is not available for this result; back-projection cannot be computed."
+        return dash.no_update, dbc.Alert(message, color="warning", className="mb-0"), "", ""
+    except Exception as error:
+        print(f"Error rendering detector view: {error}")
         traceback.print_exc()
         return (
             dash.no_update,
-            dbc.Alert(f"Could not render detector view: {e}", color="danger", className="mb-0"),
+            dbc.Alert(f"Could not render detector view: {error}", color="danger", className="mb-0"),
+            "",
             "",
         )
 
+    summary = detector_adapter.detector_summary(dataset, view)
+    status = html.Span(" ".join(notes), className="text-warning") if notes else ""
+    return fig, _detector_step_summary(summary, image_result), "", status
 
-def _detector_step_summary(parsed, step_idx, overlay, overlay_statistics, image_result=None):
+
+def _detector_step_summary(summary, image_result=None):
     """Compose the small summary card shown beneath the detector graph."""
-    if overlay is None:
-        return html.Small("No detector data for this step.", className="text-muted")
 
-    stats = overlay_statistics(overlay)
-    x_pos = float(parsed["positions"][step_idx, 0])
-    y_pos = float(parsed["positions"][step_idx, 1])
-    z_pos = float(parsed["positions"][step_idx, 2])
-
-    original_step = int(parsed.get("_step_indices", [step_idx])[step_idx])
+    x_pos, y_pos, z_pos = summary["sample_position"]
     header_bits = [
-        html.Strong(f"Step #{original_step}"),
-        f"  Motor position: ({x_pos:.1f}, {y_pos:.1f}, {z_pos:.1f})",
+        html.Strong(f"Step #{summary['step']}"),
+        f"  (frame {summary['frame_id']})  Motor position: ({x_pos:.1f}, {y_pos:.1f}, {z_pos:.1f})",
         html.Br(),
-        f"Detector: {overlay.detector_id or '?'}  |  ",
-        f"Detected: {stats['n_measured']}  |  ",
-        f"Indexed assignments: {stats['n_indexed']} ({stats['indexed_fraction'] * 100:.0f}%)",
+        f"Detector: {summary['detector_id'] or '?'}  |  ",
+        f"Detected: {summary['n_measured']}  |  ",
+        f"Indexed peaks: {summary['n_indexed_peaks']} ({summary['indexed_fraction'] * 100:.0f}%)",
     ]
-    pattern_rows = []
-    for p in stats["patterns"]:
-        missing_txt = f", missing sim={p['n_missing']}" if p.get("n_missing") else ""
-        pattern_rows.append(
+    pattern_rows_ = []
+    for pattern in summary["patterns"]:
+        simulated = f", simulated missing={pattern['n_simulated']}" if pattern.get("n_simulated") else ""
+        quality = ""
+        if pattern["rms_error_deg"] is not None:
+            quality = f", RMS={pattern['rms_error_deg']:.4f}°, goodness={pattern['goodness']:.1f}"
+        pattern_rows_.append(
             html.Li(
-                f"Pattern {p['pattern_num']}: "
-                f"{p['n_pkindex']}/{p['n_predicted_on_detector']} PkIndex assigned (on-detector predictions), "
-                f"RMS={p['rms_error']:.4f}\u00b0, "
-                f"goodness={p['goodness']:.1f}"
-                f"{missing_txt}"
+                f"Pattern {pattern['pattern_index']}: {pattern['n_indexed']} indexed peaks, "
+                f"{pattern['n_predicted']} predicted positions{quality}{simulated}"
             )
         )
-
     body = [html.P(header_bits, className="mb-1")]
     if image_result is not None and image_result.image is not None:
         body.append(
@@ -2671,33 +2286,13 @@ def _detector_step_summary(parsed, step_idx, overlay, overlay_statistics, image_
                 className="text-muted d-block mb-1",
             )
         )
-    if pattern_rows:
-        body.append(html.Ul(pattern_rows, className="mb-0 small"))
+    if pattern_rows_:
+        body.append(html.Ul(pattern_rows_, className="mb-0 small"))
     return dbc.Card(dbc.CardBody(body), className="mt-2")
 
 
-def _detector_image_range(custom_vmin, custom_vmax, auto_vmin, auto_vmax):
-    """Resolve detector image contrast values from sidebar controls."""
-    vmin = custom_vmin if custom_vmin is not None else auto_vmin
-    vmax = custom_vmax if custom_vmax is not None else auto_vmax
-    if vmin is not None and vmax is not None and float(vmin) > float(vmax):
-        return vmax, vmin
-    return vmin, vmax
-
-
 # ---------------------------------------------------------------------------
-# Callbacks: global data-scope bar
-#
-# The bar owns a single ``SCOPE_STORE_ID`` store rather than exposing one
-# Input per filter.  Figure/table callbacks should take that store as one
-# Input; ``update_orientation_map`` already has ~50 positional inputs and
-# adding one per filter forever does not scale.
-#
-# Chain is deliberately acyclic:
-#     controls | Reset  ->  scope store    (collect_data_scope)
-#     Reset             ->  control values (reset_data_scope_controls)
-# Nothing reads the store and writes back to the controls, which would
-# cycle with collect_data_scope.
+# Callbacks: global data-scope bar (acyclic: controls | Reset -> store; Reset -> controls)
 # ---------------------------------------------------------------------------
 
 
@@ -2731,42 +2326,3 @@ def collect_data_scope(pattern0_only, min_peaks, reset_clicks):
 def reset_data_scope_controls(n_clicks):
     """Return the scope widgets to their neutral values."""
     return DEFAULT_SCOPE["pattern0_only"], DEFAULT_SCOPE["min_peaks"] - 1
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _resolve_xml_path(indexing, root_path: str) -> str | None:
-    """
-    Resolve the full path to the output XML file from an indexing run.
-
-    Checks in order:
-    1. The configured output XML as an absolute path
-    2. The run output directory joined to the configured XML path
-    3. Glob for ``*.xml`` in the run output directory
-    """
-    del root_path  # Paths are persisted as fully resolved paths.
-    parameters = indexing.lauego_parameters
-    output_xml = parameters.output_xml if parameters else None
-    if output_xml:
-        candidate = Path(output_xml)
-        if candidate.is_file():
-            return str(candidate)
-
-        # Try relative to outputFolder
-        if indexing.output_path:
-            candidate = Path(indexing.output_path) / output_xml
-            if candidate.is_file():
-                return str(candidate)
-
-    # Fallback: look for XML files in outputFolder
-    if indexing.output_path:
-        output_dir = Path(indexing.output_path)
-        if output_dir.is_dir():
-            xml_files = sorted(output_dir.glob("*.xml"))
-            if xml_files:
-                return str(xml_files[0])
-
-    return None

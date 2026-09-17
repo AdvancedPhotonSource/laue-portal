@@ -30,6 +30,13 @@ class IndexingRun(Base):
     notes: Mapped[str | None] = mapped_column(String, nullable=True)
     algorithm_version: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # Frames whose processing succeeded and found at least one pattern. NULL means
+    # unknown (historical runs whose XML has not been converted). Distinct from
+    # Job.n_succeeded, which counts frames processed without error.
+    n_frames_indexed: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Explicit reference to the run's validated indexing-results HDF5 file (native output or a
+    # conversion of the historical XML). Set only after the file was published and validated.
+    results_path: Mapped[str | None] = mapped_column(String, nullable=True)
 
     scan: Mapped["Metadata | None"] = relationship(  # noqa: F821
         back_populates="indexing_runs"
@@ -60,7 +67,7 @@ class LaueGoIndexingParameters(Base):
     threshold_ratio: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_rfactor: Mapped[float] = mapped_column(Float, nullable=False)
     box_size: Mapped[int] = mapped_column(Integer, nullable=False)
-    max_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     min_separation: Mapped[int] = mapped_column(Integer, nullable=False)
     peak_shape: Mapped[str] = mapped_column(String, nullable=False)
     scan_points: Mapped[str] = mapped_column(String, nullable=False)

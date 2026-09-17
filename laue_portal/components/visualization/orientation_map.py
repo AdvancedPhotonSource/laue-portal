@@ -1,1129 +1,349 @@
+"""Color-map tab adapter: portal controls in, lauelab prepared data and Plotly figure out.
+
+The scientific work (axes, orientation colors, symmetry, references, pole HSV,
+frame-only records) is lauelab's ``prepare_map`` and ``plot_map``. This module
+owns only portal choices: control values, non-indexed appearance, user color
+ranges, the "step" notion, and cross-plot selection highlighting.
 """
-2D and 3D orientation map scatter plot components.
 
-Renders sample positions (Xsample, Ysample, Zsample) as scatter plots
-colored by crystal orientation or scalar quality metrics.
+from __future__ import annotations
 
-Coloring modes:
-- Scalar: N Indexed, Goodness, RMS Error, N Patterns (Viridis colorscale)
-- Cubic IPF: crystal direction mapped to standard IPF triangle colors
-- Rodrigues RGB: rotation axis+angle mapped to RGB
-- HSV: placeholder for spatial HSV (reserved for pole figure use)
-
-Styling matches Igor Pro's Make2Dplot_xmlData conventions.
-"""
+import dataclasses
+import math
+from collections.abc import Sequence
 
 import numpy as np
 import plotly.graph_objects as go
-
-from laue_portal.analysis.coloring import (
-    batch_ipf_colors,
-    batch_rodrigues_rgb,
-    closest_pole_hsv_colors,
-    pole_figure_color_radius,
-    rgb_to_plotly_colors,
-)
-from laue_portal.analysis.orientation import (
-    batch_crystal_directions,
-    batch_orientations,
-    batch_rodrigues,
-    misorientation_from_reference,
-    symmetry_ops_for_name,
-    symmetry_ops_for_space_group,
-)
-from laue_portal.analysis.projection import (
-    cubic_hkl_family,
-    get_surface_vectors,
-    pole_figure_points,
+from lauelab.analysis import SurfaceFrame
+from lauelab.visualization import (
+    AXIS_OPTIONS,
+    COLOR_MODES,
+    NO_PATTERN,
+    DataScope,
+    MapData,
+    VisualizationDataset,
+    plot_map,
+    prepare_map,
 )
 
-# Igor Pro background: gbRGB=(40000,40000,40000) / 65535
-_GRAY_BG = "rgb(156, 156, 156)"
-_ASPECT_RATIO_POINT_LIMIT = 50_000
+# Portal labels for the library axis names (values must be library axis names).
+AXIS_CHOICES = (
+    ("X", "X motor"),
+    ("Y", "Y motor"),
+    ("Z", "Z motor"),
+    ("H", "H"),
+    ("F", "F"),
+    ("depth", "Depth"),
+    ("Xlab", "X lab"),
+    ("Ylab", "Y lab"),
+    ("Zlab", "Z lab"),
+    ("Hlab", "H lab"),
+    ("Flab", "F lab"),
+)
+assert {value for value, _ in AXIS_CHOICES} == {choice.value for choice in AXIS_OPTIONS}
 
-# Orientation color modes (no colorscale -- per-point RGB)
-_ORIENTATION_MODES = {"cubic_ipf", "rodrigues", "misorientation", "pole_hsv"}
+SCALAR_MODES = frozenset({"n_indexed", "goodness", "rms_error", "n_patterns"})
+ORIENTATION_MODES = frozenset({"cubic_ipf", "rodrigues", "misorientation", "pole_hsv"})
+assert SCALAR_MODES | ORIENTATION_MODES == {choice.value for choice in COLOR_MODES}
 
-# Scalar color modes (use Viridis colorscale + colorbar)
-_SCALAR_MODES = {"n_indexed", "goodness", "rms_error", "n_patterns"}
-
-# Opaque colors are mandatory in Scatter3d: even alpha=1 RGBA values can
-# corrupt WebGL depth sorting.  The "transparent" option is therefore
-# implemented by removing non-indexed points from the 3-D traces entirely.
-_NONINDEXED_COLORS = {
-    "gray": "rgb(128,128,128)",
-    "red": "rgb(220,53,69)",
-    "blue": "rgb(13,110,253)",
-    "green": "rgb(25,135,84)",
+NONINDEXED_COLORS = {
+    "gray": "rgb(150,150,150)",
+    "red": "rgb(220,40,40)",
+    "blue": "rgb(40,90,220)",
+    "green": "rgb(40,160,60)",
 }
-_NONINDEXED_STYLES = frozenset((*_NONINDEXED_COLORS, "transparent"))
-
-# ---------------------------------------------------------------------------
-# Axis selection
-# ---------------------------------------------------------------------------
-# Names accepted by ``_resolve_axis``.  X/Y/Z come straight from the XML;
-# H/F are rotated sample-frame coordinates pre-computed by
-# ``xml_parser.parse_indexing_xml`` (see ``yz_to_hf``).  ``depth`` exposes
-# the per-step depth field (NaN-padded if absent).  ``auto`` defers to the
-# Igor-style heuristic in ``_select_axes_auto``.
-#
-# ``Xlab``/``Ylab``/``Zlab``/``Hlab``/``Flab`` are the lab (beam-line)
-# voxel-in-sample coordinates -- Igor's XX/YY/ZZ/HH/FF from
-# ``xmlMultiIndex.ipf:4084``.  These are the negated stage position with
-# ``depth`` folded into Z, i.e. where the diffracting voxel sits inside
-# the sample rather than where the stage was.  See
-# ``xml_parser.positions_lab``.
-_AXIS_CHOICES = (
-    "auto",
-    "X",
-    "Y",
-    "Z",
-    "H",
-    "F",
-    "depth",
-    "Xlab",
-    "Ylab",
-    "Zlab",
-    "Hlab",
-    "Flab",
-)
-
-_AXIS_LABELS = {
-    # X/Y/Z are the raw sample-positioner (motor) readings from the XML.
-    # Named "motor" to distinguish them at a glance from the "lab" axes
-    # below, which are voxel-in-sample coordinates rather than stage
-    # positions.  Only the display strings differ -- the option *values*
-    # ("X", "Y", "Z") are unchanged so saved URLs keep working.
-    "X": "X motor (um)",
-    "Y": "Y motor (um)",
-    "Z": "Z motor (um)",
-    "H": "H (um)",
-    "F": "F (um)",
-    "depth": "depth (um)",
-    "Xlab": "X lab (um)",
-    "Ylab": "Y lab (um)",
-    "Zlab": "Z lab (um)",
-    "Hlab": "H lab (um)",
-    "Flab": "F lab (um)",
-}
-
-# Column index into ``parsed["positions_lab"]`` for each lab axis name.
-_LAB_AXIS_COLUMNS = {"Xlab": 0, "Ylab": 1, "Zlab": 2, "Hlab": 3, "Flab": 4}
+NONINDEXED_STYLES = (*NONINDEXED_COLORS, "transparent")
+SURFACE_PRESETS = ("normal", "X", "H", "Y", "Z", "F")
+HIGHLIGHT_ROLE = "highlight"
 
 
-def _normalize_nonindexed_style(style):
-    """Return a supported non-indexed appearance, defaulting to gray."""
-    return style if style in _NONINDEXED_STYLES else "gray"
+def is_scalar_mode(color_by: str | None) -> bool:
+    return (color_by or "cubic_ipf") in SCALAR_MODES
 
 
-def indexed_point_mask(parsed):
-    """Return True for steps carrying a finite, usable reciprocal lattice."""
-    n_points = len(parsed["positions"])
-    lattices = parsed.get("recip_lattices")
-    if lattices is None:
-        return np.asarray(parsed.get("n_indexed", np.zeros(n_points))) > 0
+def resolve_surface(surface: str | None, values: Sequence | None = None) -> str | SurfaceFrame:
+    """A preset name, or a validated custom ``SurfaceFrame`` built from nine inputs."""
 
-    lattices = np.asarray(lattices, dtype=float)
-    if lattices.shape != (n_points, 3, 3):
-        return np.zeros(n_points, dtype=bool)
+    if surface != "custom":
+        name = surface or "normal"
+        if name not in SURFACE_PRESETS:
+            raise ValueError(f"unknown surface {name!r}")
+        return name
+    if values is None or len(values) != 9 or any(value is None or value == "" for value in values):
+        raise ValueError("Custom surface needs all nine tilt, roll, and normal components")
+    try:
+        numbers = [float(value) for value in values]
+    except (TypeError, ValueError) as error:
+        raise ValueError("Custom surface components must be numbers") from error
+    if not all(math.isfinite(value) for value in numbers):
+        raise ValueError("Custom surface components must be finite")
+    return SurfaceFrame.from_vectors(tilt=numbers[0:3], roll=numbers[3:6], normal=numbers[6:9], name="custom")
 
-    finite = np.all(np.isfinite(lattices), axis=(1, 2))
-    valid = np.zeros(n_points, dtype=bool)
-    for index in np.flatnonzero(finite):
-        valid[index] = np.linalg.matrix_rank(lattices[index]) == 3
-    return valid
+
+def parse_reference_matrix(values: Sequence | None) -> np.ndarray | None:
+    """Nine G_ref inputs (rows a*, b*, c* in 1/nm with 2 pi) as a matrix, or None when incomplete."""
+
+    if values is None or len(values) != 9 or any(value is None or value == "" for value in values):
+        return None
+    try:
+        matrix = np.array([float(value) for value in values], dtype=float).reshape(3, 3)
+    except (TypeError, ValueError) as error:
+        raise ValueError("G_ref entries must be numbers") from error
+    if not np.isfinite(matrix).all():
+        raise ValueError("G_ref entries must be finite")
+    return matrix
 
 
-def _filter_marker_points(marker, mask):
-    """Copy a marker dict and filter any per-point color array by *mask*."""
-    filtered = dict(marker)
-    colors = filtered.get("color")
-    if not isinstance(colors, str):
+def frame_id_at(dataset: VisualizationDataset, step) -> object:
+    """The frame identity at a step position (manifest index, or XML step order)."""
+
+    if step is None or step == "":
+        raise ValueError("Step is required")
+    value = float(step)
+    if not value.is_integer() or value < 0 or value >= dataset.n_frames:
+        raise ValueError(f"Step must be an integer between 0 and {dataset.n_frames - 1}")
+    return dataset.frame_ids[int(value)]
+
+
+def frame_position(dataset: VisualizationDataset, frame_id) -> int:
+    """The step position of a frame identity."""
+
+    try:
+        return dataset.frame_ids.index(frame_id)
+    except ValueError:
+        raise KeyError(f"frame {frame_id!r} is not in the dataset") from None
+
+
+def _limits(cmin, cmax):
+    values = []
+    for value in (cmin, cmax):
+        if value is None or value == "":
+            return None
         try:
-            if len(colors) == len(mask):
-                filtered["color"] = np.asarray(colors)[mask].tolist()
-        except TypeError:
-            pass
-    return filtered
+            values.append(float(value))
+        except (TypeError, ValueError):
+            return None
+    low, high = values
+    if not (math.isfinite(low) and math.isfinite(high)) or low == high:
+        return None
+    return (min(low, high), max(low, high))
 
 
-def _lab_positions(parsed):
-    """
-    Return the (N, 5) lab-frame coordinate array for *parsed*.
-
-    Falls back to a runtime compute when an older cached dict predates
-    the ``positions_lab`` key, mirroring the H/F handling below.
-    """
-    lab = parsed.get("positions_lab")
-    if lab is None:
-        from laue_portal.analysis.xml_parser import positions_lab as _compute_lab
-
-        lab = _compute_lab(parsed["positions"], parsed.get("depths"))
-    return lab
-
-
-def _resolve_axis(parsed, axis_name):
-    """
-    Return ``(values, label)`` for a named axis.
-
-    Recognised names: ``"X"``, ``"Y"``, ``"Z"``, ``"H"``, ``"F"``,
-    ``"depth"``, and the lab-frame ``"Xlab"``, ``"Ylab"``, ``"Zlab"``,
-    ``"Hlab"``, ``"Flab"``.  Unknown names fall back to X.
-    """
-    positions = parsed["positions"]
-    if axis_name in _LAB_AXIS_COLUMNS:
-        lab = _lab_positions(parsed)
-        return lab[:, _LAB_AXIS_COLUMNS[axis_name]], _AXIS_LABELS[axis_name]
-    if axis_name == "X":
-        return positions[:, 0], _AXIS_LABELS["X"]
-    if axis_name == "Y":
-        return positions[:, 1], _AXIS_LABELS["Y"]
-    if axis_name == "Z":
-        return positions[:, 2], _AXIS_LABELS["Z"]
-    if axis_name == "H":
-        # ``positions_hf`` is added by xml_parser; fall back to a runtime
-        # compute if an old cached dict is missing it.
-        hf = parsed.get("positions_hf")
-        if hf is None:
-            from laue_portal.analysis.xml_parser import positions_hf as _compute_hf
-
-            hf = _compute_hf(positions)
-        return hf[:, 0], _AXIS_LABELS["H"]
-    if axis_name == "F":
-        hf = parsed.get("positions_hf")
-        if hf is None:
-            from laue_portal.analysis.xml_parser import positions_hf as _compute_hf
-
-            hf = _compute_hf(positions)
-        return hf[:, 1], _AXIS_LABELS["F"]
-    if axis_name == "depth":
-        return parsed["depths"], _AXIS_LABELS["depth"]
-    # Unknown -- fall back to X
-    return positions[:, 0], _AXIS_LABELS["X"]
-
-
-def make_orientation_map(
-    parsed: dict,
-    color_by: str = "n_indexed",
-    marker_size: int = 10,
-    surface: str = "normal",
-    ref_grain_index: int = None,
-    pole_hkl: tuple = None,
-    pole_center_xy: tuple = None,
-    pole_color_rad_deg: float = 22.5,
-    palette: str = "Viridis",
-    reverse_palette: bool = False,
-    cmin: float = None,
-    cmax: float = None,
-    x_axis: str = "auto",
-    y_axis: str = "auto",
-    rgb_symmetry: str = "auto",
-    rgb_reference_mode: str = "lab",
-    rgb_reference_step: int = None,
-    rgb_reference_matrix=None,
-    surface_vectors=None,
-    aspect_ratio_point_limit=_ASPECT_RATIO_POINT_LIMIT,
-    nonindexed_style: str = "gray",
-) -> go.Figure:
-    """
-    Create a 2D orientation scatter plot.
-
-    Parameters
-    ----------
-    parsed : dict
-        Output from xml_parser.parse_indexing_xml().
-    color_by : str
-        Coloring mode: 'n_indexed', 'goodness', 'rms_error', 'n_patterns',
-        'cubic_ipf', 'rodrigues', 'misorientation', or 'pole_hsv'.
-    marker_size : int
-        Marker size in pixels.
-    surface : str
-        Surface direction name (``"normal"``, ``"X"``, ``"H"``, ``"Y"``,
-        ``"Z"``).  Affects IPF crystal-direction coloring.
-    ref_grain_index : int, optional
-        Reference grain index for ``"misorientation"`` coloring.
-    pole_hkl : tuple of int, optional
-        Miller indices ``(h, k, l)`` for ``"pole_hsv"`` coloring (e.g.
-        ``(1, 0, 0)``).
-    pole_center_xy : tuple of float, optional
-        ``(x0, y0)`` center for ``"pole_hsv"`` HSV coloring on the pole
-        figure.  Default ``(0, 0)``.
-    pole_color_rad_deg : float
-        Angular color-saturation radius in degrees for ``"pole_hsv"`` mode.
-        Default 22.5.
-    palette : str
-        Plotly colorscale name for scalar modes (e.g. ``"Viridis"``,
-        ``"Jet"``, ``"Plasma"``).  Ignored for orientation modes.
-    reverse_palette : bool
-        Reverse the colorscale (Plotly ``_r`` convention).  Ignored for
-        orientation modes.
-    cmin, cmax : float, optional
-        Manual lower/upper bounds for the scalar colorscale.  When
-        ``None`` Plotly auto-selects from the data range.  Ignored for
-        orientation modes.
-    x_axis, y_axis : str, optional
-        Names of the axes to plot.  One of ``"auto"`` (Igor-style
-        heuristic, default), ``"X"``, ``"Y"``, ``"Z"``, ``"H"``, ``"F"``,
-        or ``"depth"``.  H and F are wire-frame coordinates rotated from
-        ``(Y, Z)`` (see ``xml_parser.yz_to_hf``).
-    aspect_ratio_point_limit : int or None, optional
-        Disable 1:1 axis scaling above this many points for Scattergl zoom
-        performance. Defaults to 50,000. Use ``None`` to keep scaling enabled
-        at every size.
-    nonindexed_style : str
-        Appearance of steps without a usable reciprocal lattice: ``"gray"``,
-        ``"red"``, ``"blue"``, ``"green"``, or ``"transparent"``.
-
-    Returns
-    -------
-    go.Figure
-    """
-    positions = parsed["positions"]
-    depths = parsed["depths"]
-    has_depth = not np.all(np.isnan(depths))
-
-    x_vals, y_vals, x_label, y_label = _select_axes(
-        positions, depths, has_depth, x_axis=x_axis, y_axis=y_axis, parsed=parsed
-    )
-    marker_symbol = "diamond" if has_depth else "square"
-
-    fig = go.Figure()
-
-    marker_dict = _build_marker_dict(
-        parsed,
-        color_by,
-        marker_size,
-        marker_symbol,
-        surface=surface,
-        ref_grain_index=ref_grain_index,
-        pole_hkl=pole_hkl,
-        pole_center_xy=pole_center_xy,
-        pole_color_rad_deg=pole_color_rad_deg,
-        palette=palette,
-        reverse_palette=reverse_palette,
-        cmin=cmin,
-        cmax=cmax,
-        rgb_symmetry=rgb_symmetry,
-        rgb_reference_mode=rgb_reference_mode,
-        rgb_reference_step=rgb_reference_step,
-        rgb_reference_matrix=rgb_reference_matrix,
-        surface_vectors=surface_vectors,
-    )
-
-    indexed_mask = indexed_point_mask(parsed)
-    nonindexed_style = _normalize_nonindexed_style(nonindexed_style)
-    indexed_marker = _filter_marker_points(marker_dict, indexed_mask)
-    customdata = _build_customdata(parsed)
-
-    fig.add_trace(
-        go.Scattergl(
-            x=np.asarray(x_vals)[indexed_mask],
-            y=np.asarray(y_vals)[indexed_mask],
-            mode="markers",
-            marker=indexed_marker,
-            hovertemplate=(
-                "<b>Step %{customdata[0]}</b><br>"
-                "Motor position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
-                "Patterns: %{customdata[4]}<br>"
-                "Indexed: %{customdata[5]}  Goodness: %{customdata[6]:.1f}<br>"
-                "RMS error: %{customdata[7]:.5f}<br>"
-                "<extra></extra>"
-            ),
-            customdata=customdata[indexed_mask],
-            showlegend=False,
-            uid="orientation-2d-main",
-        )
-    )
-
-    nonindexed_mask = ~indexed_mask
-    if np.any(nonindexed_mask):
-        nonindexed_color = _NONINDEXED_COLORS.get(nonindexed_style, "rgba(128,128,128,0)")
-        fig.add_trace(
-            go.Scattergl(
-                x=np.asarray(x_vals)[nonindexed_mask],
-                y=np.asarray(y_vals)[nonindexed_mask],
-                mode="markers",
-                marker=dict(
-                    size=marker_size,
-                    symbol=marker_symbol,
-                    color=nonindexed_color,
-                    line=dict(width=0),
-                ),
-                hovertemplate=(
-                    "<b>Step %{customdata[0]}</b><br>"
-                    "Motor position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
-                    "Patterns: %{customdata[4]}<br>"
-                    "Indexed: %{customdata[5]}  Goodness: %{customdata[6]:.1f}<br>"
-                    "RMS error: %{customdata[7]:.5f}<br>"
-                    "<extra></extra>"
-                ),
-                customdata=customdata[nonindexed_mask],
-                name=f"Not indexed ({int(nonindexed_mask.sum())})",
-                showlegend=nonindexed_style != "transparent",
-                uid="orientation-2d-nonindexed",
-            )
-        )
-
-    aspect_ratio_disabled = aspect_ratio_point_limit is not None and len(positions) > aspect_ratio_point_limit
-    yaxis = dict(uirevision="orientation-2d-y")
-    if not aspect_ratio_disabled:
-        yaxis.update(scaleanchor="x", scaleratio=1)
-
-    fig.update_layout(
-        hoveranywhere=True,
-        xaxis_title=x_label,
-        yaxis_title=y_label,
-        xaxis=dict(uirevision="orientation-2d-x"),
-        plot_bgcolor=_GRAY_BG,
-        paper_bgcolor="white",
-        yaxis=yaxis,
-        margin=dict(l=60, r=20, t=40, b=60),
-        uirevision="orientation-2d",
-        autosize=True,
-    )
-
-    if aspect_ratio_disabled:
-        fig.add_annotation(
-            xref="paper",
-            yref="paper",
-            x=0.01,
-            y=0.99,
-            xanchor="left",
-            yanchor="top",
-            text=f"Aspect ratio scaling disabled above {aspect_ratio_point_limit:,} points for performance.",
-            showarrow=False,
-            font=dict(size=11, color="rgb(70, 70, 70)"),
-            bgcolor="rgba(255, 255, 255, 0.8)",
-            borderpad=3,
-        )
-
-    return fig
-
-
-def make_orientation_map_3d(
-    parsed: dict,
-    color_by: str = "n_indexed",
-    marker_size: int = 10,
-    surface: str = "normal",
-    ref_grain_index: int = None,
-    pole_hkl: tuple = None,
-    pole_center_xy: tuple = None,
-    pole_color_rad_deg: float = 22.5,
-    palette: str = "Viridis",
-    reverse_palette: bool = False,
-    cmin: float = None,
-    cmax: float = None,
-    x_axis: str = "X",
-    y_axis: str = "Y",
-    z_axis: str = "Z",
-    rgb_symmetry: str = "auto",
-    rgb_reference_mode: str = "lab",
-    rgb_reference_step: int = None,
-    rgb_reference_matrix=None,
-    surface_vectors=None,
-    nonindexed_style: str = "gray",
-) -> go.Figure:
-    """
-    Create a 3D orientation scatter plot using all three sample coordinates.
-
-    Parameters
-    ----------
-    parsed : dict
-        Output from xml_parser.parse_indexing_xml().
-    color_by : str
-        Coloring mode: 'n_indexed', 'goodness', 'rms_error', 'n_patterns',
-        'cubic_ipf', 'rodrigues', 'misorientation', or 'pole_hsv'.
-    marker_size : int
-        Marker size in pixels.
-    surface : str
-        Surface direction name (``"normal"``, ``"X"``, ``"H"``, ``"Y"``,
-        ``"Z"``).  Affects IPF crystal-direction coloring.
-    ref_grain_index : int, optional
-        Reference grain index for ``"misorientation"`` coloring.
-    pole_hkl : tuple of int, optional
-        Miller indices ``(h, k, l)`` for ``"pole_hsv"`` coloring.
-    pole_center_xy : tuple of float, optional
-        ``(x0, y0)`` center for ``"pole_hsv"`` HSV coloring.
-    pole_color_rad_deg : float
-        Angular color-saturation radius in degrees for ``"pole_hsv"`` mode.
-    palette, reverse_palette, cmin, cmax
-        See :func:`make_orientation_map`.  Apply only to scalar modes.
-    x_axis, y_axis, z_axis : str, optional
-        Names of the three axes.  Each is one of ``"X"``, ``"Y"``, ``"Z"``,
-        ``"H"``, ``"F"``, or ``"depth"``.  Defaults reproduce the legacy
-        X / Y / Z Cartesian layout.
-    nonindexed_style : str
-        Appearance of steps without a usable reciprocal lattice. The
-        ``"transparent"`` option removes them because Scatter3d cannot safely
-        render per-point alpha colors.
-
-    Returns
-    -------
-    go.Figure
-    """
-    x_vals, x_label = _resolve_axis(parsed, x_axis or "X")
-    y_vals, y_label = _resolve_axis(parsed, y_axis or "Y")
-    z_vals, z_label = _resolve_axis(parsed, z_axis or "Z")
-
-    fig = go.Figure()
-
-    marker_dict, _ = _build_marker_dict(
-        parsed,
-        color_by,
-        max(2, marker_size // 3),
-        marker_symbol="square",
-        surface=surface,
-        ref_grain_index=ref_grain_index,
-        pole_hkl=pole_hkl,
-        pole_center_xy=pole_center_xy,
-        pole_color_rad_deg=pole_color_rad_deg,
-        palette=palette,
-        reverse_palette=reverse_palette,
-        cmin=cmin,
-        cmax=cmax,
-        rgb_symmetry=rgb_symmetry,
-        rgb_reference_mode=rgb_reference_mode,
-        rgb_reference_step=rgb_reference_step,
-        rgb_reference_matrix=rgb_reference_matrix,
-        surface_vectors=surface_vectors,
-        return_valid=True,
-    )
-    marker_dict["opacity"] = 1.0
-
-    indexed_mask = indexed_point_mask(parsed)
-    nonindexed_style = _normalize_nonindexed_style(nonindexed_style)
-    customdata = _build_customdata(parsed)
-    indexed_marker = _filter_marker_points(marker_dict, indexed_mask)
-
-    fig.add_trace(
-        go.Scatter3d(
-            x=np.asarray(x_vals)[indexed_mask],
-            y=np.asarray(y_vals)[indexed_mask],
-            z=np.asarray(z_vals)[indexed_mask],
-            mode="markers",
-            marker=indexed_marker,
-            hovertemplate=(
-                "<b>Step %{customdata[0]}</b><br>"
-                "Motor position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
-                "Patterns: %{customdata[4]}<br>"
-                "Indexed: %{customdata[5]}  Goodness: %{customdata[6]:.1f}<br>"
-                "RMS error: %{customdata[7]:.5f}<br>"
-                "<extra></extra>"
-            ),
-            customdata=customdata[indexed_mask],
-            showlegend=False,
-            uid="orientation-3d-main",
-        )
-    )
-
-    nonindexed_mask = ~indexed_mask
-    if nonindexed_style != "transparent" and np.any(nonindexed_mask):
-        fig.add_trace(
-            go.Scatter3d(
-                x=np.asarray(x_vals)[nonindexed_mask],
-                y=np.asarray(y_vals)[nonindexed_mask],
-                z=np.asarray(z_vals)[nonindexed_mask],
-                mode="markers",
-                marker=dict(
-                    size=max(2, marker_size // 3),
-                    symbol="square",
-                    color=_NONINDEXED_COLORS[nonindexed_style],
-                    line=dict(width=0),
-                    opacity=1.0,
-                ),
-                hovertemplate=(
-                    "<b>Step %{customdata[0]}</b><br>"
-                    "Motor position: (%{customdata[1]:.1f}, %{customdata[2]:.1f}, %{customdata[3]:.1f})<br>"
-                    "Patterns: %{customdata[4]}<br>"
-                    "Indexed: %{customdata[5]}  Goodness: %{customdata[6]:.1f}<br>"
-                    "RMS error: %{customdata[7]:.5f}<br>"
-                    "<extra></extra>"
-                ),
-                customdata=customdata[nonindexed_mask],
-                name=f"Not indexed ({int(nonindexed_mask.sum())})",
-                showlegend=True,
-                uid="orientation-3d-nonindexed",
-            )
-        )
-
-    fig.update_layout(
-        scene=dict(
-            xaxis_title=x_label,
-            yaxis_title=y_label,
-            zaxis_title=z_label,
-            aspectmode="data",
-            bgcolor=_GRAY_BG,
-        ),
-        margin=dict(l=0, r=0, t=40, b=0),
-        uirevision="orientation-3d",
-        scene_uirevision="orientation-3d",
-        autosize=True,
-    )
-
-    return fig
-
-
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-
-def _build_marker_dict(
-    parsed,
-    color_by,
-    marker_size,
-    marker_symbol=None,
+def build_map(
+    dataset: VisualizationDataset,
+    *,
+    scope: DataScope,
+    axes: Sequence[str],
+    color: str,
     surface="normal",
-    ref_grain_index=None,
-    pole_hkl=None,
-    pole_center_xy=None,
-    pole_color_rad_deg=22.5,
-    palette="Viridis",
-    reverse_palette=False,
+    marker_size: int = 10,
+    nonindexed_style: str = "gray",
+    palette: str | None = None,
+    reverse: bool = False,
     cmin=None,
     cmax=None,
-    rgb_symmetry="auto",
-    rgb_reference_mode="lab",
-    rgb_reference_step=None,
-    rgb_reference_matrix=None,
-    surface_vectors=None,
-    return_valid=False,
-):
+    symmetry: str = "auto",
+    reference_mode: str = "lab",
+    reference_step=None,
+    reference_matrix: np.ndarray | None = None,
+    pole_hkl=(1, 0, 0),
+    pole_center=(0.0, 0.0),
+    pole_radius_deg: float = 22.5,
+    misorientation_reference=None,
+) -> tuple[go.Figure, MapData]:
+    """Prepare and render the color map for the portal's control values.
+
+    Raises ``ValueError`` (or ``KeyError`` for an unknown reference) with a
+    message meant for the user when the inputs cannot produce a map.
     """
-    Build Plotly marker dict for the given coloring mode.
 
-    When *return_valid* is True, returns ``(marker_dict, valid_mask)`` with
-    opaque colors instead of a bare dict.  See ``_get_orientation_colors``
-    for why the 3-D path needs this.
-    """
-    base = dict(
-        size=marker_size,
-        line=dict(width=0),
-    )
-    if marker_symbol is not None:
-        base["symbol"] = marker_symbol
-
-    valid_mask = None
-
-    if color_by in _ORIENTATION_MODES:
-        colors = _get_orientation_colors(
-            parsed,
-            color_by,
-            surface=surface,
-            ref_grain_index=ref_grain_index,
-            pole_hkl=pole_hkl,
-            pole_center_xy=pole_center_xy,
-            pole_color_rad_deg=pole_color_rad_deg,
-            rgb_symmetry=rgb_symmetry,
-            rgb_reference_mode=rgb_reference_mode,
-            rgb_reference_step=rgb_reference_step,
-            rgb_reference_matrix=rgb_reference_matrix,
-            surface_vectors=surface_vectors,
-            return_valid=return_valid,
+    color = color or "cubic_ipf"
+    kwargs = {"axes": tuple(axes), "color": color, "scope": scope, "surface": surface}
+    if color == "pole_hsv":
+        kwargs.update(
+            pole_hkl=tuple(pole_hkl), pole_center=tuple(pole_center), pole_color_radius_deg=float(pole_radius_deg)
         )
-        if return_valid:
-            colors, valid_mask = colors
+    if color in ("rodrigues", "misorientation"):
+        kwargs["orientation_symmetry"] = symmetry or "auto"
+    if color == "rodrigues":
+        if reference_mode == "step":
+            kwargs["rodrigues_reference"] = (frame_id_at(dataset, reference_step), 0)
+        elif reference_mode == "custom":
+            if reference_matrix is None:
+                raise ValueError("Custom G_ref needs all nine entries")
+            kwargs["rodrigues_reference_reciprocal"] = reference_matrix
+    if color == "misorientation":
+        if misorientation_reference is None:
+            raise ValueError("Misorientation coloring needs a reference pattern: click one in the pole figure")
+        kwargs["misorientation_reference"] = tuple(misorientation_reference)
 
-        base["color"] = colors
-        # No colorscale or colorbar for per-point RGB
+    map_data = prepare_map(dataset, **kwargs)
+    if map_data.color_kind == "scalar":
+        changes = {}
+        if palette:
+            changes["palette"] = palette
+        limits = _limits(cmin, cmax)
+        if limits is not None:
+            changes["color_limits"] = limits
+        if changes:
+            map_data = dataclasses.replace(map_data, **changes)
+
+    trace_update: dict = {"data": {"marker": {"symbol": "square"}}}
+    if map_data.color_kind == "scalar" and reverse:
+        trace_update["data"]["marker"]["reversescale"] = True
+    style = nonindexed_style if nonindexed_style in NONINDEXED_STYLES else "gray"
+    if style == "transparent":
+        trace_update["unindexed"] = {"visible": False}
     else:
-        color_vals, color_label = _get_scalar_color_values(parsed, color_by)
-        base["color"] = color_vals
-        # Apply user-selected palette + optional reverse (Plotly _r convention).
-        scale = palette or "Viridis"
-        if reverse_palette and not scale.endswith("_r"):
-            scale = f"{scale}_r"
-        base["colorscale"] = scale
-        base["colorbar"] = dict(title=color_label)
-        # Manual color range; leave Plotly to auto-pick when None.
-        if cmin is not None:
-            base["cmin"] = float(cmin)
-        if cmax is not None:
-            base["cmax"] = float(cmax)
-
-    if return_valid:
-        if valid_mask is None:
-            n_points = len(parsed["positions"])
-            valid_mask = np.ones(n_points, dtype=bool)
-        return base, valid_mask
-    return base
+        trace_update["unindexed"] = {"marker": {"color": NONINDEXED_COLORS[style], "symbol": "square"}}
+    figure = plot_map(map_data, marker_size=max(1, int(marker_size)), trace_update=trace_update)
+    return figure, map_data
 
 
-def _build_customdata(parsed):
-    """Build customdata array shared by 2D and 3D traces."""
-    positions = parsed["positions"]
-    n_points = len(positions)
-    step_indices = np.asarray(parsed.get("_step_indices", np.arange(n_points)), dtype=int)
-    return np.column_stack(
-        [
-            step_indices,
-            positions[:, 0],
-            positions[:, 1],
-            positions[:, 2],
-            parsed["n_patterns"],
-            parsed["n_indexed"],
-            np.nan_to_num(parsed["goodnesses"], nan=0),
-            np.nan_to_num(parsed["rms_errors"], nan=0),
-        ]
-    )
+def scalar_range_for(dataset: VisualizationDataset, scope: DataScope, color: str) -> tuple[float | None, float | None]:
+    """Data range of a scalar color over the scoped patterns, without preparing a map."""
 
-
-def _select_axes(positions, depths, has_depth, x_axis="auto", y_axis="auto", parsed=None):
-    """
-    Select X/Y axes for the 2-D orientation map.
-
-    When *x_axis* / *y_axis* are ``"auto"`` (default) the choice follows the
-    Igor convention:
-
-    - Wire scan at constant X: X=Zsample, Y=Ysample
-    - Wire scan with varying X: X=Xsample, Y=Zsample
-    - Non-wire scan: X=Xsample, Y=Ysample
-
-    Otherwise each axis is resolved individually via :func:`_resolve_axis`,
-    which accepts ``"X"``, ``"Y"``, ``"Z"``, ``"H"``, ``"F"``, ``"depth"``.
-    A *parsed* dict is required when either axis is non-auto so the H/F
-    columns can be looked up.
-    """
-    auto_pair = (x_axis in (None, "auto")) and (y_axis in (None, "auto"))
-
-    if auto_pair:
-        if has_depth:
-            x_range = np.nanmax(positions[:, 0]) - np.nanmin(positions[:, 0])
-            if x_range < 1.0:
-                return (
-                    positions[:, 2],
-                    positions[:, 1],
-                    _AXIS_LABELS["Z"],
-                    _AXIS_LABELS["Y"],
-                )
-            else:
-                return (
-                    positions[:, 0],
-                    positions[:, 2],
-                    _AXIS_LABELS["X"],
-                    _AXIS_LABELS["Z"],
-                )
-        else:
-            return (
-                positions[:, 0],
-                positions[:, 1],
-                _AXIS_LABELS["X"],
-                _AXIS_LABELS["Y"],
-            )
-
-    # User-selected axes.  Build a minimal parsed-like dict if the caller
-    # didn't supply one (legacy callers passed only positions/depths).
-    if parsed is None:
-        parsed = {"positions": positions, "depths": depths}
-
-    # Resolve "auto" on a per-axis basis by defaulting to X / Y.
-    x_choice = "X" if x_axis in (None, "auto") else x_axis
-    y_choice = "Y" if y_axis in (None, "auto") else y_axis
-
-    x_vals, x_label = _resolve_axis(parsed, x_choice)
-    y_vals, y_label = _resolve_axis(parsed, y_choice)
-    return x_vals, y_vals, x_label, y_label
-
-
-def _get_scalar_color_values(parsed, color_by):
-    """Return (color_array, label_string) for scalar coloring modes."""
-    if color_by == "n_indexed":
-        return parsed["n_indexed"].astype(float), "N Indexed"
-    elif color_by == "goodness":
-        return parsed["goodnesses"], "Goodness"
-    elif color_by == "rms_error":
-        return parsed["rms_errors"], "RMS Error"
-    elif color_by == "n_patterns":
-        return parsed["n_patterns"].astype(float), "N Patterns"
+    if color not in SCALAR_MODES:
+        return None, None
+    rows = np.flatnonzero(scope.pattern_mask(dataset))
+    if color == "n_patterns":
+        frames = np.unique(dataset.pattern_frame_indices[rows])
+        values = np.bincount(dataset.pattern_frame_indices, minlength=dataset.n_frames)[frames].astype(float)
     else:
-        return parsed["n_indexed"].astype(float), "N Indexed"
+        source = {
+            "n_indexed": dataset.pattern_n_indexed,
+            "goodness": dataset.pattern_goodness,
+            "rms_error": dataset.pattern_rms_error_deg,
+        }[color]
+        values = np.asarray(source[rows], dtype=float)
+    values = values[np.isfinite(values)]
+    if not len(values):
+        return None, None
+    return float(values.min()), float(values.max())
 
 
-def is_scalar_mode(color_by: str) -> bool:
-    """Return True if ``color_by`` is one of the scalar/colorbar modes."""
-    return color_by in _SCALAR_MODES
+def scalar_auto_range(map_data: MapData) -> tuple[float | None, float | None]:
+    """Finite range of a scalar color, ignoring frame-only and unindexed records."""
+
+    if map_data.color_kind != "scalar":
+        return None, None
+    values = map_data.colors[np.isfinite(map_data.colors)]
+    if not len(values):
+        return None, None
+    return float(values.min()), float(values.max())
 
 
-def get_scalar_auto_range(parsed: dict, color_by: str, indexed_only: bool = False):
-    """
-    Return ``(vmin, vmax)`` from the data for a scalar coloring mode.
-
-    Returns ``(None, None)`` if ``color_by`` is not a scalar mode or if
-    the data is empty / all NaN.
-    """
-    if not is_scalar_mode(color_by):
-        return (None, None)
-
-    values, _ = _get_scalar_color_values(parsed, color_by)
-    arr = np.asarray(values, dtype=float)
-    if indexed_only:
-        arr = arr[indexed_point_mask(parsed)]
-    finite = arr[np.isfinite(arr)]
-    if finite.size == 0:
-        return (None, None)
-    return (float(finite.min()), float(finite.max()))
+def _selected_mask(trace, selected: set) -> np.ndarray | None:
+    customdata = trace.customdata
+    if customdata is None:
+        return None
+    rows = np.asarray(customdata, dtype=object)
+    if rows.ndim != 2 or rows.shape[1] < 2:
+        return None
+    mask = np.zeros(len(rows), dtype=bool)
+    for index, (frame_id, pattern_index) in enumerate(rows[:, :2]):
+        frame_key = _identity(frame_id)
+        pattern_key = _identity(pattern_index)
+        if pattern_key is None:
+            continue
+        mask[index] = (frame_key, int(pattern_key)) in selected
+    return mask
 
 
-def _get_orientation_colors(
-    parsed,
-    color_by,
-    surface="normal",
-    ref_grain_index=None,
-    pole_hkl=None,
-    pole_center_xy=None,
-    pole_color_rad_deg=22.5,
-    rgb_symmetry="auto",
-    rgb_reference_mode="lab",
-    rgb_reference_step=None,
-    rgb_reference_matrix=None,
-    surface_vectors=None,
-    return_valid=False,
-):
-    """
-    Return list of 'rgb(r,g,b)' strings for orientation coloring modes.
-
-    Parameters
-    ----------
-    return_valid : bool
-        When True, return ``(colors, valid_mask)`` and emit fully opaque
-        colors, leaving it to the caller to drop invalid points.  Only
-        ``"rodrigues"`` produces a meaningful mask (steps whose reciprocal
-        lattice is NaN/singular, i.e. nothing was indexed there); the other
-        modes report all-True.  This exists because Plotly's 3-D WebGL
-        renderer mis-sorts any marker carrying an alpha channel, so the 3-D
-        path must filter points out rather than fade them to transparent.
-    """
-    recip_lattices = parsed["recip_lattices"]
-    lattice_params = parsed["lattice_params"]
-
-    def _result(colors, valid=None):
-        if not return_valid:
-            return colors
-        if valid is None:
-            valid = np.ones(len(colors), dtype=bool)
-        return colors, valid
-
-    # Look up the surface normal vector for the chosen surface direction.
-    if surface_vectors is None:
-        surf_normal, surf_roll, surf_tilt = get_surface_vectors(surface)
-    else:
-        surf_normal, surf_roll, surf_tilt = surface_vectors
-
-    if color_by == "cubic_ipf":
-        crystal_dirs = batch_crystal_directions(recip_lattices, normal=surf_normal)
-        rgb = batch_ipf_colors(crystal_dirs)
-        return _result(rgb_to_plotly_colors(rgb))
-
-    elif color_by == "rodrigues":
-        if rgb_symmetry == "auto":
-            symmetry_ops = symmetry_ops_for_space_group(parsed.get("space_group"))
-        else:
-            symmetry_ops = symmetry_ops_for_name(rgb_symmetry)
-
-        reference_index = None
-        reference_recip = None
-        if rgb_reference_mode == "step" and rgb_reference_step is not None:
-            matches = np.flatnonzero(
-                np.asarray(parsed.get("_step_indices", np.arange(len(recip_lattices)))) == int(rgb_reference_step)
-            )
-            reference_index = int(matches[0]) if matches.size else None
-        elif rgb_reference_mode == "custom" and rgb_reference_matrix is not None:
-            matrix = np.asarray(rgb_reference_matrix, dtype=float)
-            if matrix.shape == (3, 3) and np.all(np.isfinite(matrix)):
-                reference_recip = matrix
-
-        rod_vecs, valid = batch_rodrigues(
-            recip_lattices,
-            lattice_params,
-            symmetry_ops=symmetry_ops,
-            reference_index=reference_index,
-            reference_recip=reference_recip,
-            return_valid=True,
-        )
-        rgb = batch_rodrigues_rgb(rod_vecs)
-        if return_valid:
-            # Opaque colors + mask; caller drops the invalid points.  An
-            # alpha channel here would break the 3-D WebGL renderer.
-            return rgb_to_plotly_colors(rgb), valid
-        # 2-D path keeps the alpha=0 fade for un-indexed steps.
-        alpha = np.where(valid, 1.0, 0.0)
-        return rgb_to_plotly_colors(rgb, alpha=alpha)
-
-    elif color_by == "misorientation" and ref_grain_index is not None:
-        orientations = batch_orientations(recip_lattices, lattice_params)
-        matches = np.flatnonzero(
-            np.asarray(parsed.get("_step_indices", np.arange(len(orientations)))) == int(ref_grain_index)
-        )
-        ref_idx = int(matches[0]) if matches.size else -1
-        if ref_idx < 0 or ref_idx >= len(orientations):
-            # Invalid reference -- fall back to IPF
-            crystal_dirs = batch_crystal_directions(recip_lattices, normal=surf_normal)
-            rgb = batch_ipf_colors(crystal_dirs)
-            return _result(rgb_to_plotly_colors(rgb))
-
-        result = misorientation_from_reference(orientations, ref_idx)
-        rgb = batch_rodrigues_rgb(result["rodrigues"])
-        return _result(rgb_to_plotly_colors(rgb))
-
-    elif color_by == "pole_hsv":
-        rgb = _compute_pole_hsv_colors(
-            recip_lattices,
-            hkl=pole_hkl or (1, 0, 0),
-            surface_normal=surf_normal,
-            surface_roll=surf_roll,
-            surface_tilt=surf_tilt,
-            center_xy=pole_center_xy,
-            color_rad_deg=pole_color_rad_deg,
-        )
-        return _result(rgb_to_plotly_colors(rgb))
-
-    else:
-        # Fallback to IPF
-        crystal_dirs = batch_crystal_directions(recip_lattices, normal=surf_normal)
-        rgb = batch_ipf_colors(crystal_dirs)
-        return _result(rgb_to_plotly_colors(rgb))
+def _identity(value):
+    if value is None:
+        return None
+    if isinstance(value, (float, np.floating)):
+        if np.isnan(value):
+            return None
+        return int(value) if float(value).is_integer() else float(value)
+    if isinstance(value, np.integer):
+        return int(value)
+    return value
 
 
-def _compute_pole_hsv_colors(
-    recip_lattices,
-    hkl=(1, 0, 0),
-    surface_normal=None,
-    surface_roll=None,
-    surface_tilt=None,
-    center_xy=None,
-    color_rad_deg=22.5,
-):
-    """
-    Compute per-grain HSV pole-figure colors for the orientation map.
+def normalize_pattern_ids(values) -> set[tuple]:
+    """Pattern identities from a Dash store (lists of ``[frame_id, pattern_index]``)."""
 
-    Replicates the same algorithm used by ``make_pole_figure`` in
-    ``stereo_plot.py`` (and LaueGo's ``MakePolePoints`` + ``poleXY2rgb``):
-    for each grain, find the closest symmetry-equivalent pole to the center
-    ``(x0, y0)`` on the stereographic projection, then map the displacement
-    ``(dx, dy)`` to an HSV color wheel.  Center = white, edge = fully
-    saturated.
-
-    Parameters
-    ----------
-    recip_lattices : ndarray (N, 3, 3)
-        Per-grain reciprocal lattice matrices.
-    hkl : tuple of int
-        Miller indices for the pole family (e.g. ``(1, 0, 0)``).
-    surface_normal, surface_roll, surface_tilt : ndarray (3,), optional
-        Surface frame vectors.  Defaults to 34ID-E normal surface.
-    center_xy : tuple of float, optional
-        ``(x0, y0)`` center for the HSV color wheel on the pole figure.
-    color_rad_deg : float
-        Angular color-saturation radius in degrees.
-
-    Returns
-    -------
-    ndarray (N, 3)
-        RGB values in [0, 1] per grain.
-    """
-    N_grains = len(recip_lattices)
-
-    if center_xy is not None:
-        x0, y0 = float(center_xy[0]), float(center_xy[1])
-    else:
-        x0, y0 = 0.0, 0.0
-
-    rmax = pole_figure_color_radius(x0, y0, color_rad_deg)
-
-    # Generate the hkl family and compute pole figure points
-    family = cubic_hkl_family(*hkl)
-
-    kwargs = {}
-    if surface_normal is not None:
-        kwargs["surface_normal"] = surface_normal
-    if surface_roll is not None:
-        kwargs["surface_roll"] = surface_roll
-    if surface_tilt is not None:
-        kwargs["surface_tilt"] = surface_tilt
-
-    points, grain_indices = pole_figure_points(recip_lattices, family, **kwargs)
-
-    # Filter out NaN/inf points
-    if len(points) > 0:
-        finite_mask = np.all(np.isfinite(points), axis=1)
-        points = points[finite_mask]
-        grain_indices = grain_indices[finite_mask]
-
-    return closest_pole_hsv_colors(points, grain_indices, N_grains, x0, y0, rmax)
+    selected = set()
+    for item in values or ():
+        if item is None or len(item) != 2 or item[1] is None:
+            continue
+        selected.add((_identity(item[0]), int(item[1])))
+    return selected
 
 
-# ---------------------------------------------------------------------------
-# Cross-plot selection highlighting (Stage 3)
-# ---------------------------------------------------------------------------
+def highlight_selection(figure: go.Figure, map_data: MapData, selected_pattern_ids, *, marker_size: int) -> int:
+    """Dim unselected map points and ring the selected patterns. Returns the ring count."""
 
-
-def apply_selection_highlight(
-    fig,
-    parsed,
-    selected_grains,
-    marker_size,
-    is_3d=False,
-    x_axis="auto",
-    y_axis="auto",
-    z_axis="Z",
-    nonindexed_style="gray",
-):
-    """
-    Modify a figure in-place to highlight selected grains.
-
-    Strategy:
-    - Dim unselected points in 2D by reducing opacity
-    - Keep 3D points opaque so WebGL depth testing remains reliable
-    - Add a second highlight trace with bright outlines for selected grains
-
-    Parameters
-    ----------
-    fig : go.Figure
-        The orientation or quality map figure to modify.
-    parsed : dict
-        Parsed XML data from ``parse_indexing_xml()``.
-    selected_grains : list of int
-        Grain (step) indices to highlight.
-    marker_size : int
-        Current marker size (highlight ring will be larger).
-    is_3d : bool
-        Whether the figure is a 3D scatter plot.
-    x_axis, y_axis, z_axis : str
-        Axis selections, must match what was passed to the figure builder
-        so the highlight ring lands on the correct points.  ``z_axis`` is
-        only used in 3-D mode.
-    """
-    if not fig.data or not selected_grains:
-        return
-
-    positions = parsed["positions"]
-    n_points = len(positions)
-    step_indices = np.asarray(parsed.get("_step_indices", np.arange(n_points)), dtype=int)
-    selected_set = set(selected_grains)
-
-    if not is_3d:
-        # Dim every visible base trace.  Each trace may now contain only a
-        # subset of steps, so derive its mask from customdata rather than
-        # assuming it is aligned with the full parsed arrays.
-        import plotly.colors as pc
-
-        for trace in fig.data:
-            if trace.uid not in {"orientation-2d-main", "orientation-2d-nonindexed"}:
-                continue
-            trace_customdata = np.asarray(trace.customdata)
-            if trace_customdata.size == 0:
-                continue
-            trace_step_indices = trace_customdata[:, 0].astype(int)
-            opacity_arr = np.where(
-                np.isin(trace_step_indices, list(selected_set)),
-                1.0,
-                0.2,
-            )
-            current_colors = trace.marker.color
-
-            if isinstance(current_colors, str):
-                if current_colors.startswith("rgb("):
-                    trace.marker.color = [
-                        current_colors.replace("rgb(", "rgba(").replace(")", f",{opacity:.2f})")
-                        for opacity in opacity_arr
-                    ]
-                continue
-
-            is_rgb_strings = (
-                isinstance(current_colors, (list, tuple))
-                and len(current_colors) == len(trace_step_indices)
-                and len(current_colors) > 0
-                and isinstance(current_colors[0], str)
-            )
-            if is_rgb_strings:
-                trace.marker.color = [
-                    color.replace("rgb(", "rgba(").replace(")", f",{opacity:.2f})")
-                    if color.startswith("rgb(")
-                    else color
-                    for color, opacity in zip(current_colors, opacity_arr, strict=True)
-                ]
-                continue
-
-            # Scalar colorscale mode -- Scattergl doesn't support per-point
-            # opacity, so sample the colorscale and convert to RGBA strings.
-            color_vals = np.asarray(current_colors, dtype=float)
-            colorscale = trace.marker.colorscale
-            if isinstance(colorscale, str):
-                colorscale = pc.get_colorscale(colorscale)
-            else:
-                colorscale = [[pos, col] for pos, col in colorscale]
-            vmin = np.nanmin(color_vals)
-            vmax = np.nanmax(color_vals)
-            normed = (color_vals - vmin) / (vmax - vmin) if vmax > vmin else np.zeros_like(color_vals)
-            sampled = pc.sample_colorscale(colorscale, np.clip(normed, 0, 1), colortype="rgb")
-            trace.marker.color = [
-                color.replace("rgb(", "rgba(").replace(")", f",{opacity:.2f})")
-                for color, opacity in zip(sampled, opacity_arr, strict=True)
-            ]
-            trace.marker.colorscale = None
-
-    # Add highlight ring trace for selected grains
-    sel_mask = np.isin(step_indices, list(selected_set))
-    if _normalize_nonindexed_style(nonindexed_style) == "transparent":
-        # Invisible 2-D points and removed 3-D points must not reappear as
-        # selection rings.
-        sel_mask &= indexed_point_mask(parsed)
-    if not np.any(sel_mask):
-        return
-
-    highlight_size = max(marker_size + 6, int(marker_size * 1.4))
-
-    # Derive a stable uid from the main trace so Plotly can track this
-    # highlight trace across figure updates even when trace count changes.
-    main_uid = fig.data[0].uid or "main"
-    highlight_uid = main_uid.replace("-main", "-highlight")
-
+    selected = normalize_pattern_ids(selected_pattern_ids)
+    if not selected or not figure.data:
+        return 0
+    is_3d = any(trace.type == "scatter3d" for trace in figure.data)
+    ring_x, ring_y, ring_z, ring_custom = [], [], [], []
+    for trace in figure.data:
+        role = (trace.meta or {}).get("role") if isinstance(trace.meta, dict) else None
+        if role not in ("data", "unindexed"):
+            continue
+        mask = _selected_mask(trace, selected)
+        if mask is None:
+            continue
+        if not is_3d:
+            trace.marker.opacity = np.where(mask, 1.0, 0.2)
+        if mask.any():
+            ring_x.extend(np.asarray(trace.x)[mask])
+            ring_y.extend(np.asarray(trace.y)[mask])
+            if is_3d:
+                ring_z.extend(np.asarray(trace.z)[mask])
+            ring_custom.extend(np.asarray(trace.customdata, dtype=object)[mask].tolist())
+    if not ring_x:
+        return 0
+    ring = {
+        "mode": "markers",
+        "name": "Selected",
+        "marker": {
+            "symbol": "circle-open",
+            "size": max(1, int(marker_size)) + 6,
+            "color": "black",
+            "line": {"width": 2},
+        },
+        "customdata": ring_custom,
+        "hoverinfo": "skip",
+        "meta": {"role": HIGHLIGHT_ROLE},
+        "uid": "map-highlight",
+    }
     if is_3d:
-        x_vals_3d, _ = _resolve_axis(parsed, x_axis or "X")
-        y_vals_3d, _ = _resolve_axis(parsed, y_axis or "Y")
-        z_vals_3d, _ = _resolve_axis(parsed, z_axis or "Z")
-        fig.add_trace(
-            go.Scatter3d(
-                x=np.asarray(x_vals_3d)[sel_mask],
-                y=np.asarray(y_vals_3d)[sel_mask],
-                z=np.asarray(z_vals_3d)[sel_mask],
-                mode="markers",
-                marker=dict(
-                    # "square-open" is already unfilled, so an rgba fill only
-                    # served to hide it -- and any alpha breaks the 3-D WebGL
-                    # depth sort.  Use an opaque color instead.
-                    size=max(3, highlight_size // 3),
-                    color="white",
-                    symbol="square-open",
-                    line=dict(color="white", width=2),
-                ),
-                hoverinfo="skip",
-                showlegend=True,
-                name=f"Selected ({sel_mask.sum()})",
-                uid=highlight_uid,
-            )
-        )
+        ring["marker"]["size"] = max(1, int(marker_size)) + 3
+        figure.add_trace(go.Scatter3d(x=ring_x, y=ring_y, z=ring_z, **ring))
     else:
-        depths = parsed["depths"]
-        has_depth = not np.all(np.isnan(depths))
-        x_vals, y_vals, _, _ = _select_axes(positions, depths, has_depth, x_axis=x_axis, y_axis=y_axis, parsed=parsed)
-        x_vals = np.asarray(x_vals)
-        y_vals = np.asarray(y_vals)
+        figure.add_trace(go.Scattergl(x=ring_x, y=ring_y, **ring))
+    return len(ring_x)
 
-        fig.add_trace(
-            go.Scattergl(
-                x=x_vals[sel_mask],
-                y=y_vals[sel_mask],
-                mode="markers",
-                marker=dict(
-                    size=highlight_size,
-                    color="rgba(0,0,0,0)",
-                    symbol="circle-open",
-                    line=dict(color="white", width=2),
-                ),
-                hoverinfo="skip",
-                showlegend=True,
-                name=f"Selected ({sel_mask.sum()})",
-                uid=highlight_uid,
+
+def point_details(dataset: VisualizationDataset, frame_id, pattern_index=None) -> dict:
+    """Values shown when a map point is clicked."""
+
+    position = frame_position(dataset, frame_id)
+    pattern_rows = np.flatnonzero(dataset.pattern_frame_indices == position)
+    details = {
+        "step": position,
+        "frame_id": frame_id,
+        "sample_position": [float(value) for value in dataset.sample_positions[position]],
+        "depth": None if np.isnan(dataset.depths[position]) else float(dataset.depths[position]),
+        "n_peaks": int(dataset.frame_n_peaks[position]),
+        "n_patterns": int(len(pattern_rows)),
+        "pattern_index": None if pattern_index in (None, NO_PATTERN) else int(pattern_index),
+        "n_indexed": None,
+        "goodness": None,
+        "rms_error_deg": None,
+    }
+    if details["pattern_index"] is not None:
+        rows = pattern_rows[dataset.pattern_indices[pattern_rows] == details["pattern_index"]]
+        if len(rows):
+            row = int(rows[0])
+            details.update(
+                n_indexed=int(dataset.pattern_n_indexed[row]),
+                goodness=float(dataset.pattern_goodness[row]),
+                rms_error_deg=float(dataset.pattern_rms_error_deg[row]),
             )
-        )
+    return details

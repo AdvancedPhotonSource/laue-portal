@@ -48,7 +48,7 @@ stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=5
 priority=100
 
-# RQ Worker for background job processing
+# RQ Worker: one queued item is one whole run; one active scientific run per host.
 [program:rq_worker]
 command={{PYTHON_BIN}} -m laue_portal.processing.worker
 directory={{PROJECT_DIR}}
@@ -59,9 +59,14 @@ stdout_logfile=%(here)s/logs/%(program_name)s.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=5
 priority=300
-# Start with 1 worker, increase if needed
+# Keep one worker per host: the run itself uses bounded compute processes
+# (RUN_EXECUTION.workers in config.yaml). Increase only on hosts provisioned for it.
 numprocs=1
 process_name=%(program_name)s_%(process_num)02d
+# On stop the worker asks the running run to stop cooperatively and waits for it
+# to drain and finalize. Must be at least RUN_EXECUTION.shutdown_grace_seconds.
+stopsignal=TERM
+stopwaitsecs=600
 
 # Group all Laue Portal services
 [group:laue-portal]

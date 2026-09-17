@@ -130,7 +130,7 @@ def build_peakindex_form(readonly=False, show_actions=True):
                         form_field("Min Spot Size [px]", "min_size", readonly=readonly),
                         form_field("Min Spot Sep. [px]", "min_separation", readonly=readonly),
                         form_field(
-                            "Max No. of Spots",
+                            "Max detected spots",
                             "max_number",
                             placeholder="empty for all",
                             readonly=readonly,
@@ -147,7 +147,6 @@ def build_peakindex_form(readonly=False, show_actions=True):
                         form_field("Mask File", "maskFile", wide=True, readonly=readonly),
                         form_check_row(
                             form_checkbox("Smooth peak before fitting", "smooth", disabled=readonly),
-                            form_checkbox("Cosmic Filter", "cosmicFilter", disabled=readonly),
                         ),
                     ],
                 ),
@@ -176,7 +175,7 @@ def build_peakindex_form(readonly=False, show_actions=True):
                         form_field("Angle Tolerance [deg]", "indexAngleTolerance", readonly=readonly),
                         form_field("Central HKL", "indexHKL", readonly=readonly),
                         form_field("Cone Angle [deg]", "indexCone", readonly=readonly),
-                        form_field("Max No. of Spots", "max_peaks", placeholder="empty: 200", readonly=readonly),
+                        form_field("Max spots to index", "max_peaks", placeholder="empty: 200", readonly=readonly),
                         form_field("Depth [um]", "depth", placeholder="empty -> auto", readonly=readonly),
                     ],
                 ),
@@ -277,7 +276,6 @@ def set_peakindex_form_props(peakindex, read_only=False):
     set_props("indexCone", {"value": parameters.index_cone, "readonly": read_only})
     set_props("energyUnit", {"value": parameters.energy_unit, "readonly": read_only})
     set_props("exposureUnit", {"value": parameters.exposure_unit, "readonly": read_only})
-    set_props("cosmicFilter", {"value": parameters.cosmic_filter, "disabled": read_only})
     set_props("recipLatticeUnit", {"value": parameters.reciprocal_lattice_unit, "readonly": read_only})
     set_props(
         "latticeParametersUnit",

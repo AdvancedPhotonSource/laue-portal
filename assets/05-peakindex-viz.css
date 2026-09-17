@@ -1,3 +1,17 @@
+.pi-viz-status:empty {
+  display: none;
+}
+
+.pi-viz-status {
+  padding: 0.25rem 0.75rem;
+}
+
+.lp-artifact-bar {
+  min-height: 2rem;
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+  background: var(--bs-light, #f8f9fa);
+}
+
 /* ==========================================================================
    Peak Indexing — Visualization Sidebar & Page Styles
    Controls for each visualization tab are housed in a left sidebar panel.
@@ -23,7 +37,8 @@
 
 .pi-page {
   display: grid;
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  /* navbar, detail header, artifact bar, scope bar, tab strip, tab content */
+  grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
   height: 100dvh;
   overflow: hidden;
 }

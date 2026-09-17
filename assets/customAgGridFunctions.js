@@ -182,79 +182,53 @@ dagcomponentfuncs.StatusRenderer = function (props) {
     );
 };
 
-// SubJob Progress Renderer - shows completion status with text and progress bar
-dagcomponentfuncs.SubJobProgressRenderer = function (props) {
-    const data = props.data;
-    const total = data.total_subjobs || 0;
+// Run progress renderer: stored run counters as text and a segmented bar.
+// processed = succeeded + failed; pending inputs are striped while the run is active.
+dagcomponentfuncs.RunProgressRenderer = function (props) {
+    const data = props.data || {};
+    const total = data.n_inputs || 0;
 
     if (total === 0) {
-        return React.createElement('span', { className: 'text-muted' }, 'No subjobs');
+        return React.createElement('span', { className: 'text-muted' }, 'No inputs');
     }
-    
-    const completed = data.completed_subjobs || 0;
-    const failed = data.failed_subjobs || 0;
-    const running = data.running_subjobs || 0;
-    const queued = data.queued_subjobs || 0;
-    
-    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-    
-    // Create progress bar with different segments
-    const progressSegments = [];
-    
-    if (completed > 0) {
-        progressSegments.push(
-            React.createElement('div', {
-                key: 'completed',
-                className: 'progress-bar bg-success',
-                style: { width: `${(completed / total) * 100}%` },
-                title: `${completed} completed`
-            })
-        );
-    }
-    
-    if (failed > 0) {
-        progressSegments.push(
-            React.createElement('div', {
-                key: 'failed',
-                className: 'progress-bar bg-danger',
-                style: { width: `${(failed / total) * 100}%` },
-                title: `${failed} failed`
-            })
-        );
-    }
-    
-    if (running > 0) {
-        progressSegments.push(
-            React.createElement('div', {
-                key: 'running',
-                className: 'progress-bar bg-info progress-bar-striped progress-bar-animated',
-                style: { width: `${(running / total) * 100}%` },
-                title: `${running} running`
-            })
-        );
-    }
-    
-    if (queued > 0) {
-        progressSegments.push(
-            React.createElement('div', {
-                key: 'queued',
-                className: 'progress-bar bg-warning',
-                style: { width: `${(queued / total) * 100}%` },
-                title: `${queued} queued`
-            })
-        );
-    }
-    
-    return React.createElement('div', { style: { width: '100%' } }, [
-        React.createElement('div', { 
-            key: 'text',
-            className: 'text-center small mb-1' 
-        }, `${completed}/${total} completed`),
-        React.createElement('div', {
-            key: 'progress',
-            className: 'progress',
-            style: { height: '20px' }
-        }, progressSegments)
+
+    const succeeded = data.n_succeeded || 0;
+    const failed = data.n_failed || 0;
+    const notRun = data.n_not_run || 0;
+    const pending = Math.max(total - succeeded - failed - notRun, 0);
+    const processed = succeeded + failed;
+    const active = data.status === 0 || data.status === 1;
+
+    const segments = [];
+    const segment = (key, className, count, label) => {
+        if (count > 0) {
+            segments.push(
+                React.createElement('div', {
+                    key: key,
+                    className: 'progress-bar ' + className,
+                    style: { width: `${(count / total) * 100}%` },
+                    title: `${count} ${label}`
+                })
+            );
+        }
+    };
+    segment('succeeded', 'bg-success', succeeded, 'succeeded');
+    segment('failed', 'bg-danger', failed, 'failed');
+    segment('not_run', 'bg-secondary', notRun, 'not run');
+    segment(
+        'pending',
+        active && data.status === 1 ? 'bg-warning progress-bar-striped progress-bar-animated' : 'bg-warning',
+        pending,
+        active ? 'pending' : 'unaccounted'
+    );
+
+    let text = `${processed}/${total} processed`;
+    if (failed > 0) text += `, ${failed} failed`;
+    if (notRun > 0) text += `, ${notRun} not run`;
+
+    return React.createElement('div', { style: { width: '100%' }, title: text }, [
+        React.createElement('div', { key: 'text', className: 'text-center small mb-1' }, text),
+        React.createElement('div', { key: 'progress', className: 'progress', style: { height: '20px' } }, segments)
     ]);
 };
 

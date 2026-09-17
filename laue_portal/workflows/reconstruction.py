@@ -4,9 +4,8 @@ import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
 
-from sqlalchemy import Engine, insert, select
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, joinedload
 
 from laue_portal.database import db_schema, session_utils
@@ -18,11 +17,9 @@ from laue_portal.workflows.files import (
     normalize_input_directory,
     normalize_integer_range,
     normalize_output_path_template,
-    resolve_input_files,
+    resolve_inputs,
 )
-
-QUEUED_STATUS = 0
-SUBJOB_INSERT_BATCH_SIZE = 10_000
+from laue_portal.workflows.run_records import new_job, publish_run_inputs, request_document
 
 
 @dataclass(frozen=True)
@@ -71,38 +68,15 @@ class WireReconstructionRequest:
         object.__setattr__(self, "priority", int(self.priority))
 
 
-def _persist_subjobs(
-    session: Session,
-    request: WireReconstructionRequest,
-    job_id: int,
-    input_files: tuple[str, ...],
-    output_root: str,
-) -> None:
-    for start in range(0, len(input_files), SUBJOB_INSERT_BATCH_SIZE):
-        batch = input_files[start : start + SUBJOB_INSERT_BATCH_SIZE]
-        rows = [
-            {
-                "job_id": job_id,
-                "computer_name": request.computer_name,
-                "status": QUEUED_STATUS,
-                "priority": request.priority,
-                "input_path": input_path,
-                "output_path": os.path.join(output_root, f"{Path(input_path).stem}_"),
-            }
-            for input_path in batch
-        ]
-        session.execute(insert(db_schema.SubJob), rows)
-
-
 def create_reconstruction(
     request: WireReconstructionRequest,
     *,
     engine: Engine | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> db_schema.ReconstructionRun:
-    """Resolve files, then atomically create a wire run, job, and subjobs."""
+    """Resolve files, create the run and its job atomically, then publish the manifest."""
 
-    input_files = resolve_input_files(
+    inputs = resolve_inputs(
         request.input_path,
         request.filename_prefixes,
         request.scan_point_values,
@@ -113,13 +87,11 @@ def create_reconstruction(
     database_engine = engine or session_utils.get_engine()
     with Session(database_engine, expire_on_commit=False) as session:
         with session.begin():
-            job = db_schema.Job(
+            job = new_job(
                 computer_name=request.computer_name,
-                status=QUEUED_STATUS,
                 priority=request.priority,
-                submit_time=request.submitted_at,
-                start_time=None,
-                finish_time=None,
+                submitted_at=request.submitted_at,
+                n_inputs=len(inputs),
             )
             session.add(job)
             session.flush()
@@ -138,6 +110,7 @@ def create_reconstruction(
             session.add(run)
             session.flush()
             run.output_path = format_output_path(request.output_path_template, run.id)
+            job.run_directory = run.output_path
             run.wire_parameters = db_schema.WireReconstructionParameters(
                 filename_prefixes=list(request.filename_prefixes),
                 geometry_file=request.geometry_file,
@@ -152,12 +125,35 @@ def create_reconstruction(
                 scan_points_len=len(request.scan_point_values),
                 verbose=request.verbose,
             )
-            _persist_subjobs(session, request, job.job_id, input_files, run.output_path)
-    return run
+        run_id = run.id
+        job_id = job.job_id
+        run_directory = run.output_path
+
+    payload = {
+        "kind": "wire_reconstruction",
+        "run": {
+            "reconstruction_id": run_id,
+            "job_id": job_id,
+            "scan_number": request.scan_number,
+            "method": "wire",
+        },
+        "request": request_document(request),
+        "output": {"directory": run_directory},
+    }
+    publish_run_inputs(
+        database_engine,
+        job_id=job_id,
+        display_id=f"Reconstruction R{run_id}",
+        run_directory=run_directory,
+        inputs=inputs,
+        request_payload=payload,
+        now=request.submitted_at,
+    )
+    return get_reconstruction(run_id, engine=database_engine)
 
 
 def get_reconstruction(reconstruction_id: int, *, engine: Engine | None = None) -> db_schema.ReconstructionRun | None:
-    """Load a reconstruction with its parameters, job, and subjobs."""
+    """Load a reconstruction with its parameters and job."""
 
     database_engine = engine or session_utils.get_engine()
     statement = (

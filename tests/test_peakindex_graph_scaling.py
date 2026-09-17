@@ -9,7 +9,7 @@ PAGE = Path(__file__).parents[1] / "laue_portal" / "pages" / "peakindexing.py"
 def test_page_grid_reserves_the_last_row_for_tab_content():
     css = CSS.read_text()
 
-    assert "grid-template-rows: auto auto auto auto minmax(0, 1fr)" in css
+    assert "grid-template-rows: auto auto auto auto auto minmax(0, 1fr)" in css
     assert ".pi-page > .tab-content {" in css
     assert ".pi-page > .tab-content > .tab-pane.active {" in css
     assert ".pi-page > .lp-detail-tabs {" not in css

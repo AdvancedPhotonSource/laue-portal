@@ -32,7 +32,7 @@ def workflow_engine(tmp_path):
         engine.dispose()
 
 
-def test_fresh_database_contains_unified_workflow_tables_and_subjob_paths(workflow_engine):
+def test_fresh_database_contains_unified_workflow_tables_and_no_per_input_table(workflow_engine):
     inspector = inspect(workflow_engine)
     table_names = set(inspector.get_table_names())
 
@@ -42,10 +42,10 @@ def test_fresh_database_contains_unified_workflow_tables_and_subjob_paths(workfl
         "indexing_run",
         "lauego_indexing_parameters",
     } <= table_names
-    assert {"recon", "wirerecon", "peakindex"}.isdisjoint(table_names)
-    subjob_columns = {column["name"]: column for column in inspector.get_columns("subjob")}
-    assert subjob_columns["input_path"]["nullable"] is True
-    assert subjob_columns["output_path"]["nullable"] is True
+    assert {"recon", "wirerecon", "peakindex", "subjob"}.isdisjoint(table_names)
+    job_columns = {column["name"] for column in inspector.get_columns("job")}
+    assert {"n_inputs", "n_succeeded", "n_failed", "n_not_run", "phase", "failure_report_path"} <= job_columns
+    assert not hasattr(db_schema, "SubJob")
 
 
 def test_legacy_workflow_models_and_helpers_are_not_exported():
