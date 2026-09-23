@@ -19,6 +19,10 @@ Identity convention (characterized 2026-09-16, plan section 3.3):
   templates in form order, then requested scan points in requested order, then
   depth points. ``input_id`` is the source file stem, which is what lauelab
   HDF5 results store as ``frames/frame_ids`` for new runs.
+* A frame of a reconstruction-scan file has ``source`` = the scan file plus
+  ``point_id`` and zero-based ``depth_index``. Its ``input_id`` is
+  ``<point_id>_<depth_index>``, the stem the same frame had as a per-depth
+  file ``<point_id>_<depth_index>.h5``.
 * Historical positions and manifest positions therefore differ. Anything that
   refers to a frame must use ``input_id`` (or the ``inputImage`` stem of an
   old step), never a position, so no selection acquires an off-by-one change.
@@ -50,6 +54,7 @@ REQUEST_FILENAME = "request.json"
 FAILURE_REPORT_FILENAME = "failures.jsonl"
 RUN_SUMMARY_FILENAME = "run.json"
 RESULTS_FILENAME = "output.h5"
+RECONSTRUCTION_FILENAME = "reconstruction.h5"
 LOG_FILENAME = "run.log"
 
 # Names a run directory reserves for support and authoritative files. A user
@@ -61,6 +66,7 @@ RESERVED_RUN_FILENAMES = frozenset(
         FAILURE_REPORT_FILENAME,
         RUN_SUMMARY_FILENAME,
         RESULTS_FILENAME,
+        RECONSTRUCTION_FILENAME,
         LOG_FILENAME,
     }
 )
@@ -81,9 +87,14 @@ class ManifestEntry:
     scan_point: int | None
     depth_point: int | None
     depth: float | None = None  # physical depth override in micrometres; None = from file
+    point_id: str | None = None  # reconstruction-scan point; source is then the scan file
+    depth_index: int | None = None  # zero-based frame of that point
 
     def to_json(self) -> str:
-        return json.dumps(asdict(self), separators=(",", ":"), ensure_ascii=False)
+        values = asdict(self)
+        if self.point_id is None:  # file inputs keep the original line format
+            del values["point_id"], values["depth_index"]
+        return json.dumps(values, separators=(",", ":"), ensure_ascii=False)
 
     @classmethod
     def from_dict(cls, values: Mapping[str, Any]) -> ManifestEntry:
@@ -96,6 +107,8 @@ class ManifestEntry:
                 scan_point=None if values.get("scan_point") is None else int(values["scan_point"]),
                 depth_point=None if values.get("depth_point") is None else int(values["depth_point"]),
                 depth=None if values.get("depth") is None else float(values["depth"]),
+                point_id=None if values.get("point_id") is None else str(values["point_id"]),
+                depth_index=None if values.get("depth_index") is None else int(values["depth_index"]),
             )
         except (KeyError, TypeError, ValueError) as error:
             raise ManifestError(f"malformed manifest entry: {error}") from error
@@ -114,6 +127,12 @@ def input_identity(path: str | os.PathLike[str]) -> str:
     return Path(path).stem
 
 
+def scan_frame_identity(point_id: str, depth_index: int) -> str:
+    """The identity of one reconstruction-scan frame: the stem of its per-depth file."""
+
+    return f"{point_id}_{depth_index}"
+
+
 def build_manifest_entries(
     inputs: Sequence[ResolvedInput],
     *,
@@ -124,13 +143,20 @@ def build_manifest_entries(
     Identities are file stems. If two inputs share a stem (for example ``a.h5``
     and ``a.tif``), every identity in the run falls back to the full filename so
     one rule applies to the whole manifest. Duplicate filenames are an error.
+    A reconstruction-scan frame's identity is ``<point_id>_<depth_index>``.
     """
 
     if not inputs:
         raise ManifestError("a run needs at least one input")
-    stems = [input_identity(entry.path) for entry in inputs]
+    stems = [
+        input_identity(entry.path) if entry.point_id is None else scan_frame_identity(entry.point_id, entry.depth_index)
+        for entry in inputs
+    ]
     if len(set(stems)) == len(stems):
         identities = stems
+    elif any(entry.point_id is not None for entry in inputs):
+        duplicate = next(name for name in stems if stems.count(name) > 1)
+        raise ManifestError(f"input identity {duplicate!r} is not unique within the run")
     else:
         identities = [os.path.basename(entry.path) for entry in inputs]
         if len(set(identities)) != len(identities):
@@ -146,6 +172,8 @@ def build_manifest_entries(
             scan_point=entry.scan_point,
             depth_point=entry.depth_point,
             depth=depths.get(index),
+            point_id=entry.point_id,
+            depth_index=entry.depth_index,
         )
         for index, (entry, identity) in enumerate(zip(inputs, identities, strict=True))
     )

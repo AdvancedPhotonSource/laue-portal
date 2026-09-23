@@ -1,17 +1,17 @@
-"""Tests for the native wire reconstruction adapter (Reconstructor is faked; the library tests its numerics)."""
+"""Tests for the wire reconstruction adapter, run through lauelab on a small synthetic wire scan."""
 
 from __future__ import annotations
 
 import os
-from types import SimpleNamespace
 
-import numpy as np
 import pytest
 from lauelab.indexing import InputError
+from lauelab.reconstruct import ScanReader, validate_scan_file
 
 from laue_portal.processing.compute import contract, wire
 from laue_portal.workflows.files import ResolvedInput
-from laue_portal.workflows.manifest import build_manifest_entries
+from laue_portal.workflows.manifest import RECONSTRUCTION_FILENAME, build_manifest_entries
+from tests.wire_support import GEOMETRY, N_DEPTHS, OPTIONS, write_wire_scan
 
 
 class Hooks:
@@ -68,50 +68,16 @@ def _request(tmp_path, count=3, **overrides):
     )
 
 
-def _entries(tmp_path, count=3):
-    return build_manifest_entries(
-        tuple(ResolvedInput(os.fspath(tmp_path / f"point_{i}.h5"), 0, (i,)) for i in range(1, count + 1))
-    )
+def _entries(tmp_path, count=3, missing=()):
+    """Point files point_1 ... point_<count>; indices in ``missing`` are never written."""
 
-
-class FakeReconstructor:
-    instances = []
-
-    def __init__(self, geometry, detector, **options):
-        self.geometry = geometry
-        self.detector = detector
-        self.options = options
-        self.num_threads = options.get("num_threads") or 8
-        self.calls = []
-        FakeReconstructor.instances.append(self)
-
-    def reconstruct(self, path, output_base=None, *, return_images=False):
-        self.calls.append((path, output_base))
-        stem = os.path.basename(path)
-        if "point_2" in stem:
-            raise InputError("input file has 3 stored slices; at least 5 are needed")
-        if "point_3" in stem:
-            return SimpleNamespace(
-                success=False,
-                output_files=[f"{output_base}0.h5"],
-                error="write failed",
-                last_completed_stripe=1,
-                depth_um=None,
-            )
-        os.makedirs(os.path.dirname(output_base), exist_ok=True)
-        files = [f"{output_base}{k}.h5" for k in range(3)] + [f"{output_base}summary.txt"]
-        for name in files:
-            with open(name, "w") as handle:
-                handle.write("data")
-        return SimpleNamespace(
-            success=True, output_files=files, error=None, last_completed_stripe=2, depth_um=np.array([-1.0, 0.0, 1.0])
-        )
-
-
-@pytest.fixture(autouse=True)
-def fake_reconstructor(monkeypatch):
-    FakeReconstructor.instances = []
-    monkeypatch.setattr(wire, "Reconstructor", FakeReconstructor)
+    paths = []
+    for i in range(1, count + 1):
+        path = tmp_path / f"point_{i}.h5"
+        if i not in missing:
+            write_wire_scan(path, seed=i)
+        paths.append(ResolvedInput(os.fspath(path), 0, (i,)))
+    return build_manifest_entries(tuple(paths))
 
 
 def test_settings_follow_the_wire_form_mapping():
@@ -138,73 +104,63 @@ def test_registry_resolves_the_native_adapters():
     assert contract.get_compute_function(lauego.LAUEGO_KIND) is lauego.compute_lauego_indexing
 
 
-def test_points_are_reconstructed_in_manifest_order_with_per_point_outcomes(tmp_path):
-    request = _request(tmp_path)
+def test_points_are_reconstructed_into_one_scan_file_with_per_point_outcomes(tmp_path):
+    request = _request(tmp_path, **OPTIONS, geometry_file=os.fspath(GEOMETRY), wire_edges="both")
     hooks = Hooks()
+
+    outcome = wire.compute_wire_reconstruction(request, _entries(tmp_path, missing={2}), hooks)
+
+    assert (outcome.n_succeeded, outcome.n_failed, outcome.stopped) == (2, 1, False)
+    assert hooks.progress == [(0, 1), (1, 1), (2, 1)]  # the missing input fails while the manifest freezes
+    assert [(f.index, f.input_id, f.error_type) for f in hooks.failures] == [(1, "point_2", "ReconstructionError")]
+    assert "does not exist" in hooks.failures[0].message
+    path = os.path.join(request.run_directory, RECONSTRUCTION_FILENAME)
+    assert outcome.artifacts == {"reconstruction": path}
+    assert outcome.validation_error is None
+    assert os.listdir(request.run_directory) == [RECONSTRUCTION_FILENAME]
+    assert outcome.provenance["engine"].startswith("lauelab reconstruct_scan")
+    assert outcome.provenance["reconstruction_summary"] == {
+        "run_status": "finished",
+        "n_points": 3,
+        "n_complete": 2,
+        "n_failed": 1,
+        "n_unattempted": 0,
+    }
+    assert outcome.summary == f"2 of 3 point(s) reconstructed into {RECONSTRUCTION_FILENAME}"
+    with ScanReader(path) as scan:
+        assert scan.point_ids == ("point_1", "point_2", "point_3")  # manifest input IDs, in manifest order
+        assert [entry.status for entry in scan.points] == ["complete", "failed", "complete"]
+        point = scan.point("point_3")
+        assert point.shape == (N_DEPTHS, 32, 32)
+        assert point.dtype.kind == "i"  # both-edge output keeps its sign
+
+
+def test_stop_between_points_publishes_completed_points_and_records_not_run(tmp_path):
+    request = _request(tmp_path, **OPTIONS, geometry_file=os.fspath(GEOMETRY))
+    hooks = Hooks(stop_after=1)
 
     outcome = wire.compute_wire_reconstruction(request, _entries(tmp_path), hooks)
 
-    reconstructor = FakeReconstructor.instances[0]
-    assert (reconstructor.geometry, reconstructor.detector) == ("/calib/geoN.xml", 0)
-    assert reconstructor.options == {
-        "depth_range": (-50.0, 150.0),
-        "resolution": 1.0,
-        "wire_edge": "leading",
-        "percent_brightest": 100.0,
-        "num_threads": 4,
-        "memory_limit_mb": 50000,
-    }
-    assert [os.path.basename(base) for _, base in reconstructor.calls] == ["point_1_", "point_2_", "point_3_"]
-    assert (outcome.n_succeeded, outcome.n_failed, outcome.stopped) == (1, 2, False)
-    assert hooks.progress == [(1, 0), (1, 1), (1, 2)]
-    assert [(f.index, f.category, f.error_type) for f in hooks.failures] == [
-        (1, "input", "InputError"),
-        (2, "error", "ReconstructionError"),
-    ]
-    assert hooks.failures[1].context == {"last_completed_stripe": 1, "partial_files": 1}
-    assert outcome.artifacts == {"directory": request.run_directory}
-    assert outcome.validation_error is None
-    assert outcome.provenance["depths_um"] == [-1.0, 0.0, 1.0]
-    assert outcome.provenance["n_files_written"] == 4
-    assert outcome.provenance["engine"].startswith("lauelab Reconstructor")
-    assert sorted(os.listdir(request.run_directory)) == [
-        "point_1_0.h5",
-        "point_1_1.h5",
-        "point_1_2.h5",
-        "point_1_summary.txt",
-    ]
-
-
-def test_stop_between_points_records_not_run(tmp_path):
-    hooks = Hooks(stop_after=1)
-    outcome = wire.compute_wire_reconstruction(_request(tmp_path), _entries(tmp_path), hooks)
     assert (outcome.n_succeeded, outcome.n_failed, outcome.stopped) == (1, 0, True)
     assert [(f.index, f.category) for f in hooks.failures] == [(1, "cancelled"), (2, "cancelled")]
-    assert len(FakeReconstructor.instances[0].calls) == 1
+    summary = validate_scan_file(outcome.artifacts["reconstruction"])
+    assert (summary.run_status, summary.n_complete, summary.n_unattempted) == ("cancelled", 1, 2)
 
 
-def test_missing_output_files_fail_validation(tmp_path):
-    request = _request(tmp_path, count=1)
-    hooks = Hooks()
-
-    class Vanishing(FakeReconstructor):
-        def reconstruct(self, path, output_base=None, *, return_images=False):
-            result = super().reconstruct(path, output_base=output_base)
-            os.unlink(result.output_files[1])
-            return result
-
-    wire.Reconstructor = Vanishing
-    outcome = wire.compute_wire_reconstruction(request, _entries(tmp_path, count=1), hooks)
-    assert outcome.n_succeeded == 1
-    assert outcome.validation_error.startswith("1 reconstructed file(s) are missing or empty")
-    assert outcome.artifacts == {}
+def test_shared_configuration_problems_stop_the_run_and_publish_nothing(tmp_path):
+    request = _request(tmp_path, **OPTIONS, geometry_file=os.fspath(tmp_path / "missing.xml"))
+    with pytest.raises(ValueError, match="Failed to load geometry"):
+        wire.compute_wire_reconstruction(request, _entries(tmp_path), Hooks())
+    assert not os.path.exists(os.path.join(request.run_directory, RECONSTRUCTION_FILENAME))
 
 
-def test_shared_configuration_problems_stop_the_run_before_any_point(tmp_path):
-    class Refusing(FakeReconstructor):
-        def __init__(self, *args, **kwargs):
-            raise InputError("geometry has no complete wire section")
-
-    wire.Reconstructor = Refusing
-    with pytest.raises(InputError, match="no complete wire section"):
-        wire.compute_wire_reconstruction(_request(tmp_path), _entries(tmp_path), Hooks())
+def test_an_existing_reconstruction_is_never_overwritten(tmp_path):
+    request = _request(tmp_path, **OPTIONS, geometry_file=os.fspath(GEOMETRY))
+    os.makedirs(request.run_directory)
+    existing = os.path.join(request.run_directory, RECONSTRUCTION_FILENAME)
+    with open(existing, "w") as handle:
+        handle.write("earlier run")
+    with pytest.raises(FileExistsError):
+        wire.compute_wire_reconstruction(request, _entries(tmp_path), Hooks())
+    with open(existing) as handle:
+        assert handle.read() == "earlier run"

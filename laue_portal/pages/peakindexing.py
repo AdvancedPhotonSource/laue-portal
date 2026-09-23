@@ -43,6 +43,7 @@ from laue_portal.components.visualization.scope_bar import (
     scope_bar,
     to_data_scope,
 )
+from laue_portal.components.visualization.viz_layout import viz_control, viz_graph_with_loading, viz_sidebar_head
 from laue_portal.config import DEFAULT_VARIABLES
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix
 from laue_portal.services import indexing_results
@@ -55,25 +56,6 @@ dash.register_page(__name__, path="/peakindexing")  # Simplified path
 # ---------------------------------------------------------------------------
 # Visualization helpers — sidebar control builders
 # ---------------------------------------------------------------------------
-
-
-def _viz_sidebar_head(title, icon_class="bi bi-sliders"):
-    """Section header inside a visualization sidebar."""
-    return html.Div(
-        [
-            html.I(className=f"pi-viz-section-icon {icon_class}"),
-            html.H4(title),
-        ],
-        className="pi-viz-sidebar-head",
-    )
-
-
-def _viz_control(label_text, *children, help_text=None):
-    """Single labelled control row inside a visualization sidebar."""
-    content = [html.Label(label_text), *children]
-    if help_text:
-        content.append(html.Small(help_text, className="text-muted"))
-    return html.Div(content, className="pi-viz-control")
 
 
 def _rgb_symmetry_controls_visible(color_mode):
@@ -189,40 +171,6 @@ def _parse_stereo_hkl(h, k, l):
     return hkl
 
 
-def _viz_graph_with_loading(graph, target_id, text="Updating\u2026", cursor_readout_id=None):
-    """Wrap a dcc.Graph in a dcc.Loading overlay shown during callbacks."""
-    children = [graph, html.Div(id=target_id)]
-    if cursor_readout_id:
-        children.append(
-            html.Div(
-                "x: —   y: —",
-                id=cursor_readout_id,
-                className="pi-viz-cursor-readout",
-                **{"aria-live": "polite"},
-            )
-        )
-    return dcc.Loading(
-        type="circle",
-        # Only the callback's dedicated sentinel should activate the overlay.
-        # Client-side cursor-readout updates must remain visually silent.
-        target_components={target_id: "children"},
-        overlay_style={"visibility": "visible", "opacity": 1},
-        custom_spinner=html.Div(
-            [
-                dbc.Spinner(size="sm", color="secondary", spinner_class_name="me-2"),
-                html.Span(text, className="pi-viz-loading-text"),
-            ],
-            style={
-                "display": "flex",
-                "alignItems": "center",
-                "justifyContent": "center",
-                "padding": "2rem",
-            },
-        ),
-        children=children,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Visualization tabs — sidebar + main content layout
 # ---------------------------------------------------------------------------
@@ -261,8 +209,8 @@ _viz_tabs = dbc.Tabs(
                                 html.Div(
                                     className="pi-viz-sidebar-section",
                                     children=[
-                                        _viz_sidebar_head("Color", "bi bi-palette"),
-                                        _viz_control(
+                                        viz_sidebar_head("Color", "bi bi-palette"),
+                                        viz_control(
                                             "Color by",
                                             dbc.Select(
                                                 id="orientation-color-select",
@@ -285,7 +233,7 @@ _viz_tabs = dbc.Tabs(
                                 html.Div(
                                     className="pi-viz-sidebar-section",
                                     children=[
-                                        _viz_sidebar_head("Color", "bi bi-palette2"),
+                                        viz_sidebar_head("Color", "bi bi-palette2"),
                                         # Legend image (IPF triangle / HSV hexagon /
                                         # empty placeholder).  Children are swapped
                                         # by the dispatcher callback per color mode.
@@ -306,7 +254,7 @@ _viz_tabs = dbc.Tabs(
                                             id="orientation-rgb-symmetry-wrap",
                                             style={"display": "none"},
                                             children=[
-                                                _viz_control(
+                                                viz_control(
                                                     "RGB symmetry",
                                                     dbc.Select(
                                                         id="orientation-rgb-symmetry-select",
@@ -320,7 +268,7 @@ _viz_tabs = dbc.Tabs(
                                                         className="form-select",
                                                     ),
                                                 ),
-                                                _viz_control(
+                                                viz_control(
                                                     "Reference",
                                                     dbc.Select(
                                                         id="orientation-rgb-reference-select",
@@ -336,7 +284,7 @@ _viz_tabs = dbc.Tabs(
                                                 html.Div(
                                                     id="orientation-rgb-reference-step-wrap",
                                                     style={"display": "none"},
-                                                    children=_viz_control(
+                                                    children=viz_control(
                                                         "Ref step",
                                                         dbc.Input(
                                                             id="orientation-rgb-reference-step",
@@ -351,7 +299,7 @@ _viz_tabs = dbc.Tabs(
                                                 html.Div(
                                                     id="orientation-rgb-reference-matrix-wrap",
                                                     style={"display": "none"},
-                                                    children=_viz_control(
+                                                    children=viz_control(
                                                         "G_ref rows",
                                                         _rgb_reference_matrix_inputs(),
                                                     ),
@@ -363,8 +311,8 @@ _viz_tabs = dbc.Tabs(
                                 html.Div(
                                     className="pi-viz-sidebar-section",
                                     children=[
-                                        _viz_sidebar_head("Projection", "bi bi-grid-3x3"),
-                                        _viz_control(
+                                        viz_sidebar_head("Projection", "bi bi-grid-3x3"),
+                                        viz_control(
                                             "Surface",
                                             dbc.Select(
                                                 id="orientation-surface-select",
@@ -384,12 +332,12 @@ _viz_tabs = dbc.Tabs(
                                         html.Div(
                                             id="orientation-surface-custom-wrap",
                                             style={"display": "none"},
-                                            children=_viz_control(
+                                            children=viz_control(
                                                 "Custom frame",
                                                 _surface_frame_inputs("orientation"),
                                             ),
                                         ),
-                                        _viz_control(
+                                        viz_control(
                                             "View",
                                             dbc.RadioItems(
                                                 id="orientation-view-toggle",
@@ -416,7 +364,7 @@ _viz_tabs = dbc.Tabs(
                                         html.Div(
                                             id="orientation-2d-axis-wrap",
                                             children=[
-                                                _viz_control(
+                                                viz_control(
                                                     "X axis",
                                                     dbc.Select(
                                                         id="orientation-x-axis-select",
@@ -437,7 +385,7 @@ _viz_tabs = dbc.Tabs(
                                                         className="form-select",
                                                     ),
                                                 ),
-                                                _viz_control(
+                                                viz_control(
                                                     "Y axis",
                                                     dbc.Select(
                                                         id="orientation-y-axis-select",
@@ -464,7 +412,7 @@ _viz_tabs = dbc.Tabs(
                                             id="orientation-3d-axis-wrap",
                                             style={"display": "none"},
                                             children=[
-                                                _viz_control(
+                                                viz_control(
                                                     "X axis",
                                                     dbc.Select(
                                                         id="orientation-3d-x-axis-select",
@@ -485,7 +433,7 @@ _viz_tabs = dbc.Tabs(
                                                         className="form-select",
                                                     ),
                                                 ),
-                                                _viz_control(
+                                                viz_control(
                                                     "Y axis",
                                                     dbc.Select(
                                                         id="orientation-3d-y-axis-select",
@@ -506,7 +454,7 @@ _viz_tabs = dbc.Tabs(
                                                         className="form-select",
                                                     ),
                                                 ),
-                                                _viz_control(
+                                                viz_control(
                                                     "Z axis",
                                                     dbc.Select(
                                                         id="orientation-z-axis-select",
@@ -534,8 +482,8 @@ _viz_tabs = dbc.Tabs(
                                 html.Div(
                                     className="pi-viz-sidebar-section",
                                     children=[
-                                        _viz_sidebar_head("Display", "bi bi-aspect-ratio"),
-                                        _viz_control(
+                                        viz_sidebar_head("Display", "bi bi-aspect-ratio"),
+                                        viz_control(
                                             "Marker",
                                             dbc.Input(
                                                 id="orientation-marker-size",
@@ -548,7 +496,7 @@ _viz_tabs = dbc.Tabs(
                                                 className="form-control",
                                             ),
                                         ),
-                                        _viz_control(
+                                        viz_control(
                                             "Non-indexed",
                                             dbc.Select(
                                                 id="orientation-nonindexed-style",
@@ -574,7 +522,7 @@ _viz_tabs = dbc.Tabs(
                         html.Div(
                             className="pi-viz-main",
                             children=[
-                                _viz_graph_with_loading(
+                                viz_graph_with_loading(
                                     dcc.Graph(
                                         id="orientation-map-graph",
                                         config={"displayModeBar": True, "scrollZoom": True},
@@ -616,12 +564,12 @@ _viz_tabs = dbc.Tabs(
                                 html.Div(
                                     className="pi-viz-sidebar-section",
                                     children=[
-                                        _viz_sidebar_head("Pole", "bi bi-bullseye"),
-                                        _viz_control(
+                                        viz_sidebar_head("Pole", "bi bi-bullseye"),
+                                        viz_control(
                                             "{hkl}",
                                             _stereo_hkl_inputs(),
                                         ),
-                                        _viz_control(
+                                        viz_control(
                                             "Surface",
                                             dbc.Select(
                                                 id="stereo-surface-select",
@@ -641,7 +589,7 @@ _viz_tabs = dbc.Tabs(
                                         html.Div(
                                             id="stereo-surface-custom-wrap",
                                             style={"display": "none"},
-                                            children=_viz_control(
+                                            children=viz_control(
                                                 "Custom frame",
                                                 _surface_frame_inputs("stereo"),
                                             ),
@@ -651,8 +599,8 @@ _viz_tabs = dbc.Tabs(
                                 html.Div(
                                     className="pi-viz-sidebar-section",
                                     children=[
-                                        _viz_sidebar_head("Color", "bi bi-palette"),
-                                        _viz_control(
+                                        viz_sidebar_head("Color", "bi bi-palette"),
+                                        viz_control(
                                             "Scheme",
                                             dbc.Select(
                                                 id="stereo-color-select",
@@ -703,7 +651,7 @@ _viz_tabs = dbc.Tabs(
                                 html.Div(
                                     className="pi-viz-sidebar-section",
                                     children=[
-                                        _viz_sidebar_head("Color Key", "bi bi-triangle"),
+                                        viz_sidebar_head("Color Key", "bi bi-triangle"),
                                         html.Div(
                                             id="stereo-color-key",
                                             children=stereo_color_key("hsv_position"),
@@ -713,8 +661,8 @@ _viz_tabs = dbc.Tabs(
                                 html.Div(
                                     className="pi-viz-sidebar-section",
                                     children=[
-                                        _viz_sidebar_head("Display", "bi bi-aspect-ratio"),
-                                        _viz_control(
+                                        viz_sidebar_head("Display", "bi bi-aspect-ratio"),
+                                        viz_control(
                                             "Marker",
                                             dbc.Input(
                                                 id="stereo-marker-size",
@@ -735,7 +683,7 @@ _viz_tabs = dbc.Tabs(
                         html.Div(
                             className="pi-viz-main",
                             children=[
-                                _viz_graph_with_loading(
+                                viz_graph_with_loading(
                                     dcc.Graph(
                                         id="stereo-plot-graph",
                                         config={
@@ -792,8 +740,8 @@ _viz_tabs = dbc.Tabs(
                                 html.Div(
                                     className="pi-viz-sidebar-section",
                                     children=[
-                                        _viz_sidebar_head("Step", "bi bi-list-ol"),
-                                        _viz_control(
+                                        viz_sidebar_head("Step", "bi bi-list-ol"),
+                                        viz_control(
                                             "Step #",
                                             html.Div(
                                                 [
@@ -820,8 +768,8 @@ _viz_tabs = dbc.Tabs(
                                 html.Div(
                                     className="pi-viz-sidebar-section",
                                     children=[
-                                        _viz_sidebar_head("Display", "bi bi-eye"),
-                                        _viz_control(
+                                        viz_sidebar_head("Display", "bi bi-eye"),
+                                        viz_control(
                                             "",
                                             dbc.Checkbox(
                                                 id="detector-show-detected",
@@ -829,7 +777,7 @@ _viz_tabs = dbc.Tabs(
                                                 value=True,
                                             ),
                                         ),
-                                        _viz_control(
+                                        viz_control(
                                             "",
                                             dbc.Checkbox(
                                                 id="detector-show-indexed",
@@ -837,7 +785,7 @@ _viz_tabs = dbc.Tabs(
                                                 value=True,
                                             ),
                                         ),
-                                        _viz_control(
+                                        viz_control(
                                             "",
                                             dbc.Checkbox(
                                                 id="detector-show-missing",
@@ -845,7 +793,7 @@ _viz_tabs = dbc.Tabs(
                                                 value=False,
                                             ),
                                         ),
-                                        _viz_control(
+                                        viz_control(
                                             "",
                                             dbc.Checkbox(
                                                 id="detector-show-hkl",
@@ -853,7 +801,7 @@ _viz_tabs = dbc.Tabs(
                                                 value=True,
                                             ),
                                         ),
-                                        _viz_control(
+                                        viz_control(
                                             "Marker",
                                             dbc.Input(
                                                 id="detector-marker-size",
@@ -866,7 +814,7 @@ _viz_tabs = dbc.Tabs(
                                                 className="form-control",
                                             ),
                                         ),
-                                        _viz_control(
+                                        viz_control(
                                             "Label size",
                                             dbc.Input(
                                                 id="detector-label-size",
@@ -884,8 +832,8 @@ _viz_tabs = dbc.Tabs(
                                 html.Div(
                                     className="pi-viz-sidebar-section",
                                     children=[
-                                        _viz_sidebar_head("Image", "bi bi-image"),
-                                        _viz_control(
+                                        viz_sidebar_head("Image", "bi bi-image"),
+                                        viz_control(
                                             "",
                                             dbc.Checkbox(
                                                 id="detector-show-image",
@@ -893,7 +841,7 @@ _viz_tabs = dbc.Tabs(
                                                 value=True,
                                             ),
                                         ),
-                                        _viz_control(
+                                        viz_control(
                                             "Colormap",
                                             dbc.Select(
                                                 id="detector-image-colormap",
@@ -912,7 +860,7 @@ _viz_tabs = dbc.Tabs(
                                                 className="form-select",
                                             ),
                                         ),
-                                        _viz_control(
+                                        viz_control(
                                             "Min I",
                                             dbc.Input(
                                                 id="detector-image-vmin",
@@ -924,7 +872,7 @@ _viz_tabs = dbc.Tabs(
                                                 className="form-control",
                                             ),
                                         ),
-                                        _viz_control(
+                                        viz_control(
                                             "Max I",
                                             dbc.Input(
                                                 id="detector-image-vmax",
@@ -959,7 +907,7 @@ _viz_tabs = dbc.Tabs(
                                 html.Div(
                                     className="pi-viz-sidebar-section",
                                     children=[
-                                        _viz_sidebar_head("Patterns", "bi bi-collection"),
+                                        viz_sidebar_head("Patterns", "bi bi-collection"),
                                         # Per-step pattern checklist is populated
                                         # dynamically; empty list at startup.
                                         html.Div(
@@ -980,7 +928,7 @@ _viz_tabs = dbc.Tabs(
                         html.Div(
                             className="pi-viz-main",
                             children=[
-                                _viz_graph_with_loading(
+                                viz_graph_with_loading(
                                     dcc.Graph(
                                         id="detector-view-graph",
                                         config={"displayModeBar": True, "scrollZoom": True},
@@ -2200,6 +2148,7 @@ def update_detector_view(
         path_context = path_context or {}
         image_result = load_detector_image(
             dataset.input_images[position],
+            source=dataset.sources[position],
             xml_path=source.get("path"),
             data_folder=path_context.get("data_folder"),
             root_path=path_context.get("root_path"),

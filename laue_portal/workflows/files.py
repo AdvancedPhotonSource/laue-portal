@@ -14,11 +14,17 @@ ProgressCallback = Callable[[int, int], None]
 
 @dataclass(frozen=True)
 class ResolvedInput:
-    """One selected input file with the identity that selected it."""
+    """One selected input with the identity that selected it.
+
+    A frame of a reconstruction-scan file also names its point and zero-based
+    depth index; ``path`` is then the scan file.
+    """
 
     path: str
     template_index: int
     indices: tuple[int, ...]
+    point_id: str | None = None
+    depth_index: int | None = None
 
     @property
     def scan_point(self) -> int | None:
@@ -130,51 +136,195 @@ def resolve_inputs(
         raise WorkflowValidationError("Progress interval must be greater than zero")
     input_directory = normalize_input_directory(directory)
     normalized_templates = normalize_filename_templates(templates)
-    expected_keys = tuple(
-        _expected_index_keys(template, scan_points, depth_points) for template in normalized_templates
-    )
-    matcher = compile_filename_templates(normalized_templates, append_suffix_wildcard=append_suffix_wildcard)
-
+    for template in normalized_templates:  # reject placeholder mismatches before listing the directory
+        _expected_index_keys(template, scan_points, depth_points)
     try:
         filenames = os.listdir(input_directory)
     except OSError as error:
         raise FileResolutionError(f"Could not list input directory {input_directory!r}: {error}") from error
 
-    total = len(filenames)
+    resolved = []
+    seen_paths = set()
+    for template_index, index_key, filename in _match_names(
+        filenames,
+        normalized_templates,
+        scan_points,
+        depth_points,
+        where=repr(input_directory),
+        append_suffix_wildcard=append_suffix_wildcard,
+        progress_callback=progress_callback,
+        progress_interval=progress_interval,
+    ):
+        full_path = os.path.join(input_directory, filename)
+        if full_path not in seen_paths:
+            seen_paths.add(full_path)
+            resolved.append(ResolvedInput(full_path, template_index, index_key))
+
+    if not resolved:
+        raise FileResolutionError(f"No input files matched in {input_directory!r}")
+    return tuple(resolved)
+
+
+def _match_names(
+    names: Sequence[str],
+    templates: Sequence[str],
+    scan_points: Sequence[int],
+    depth_points: Sequence[int] | None,
+    *,
+    where: str,
+    append_suffix_wildcard: bool,
+    progress_callback: ProgressCallback | None = None,
+    progress_interval: int = 10_000,
+):
+    """Yield ``(template_index, index_key, name)`` in template and requested-index order.
+
+    Names are bucketed by captured ``%d`` indices in one regex pass. Names
+    within a bucket keep their input order, avoiding a super-linear sort.
+    """
+
+    expected_keys = tuple(_expected_index_keys(template, scan_points, depth_points) for template in templates)
+    matcher = compile_filename_templates(templates, append_suffix_wildcard=append_suffix_wildcard)
+
+    total = len(names)
     if progress_callback is not None:
         progress_callback(0, total)
 
-    buckets: tuple[defaultdict[tuple[int, ...], list[str]], ...] = tuple(
-        defaultdict(list) for _ in normalized_templates
-    )
-    for scanned, filename in enumerate(filenames, start=1):
-        match = matcher.match(filename)
+    buckets: tuple[defaultdict[tuple[int, ...], list[str]], ...] = tuple(defaultdict(list) for _ in templates)
+    for scanned, name in enumerate(names, start=1):
+        match = matcher.match(name)
         if match is not None:
-            buckets[match.template_index][match.indices].append(filename)
+            buckets[match.template_index][match.indices].append(name)
         if progress_callback is not None and scanned % progress_interval == 0:
             progress_callback(scanned, total)
     if progress_callback is not None and (total == 0 or total % progress_interval):
         progress_callback(total, total)
 
-    resolved = []
-    seen_paths = set()
-    for template_index, template in enumerate(normalized_templates):
+    for template_index, template in enumerate(templates):
         for index_key in expected_keys[template_index]:
             matches = buckets[template_index].get(index_key, ())
             if not matches:
                 index_description = ", ".join(str(value) for value in index_key) or "no indices"
-                raise FileResolutionError(
-                    f"No files matched template {template!r} for {index_description} in {input_directory!r}"
-                )
-            for filename in matches:
-                full_path = os.path.join(input_directory, filename)
-                if full_path not in seen_paths:
-                    seen_paths.add(full_path)
-                    resolved.append(ResolvedInput(full_path, template_index, tuple(index_key)))
+                raise FileResolutionError(f"No files matched template {template!r} for {index_description} in {where}")
+            for name in matches:
+                yield template_index, tuple(index_key), name
 
+
+def is_reconstruction_scan(path: str | os.PathLike[str]) -> bool:
+    """Whether ``path`` is a file carrying the lauelab reconstruction-scan format marker."""
+
+    from lauelab.reconstruct import ScanReader
+
+    if not os.path.isfile(path):
+        return False
+    try:
+        with ScanReader(path):
+            return True
+    except (OSError, ValueError):
+        return False
+
+
+def resolve_scan_inputs(
+    scan_path: str | os.PathLike[str],
+    templates: Sequence[str],
+    scan_points: Sequence[int],
+    *,
+    depth_indices: Sequence[int] | None = None,
+) -> tuple[ResolvedInput, ...]:
+    """Select frames of a reconstruction-scan file with the reconstruction's own filename templates.
+
+    Templates and scan points match the basename of each point's recorded
+    source file, so they select the same points they selected when the
+    reconstruction was submitted. A template takes at most one ``%d`` (the
+    scan point). ``depth_indices`` are zero-based positions in each point's
+    depth stack; ``None`` selects every depth. Only the catalog is read.
+
+    Raises
+    ------
+    FileResolutionError
+        If the file is not a reconstruction-scan file, a template matches no
+        point, a selected point is not complete, or a depth index is outside
+        a selected point's stack.
+    """
+
+    from lauelab.reconstruct import ScanReader
+
+    path = normalize_input_directory(scan_path)
+    normalized_templates = normalize_filename_templates(templates)
+    for template in normalized_templates:
+        if template.count("%d") > 1:
+            raise FileResolutionError(
+                f"Filename template {template!r} has more than one %d placeholder; "
+                "a reconstruction-scan file selects depths with the depth range"
+            )
+    try:
+        with ScanReader(path) as scan:
+            points = scan.points
+    except (OSError, ValueError) as error:
+        raise FileResolutionError(f"{path!r} is not a readable reconstruction-scan file: {error}") from error
+
+    by_name: dict[str, list] = defaultdict(list)
+    for point in points:
+        by_name[os.path.basename(point.source_path)].append(point)
+
+    resolved = []
+    problems = []
+    seen = set()
+    for template_index, index_key, name in _match_names(
+        list(by_name), normalized_templates, scan_points, None, where=repr(path), append_suffix_wildcard=True
+    ):
+        for point in by_name[name]:
+            if point.point_id in seen:
+                continue
+            seen.add(point.point_id)
+            if not point.complete:
+                detail = f": {point.error}" if point.error else ""
+                problems.append(f"point {point.point_id!r} is {point.status}{detail}")
+                continue
+            n_depths = point.shape[0]
+            selected = range(n_depths) if depth_indices is None else depth_indices
+            outside = [value for value in selected if not 0 <= value < n_depths]
+            if outside:
+                problems.append(f"point {point.point_id!r} has depth indices 0-{n_depths - 1}; requested {outside[0]}")
+                continue
+            for depth_index in selected:
+                resolved.append(
+                    ResolvedInput(
+                        path,
+                        template_index,
+                        (*index_key, int(depth_index)),
+                        point_id=point.point_id,
+                        depth_index=int(depth_index),
+                    )
+                )
+    if problems:
+        shown = "; ".join(problems[:5]) + (f"; and {len(problems) - 5} more" if len(problems) > 5 else "")
+        raise FileResolutionError(f"Cannot index {path!r}: {shown}")
     if not resolved:
-        raise FileResolutionError(f"No input files matched in {input_directory!r}")
+        raise FileResolutionError(f"No frames were selected in {path!r}")
     return tuple(resolved)
+
+
+def resolve_request_inputs(
+    input_path: str | os.PathLike[str],
+    templates: Sequence[str],
+    scan_points: Sequence[int],
+    *,
+    depth_values: Sequence[int] | None = None,
+    progress_callback: ProgressCallback | None = None,
+) -> tuple[ResolvedInput, ...]:
+    """Resolve an indexing request's inputs from a directory or a reconstruction-scan file.
+
+    A directory keeps the per-file machinery: ``depth_values`` fill a second
+    ``%d``. A reconstruction-scan file (recognised by its format marker, not
+    its name) selects points by template and scan point, and ``depth_values``
+    are zero-based depth indices; see :func:`resolve_scan_inputs`.
+    """
+
+    if is_reconstruction_scan(input_path):
+        return resolve_scan_inputs(input_path, templates, scan_points, depth_indices=depth_values)
+    return resolve_inputs(
+        input_path, templates, scan_points, depth_points=depth_values, progress_callback=progress_callback
+    )
 
 
 def resolve_input_files(

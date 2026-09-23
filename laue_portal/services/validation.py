@@ -14,6 +14,7 @@ from laue_portal.database.db_utils import (
 )
 from laue_portal.utilities.hkl_parse import str2hkl
 from laue_portal.utilities.srange import srange
+from laue_portal.workflows.files import WorkflowValidationError, is_reconstruction_scan, resolve_scan_inputs
 from laue_portal.workflows.identity import merged_identity_value, parse_workflow_identities
 
 PEAKINDEX_FIELD_IDS = [
@@ -294,6 +295,40 @@ def format_filename_with_indices(filename_prefix, scanPoint_num, depthRange_num=
     return file_str
 
 
+def _validate_scan_selection(validation_result, input_prefix, scan_path, prefixes, scan_points, depth_range):
+    """Report selection problems for a reconstruction-scan input by resolving it (catalog only).
+
+    A template takes at most one %d, filled by Scan Points; Depth Range holds
+    zero-based depth indices and blank selects every depth.
+    """
+
+    for prefix in prefixes:
+        placeholder_count = prefix.count("%d")
+        if placeholder_count > 1 or (placeholder_count == 1) != bool(scan_points):
+            add_validation_message(
+                validation_result,
+                "errors",
+                "filenamePrefix",
+                input_prefix,
+                custom_message=(
+                    f"Filename prefix '{prefix}' must have one %d with Scan Points, or none without; "
+                    "a reconstruction-scan file selects depths with Depth Range"
+                ),
+            )
+            return
+    if not prefixes:
+        return
+    try:
+        resolve_scan_inputs(
+            scan_path,
+            prefixes,
+            srange(scan_points).list() if scan_points else (),
+            depth_indices=srange(depth_range).list() if depth_range else None,
+        )
+    except (WorkflowValidationError, ValueError) as error:
+        add_validation_message(validation_result, "errors", "data_path", input_prefix, custom_message=str(error))
+
+
 def validate_peakindexing(fields, catalog_defaults=None):
     """Validate peak indexing form fields without depending on Dash callback context."""
     validation_result = {"errors": {}, "warnings": {}, "successes": {}}
@@ -522,7 +557,16 @@ def validate_peakindexing(fields, catalog_defaults=None):
                             input_prefix,
                             custom_message="Data Path directory not found",
                         )
+                    elif os.path.isfile(current_full_data_path) and not is_reconstruction_scan(current_full_data_path):
+                        add_validation_message(
+                            validation_result,
+                            "errors",
+                            "data_path",
+                            input_prefix,
+                            custom_message="Data Path must be a directory or a reconstruction-scan file",
+                        )
                     else:
+                        scan_file = os.path.isfile(current_full_data_path)
                         source_path = None
                         source_label = None
                         if indexing_id is not None:
@@ -541,7 +585,13 @@ def validate_peakindexing(fields, catalog_defaults=None):
                                 source_path = catalog.filefolder
                                 source_label = f"SN{scan_num_int}"
 
-                        if source_path and os.path.normpath(source_path) != os.path.normpath(current_full_data_path):
+                        # A reconstruction's scan file lives in its output directory.
+                        compared_path = (
+                            os.path.dirname(current_full_data_path)
+                            if scan_file and reconstruction_id is not None and indexing_id is None
+                            else current_full_data_path
+                        )
+                        if source_path and os.path.normpath(source_path) != os.path.normpath(compared_path):
                             add_validation_message(
                                 validation_result,
                                 "warnings",
@@ -550,9 +600,10 @@ def validate_peakindexing(fields, catalog_defaults=None):
                                 custom_message=f"{source_label} has a different source path ({source_path})",
                             )
 
-                        with os.scandir(current_full_data_path) as entries:
-                            contains_file = any(entry.is_file() for entry in entries)
-                        if not contains_file:
+                        if not scan_file:
+                            with os.scandir(current_full_data_path) as entries:
+                                contains_file = any(entry.is_file() for entry in entries)
+                        if not scan_file and not contains_file:
                             add_validation_message(
                                 validation_result,
                                 "errors",
@@ -587,6 +638,16 @@ def validate_peakindexing(fields, catalog_defaults=None):
                             for value in str(current_filename_prefix_str or "").split(",")
                             if value.strip()
                         ]
+                        if scan_file:
+                            _validate_scan_selection(
+                                validation_result,
+                                input_prefix,
+                                current_full_data_path,
+                                prefixes,
+                                current_scan_points,
+                                current_depth_range,
+                            )
+                            prefixes = []  # the directory placeholder rules below do not apply
                         for prefix in prefixes:
                             placeholder_count = prefix.count("%d")
                             has_scan_points = bool(current_scan_points)

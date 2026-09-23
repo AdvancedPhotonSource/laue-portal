@@ -4,7 +4,8 @@ The indexing XML stores the source detector file in ``<inputImage>``.  In
 practice that value may be absolute, relative to the indexing output folder,
 or relative to the original data folder stored on the indexing run.  This
 module resolves those common locations and loads a 2-D HDF5 dataset for use as
-an image background.
+an image background. A frame indexed from a reconstruction-scan file carries a
+``ScanFrame`` source; exactly that stored frame is read, never the whole stack.
 """
 
 from __future__ import annotations
@@ -49,6 +50,7 @@ class DetectorImageResult:
 def load_detector_image(
     input_image: str | None,
     *,
+    source=None,
     xml_path: str | None = None,
     data_folder: str | None = None,
     root_path: str | None = None,
@@ -60,6 +62,10 @@ def load_detector_image(
     ----------
     input_image:
         Value from the XML ``<inputImage>`` element.
+    source:
+        The result's ``lauelab.indexing.ScanFrame``, or None for a frame file.
+        When given, its point and depth index select one stored frame of the
+        scan file found at ``input_image``.
     xml_path:
         Current indexing XML path.  Used to resolve paths relative to the
         output folder.
@@ -95,7 +101,10 @@ def load_detector_image(
         return DetectorImageResult(warning=warning, attempted_paths=attempted)
 
     try:
-        data, dataset = _read_hdf5_image(image_path, dataset_paths)
+        if source is None:
+            data, dataset = _read_hdf5_image(image_path, dataset_paths)
+        else:
+            data, dataset = _read_scan_frame(image_path, source)
     except Exception as exc:
         return DetectorImageResult(
             warning=f"Could not load detector image {image_path}: {exc}",
@@ -173,6 +182,14 @@ def _read_hdf5_image(path: Path, dataset_paths: Iterable[str]) -> tuple[np.ndarr
             return _coerce_image_2d(data), dataset
 
         raise KeyError("no 2-D detector image dataset found")
+
+
+def _read_scan_frame(path: Path, source) -> tuple[np.ndarray, str]:
+    from lauelab.reconstruct import ScanReader
+
+    with ScanReader(path) as scan:
+        data = scan.point(source.point_id).frame(source.depth_index)
+    return data.astype(float, copy=False), f"point {source.point_id}, depth index {source.depth_index}"
 
 
 def _first_2d_dataset(group, prefix: str = "") -> tuple[str, np.ndarray] | None:

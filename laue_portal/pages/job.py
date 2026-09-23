@@ -446,19 +446,21 @@ def configuration_content(details: run_summary.RunDetails):
     execution_rows = run_summary.execution_rows(details)
     history_rows = run_summary.history_rows(details)
 
-    if (
-        details.progress.is_terminal
-        and details.progress.status != JobStatus.FINISHED
-        and details.artifacts.get("results")
-    ):
-        sections.append(
-            dbc.Alert(
+    if details.progress.is_terminal and details.progress.status != JobStatus.FINISHED:
+        partial_note = None
+        if details.artifacts.get("results"):
+            partial_note = (
                 "This run did not finish, but its published results hold every input that succeeded and can be "
-                "viewed from the linked result page.",
-                color="info",
-                className="py-2 small",
+                "viewed from the linked result page."
             )
-        )
+        elif details.artifacts.get("reconstruction"):
+            partial_note = (
+                "This run did not finish, but its published reconstruction file holds every point that completed; "
+                "it records each failed or unattempted point with its status, and those points are also listed "
+                "in the failure report."
+            )
+        if partial_note:
+            sections.append(dbc.Alert(partial_note, color="info", className="py-2 small"))
 
     columns = []
     if request_rows:

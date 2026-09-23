@@ -253,3 +253,17 @@ dagcomponentfuncs.ScanImportStatusRenderer = function (props) {
         info.text
     );
 };
+
+// Per-row delete button; reports the row's ID through the grid's cellRendererData.
+dagcomponentfuncs.RowDeleteButton = function (props) {
+    return React.createElement(
+        'button',
+        {
+            className: 'btn btn-link btn-sm p-0 text-danger',
+            title: 'Delete ' + props.data.id,
+            'aria-label': 'Delete ' + props.data.id,
+            onClick: function () { props.setData(props.data.id); },
+        },
+        '✕'
+    );
+};

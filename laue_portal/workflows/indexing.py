@@ -18,7 +18,7 @@ from laue_portal.workflows.files import (
     normalize_integer_range,
     normalize_optional_integer_range,
     normalize_output_path_template,
-    resolve_inputs,
+    resolve_request_inputs,
 )
 from laue_portal.workflows.manifest import RESERVED_RUN_FILENAMES, RESULTS_FILENAME
 from laue_portal.workflows.run_records import new_job, publish_run_inputs, request_document
@@ -126,20 +126,21 @@ def create_indexing(
     engine: Engine | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> db_schema.IndexingRun:
-    """Resolve files, create the run and its job atomically, then publish the manifest.
+    """Resolve inputs, create the run and its job atomically, then publish the manifest.
 
-    No per-input rows are written. The frozen input list goes to
+    The input path is a directory of frame files or a reconstruction-scan file
+    (see :func:`~laue_portal.workflows.files.resolve_request_inputs`). No per-input rows are written. The frozen input list goes to
     ``inputs.jsonl`` in the run directory and the request to ``request.json``;
     the job records their location, digest, and count.
     """
 
     # Filtering is disabled for new runs, including reruns of historical settings.
     request = replace(request, cosmic_filter=False)
-    inputs = resolve_inputs(
+    inputs = resolve_request_inputs(
         request.input_path,
         request.filename_prefixes,
         request.scan_point_values,
-        depth_points=request.depth_values,
+        depth_values=request.depth_values,
         progress_callback=progress_callback,
     )
 

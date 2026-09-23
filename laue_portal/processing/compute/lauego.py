@@ -26,6 +26,7 @@ from lauelab.indexing import (
     InputError,
     InvalidResultsFile,
     PeakParams,
+    ScanFrame,
     XmlResultsWriter,
     load_mask,
     validate_results_file,
@@ -188,7 +189,10 @@ class _AdmittedEntries:
         for entry in self._entries:
             self.admitted[entry.index] = entry
             depth = entry.depth if entry.depth is not None else self._depth_override
-            yield FrameInput(entry.source, input_id=entry.input_id, depth=depth)
+            frame = (
+                entry.source if entry.point_id is None else ScanFrame(entry.source, entry.point_id, entry.depth_index)
+            )
+            yield FrameInput(frame, input_id=entry.input_id, depth=depth)
 
     def remaining(self) -> Iterable[ManifestEntry]:
         """Entries never handed to the indexer (after a stop)."""

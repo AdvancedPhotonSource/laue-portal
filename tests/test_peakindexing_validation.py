@@ -307,3 +307,58 @@ def test_both_spot_limits_may_be_blank(tmp_path, isolated_db):
     fields = valid_peakindex_fields(tmp_path)
     fields.update(max_number="", max_peaks="")
     assert validate_peakindexing(fields)["errors"] == {}
+
+
+@pytest.fixture
+def scan_file(tmp_path):
+    """A reconstruction-scan file whose point wire_2 failed."""
+
+    from lauelab.reconstruct import reconstruct_scan
+
+    from tests.wire_support import GEOMETRY, write_wire_scan
+
+    inputs = [write_wire_scan(tmp_path / "wire_1.h5"), tmp_path / "wire_2.h5"]
+    result = reconstruct_scan(
+        inputs,
+        tmp_path / "reconstruction.h5",
+        geometry=GEOMETRY,
+        detector=0,
+        point_ids=["wire_1", "wire_2"],
+        depth_range=(-25.0, 25.0),
+        resolution=5.0,
+        num_threads=1,
+    )
+    return os.fspath(result.path)
+
+
+@pytest.fixture
+def scan_fields(tmp_path, scan_file):
+    fields = valid_peakindex_fields(tmp_path)
+    fields.update({"data_path": scan_file, "filenamePrefix": "wire_%d", "scanPoints": "1", "depthRange": "0-3"})
+    return fields
+
+
+def test_a_reconstruction_scan_file_is_a_valid_data_path(isolated_db, scan_fields):
+    result = validate_peakindexing(scan_fields)
+
+    assert result["errors"] == {}
+
+
+def test_scan_file_selection_problems_are_reported_before_submission(isolated_db, scan_fields):
+    failed = validate_peakindexing({**scan_fields, "scanPoints": "1-2"})
+    assert "point 'wire_2' is failed" in str(failed["errors"]["data_path"])
+
+    beyond = validate_peakindexing({**scan_fields, "depthRange": "0-11"})
+    assert "requested 11" in str(beyond["errors"]["data_path"])
+
+    two_placeholders = validate_peakindexing({**scan_fields, "filenamePrefix": "wire_%d_%d"})
+    assert "filenamePrefix" in two_placeholders["errors"]
+
+
+def test_a_data_path_file_that_is_not_a_scan_file_is_rejected(tmp_path, isolated_db):
+    fields = valid_peakindex_fields(tmp_path)
+    fields["data_path"] = str(tmp_path / "data" / "img_1.tif")
+
+    result = validate_peakindexing(fields)
+
+    assert "must be a directory or a reconstruction-scan file" in str(result["errors"]["data_path"])

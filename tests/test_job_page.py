@@ -292,3 +292,29 @@ def test_stop_run_uses_the_run_control_and_reloads(engine, tmp_path, monkeypatch
 def test_no_page_text_mentions_subjobs():
     source = open(job_page.__file__, encoding="utf-8").read().lower()
     assert "subjob" not in source
+
+
+def test_an_incomplete_reconstruction_points_to_its_published_file():
+    from laue_portal.pages.job import configuration_content
+    from laue_portal.services.run_summary import RunDetails
+    from laue_portal.workflows.execution import JobStatus
+    from laue_portal.workflows.progress import RunProgress
+
+    progress = RunProgress(
+        job_id=4, status=int(JobStatus.FAILED), phase="finished", n_inputs=3, n_succeeded=2, n_failed=1, n_not_run=0
+    )
+    details = RunDetails(
+        progress=progress,
+        kind="wire_reconstruction",
+        display_id="Reconstruction R4",
+        run_directory="/runs/rec_4",
+        request=None,
+        summary={"artifacts": {"reconstruction": "/runs/rec_4/reconstruction.h5"}},
+        history=None,
+        results_path=None,
+    )
+
+    text = str(configuration_content(details))
+
+    assert "published reconstruction file holds every point that completed" in text
+    assert "/runs/rec_4/reconstruction.h5" in text
