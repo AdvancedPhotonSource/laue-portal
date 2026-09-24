@@ -4,8 +4,9 @@ The indexing XML stores the source detector file in ``<inputImage>``.  In
 practice that value may be absolute, relative to the indexing output folder,
 or relative to the original data folder stored on the indexing run.  This
 module resolves those common locations and loads a 2-D HDF5 dataset for use as
-an image background. A frame indexed from a reconstruction-scan file carries a
-``ScanFrame`` source; exactly that stored frame is read, never the whole stack.
+an image background. For reconstructed data, the ``ScanFrame`` reference
+selects one depth frame from a point file. The reader checks the point ID
+before loading that frame.
 """
 
 from __future__ import annotations
@@ -65,7 +66,7 @@ def load_detector_image(
     source:
         The result's ``lauelab.indexing.ScanFrame``, or None for a frame file.
         When given, its point and depth index select one stored frame of the
-        scan file found at ``input_image``.
+        point file found at ``input_image``.
     xml_path:
         Current indexing XML path.  Used to resolve paths relative to the
         output folder.
@@ -185,10 +186,12 @@ def _read_hdf5_image(path: Path, dataset_paths: Iterable[str]) -> tuple[np.ndarr
 
 
 def _read_scan_frame(path: Path, source) -> tuple[np.ndarray, str]:
-    from lauelab.reconstruct import ScanReader
+    from lauelab.reconstruct import PointReader
 
-    with ScanReader(path) as scan:
-        data = scan.point(source.point_id).frame(source.depth_index)
+    with PointReader(path) as point:
+        if point.point_id != source.point_id:
+            raise ValueError(f"{path} holds point {point.point_id!r}, not {source.point_id!r}")
+        data = point.frame(source.depth_index)
     return data.astype(float, copy=False), f"point {source.point_id}, depth index {source.depth_index}"
 
 

@@ -14,10 +14,10 @@ ProgressCallback = Callable[[int, int], None]
 
 @dataclass(frozen=True)
 class ResolvedInput:
-    """One selected input with the identity that selected it.
+    """An input path and the template indices used to select it.
 
-    A frame of a reconstruction-scan file also names its point and zero-based
-    depth index; ``path`` is then the scan file.
+    For reconstructed frames, ``path`` refers to the point file. ``point_id``
+    and ``depth_index`` select a frame within it; depth indices are zero-based.
     """
 
     path: str
@@ -128,8 +128,7 @@ def resolve_inputs(
 
     Matches are bucketed by captured ``%d`` indices, then emitted in template
     and requested-index order. Files within a bucket retain directory-listing
-    order, avoiding a sort that would make the operation super-linear. The
-    returned order is the run order recorded in the input manifest.
+    order. The input manifest records this order for execution.
     """
 
     if progress_interval <= 0:
@@ -178,8 +177,7 @@ def _match_names(
 ):
     """Yield ``(template_index, index_key, name)`` in template and requested-index order.
 
-    Names are bucketed by captured ``%d`` indices in one regex pass. Names
-    within a bucket keep their input order, avoiding a super-linear sort.
+    Names that match the same indices retain their input order.
     """
 
     expected_keys = tuple(_expected_index_keys(template, scan_points, depth_points) for template in templates)
@@ -210,7 +208,7 @@ def _match_names(
 
 
 def is_reconstruction_scan(path: str | os.PathLike[str]) -> bool:
-    """Whether ``path`` is a file carrying the lauelab reconstruction-scan format marker."""
+    """Whether ``path`` is a readable lauelab reconstruction scan catalog (``scan.h5``)."""
 
     from lauelab.reconstruct import ScanReader
 
@@ -230,20 +228,23 @@ def resolve_scan_inputs(
     *,
     depth_indices: Sequence[int] | None = None,
 ) -> tuple[ResolvedInput, ...]:
-    """Select frames of a reconstruction-scan file with the reconstruction's own filename templates.
+    """Select reconstructed frames by source filename and depth index.
 
-    Templates and scan points match the basename of each point's recorded
-    source file, so they select the same points they selected when the
-    reconstruction was submitted. A template takes at most one ``%d`` (the
-    scan point). ``depth_indices`` are zero-based positions in each point's
-    depth stack; ``None`` selects every depth. Only the catalog is read.
+    Templates match the original input filenames recorded in the catalog.
+    Each template accepts at most one ``%d`` for the scan point. Depth indices
+    are zero-based; ``None`` selects every depth.
+
+    Selection reads only catalog metadata and returns point-file references
+    for indexing. All selected points must be complete in that snapshot.
+    During reconstruction, catalog updates can lag point completion by a few
+    seconds.
 
     Raises
     ------
     FileResolutionError
-        If the file is not a reconstruction-scan file, a template matches no
-        point, a selected point is not complete, or a depth index is outside
-        a selected point's stack.
+        If the file is not a scan catalog, a template matches no point, a
+        selected point is not complete, or a depth index is outside a
+        selected point's stack.
     """
 
     from lauelab.reconstruct import ScanReader
@@ -254,13 +255,13 @@ def resolve_scan_inputs(
         if template.count("%d") > 1:
             raise FileResolutionError(
                 f"Filename template {template!r} has more than one %d placeholder; "
-                "a reconstruction-scan file selects depths with the depth range"
+                "a scan catalog selects depths with the depth range"
             )
     try:
-        with ScanReader(path) as scan:
-            points = scan.points
+        scan = ScanReader(path)  # loads the catalog snapshot and closes the file
     except (OSError, ValueError) as error:
-        raise FileResolutionError(f"{path!r} is not a readable reconstruction-scan file: {error}") from error
+        raise FileResolutionError(f"{path!r} is not a readable reconstruction scan catalog: {error}") from error
+    points = scan.points
 
     by_name: dict[str, list] = defaultdict(list)
     for point in points:
@@ -286,10 +287,11 @@ def resolve_scan_inputs(
             if outside:
                 problems.append(f"point {point.point_id!r} has depth indices 0-{n_depths - 1}; requested {outside[0]}")
                 continue
+            point_path = os.fspath(scan.point_path(point.point_id))
             for depth_index in selected:
                 resolved.append(
                     ResolvedInput(
-                        path,
+                        point_path,
                         template_index,
                         (*index_key, int(depth_index)),
                         point_id=point.point_id,
@@ -312,12 +314,12 @@ def resolve_request_inputs(
     depth_values: Sequence[int] | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> tuple[ResolvedInput, ...]:
-    """Resolve an indexing request's inputs from a directory or a reconstruction-scan file.
+    """Resolve an indexing request's inputs from a directory or a reconstruction scan catalog.
 
-    A directory keeps the per-file machinery: ``depth_values`` fill a second
-    ``%d``. A reconstruction-scan file (recognised by its format marker, not
-    its name) selects points by template and scan point, and ``depth_values``
-    are zero-based depth indices; see :func:`resolve_scan_inputs`.
+    For directory inputs, ``depth_values`` fill the second ``%d`` in the
+    filename template. For scan catalogs, they select zero-based depth indices
+    within each point; see :func:`resolve_scan_inputs`. Catalogs are detected
+    by their format marker.
     """
 
     if is_reconstruction_scan(input_path):

@@ -311,7 +311,7 @@ def test_both_spot_limits_may_be_blank(tmp_path, isolated_db):
 
 @pytest.fixture
 def scan_file(tmp_path):
-    """A reconstruction-scan file whose point wire_2 failed."""
+    """Create a scan with a failed wire_2 point."""
 
     from lauelab.reconstruct import reconstruct_scan
 
@@ -320,13 +320,13 @@ def scan_file(tmp_path):
     inputs = [write_wire_scan(tmp_path / "wire_1.h5"), tmp_path / "wire_2.h5"]
     result = reconstruct_scan(
         inputs,
-        tmp_path / "reconstruction.h5",
+        tmp_path / "reconstruction",
         geometry=GEOMETRY,
         detector=0,
         point_ids=["wire_1", "wire_2"],
         depth_range=(-25.0, 25.0),
         resolution=5.0,
-        num_threads=1,
+        threads_per_worker=1,
     )
     return os.fspath(result.path)
 
@@ -338,13 +338,13 @@ def scan_fields(tmp_path, scan_file):
     return fields
 
 
-def test_a_reconstruction_scan_file_is_a_valid_data_path(isolated_db, scan_fields):
+def test_a_scan_catalog_is_a_valid_data_path(isolated_db, scan_fields):
     result = validate_peakindexing(scan_fields)
 
     assert result["errors"] == {}
 
 
-def test_scan_file_selection_problems_are_reported_before_submission(isolated_db, scan_fields):
+def test_scan_catalog_selection_problems_are_reported_before_submission(isolated_db, scan_fields):
     failed = validate_peakindexing({**scan_fields, "scanPoints": "1-2"})
     assert "point 'wire_2' is failed" in str(failed["errors"]["data_path"])
 
@@ -355,10 +355,42 @@ def test_scan_file_selection_problems_are_reported_before_submission(isolated_db
     assert "filenamePrefix" in two_placeholders["errors"]
 
 
-def test_a_data_path_file_that_is_not_a_scan_file_is_rejected(tmp_path, isolated_db):
+def _reconstruction_with_output(output_path):
+    from datetime import datetime
+
+    from sqlalchemy.orm import Session
+
+    from laue_portal.database import db_schema
+    from laue_portal.workflows.run_records import new_job
+
+    now = datetime(2026, 9, 24, 9, 0, 0)
+    with Session(session_utils.get_engine()) as session, session.begin():
+        run = db_schema.ReconstructionRun(
+            job=new_job(computer_name="test-host", priority=0, submitted_at=now, n_inputs=2),
+            method="wire",
+            input_path="/data",
+            output_path=os.fspath(output_path),
+            created_at=now,
+        )
+        session.add(run)
+        session.flush()
+        return run.id
+
+
+def test_a_linked_reconstruction_is_compared_with_its_scan_catalog(tmp_path, isolated_db, scan_fields):
+    own = _reconstruction_with_output(tmp_path)  # the fixture's catalog is tmp_path/reconstruction/scan.h5
+    other = _reconstruction_with_output(tmp_path / "elsewhere")
+
+    warnings = validate_peakindexing({**scan_fields, "IDnumber": f"R{own}"})["warnings"]
+    assert "different source path" not in str(warnings["data_path"])
+    warnings = validate_peakindexing({**scan_fields, "IDnumber": f"R{other}"})["warnings"]
+    assert "has a different source path" in str(warnings["data_path"])
+
+
+def test_a_data_path_file_that_is_not_a_scan_catalog_is_rejected(tmp_path, isolated_db):
     fields = valid_peakindex_fields(tmp_path)
     fields["data_path"] = str(tmp_path / "data" / "img_1.tif")
 
     result = validate_peakindexing(fields)
 
-    assert "must be a directory or a reconstruction-scan file" in str(result["errors"]["data_path"])
+    assert "must be a directory or a reconstruction scan catalog" in str(result["errors"]["data_path"])

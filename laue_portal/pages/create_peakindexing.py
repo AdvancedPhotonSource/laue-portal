@@ -42,7 +42,7 @@ from laue_portal.services.validation import (
 from laue_portal.utilities.hkl_parse import str2hkl
 from laue_portal.workflows.identity import parse_workflow_identities
 from laue_portal.workflows.indexing import LaueGoIndexingRequest, create_indexing, get_indexing
-from laue_portal.workflows.manifest import RECONSTRUCTION_FILENAME
+from laue_portal.workflows.manifest import reconstruction_catalog_path
 from laue_portal.workflows.reconstruction import get_reconstruction
 
 logger = logging.getLogger(__name__)
@@ -849,10 +849,9 @@ def load_scan_data_from_url(href):
                             raise ValueError(f"SN{scan_number} does not match reconstruction R{reconstruction_id}")
                         scan_number = scan_number if scan_number is not None else reconstruction.scan_number
                         form_data.scan_number = scan_number
-                        # A run written as one reconstruction-scan file is indexed from that
-                        # file; an earlier per-depth run from its directory of frame files.
+                        # Earlier per-depth runs use the output directory directly.
                         input_path = reconstruction.output_path
-                        scan_file = os.path.join(input_path, RECONSTRUCTION_FILENAME)
+                        scan_file = reconstruction_catalog_path(input_path)
                         if os.path.isfile(scan_file):
                             input_path = scan_file
                         form_data.input_path = input_path

@@ -1,15 +1,14 @@
-"""Wire reconstruction detail page: Parameters, Points, Depth View, and ROI Inspector.
+"""Inspect reconstructed points, depth frames, and ROI traces.
 
-The browser holds identities only -- the artifact path, the selected point,
-the depth index, and ROI definitions. Stored frames, reference images, and
-traces are prepared by lauelab on the server and cached by
-``laue_portal.services.reconstruction_view``; the page receives one 2D image
-and small 1D traces at a time. Each figure has exactly one owning callback, so
-Dash drops an in-flight response when the same callback is requested again and
-a slow response cannot overwrite a newer point or ROI selection.
+The browser stores the selected point, depth index, and ROI definitions.
+Image and trace calculations run on the server through ``reconstruction_view``.
+Keep one callback per figure so Dash can discard superseded requests.
+
+Refresh reloads the point table while preserving the selected point and ROIs.
 """
 
 import urllib.parse
+from datetime import datetime
 
 import dash
 import dash_ag_grid as dag
@@ -37,6 +36,7 @@ from laue_portal.components.wire_recon_form import set_wire_recon_form_props, wi
 from laue_portal.config import DEFAULT_VARIABLES
 from laue_portal.database.db_utils import get_catalog_data, remove_root_path_prefix
 from laue_portal.services import reconstruction_view as view
+from laue_portal.workflows.execution import is_terminal
 from laue_portal.workflows.reconstruction import get_reconstruction
 
 dash.register_page(__name__, path="/wire_reconstruction")
@@ -238,7 +238,7 @@ layout = html.Div(
     [
         navbar.navbar,
         dcc.Location(id="url-wire-recon-page", refresh=False),
-        # Where the run's pixels are ({kind, path}); scientific products stay on the server.
+        dcc.Store(id="wr-run"),
         dcc.Store(id="wr-artifact"),
         dcc.Store(id="wr-point"),
         # {point_id: {"next": n, "rois": [...]}}, this page session only.
@@ -248,7 +248,21 @@ layout = html.Div(
         # The frame currently drawn in Depth View, so revisiting the tab resends nothing.
         dcc.Store(id="wr-depth-drawn", data=None),
         detail_header("wire-recon-id-header"),
-        html.Div(id="wr-point-bar", className="lp-artifact-bar d-flex align-items-center gap-3 px-3 py-1 small"),
+        html.Div(
+            className="lp-artifact-bar d-flex align-items-center gap-3 px-3 py-1 small",
+            children=[
+                html.Div(id="wr-point-bar", className="d-flex align-items-center gap-3"),
+                dbc.Button(
+                    [html.I(className="bi bi-arrow-clockwise me-1"), "Refresh"],
+                    id="wr-refresh",
+                    size="sm",
+                    color="secondary",
+                    outline=True,
+                    className="ms-auto py-0",
+                    title="Read the reconstruction catalog again to show points completed since",
+                ),
+            ],
+        ),
         dbc.Tabs(
             id="wire-recon-detail-tabs",
             active_tab=TAB_PARAMETERS,
@@ -290,7 +304,7 @@ def _empty_figure(message):
 
 @callback(
     Output("wire-recon-id-header", "children"),
-    Output("wr-artifact", "data"),
+    Output("wr-run", "data"),
     Input("url-wire-recon-page", "href"),
     prevent_initial_call=True,
 )
@@ -310,9 +324,8 @@ def load_wire_recon_data(href):
             reconstruction_id = int(reconstruction_id_str)
             reconstruction = get_reconstruction(reconstruction_id)
             if reconstruction and reconstruction.method == "wire" and reconstruction.wire_parameters:
-                artifact = view.locate_artifact(reconstruction.output_path)
+                run = {"reconstruction_id": reconstruction_id, "directory": reconstruction.output_path}
                 with Session(session_utils.get_engine()) as session:
-                    # Add root_path from DEFAULT_VARIABLES
                     root_path = DEFAULT_VARIABLES.get("root_path", "")
                     reconstruction.root_path = root_path
 
@@ -330,19 +343,15 @@ def load_wire_recon_data(href):
                         catalog_data = get_catalog_data(session, reconstruction.scan_number, root_path)
                         reconstruction.data_path = catalog_data.get("data_path", "")
 
-                    # Populate the form with the data
                     set_wire_recon_form_props(reconstruction, read_only=True)
 
-                    # Get related links
                     related_links = []
 
-                    # Add job link if it exists
                     if reconstruction.job_id:
                         related_links.append(
                             (f"Job ID: {reconstruction.job_id}", f"/job?job_id={reconstruction.job_id}")
                         )
 
-                    # Add scan link
                     if reconstruction.scan_number:
                         related_links.append(
                             (
@@ -352,7 +361,7 @@ def load_wire_recon_data(href):
                         )
 
                     header = detail_header_content(f"Reconstruction R{reconstruction_id}", related_links)
-                    return header, artifact.to_store() if artifact else None
+                    return header, run
 
         except Exception as e:
             print(f"Error loading wire reconstruction data: {e}")
@@ -363,35 +372,77 @@ def load_wire_recon_data(href):
 
 # --- Points ----------------------------------------------------------------------
 
+POINT_STATUS_MESSAGES = {
+    "pending": "has not been reconstructed yet; press Refresh after it completes",
+    "writing": "is being reconstructed; press Refresh after it completes",
+    "unattempted": "was not reconstructed because the run stopped first",
+    "interrupted": "was interrupted before its file was recorded",
+}
+
+
+@callback(
+    Output("wr-artifact", "data"),
+    Input("wr-run", "data"),
+    Input("wr-refresh", "n_clicks"),
+)
+def locate_run_output(run, n_clicks):
+    """Check for output when the page opens or Refresh is pressed."""
+
+    if not run:
+        return None
+    artifact = view.locate_artifact(run["directory"])
+    if artifact is not None:
+        return {**artifact.to_store(), "read": n_clicks or 0}
+    reconstruction = get_reconstruction(run["reconstruction_id"])
+    waiting = reconstruction is not None and reconstruction.job is not None and not is_terminal(reconstruction.job)
+    return {"kind": None, "waiting": waiting, "read": n_clicks or 0}
+
+
+def _catalog_message(artifact, run_status):
+    read_at = datetime.now().strftime("%H:%M:%S")
+    if artifact.kind != view.KIND_SCAN:
+        return (
+            f"Per-depth files in {artifact.path}. Depths are read when a point is opened, and raw "
+            "reference images were not recorded for these runs."
+        )
+    message = f"Scan catalog {artifact.path}: run {run_status}, read at {read_at}."
+    if run_status == "running":
+        message += " Points appear here a few seconds after they complete; press Refresh to see new points."
+    return message
+
 
 @callback(
     Output("wr-points-grid", "rowData"),
     Output("wr-points-message", "children"),
     Output("wr-point", "data"),
     Input("wr-artifact", "data"),
+    State("wr-point", "data"),
 )
-def load_points(artifact_data):
-    """Catalog rows only; the first complete point becomes the initial selection."""
+def load_points(artifact_data, current):
+    """Refresh the point table, preserving the selection when it is still available."""
 
     artifact = view.Artifact.from_store(artifact_data)
     if artifact is None:
-        return [], "No reconstructed images were found for this run.", None
+        if (artifact_data or {}).get("waiting"):
+            message = "Results are not ready: the run has not published its reconstruction catalog yet. Press Refresh."
+        else:
+            message = "No reconstructed images were found for this run."
+        return [], message, None
     try:
-        rows = view.point_rows(artifact)
+        table = view.point_table(artifact)
     except (OSError, ValueError) as error:
-        return [], f"Could not read the reconstruction: {error}", None
-    first = next((row["point_id"] for row in rows if row["status"] == "complete"), None)
-    if artifact.kind == view.KIND_SCAN:
-        message = f"Reconstruction file {artifact.path}"
+        # Keep what is shown; a later Refresh can read the catalog again.
+        return dash.no_update, f"Could not read the reconstruction: {error}", dash.no_update
+    rows = table.rows
+    complete = [row["point_id"] for row in rows if row["status"] == "complete"]
+    if current in complete:
+        selected = dash.no_update  # keep the current figures
     else:
-        message = (
-            f"Per-depth files in {artifact.path}. Depths are read when a point is opened, and raw "
-            "reference images were not recorded for these runs."
-        )
+        selected = complete[0] if complete else None
     for row in rows:
         position = row.pop("sample_position_um")
         row["sample_position_um"] = ", ".join(f"{value:.1f}" for value in position) if position else ""
-    return rows, message, first
+    return rows, _catalog_message(artifact, table.run_status), selected
 
 
 @callback(
@@ -406,8 +457,11 @@ def select_point(selected, current):
         raise PreventUpdate
     row = selected[0]
     if row["status"] != "complete":
-        detail = f": {row['error']}" if row.get("error") else ""
-        return dash.no_update, f"Point {row['point_id']} is {row['status']} and has no images{detail}"
+        if row["status"] == "failed":
+            detail = f"failed: {row['error']}" if row.get("error") else "failed"
+        else:
+            detail = POINT_STATUS_MESSAGES.get(row["status"], f"is {row['status']}")
+        return dash.no_update, f"Point {row['point_id']} {detail}. It has no images."
     if row["point_id"] == current:
         raise PreventUpdate
     return row["point_id"], dash.no_update
@@ -417,7 +471,7 @@ def select_point(selected, current):
     Output("wr-point-bar", "children"),
     Output("wr-points-grid", "selectedRows"),
     Input("wr-point", "data"),
-    State("wr-points-grid", "rowData"),
+    Input("wr-points-grid", "rowData"),
 )
 def show_point(point_id, rows):
     rows = rows or []
@@ -523,7 +577,7 @@ def show_depth_frame(index, colormap, tab, point_id, artifact_data, drawn):
     State("wr-artifact", "data"),
 )
 def edit_rois(point_id, click, deleted, size, state, selected, artifact_data):
-    """The single owner of ROI definitions, the ROI list, and its selection."""
+    """Update ROI definitions and table selection together."""
 
     trigger = dash.ctx.triggered_id
     rois = depth_view.point_rois(state, point_id)
@@ -535,7 +589,6 @@ def edit_rois(point_id, click, deleted, size, state, selected, artifact_data):
     if not point_id:
         raise PreventUpdate
     if trigger == "wr-roi-grid":
-        # A row's delete button; the other ROIs keep their selection.
         roi_id = (deleted or {}).get("value")
         if roi_id is None:
             raise PreventUpdate
@@ -591,7 +644,6 @@ def show_reference(kind, state, point_id, tab, drawn, artifact_data):
         and drawn.get("kind") == kind
         and drawn.get("count") is not None
     ):
-        # The image already in the browser stays; replace only the squares.
         patch = Patch()
         for position in range(drawn["count"], 0, -1):
             del patch["data"][position]
@@ -609,7 +661,7 @@ def show_reference(kind, state, point_id, tab, drawn, artifact_data):
 
 
 def _placeholder_reference(shape, point_id):
-    """A stand-in image of the right shape, used only to build the library's overlay traces."""
+    """Supply image dimensions to the overlay builder without loading pixels."""
 
     return ReferenceImage(np.zeros(shape, dtype=np.uint8), "sum_reconstructed", "stored", point_id, "overlay")
 

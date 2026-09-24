@@ -1,10 +1,8 @@
-"""The one RQ task per run: load the frozen request, compute and write, finalize.
+"""Execute a queued run and record its final status.
 
-``execute_run`` is the only function the queue runs. It adapts the persisted job
-to the plain compute function from ``laue_portal.processing.compute`` and owns
-progress persistence, cooperative cancellation, cleanup of compute descendants,
-and the terminal status decision. The final status depends on the authoritative
-output's validation, not only on counts.
+The executor loads the saved request, calls the compute function, and records
+progress and output details. It also handles cancellation and process cleanup.
+Output validation failures mark the run as failed even if all inputs completed.
 """
 
 from __future__ import annotations
@@ -72,6 +70,7 @@ class ExecutorHooks:
         self._recorder = recorder
         self._failures = failures
         self.messages: list[str] = []
+        self.outcome: RunOutcome | None = None
 
     def should_stop(self) -> bool:
         return self._monitor.stop_requested
@@ -81,6 +80,9 @@ class ExecutorHooks:
 
     def record_failure(self, record: FailureRecord) -> None:
         self._failures.append(record)
+
+    def report_outcome(self, outcome: RunOutcome) -> None:
+        self.outcome = outcome
 
     def log(self, message: str) -> None:
         self.messages.append(message)
@@ -129,6 +131,7 @@ def _start(engine: Engine, job_id: int, policy: RunPolicy) -> tuple[RunRequest |
             n_inputs=job.n_inputs,
             workers=policy.workers,
             max_in_flight=policy.max_in_flight,
+            reconstruction_workers=policy.reconstruction_workers,
         )
         execution.mark_running(job)
     return request, None
@@ -211,6 +214,7 @@ def _write_run_summary(
             "job_timeout_seconds": policy.job_timeout_seconds,
             "workers": policy.workers,
             "max_in_flight": policy.max_in_flight,
+            "reconstruction_workers": policy.reconstruction_workers,
         },
         "host": platform.node(),
         "log": hook_messages,
@@ -256,6 +260,8 @@ def execute_run(job_id: int, *, engine: Engine | None = None, policy: RunPolicy 
         recorder.report(succeeded=outcome.n_succeeded, failed=outcome.n_failed)
     except BaseException as exc:  # timeouts and interrupts must still finalize the run
         error = exc
+        if not isinstance(outcome, RunOutcome):
+            outcome = hooks.outcome
         logger.exception("Run %s failed", job_id)
     finally:
         monitor.close()

@@ -309,12 +309,12 @@ def test_an_incomplete_reconstruction_points_to_its_published_file():
         display_id="Reconstruction R4",
         run_directory="/runs/rec_4",
         request=None,
-        summary={"artifacts": {"reconstruction": "/runs/rec_4/reconstruction.h5"}},
+        summary={"artifacts": {"reconstruction": "/runs/rec_4/reconstruction/scan.h5"}},
         history=None,
         results_path=None,
     )
 
     text = str(configuration_content(details))
 
-    assert "published reconstruction file holds every point that completed" in text
-    assert "/runs/rec_4/reconstruction.h5" in text
+    assert "Completed point files are available from this incomplete run" in text
+    assert "/runs/rec_4/reconstruction/scan.h5" in text

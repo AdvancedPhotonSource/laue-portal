@@ -16,6 +16,7 @@ from laue_portal.utilities.hkl_parse import str2hkl
 from laue_portal.utilities.srange import srange
 from laue_portal.workflows.files import WorkflowValidationError, is_reconstruction_scan, resolve_scan_inputs
 from laue_portal.workflows.identity import merged_identity_value, parse_workflow_identities
+from laue_portal.workflows.manifest import reconstruction_catalog_path
 
 PEAKINDEX_FIELD_IDS = [
     "data_path",
@@ -296,7 +297,7 @@ def format_filename_with_indices(filename_prefix, scanPoint_num, depthRange_num=
 
 
 def _validate_scan_selection(validation_result, input_prefix, scan_path, prefixes, scan_points, depth_range):
-    """Report selection problems for a reconstruction-scan input by resolving it (catalog only).
+    """Check point and depth selection against the catalog.
 
     A template takes at most one %d, filled by Scan Points; Depth Range holds
     zero-based depth indices and blank selects every depth.
@@ -312,7 +313,7 @@ def _validate_scan_selection(validation_result, input_prefix, scan_path, prefixe
                 input_prefix,
                 custom_message=(
                     f"Filename prefix '{prefix}' must have one %d with Scan Points, or none without; "
-                    "a reconstruction-scan file selects depths with Depth Range"
+                    "a scan catalog selects depths with Depth Range"
                 ),
             )
             return
@@ -563,7 +564,7 @@ def validate_peakindexing(fields, catalog_defaults=None):
                             "errors",
                             "data_path",
                             input_prefix,
-                            custom_message="Data Path must be a directory or a reconstruction-scan file",
+                            custom_message="Data Path must be a directory or a reconstruction scan catalog",
                         )
                     else:
                         scan_file = os.path.isfile(current_full_data_path)
@@ -585,13 +586,9 @@ def validate_peakindexing(fields, catalog_defaults=None):
                                 source_path = catalog.filefolder
                                 source_label = f"SN{scan_num_int}"
 
-                        # A reconstruction's scan file lives in its output directory.
-                        compared_path = (
-                            os.path.dirname(current_full_data_path)
-                            if scan_file and reconstruction_id is not None and indexing_id is None
-                            else current_full_data_path
-                        )
-                        if source_path and os.path.normpath(source_path) != os.path.normpath(compared_path):
+                        if source_path and scan_file and reconstruction_id is not None and indexing_id is None:
+                            source_path = reconstruction_catalog_path(source_path)
+                        if source_path and os.path.normpath(source_path) != os.path.normpath(current_full_data_path):
                             add_validation_message(
                                 validation_result,
                                 "warnings",

@@ -1,6 +1,6 @@
 """Immutable run input manifests, frozen requests, and run-level failure reports.
 
-Each run has a constant number of support files in its run directory:
+Run metadata is stored alongside the output:
 
 ~~~text
 inputs.jsonl    ordered identity/source manifest, one JSON object per input
@@ -8,7 +8,12 @@ request.json    the frozen execution request (paths, validated settings, identit
 failures.jsonl  one JSON object per failed or unattempted input, only when needed
 ~~~
 
-Identity convention (characterized 2026-09-16, plan section 3.3):
+A wire reconstruction also writes one lauelab scan directory,
+``reconstruction/``: the catalog ``scan.h5`` and one standalone point file per
+reconstructed point under ``reconstruction/points/``. The catalog path is the
+run's reconstruction artifact; keep the whole directory together when moving it.
+
+Frame IDs and ordering:
 
 * Historical merged ``output.xml`` files were assembled by ``merge_xml_files``
   from one XML per frame, in ``sorted()`` order of the per-frame XML filenames.
@@ -19,13 +24,13 @@ Identity convention (characterized 2026-09-16, plan section 3.3):
   templates in form order, then requested scan points in requested order, then
   depth points. ``input_id`` is the source file stem, which is what lauelab
   HDF5 results store as ``frames/frame_ids`` for new runs.
-* A frame of a reconstruction-scan file has ``source`` = the scan file plus
+* A frame of a reconstructed point has ``source`` = the point file plus
   ``point_id`` and zero-based ``depth_index``. Its ``input_id`` is
   ``<point_id>_<depth_index>``, the stem the same frame had as a per-depth
   file ``<point_id>_<depth_index>.h5``.
 * Historical positions and manifest positions therefore differ. Anything that
   refers to a frame must use ``input_id`` (or the ``inputImage`` stem of an
-  old step), never a position, so no selection acquires an off-by-one change.
+  old step) to preserve selections across the two formats.
 """
 
 from __future__ import annotations
@@ -54,7 +59,8 @@ REQUEST_FILENAME = "request.json"
 FAILURE_REPORT_FILENAME = "failures.jsonl"
 RUN_SUMMARY_FILENAME = "run.json"
 RESULTS_FILENAME = "output.h5"
-RECONSTRUCTION_FILENAME = "reconstruction.h5"
+RECONSTRUCTION_DIRECTORY = "reconstruction"
+RECONSTRUCTION_CATALOG_FILENAME = "scan.h5"  # the name lauelab gives a scan directory's catalog
 LOG_FILENAME = "run.log"
 
 # Names a run directory reserves for support and authoritative files. A user
@@ -66,10 +72,16 @@ RESERVED_RUN_FILENAMES = frozenset(
         FAILURE_REPORT_FILENAME,
         RUN_SUMMARY_FILENAME,
         RESULTS_FILENAME,
-        RECONSTRUCTION_FILENAME,
+        RECONSTRUCTION_DIRECTORY,
         LOG_FILENAME,
     }
 )
+
+
+def reconstruction_catalog_path(run_directory: str | os.PathLike[str]) -> str:
+    """Return the expected catalog path for a wire reconstruction."""
+
+    return os.path.join(run_directory, RECONSTRUCTION_DIRECTORY, RECONSTRUCTION_CATALOG_FILENAME)
 
 
 class ManifestError(RuntimeError):
@@ -78,7 +90,7 @@ class ManifestError(RuntimeError):
 
 @dataclass(frozen=True)
 class ManifestEntry:
-    """One input in run order with a stable identity and its selection provenance."""
+    """An input ID, source, and selection indices in execution order."""
 
     index: int
     input_id: str
@@ -87,7 +99,7 @@ class ManifestEntry:
     scan_point: int | None
     depth_point: int | None
     depth: float | None = None  # physical depth override in micrometres; None = from file
-    point_id: str | None = None  # reconstruction-scan point; source is then the scan file
+    point_id: str | None = None  # reconstructed point; source is then its point file
     depth_index: int | None = None  # zero-based frame of that point
 
     def to_json(self) -> str:
@@ -122,13 +134,13 @@ class ManifestSummary:
 
 
 def input_identity(path: str | os.PathLike[str]) -> str:
-    """The identity a source file carries in results: its filename without extension."""
+    """Use the filename stem as the frame ID."""
 
     return Path(path).stem
 
 
 def scan_frame_identity(point_id: str, depth_index: int) -> str:
-    """The identity of one reconstruction-scan frame: the stem of its per-depth file."""
+    """Build the frame ID used by reconstruction results and per-depth exports."""
 
     return f"{point_id}_{depth_index}"
 
@@ -143,7 +155,7 @@ def build_manifest_entries(
     Identities are file stems. If two inputs share a stem (for example ``a.h5``
     and ``a.tif``), every identity in the run falls back to the full filename so
     one rule applies to the whole manifest. Duplicate filenames are an error.
-    A reconstruction-scan frame's identity is ``<point_id>_<depth_index>``.
+    A reconstructed frame's identity is ``<point_id>_<depth_index>``.
     """
 
     if not inputs:
@@ -261,7 +273,7 @@ def count_manifest_entries(path: str | os.PathLike[str]) -> int:
 
 
 def verify_manifest(path: str | os.PathLike[str], *, expected_digest: str, expected_count: int) -> None:
-    """Confirm a manifest is the one recorded for a run before anything consumes it."""
+    """Check the manifest against the digest and input count recorded for the run."""
 
     if not os.path.isfile(path):
         raise ManifestError(f"manifest {path} is missing")

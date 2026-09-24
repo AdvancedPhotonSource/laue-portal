@@ -1,19 +1,15 @@
-"""Server-side access to a wire reconstruction's points for the reconstruction page.
+"""Load reconstruction images and traces for the wire reconstruction page.
 
-A run's pixels are found in one of two layouts:
+New runs use ``reconstruction/scan.h5`` to track progress and locate completed
+files under ``reconstruction/points/``. Earlier runs have per-depth files
+``<point_id>_<depth_index>.h5`` and ``<point_id>_summary.txt`` in the run directory.
 
-* ``reconstruction.h5`` in the run directory, a lauelab reconstruction-scan
-  file (runs from this portal version onward);
-* per-depth files ``<point_id>_<depth_index>.h5`` next to one
-  ``<point_id>_summary.txt`` per point (earlier runs).
+Catalog metadata and computed products are cached on the server. Point-file
+identity determines whether an image or trace can be reused after a catalog
+update. Per-depth runs use directory identity instead; their first reference
+image or full-frame trace requires reading every frame.
 
-Callbacks keep only small identities in the browser (artifact path, point ID,
-ROI bounds). Scientific products -- a stored frame, a reference image, a
-depth trace -- are computed by lauelab and kept here in a byte-bounded
-least-recently-used cache whose keys carry the artifact's identity, so a
-changed file is never served from the cache. Axis, scale, and colour changes
-reuse cached products. Per-depth points have no embedded reductions, so their
-first full-frame trace or reference reads every frame once.
+The point table reads a fresh catalog snapshot on each explicit refresh.
 """
 
 from __future__ import annotations
@@ -30,7 +26,7 @@ from lauelab.indexing import InputError
 from lauelab.reconstruct import PerDepthReader, ScanReader
 from lauelab.reconstruct.inspection import Bounds, DepthTrace, ReferenceImage, depth_trace, reference_image
 
-from laue_portal.workflows.manifest import RECONSTRUCTION_FILENAME
+from laue_portal.workflows.manifest import reconstruction_catalog_path
 
 KIND_SCAN = "scan"
 KIND_PER_DEPTH = "per_depth"
@@ -39,15 +35,15 @@ DEFAULT_CACHE_BYTES = 1024 * 1024 * 1024
 
 
 class ViewError(RuntimeError):
-    """A point or product cannot be shown; the message is meant for the page."""
+    """An error message suitable for display on the reconstruction page."""
 
 
 @dataclass(frozen=True)
 class Artifact:
-    """Where a run's reconstructed pixels live."""
+    """Location and format of a reconstruction."""
 
     kind: str
-    path: str  # the scan file, or the run directory holding per-depth files
+    path: str  # the scan catalog, or the run directory holding per-depth files
 
     def to_store(self) -> dict:
         return {"kind": self.kind, "path": self.path}
@@ -60,11 +56,11 @@ class Artifact:
 
 
 def locate_artifact(run_directory: str | None) -> Artifact | None:
-    """The run's scan file, else its per-depth files, else None."""
+    """Find the scan catalog or per-depth output, including catalogs of running jobs."""
 
     if not run_directory:
         return None
-    scan = os.path.join(run_directory, RECONSTRUCTION_FILENAME)
+    scan = reconstruction_catalog_path(run_directory)
     if os.path.isfile(scan):
         return Artifact(KIND_SCAN, scan)
     try:
@@ -76,19 +72,21 @@ def locate_artifact(run_directory: str | None) -> Artifact | None:
     return None
 
 
-def _identity(artifact: Artifact) -> tuple:
-    """Changes whenever the artifact is rewritten; part of every cache key."""
+def _file_identity(path: str) -> tuple:
+    """Use the path, inode, size, and modification time to detect file changes."""
 
-    status = os.stat(artifact.path)
-    return (artifact.kind, os.path.realpath(artifact.path), status.st_size, status.st_mtime_ns)
+    status = os.stat(path)
+    return (os.path.realpath(path), status.st_ino, status.st_size, status.st_mtime_ns)
+
+
+def _identity(artifact: Artifact) -> tuple:
+    """Identify the current catalog snapshot or per-depth directory."""
+
+    return (artifact.kind, *_file_identity(artifact.path))
 
 
 def _per_depth_files(directory: str) -> dict[str, list[str]]:
-    """Point ID to its per-depth HDF5 files, from one directory listing.
-
-    Points are the prefixes of ``<point_id>_summary.txt``; a point's frames are
-    exactly the names ``<point_id>_<digits>.h5``.
-    """
+    """Group per-depth files by point ID, using summary filenames to identify points."""
 
     names = os.listdir(directory)
     points = sorted(name[: -len(SUMMARY_SUFFIX)] for name in names if name.endswith(SUMMARY_SUFFIX))
@@ -109,12 +107,21 @@ def _finite(values) -> list[float] | None:
     return values if all(np.isfinite(values)) else None
 
 
-def point_rows(artifact: Artifact) -> list[dict]:
-    """One lightweight row per point, from the catalog or a directory listing; reads no pixels."""
+@dataclass(frozen=True)
+class PointTable:
+    """Point metadata for the table, with the catalog status when available."""
+
+    rows: list[dict]
+    run_status: str | None  # the catalog's run status; None for per-depth files
+
+
+def point_table(artifact: Artifact) -> PointTable:
+    """Read current point metadata for the table without loading images."""
 
     rows = []
     if artifact.kind == KIND_SCAN:
         with ScanReader(artifact.path) as scan:
+            run_status = scan.run_status
             for entry in scan.points:
                 complete = entry.status == "complete"
                 rows.append(
@@ -132,7 +139,7 @@ def point_rows(artifact: Artifact) -> list[dict]:
                         "error": entry.error,
                     }
                 )
-        return rows
+        return PointTable(rows, run_status)
     for index, (point_id, files) in enumerate(_per_depth_files(artifact.path).items()):
         rows.append(
             {
@@ -149,11 +156,11 @@ def point_rows(artifact: Artifact) -> list[dict]:
                 "error": "" if files else "no per-depth files next to the summary",
             }
         )
-    return rows
+    return PointTable(rows, None)
 
 
 class ProductCache:
-    """Least-recently-used cache bounded by the bytes of the arrays it holds."""
+    """Cache products with a byte limit; estimate memory use for metadata."""
 
     def __init__(self, max_bytes: int = DEFAULT_CACHE_BYTES):
         self.max_bytes = max_bytes
@@ -200,6 +207,8 @@ def _nbytes(value) -> int:
         return value.values.nbytes + value.depth_um.nbytes
     if isinstance(value, PerDepthReader):
         return 64 * len(value.paths)  # metadata only; pixels are read per operation
+    if isinstance(value, _Catalog):
+        return sum(1024 + len(p.source_path) + len(p.error) + len(p.path) for p in value.scan.points)
     return 64
 
 
@@ -207,10 +216,10 @@ CACHE = ProductCache()
 
 
 def _open_point(artifact: Artifact, point_id: str):
-    """A context manager yielding the point's reader."""
+    """Open a point reader for use in a ``with`` block."""
 
     if artifact.kind == KIND_SCAN:
-        return _ScanPoint(artifact.path, point_id)
+        return _catalog(artifact).point(point_id)
     reader = CACHE.get((_identity(artifact), point_id, "reader"), lambda: _per_depth_reader(artifact, point_id))
     return _Borrowed(reader)
 
@@ -222,22 +231,19 @@ def _per_depth_reader(artifact: Artifact, point_id: str) -> PerDepthReader:
     return PerDepthReader(files, point_id=point_id)
 
 
-class _ScanPoint:
-    def __init__(self, path: str, point_id: str):
-        self._path = path
-        self._point_id = point_id
-        self._scan = None
+class _Catalog:
+    """Share catalog metadata across callbacks. Callbacks close their own point readers."""
 
-    def __enter__(self):
-        self._scan = ScanReader(self._path)
-        try:
-            return self._scan.point(self._point_id)
-        except BaseException:
-            self._scan.close()
-            raise
+    def __init__(self, path):
+        self.scan = ScanReader(path)
+        self.points = {entry.point_id: entry for entry in self.scan.points}
+        self._lock = threading.Lock()
 
-    def __exit__(self, *exc):
-        self._scan.close()
+    def point(self, point_id):
+        # ScanReader updates its list of open readers here. Only opening and
+        # validation need this lock; callbacks can read their pixels independently.
+        with self._lock:
+            return self.scan.point(point_id)
 
 
 class _Borrowed:
@@ -253,9 +259,29 @@ class _Borrowed:
         return None
 
 
+def _catalog(artifact: Artifact) -> _Catalog:
+    """Reuse the catalog metadata until a new snapshot is published."""
+
+    return CACHE.get((_identity(artifact), "catalog"), lambda: _Catalog(artifact.path))
+
+
+def _point_key(artifact: Artifact, point_id: str) -> tuple:
+    """Build a cache key from the point file or per-depth directory."""
+
+    if artifact.kind != KIND_SCAN:
+        return (_identity(artifact), point_id)
+    catalog = _catalog(artifact)
+    entry = catalog.points.get(point_id)
+    if entry is None:
+        raise ViewError(f"the catalog has no point {point_id!r}")
+    if entry.status != "complete":
+        raise ViewError(f"point {point_id!r} is {entry.status}" + (f": {entry.error}" if entry.error else ""))
+    return (KIND_SCAN, point_id, *_file_identity(catalog.scan.point_path(point_id)))
+
+
 def _cached(artifact: Artifact, point_id: str, product: Hashable, compute):
     try:
-        key = (_identity(artifact), point_id, product)
+        key = (_point_key(artifact, point_id), product)
         return CACHE.get(key, lambda: _with_point(artifact, point_id, compute))
     except (InputError, KeyError, OSError, ValueError) as error:
         raise ViewError(str(error) or type(error).__name__) from error
@@ -284,7 +310,7 @@ def point_summary(artifact: Artifact, point_id: str) -> PointSummary:
 
 
 def stored_frame(artifact: Artifact, point_id: str, depth_index: int) -> np.ndarray:
-    """One stored frame, read alone."""
+    """Read and cache one depth frame."""
 
     return _cached(artifact, point_id, ("frame", int(depth_index)), lambda point: point.frame(int(depth_index)))
 
@@ -298,7 +324,7 @@ def reference(artifact: Artifact, point_id: str, kind: str) -> ReferenceImage:
 
 
 def roi_trace(artifact: Artifact, point_id: str, name: str, bounds: Bounds) -> DepthTrace:
-    """One ROI's trace; cached by bounds so adding an ROI reduces only that ROI."""
+    """Cache ROI traces by bounds so changing a label reuses the calculation."""
 
     bounds = tuple(int(value) for value in bounds)
     trace = _cached(artifact, point_id, ("roi", bounds), lambda point: depth_trace(point, bounds))

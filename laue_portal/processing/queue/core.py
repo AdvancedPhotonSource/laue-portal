@@ -12,26 +12,23 @@ from laue_portal.workflows.execution import STATUS_NAMES
 
 logger = logging.getLogger(__name__)
 
-# Redis connection
 redis_conn = Redis(host=REDIS_CONFIG.get("host", "localhost"), port=REDIS_CONFIG["port"], decode_responses=False)
 
 # Single queue for all run types; one queue item is one run.
 job_queue = Queue("laue_jobs", connection=redis_conn)
 
-# Global variable to store startup status
 REDIS_CONNECTED_AT_STARTUP = None
 
 # Job status mapping, shared with laue_portal.workflows.execution.JobStatus
 STATUS_MAPPING = {int(status): name for status, name in STATUS_NAMES.items()}
 
-# Reverse mapping for converting status names to integers
 STATUS_REVERSE_MAPPING = {v: k for k, v in STATUS_MAPPING.items()}
 
 RUN_JOB_TYPE = "run"
 
 
 def run_queue_id(job_id: int) -> str:
-    """The deterministic RQ job identity of one run; enqueueing it twice is impossible."""
+    """Build a stable queue ID so enqueue requests can be deduplicated."""
 
     return f"{RUN_JOB_TYPE}_{int(job_id)}"
 
@@ -41,9 +38,12 @@ class RunPolicy:
     """Whole-run execution limits, read from the ``RUN_EXECUTION`` section of config.yaml.
 
     ``job_timeout_seconds`` is the wall-clock limit for one run; RQ raises inside
-    the run when it is exceeded and the run is finalized as Failed. It replaces
-    the old two-hour per-chunk assumption. ``stale_heartbeat_seconds`` decides
+    the run when it is exceeded, and the executor records a failure.
+    ``stale_heartbeat_seconds`` decides
     when a Running job whose heartbeat stopped is reconciled as interrupted.
+    ``workers`` bounds an indexing run's processes; ``reconstruction_workers``
+    is the number of points a wire reconstruction computes at once, each with
+    ``DEFAULT_VARIABLES.num_threads`` threads and its own stripe-buffer budget.
     """
 
     job_timeout_seconds: int = 24 * 3600
@@ -54,6 +54,7 @@ class RunPolicy:
     shutdown_grace_seconds: int = 600
     workers: int = 4
     max_in_flight: int | None = None
+    reconstruction_workers: int = 1
 
     def __post_init__(self) -> None:
         if self.job_timeout_seconds <= 0:
@@ -67,6 +68,8 @@ class RunPolicy:
             raise ValueError("shutdown_grace_seconds must not be negative")
         if self.workers <= 0:
             raise ValueError("workers must be positive")
+        if self.reconstruction_workers <= 0:
+            raise ValueError("reconstruction_workers must be positive")
         if self.max_in_flight is not None and self.max_in_flight < self.workers:
             raise ValueError("max_in_flight must be at least workers")
 

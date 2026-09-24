@@ -68,16 +68,15 @@ def test_refresh_sends_only_active_or_newly_finalized_rows_and_adds_new_runs(eng
     assert [row["job_id"] for row in rows] == [second.job_id, first.job_id]
     assert state["max_id"] == second.job_id
 
-    transaction, state, note = run_monitor.refresh_jobs(1, None, state, "/run-monitor")
+    transaction, state = run_monitor.refresh_jobs(1, None, state, "/run-monitor")
     assert [row["job_id"] for row in transaction["update"]] == [second.job_id]  # active run only
     assert "add" not in transaction
-    assert "1 active run(s)" in note
 
     with Session(engine) as session, session.begin():
         execution.record_progress(session.get(db_schema.Job, second.job_id), succeeded=3, failed=0)
     third = publish_wire_run(engine, tmp_path, name="third")
 
-    transaction, state, note = run_monitor.refresh_jobs(2, None, state, "/run-monitor")
+    transaction, state = run_monitor.refresh_jobs(2, None, state, "/run-monitor")
     assert [row["job_id"] for row in transaction["update"]] == [second.job_id]
     assert transaction["update"][0]["n_processed"] == 3
     assert [row["job_id"] for row in transaction["add"]] == [third.job_id] and transaction["addIndex"] == 0
@@ -85,15 +84,13 @@ def test_refresh_sends_only_active_or_newly_finalized_rows_and_adds_new_runs(eng
 
     _finish(engine, second.job_id)
     _finish(engine, third.job_id, JobStatus.CANCELLED)
-    transaction, state, note = run_monitor.refresh_jobs(3, None, state, "/run-monitor")
+    transaction, state = run_monitor.refresh_jobs(3, None, state, "/run-monitor")
     assert sorted(row["job_id"] for row in transaction["update"]) == sorted([second.job_id, third.job_id])
-    assert "0 active run(s)" in note
     assert live_rows.payload_bytes(transaction) < 4000
 
     # Nothing active and nothing finalized since the last poll: no transaction is sent.
-    transaction, state, note = run_monitor.refresh_jobs(4, None, state, "/run-monitor")
+    transaction, state = run_monitor.refresh_jobs(4, None, state, "/run-monitor")
     assert transaction is no_update
-    assert "no active runs" in note
 
     with pytest.raises(PreventUpdate):
         run_monitor.refresh_jobs(5, None, state, "/elsewhere")

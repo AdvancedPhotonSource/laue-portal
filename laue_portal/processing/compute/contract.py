@@ -1,4 +1,4 @@
-"""The contract between the queue executor and a compute-and-write function."""
+"""Requests, results, and executor hooks for compute functions."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from laue_portal.workflows.manifest import FailureRecord, ManifestEntry
 
 @dataclass(frozen=True)
 class RunRequest:
-    """Everything a compute function needs, loaded from the run's frozen ``request.json``."""
+    """Compute settings loaded from ``request.json`` and the execution policy."""
 
     job_id: int
     kind: str
@@ -22,10 +22,11 @@ class RunRequest:
     n_inputs: int
     workers: int
     max_in_flight: int | None
+    reconstruction_workers: int = 1  # points a wire reconstruction computes at once
 
     @property
     def parameters(self) -> Mapping[str, Any]:
-        """The frozen form request (validated settings, paths, identities)."""
+        """Saved form parameters."""
 
         return self.document.get("request", {})
 
@@ -35,7 +36,7 @@ class RunRequest:
 
 
 class RunHooks(Protocol):
-    """Local progress and cancellation hooks; never part of a serialized request."""
+    """Executor callbacks for progress, cancellation, and output reporting."""
 
     def should_stop(self) -> bool:
         """True once cancellation or shutdown was requested; stop admitting new inputs."""
@@ -46,13 +47,16 @@ class RunHooks(Protocol):
     def record_failure(self, record: FailureRecord) -> None:
         """Append one failed or unattempted input to the run's failure report."""
 
+    def report_outcome(self, outcome: RunOutcome) -> None:
+        """Keep output details for the run summary if computation raises."""
+
     def log(self, message: str) -> None:
         """Operational message for the run log."""
 
 
 @dataclass
 class RunOutcome:
-    """What a compute function produced; the executor derives the terminal status from it."""
+    """Compute results used by the executor to determine the final run status."""
 
     n_succeeded: int
     n_failed: int

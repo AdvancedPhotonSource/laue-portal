@@ -68,6 +68,10 @@ def test_old_coordinator_machinery_is_gone():
 def test_run_policy_validates_its_settings():
     policy = core.RunPolicy.from_config({"job_timeout_seconds": 3600, "workers": 2})
     assert (policy.job_timeout_seconds, policy.workers, policy.heartbeat_seconds) == (3600, 2, 15.0)
+    assert policy.reconstruction_workers == 1  # several points at once must be chosen explicitly
+    assert core.RunPolicy.from_config({"reconstruction_workers": 3}).reconstruction_workers == 3
+    with pytest.raises(ValueError, match="reconstruction_workers"):
+        core.RunPolicy(reconstruction_workers=0)
     with pytest.raises(ValueError, match="Unknown RUN_EXECUTION"):
         core.RunPolicy.from_config({"chunk_size": 50})
     with pytest.raises(ValueError, match="job_timeout_seconds"):

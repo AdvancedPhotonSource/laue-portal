@@ -48,10 +48,6 @@ layout = html.Div(
                                     color="success",
                                     className="me-2",
                                 ),
-                                html.Span(
-                                    id="run-monitor-refresh-note",
-                                    className="text-muted small align-self-center me-2",
-                                ),
                             ],
                             className="bg-light px-2 py-2 d-flex justify-content-end w-100",
                         )
@@ -385,14 +381,6 @@ def _get_jobs():
     return _column_defs(columns), rows
 
 
-def _refresh_note(rows: list[dict], transaction: dict | None) -> str:
-    active = sum(1 for row in rows if row.get("status") in (0, 1))
-    if not rows:
-        return f"Auto-refresh every {live_rows.REFRESH_SECONDS} s; no active runs."
-    changed = len(transaction.get("update", [])) + len(transaction.get("add", [])) if transaction else 0
-    return f"Auto-refresh every {live_rows.REFRESH_SECONDS} s; {active} active run(s), {changed} row(s) updated."
-
-
 @dash.callback(
     Output("job-table", "columnDefs"),
     Output("job-table", "rowData"),
@@ -411,7 +399,6 @@ def get_jobs(path):
 @dash.callback(
     Output("job-table", "rowTransaction"),
     Output("run-monitor-refresh-state", "data", allow_duplicate=True),
-    Output("run-monitor-refresh-note", "children"),
     Input("run-monitor-refresh-interval", "n_intervals"),
     Input("run-monitor-page-refresh-btn", "n_clicks"),
     State("run-monitor-refresh-state", "data"),
@@ -426,7 +413,7 @@ def refresh_jobs(n_intervals, n_clicks, state, path):
         raise PreventUpdate
     rows = _job_rows(active_or_changed_since(live_rows.since_from_state(state)))
     transaction, next_state = live_rows.transaction(rows, "job_id", state)
-    return transaction if transaction else dash.no_update, next_state, _refresh_note(rows, transaction)
+    return transaction if transaction else dash.no_update, next_state
 
 
 @dash.callback(

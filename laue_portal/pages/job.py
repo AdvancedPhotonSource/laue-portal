@@ -455,9 +455,8 @@ def configuration_content(details: run_summary.RunDetails):
             )
         elif details.artifacts.get("reconstruction"):
             partial_note = (
-                "This run did not finish, but its published reconstruction file holds every point that completed; "
-                "it records each failed or unattempted point with its status, and those points are also listed "
-                "in the failure report."
+                "Completed point files are available from this incomplete run. Check the scan catalog for point "
+                "status and the failure report for recorded errors."
             )
         if partial_note:
             sections.append(dbc.Alert(partial_note, color="info", className="py-2 small"))

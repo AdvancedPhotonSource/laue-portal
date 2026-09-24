@@ -1,12 +1,14 @@
-"""Native wire-scan reconstruction of one run into one reconstruction-scan HDF5 file.
+"""Run wire reconstruction with lauelab's local worker pool.
 
-Each manifest entry is one wire-scan point. ``lauelab.reconstruct_scan``
-reconstructs the points one at a time with the configured OpenMP thread count
-into ``reconstruction.h5`` in the run directory; the point ID is the entry's
-``input_id``. A stop request is honoured between points. The library writes a
-private ``.partial`` file, validates it, and publishes it with honest per-point
-status, so a cancelled or partly failed run still publishes its completed
-points. A failure of the shared file stops the run and publishes nothing.
+Each manifest entry supplies one point. Workers write completed point files
+under ``reconstruction/points/``; ``reconstruction/scan.h5`` tracks their status.
+``reconstruction_workers`` controls how many points run concurrently, and the
+saved ``num_threads`` sets each worker's OpenMP thread count.
+
+Cancellation lets active points finish. Input and reconstruction errors are
+reported per point; output errors stop the run. The executor retains the
+catalog path and configuration if reconstruction raises. A catalog write
+failure leaves the last published snapshot available.
 """
 
 from __future__ import annotations
@@ -23,15 +25,16 @@ from laue_portal.processing.compute.contract import RunHooks, RunOutcome, RunReq
 from laue_portal.processing.compute.lauego import _library_provenance
 from laue_portal.workflows.manifest import (
     CATEGORY_CANCELLED,
-    RECONSTRUCTION_FILENAME,
+    RECONSTRUCTION_DIRECTORY,
     FailureRecord,
     ManifestEntry,
+    reconstruction_catalog_path,
 )
 
 WIRE_KIND = "wire_reconstruction"
 DETECTOR_INDEX = 0
 WIRE_EDGES = ("leading", "trailing", "both")
-ENGINE = "lauelab reconstruct_scan (in-process, one reconstruction-scan file)"
+ENGINE = "lauelab reconstruct_scan (local worker processes, one scan directory)"
 
 
 @dataclass(frozen=True)
@@ -41,13 +44,16 @@ class WireSettings:
     resolution: float
     wire_edge: str
     percent_brightest: float
-    num_threads: int | None
-    memory_limit_mb: int
+    threads_per_worker: int | None
+    memory_limit_mb: int  # stripe-buffer budget of each worker
     detector_index: int = DETECTOR_INDEX
 
 
 def settings_from_request(parameters: Mapping[str, Any]) -> WireSettings:
-    """Map the saved wire form values to Reconstructor arguments (plan section 7.2)."""
+    """Map the saved wire form values to reconstruction arguments.
+
+    The saved ``num_threads`` is each worker's OpenMP thread count.
+    """
 
     edge = str(parameters["wire_edges"]).strip().lower()
     if edge not in WIRE_EDGES:
@@ -60,29 +66,50 @@ def settings_from_request(parameters: Mapping[str, Any]) -> WireSettings:
         resolution=float(parameters["depth_resolution"]),
         wire_edge=edge,
         percent_brightest=float(parameters["percent_brightest"]),
-        num_threads=None if threads in (None, 0) else int(threads),
+        threads_per_worker=None if threads in (None, 0) else int(threads),
         memory_limit_mb=int(memory) if memory not in (None, 0) else 8192,
     )
 
 
 def reconstructor_options(settings: WireSettings) -> dict[str, Any]:
-    """Keyword arguments for the library's ``Reconstructor``."""
+    """Build the reconstruction options shared by all points."""
 
     return {
         "depth_range": settings.depth_range,
         "resolution": settings.resolution,
         "wire_edge": settings.wire_edge,
         "percent_brightest": settings.percent_brightest,
-        "num_threads": settings.num_threads,
         "memory_limit_mb": settings.memory_limit_mb,
     }
 
 
 def compute_wire_reconstruction(request: RunRequest, entries: Iterable[ManifestEntry], hooks: RunHooks) -> RunOutcome:
     settings = settings_from_request(request.parameters)
-    entries = list(entries)  # one small record per point; the library freezes the same order
+    entries = list(entries)
     os.makedirs(request.run_directory, exist_ok=True)
-    output = os.path.join(request.run_directory, RECONSTRUCTION_FILENAME)
+    # The library refuses a nonempty destination, so an earlier run's output is never overwritten.
+    output = os.path.join(request.run_directory, RECONSTRUCTION_DIRECTORY)
+
+    outcome = RunOutcome(
+        n_succeeded=0,
+        n_failed=0,
+        provenance={
+            **_library_provenance(),
+            "engine": ENGINE,
+            "geometry_file": settings.geometry_file,
+            "detector_index": settings.detector_index,
+            "depth_range_um": list(settings.depth_range),
+            "resolution_um": settings.resolution,
+            "wire_edge": settings.wire_edge,
+            "percent_brightest": settings.percent_brightest,
+            "workers": request.reconstruction_workers,
+            "threads_per_worker": settings.threads_per_worker,
+            "memory_limit_mb": settings.memory_limit_mb,
+            "output_layout": f"one point file per point with a scan catalog ({RECONSTRUCTION_DIRECTORY}/)",
+        },
+    )
+    catalog = reconstruction_catalog_path(request.run_directory)
+    catalog_existed = os.path.exists(catalog)
 
     counts = {"complete": 0, "failed": 0}
 
@@ -99,17 +126,27 @@ def compute_wire_reconstruction(request: RunRequest, entries: Iterable[ManifestE
         counts[point.status] += 1
         hooks.report_progress(succeeded=counts["complete"], failed=counts["failed"])
 
-    # Shared configuration problems and a failure of the output file raise and stop the run.
-    result = reconstruct_scan(
-        [entry.source for entry in entries],
-        output,
-        geometry=settings.geometry_file,
-        detector=settings.detector_index,
-        point_ids=[entry.input_id for entry in entries],
-        progress=progress,
-        should_stop=hooks.should_stop,
-        **reconstructor_options(settings),
-    )
+    try:
+        result = reconstruct_scan(
+            [entry.source for entry in entries],
+            output,
+            geometry=settings.geometry_file,
+            detector=settings.detector_index,
+            point_ids=[entry.input_id for entry in entries],
+            workers=request.reconstruction_workers,
+            threads_per_worker=settings.threads_per_worker,
+            progress=progress,
+            should_stop=hooks.should_stop,
+            **reconstructor_options(settings),
+        )
+    finally:
+        outcome.n_succeeded = counts["complete"]
+        outcome.n_failed = counts["failed"]
+        # Keep partial output details, but do not claim a rejected destination as this run's output.
+        if not catalog_existed and os.path.isfile(catalog):
+            outcome.artifacts["reconstruction"] = catalog
+        hooks.report_outcome(outcome)
+    outcome.stopped = result.cancelled
     for point in result.outcomes:
         if point.status == "unattempted":
             hooks.record_failure(
@@ -118,28 +155,10 @@ def compute_wire_reconstruction(request: RunRequest, entries: Iterable[ManifestE
                 )
             )
 
-    outcome = RunOutcome(
-        n_succeeded=counts["complete"],
-        n_failed=counts["failed"],
-        stopped=result.cancelled,
-        provenance={
-            **_library_provenance(),
-            "engine": ENGINE,
-            "geometry_file": settings.geometry_file,
-            "detector_index": settings.detector_index,
-            "depth_range_um": list(settings.depth_range),
-            "resolution_um": settings.resolution,
-            "wire_edge": settings.wire_edge,
-            "percent_brightest": settings.percent_brightest,
-            "num_threads": settings.num_threads,
-            "memory_limit_mb": settings.memory_limit_mb,
-            "output_layout": f"one reconstruction-scan HDF5 file per run ({RECONSTRUCTION_FILENAME})",
-        },
-    )
     try:
         summary = validate_scan_file(result.path)
     except (InvalidScanFile, OSError) as error:
-        outcome.validation_error = f"{RECONSTRUCTION_FILENAME}: {error}"
+        outcome.validation_error = f"{result.path}: {error}"
         return outcome
     outcome.artifacts["reconstruction"] = os.fspath(result.path)
     outcome.provenance["reconstruction_summary"] = {
@@ -150,7 +169,7 @@ def compute_wire_reconstruction(request: RunRequest, entries: Iterable[ManifestE
         "n_unattempted": summary.n_unattempted,
     }
     outcome.summary = (
-        f"{summary.n_complete} of {summary.n_points} point(s) reconstructed into {RECONSTRUCTION_FILENAME}"
+        f"{summary.n_complete} of {summary.n_points} point(s) reconstructed into {RECONSTRUCTION_DIRECTORY}/"
     )
     return outcome
 

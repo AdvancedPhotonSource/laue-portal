@@ -128,10 +128,10 @@ def create_indexing(
 ) -> db_schema.IndexingRun:
     """Resolve inputs, create the run and its job atomically, then publish the manifest.
 
-    The input path is a directory of frame files or a reconstruction-scan file
-    (see :func:`~laue_portal.workflows.files.resolve_request_inputs`). No per-input rows are written. The frozen input list goes to
-    ``inputs.jsonl`` in the run directory and the request to ``request.json``;
-    the job records their location, digest, and count.
+    Inputs can come from a directory of frame files or a reconstruction
+    catalog. Catalog selections become point-file references in ``inputs.jsonl``.
+    The request is saved in ``request.json``. The job records the file locations,
+    manifest digest, and input count, without creating a database row per input.
     """
 
     # Filtering is disabled for new runs, including reruns of historical settings.
