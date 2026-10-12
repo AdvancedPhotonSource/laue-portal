@@ -96,8 +96,9 @@ def settings_from_request(parameters: Mapping[str, Any]) -> IndexingSettings:
     Threshold blank means automatic. A non-positive threshold ratio (the old
     ``-1`` marker) means none. ``max_number`` blank or non-positive is the
     uncapped peak search; ``max_peaks`` is the number of spots to index and
-    falls back to the displayed default of 200. Integer-valued fields go to the
-    library unrounded so a fractional Min Spot Size is rejected, not rounded.
+    falls back to the displayed default of 200. Values go to the library
+    unrounded: a fractional box size is rejected, and a fractional Min Spot Size
+    is used as given, as with the LaueGo ``peaksearch -m`` option.
     """
 
     threshold = _optional_number(parameters.get("threshold"))

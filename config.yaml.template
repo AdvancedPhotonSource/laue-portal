@@ -110,6 +110,10 @@ WIRERECON_DEFAULTS:
   depth_end: 150
   depth_resolution: 1
 
+  # Leading stored slices and wire-vector entries skipped (reconstructN_cpu uses 1 and 1)
+  frame_skip: 1
+  wire_skip: 1
+
   # Output
   outputFolder: "analysis/scan_%d/rec_%d/data"
 

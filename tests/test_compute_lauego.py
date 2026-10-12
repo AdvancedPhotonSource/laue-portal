@@ -103,11 +103,11 @@ def test_depth_override_accepts_zero_and_rejects_text():
         lauego.parse_depth_override(True)
 
 
-def test_fractional_min_size_is_rejected_by_the_library_not_rounded():
-    settings = lauego.settings_from_request(_parameters(min_size=1.13))
-    with pytest.raises(InputError, match="min_size must be a whole number"):
-        lauego.build_indexer(settings)
-    lauego.build_indexer(lauego.settings_from_request(_parameters(min_size=3.0)))
+def test_fractional_min_size_reaches_the_library_unrounded():
+    indexer = lauego.build_indexer(lauego.settings_from_request(_parameters(min_size=1.13)))
+    assert indexer.peak_params.min_size == 1.13
+    with pytest.raises(InputError, match="min_size must be a positive number"):
+        lauego.build_indexer(lauego.settings_from_request(_parameters(min_size=0)))
 
 
 @pytest.fixture

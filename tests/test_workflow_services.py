@@ -178,7 +178,7 @@ def test_create_reconstruction_persists_a_run_and_publishes_its_manifest(workflo
             subjob_inserts.append(executemany)
 
     run = reconstruction_workflow.create_reconstruction(
-        _wire_request(input_path, output_template), engine=workflow_engine
+        _wire_request(input_path, output_template, frame_skip=0, wire_skip=2), engine=workflow_engine
     )
 
     expected_output = os.fspath(tmp_path / "analysis" / "rec_1" / "data")
@@ -187,6 +187,7 @@ def test_create_reconstruction_persists_a_run_and_publishes_its_manifest(workflo
     assert run.output_path == expected_output
     assert run.wire_parameters.scan_points_len == 2
     assert run.wire_parameters.filename_prefixes == ["wire_%d.h5"]
+    assert (run.wire_parameters.frame_skip, run.wire_parameters.wire_skip) == (0, 2)
     assert run.job.status == JobStatus.QUEUED
     assert run.job.phase == RunPhase.PUBLISHED
     assert run.job.submit_time == datetime(2026, 8, 19, 12, 0, 0)
@@ -214,6 +215,7 @@ def test_create_reconstruction_persists_a_run_and_publishes_its_manifest(workflo
     assert request["run"] == {"reconstruction_id": 1, "job_id": 1, "scan_number": 1, "method": "wire"}
     assert request["request"]["geometry_file"] == "/config/geometry.xml"
     assert request["request"]["submitted_at"] == "2026-08-19T12:00:00"
+    assert (request["request"]["frame_skip"], request["request"]["wire_skip"]) == (0, 2)
     assert request["manifest"] == {"path": MANIFEST_FILENAME, "n_inputs": 2, "sha256": run.job.manifest_digest}
     assert sorted(os.listdir(expected_output)) == [MANIFEST_FILENAME, REQUEST_FILENAME]
 

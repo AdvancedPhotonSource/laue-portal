@@ -30,6 +30,7 @@ from laue_portal.workflows.manifest import (
     ManifestEntry,
     reconstruction_catalog_path,
 )
+from laue_portal.workflows.reconstruction import DEFAULT_SKIP
 
 WIRE_KIND = "wire_reconstruction"
 DETECTOR_INDEX = 0
@@ -44,6 +45,8 @@ class WireSettings:
     resolution: float
     wire_edge: str
     percent_brightest: float
+    frame_skip: int
+    wire_skip: int
     threads_per_worker: int | None
     memory_limit_mb: int  # stripe-buffer budget of each worker
     detector_index: int = DETECTOR_INDEX
@@ -52,7 +55,9 @@ class WireSettings:
 def settings_from_request(parameters: Mapping[str, Any]) -> WireSettings:
     """Map the saved wire form values to reconstruction arguments.
 
-    The saved ``num_threads`` is each worker's OpenMP thread count.
+    The saved ``num_threads`` is each worker's OpenMP thread count. A request
+    without ``frame_skip`` or ``wire_skip`` uses ``DEFAULT_SKIP``. lauelab
+    validates both skips.
     """
 
     edge = str(parameters["wire_edges"]).strip().lower()
@@ -66,6 +71,8 @@ def settings_from_request(parameters: Mapping[str, Any]) -> WireSettings:
         resolution=float(parameters["depth_resolution"]),
         wire_edge=edge,
         percent_brightest=float(parameters["percent_brightest"]),
+        frame_skip=parameters.get("frame_skip", DEFAULT_SKIP),
+        wire_skip=parameters.get("wire_skip", DEFAULT_SKIP),
         threads_per_worker=None if threads in (None, 0) else int(threads),
         memory_limit_mb=int(memory) if memory not in (None, 0) else 8192,
     )
@@ -79,6 +86,8 @@ def reconstructor_options(settings: WireSettings) -> dict[str, Any]:
         "resolution": settings.resolution,
         "wire_edge": settings.wire_edge,
         "percent_brightest": settings.percent_brightest,
+        "frame_skip": settings.frame_skip,
+        "wire_skip": settings.wire_skip,
         "memory_limit_mb": settings.memory_limit_mb,
     }
 
@@ -102,6 +111,8 @@ def compute_wire_reconstruction(request: RunRequest, entries: Iterable[ManifestE
             "resolution_um": settings.resolution,
             "wire_edge": settings.wire_edge,
             "percent_brightest": settings.percent_brightest,
+            "frame_skip": settings.frame_skip,
+            "wire_skip": settings.wire_skip,
             "workers": request.reconstruction_workers,
             "threads_per_worker": settings.threads_per_worker,
             "memory_limit_mb": settings.memory_limit_mb,

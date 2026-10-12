@@ -62,6 +62,9 @@ class WireReconstructionParameters(Base):
     depth_start: Mapped[float] = mapped_column(Float, nullable=False)
     depth_end: Mapped[float] = mapped_column(Float, nullable=False)
     depth_resolution: Mapped[float] = mapped_column(Float, nullable=False)
+    # Null for runs recorded before the skip options; those runs used DEFAULT_SKIP.
+    frame_skip: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    wire_skip: Mapped[int | None] = mapped_column(Integer, nullable=True)
     num_threads: Mapped[int] = mapped_column(Integer, nullable=False)
     memory_limit_mb: Mapped[int] = mapped_column(Integer, nullable=False)
     scan_points: Mapped[str] = mapped_column(String, nullable=False)

@@ -601,7 +601,7 @@ def submit_parameters(
                 detector_crop_x2=int(PEAKINDEX_DEFAULTS["detectorCropX2"]),
                 detector_crop_y1=int(PEAKINDEX_DEFAULTS["detectorCropY1"]),
                 detector_crop_y2=int(PEAKINDEX_DEFAULTS["detectorCropY2"]),
-                min_size=int(float(fields["min_size"][index])),
+                min_size=float(fields["min_size"][index]),
                 max_peaks=(int(fields["max_peaks"][index]) if fields["max_peaks"][index] not in (None, "") else 200),
                 smooth=_as_bool(fields["smooth"][index]),
                 mask_file=resolve_path_with_root(mask_file, root_path) if mask_file else None,

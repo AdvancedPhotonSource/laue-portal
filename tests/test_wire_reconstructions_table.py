@@ -251,6 +251,8 @@ def test_wire_submission_passes_a_request_to_the_workflow_service(empty_test_dat
             -10,
             10,
             1,
+            2,
+            0,
             "1-2",
             "raw",
             "image_%d.h5",
@@ -261,7 +263,22 @@ def test_wire_submission_passes_a_request_to_the_workflow_service(empty_test_dat
     assert request.scan_number == 12
     assert request.filename_prefixes == ("image_%d.h5",)
     assert request.output_path_template.endswith("analysis/scan_12/rec_%d/data")
+    assert (request.frame_skip, request.wire_skip) == (2, 0)
     enqueue.assert_called_once_with(41)
+
+
+def test_wire_validation_rejects_negative_skips_and_warns_on_nondefault_skips(empty_test_database):
+    engine, _ = empty_test_database
+    states = {f"{name}.value": value for name, value in (("frame_skip", "-1"), ("wire_skip", "2"))}
+
+    with patch.object(create_wire_reconstruction.session_utils, "get_engine", return_value=engine):
+        result = create_wire_reconstruction.validate_wire_reconstruction_inputs(SimpleNamespace(states=states))
+
+    assert result["errors"]["frame_skip"] == ["Frame Skip must be a non-negative integer"]
+    assert "wire_skip" not in result["errors"]
+    assert result["warnings"]["wire_skip"] == [
+        "Wire Skip differs from the reconstructN_cpu value (1); it changes which wire positions are paired with each frame"
+    ]
 
 
 def test_index_submission_uses_one_reconstruction_id(empty_test_database, tmp_path):
@@ -299,7 +316,7 @@ def test_index_submission_uses_one_reconstruction_id(empty_test_database, tmp_pa
             "Lorentzian",
             "1-2",
             None,
-            3,
+            "1.13",
             200,
             False,
             None,
@@ -321,4 +338,5 @@ def test_index_submission_uses_one_reconstruction_id(empty_test_database, tmp_pa
     assert request.scan_number == 12
     assert request.reconstruction_id == reconstruction_id
     assert request.filename_prefixes == ("image_%d.h5",)
+    assert request.min_size == 1.13  # not truncated
     enqueue.assert_called_once_with(52)

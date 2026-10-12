@@ -289,18 +289,18 @@ def test_multi_input_validation_labels_the_failing_input(tmp_path, isolated_db):
     assert result["errors"]["maxRfactor"] == ["Input 2: Max Rfactor must be between 0 and 1"]
 
 
-@pytest.mark.parametrize("value", ["3", "3.0"])
-def test_minimum_spot_size_accepts_positive_whole_pixels(tmp_path, isolated_db, value):
+@pytest.mark.parametrize("value", ["3", "3.0", "1.13"])
+def test_minimum_spot_size_accepts_positive_pixels(tmp_path, isolated_db, value):
     fields = valid_peakindex_fields(tmp_path)
     fields["min_size"] = value
     assert validate_peakindexing(fields)["errors"] == {}
 
 
-@pytest.mark.parametrize("value", ["0", "-1", "3.5", "nan", "inf"])
-def test_minimum_spot_size_rejects_nonpositive_or_fractional_pixels(tmp_path, isolated_db, value):
+@pytest.mark.parametrize("value", ["0", "-1", "nan", "inf"])
+def test_minimum_spot_size_rejects_nonpositive_or_nonfinite_pixels(tmp_path, isolated_db, value):
     fields = valid_peakindex_fields(tmp_path)
     fields["min_size"] = value
-    assert validate_peakindexing(fields)["errors"]["min_size"] == ["Min Spot Size must be a positive integer"]
+    assert validate_peakindexing(fields)["errors"]["min_size"] == ["Min Spot Size must be a positive number"]
 
 
 def test_both_spot_limits_may_be_blank(tmp_path, isolated_db):

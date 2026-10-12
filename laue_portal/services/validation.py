@@ -1,5 +1,6 @@
 """Dash-independent validation helpers for create-page workflows."""
 
+import math
 import os
 
 from sqlalchemy.orm import Session
@@ -849,13 +850,13 @@ def validate_peakindexing(fields, catalog_defaults=None):
                 )
 
             min_size_val = validate_field("min_size", converter=safe_float)
-            if min_size_val is not None and (min_size_val <= 0 or not min_size_val.is_integer()):
+            if min_size_val is not None and not (math.isfinite(min_size_val) and min_size_val > 0):
                 add_validation_message(
                     validation_result,
                     "errors",
                     "min_size",
                     input_prefix,
-                    custom_message="Min Spot Size must be a positive integer",
+                    custom_message="Min Spot Size must be a positive number",
                 )
 
             max_peaks_val = validate_field("max_peaks", converter=safe_int, required=False)

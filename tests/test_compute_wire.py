@@ -94,16 +94,21 @@ def _entries(tmp_path, count=3, missing=()):
 
 
 def test_settings_follow_the_wire_form_mapping():
-    settings = wire.settings_from_request(_parameters(wire_edges=" Both "))
+    settings = wire.settings_from_request(_parameters(wire_edges=" Both ", frame_skip=2, wire_skip=0))
     assert settings == wire.WireSettings(
         geometry_file="/calib/geoN.xml",
         depth_range=(-50.0, 150.0),
         resolution=1.0,
         wire_edge="both",
         percent_brightest=100.0,
+        frame_skip=2,
+        wire_skip=0,
         threads_per_worker=4,
         memory_limit_mb=50000,
     )
+    # A request saved without the skips uses the reconstructN_cpu values.
+    defaults = wire.settings_from_request(_parameters())
+    assert (defaults.frame_skip, defaults.wire_skip) == (1, 1)
     assert wire.settings_from_request(_parameters(num_threads=None, memory_limit_mb=0)).threads_per_worker is None
     assert wire.settings_from_request(_parameters(memory_limit_mb=None)).memory_limit_mb == 8192
     with pytest.raises(InputError, match="wire edge must be one of"):
@@ -150,6 +155,24 @@ def test_points_are_reconstructed_into_a_scan_directory_with_per_point_outcomes(
         point = scan.point("point_3")
         assert point.shape == (N_DEPTHS, 32, 32)
         assert point.dtype.kind == "i"  # both-edge output keeps its sign
+
+
+def test_skips_reach_the_library_and_are_recorded(tmp_path):
+    request = _request(tmp_path, count=1, **OPTIONS, geometry_file=os.fspath(GEOMETRY), wire_skip=2)
+
+    outcome = wire.compute_wire_reconstruction(request, _entries(tmp_path, count=1), Hooks())
+
+    assert outcome.n_succeeded == 1
+    assert (outcome.provenance["frame_skip"], outcome.provenance["wire_skip"]) == (1, 2)
+    with ScanReader(outcome.artifacts["reconstruction"]) as scan:
+        point = scan.point("point_1")
+        assert (point.settings["frame_skip"], point.settings["wire_skip"]) == (1, 2)
+    with pytest.raises(InputError, match="wire_skip must be a non-negative integer"):
+        wire.compute_wire_reconstruction(
+            _request(tmp_path / "negative", count=1, **OPTIONS, geometry_file=os.fspath(GEOMETRY), wire_skip=-1),
+            _entries(tmp_path, count=1),
+            Hooks(),
+        )
 
 
 def test_several_workers_give_the_same_points(tmp_path):

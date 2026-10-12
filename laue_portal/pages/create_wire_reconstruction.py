@@ -39,11 +39,13 @@ from laue_portal.services.validation import (
     all_path_fields_are_absolute,
     get_num_inputs_from_fields,
     safe_float,
+    safe_int,
     validate_field_value,
 )
 from laue_portal.utilities.srange import srange
 from laue_portal.workflows.identity import merged_identity_value, parse_workflow_identities
 from laue_portal.workflows.reconstruction import (
+    DEFAULT_SKIP,
     WireReconstructionRequest,
     create_reconstruction,
     get_reconstruction,
@@ -100,6 +102,8 @@ def create_default_wirerecon(overrides=None):
         "depth_start": WIRERECON_DEFAULTS.get("depth_start"),
         "depth_end": WIRERECON_DEFAULTS.get("depth_end"),
         "depth_resolution": WIRERECON_DEFAULTS.get("depth_resolution"),
+        "frame_skip": WIRERECON_DEFAULTS.get("frame_skip", DEFAULT_SKIP),
+        "wire_skip": WIRERECON_DEFAULTS.get("wire_skip", DEFAULT_SKIP),
         "num_threads": DEFAULT_VARIABLES.get("num_threads"),
         "memory_limit_mb": DEFAULT_VARIABLES.get("memory_limit_mb"),
         "scan_points": WIRERECON_DEFAULTS.get("scanPoints", ""),
@@ -130,6 +134,8 @@ def _copy_reconstruction_for_form(run, root_path):
             "depth_start": parameters.depth_start,
             "depth_end": parameters.depth_end,
             "depth_resolution": parameters.depth_resolution,
+            "frame_skip": DEFAULT_SKIP if parameters.frame_skip is None else parameters.frame_skip,
+            "wire_skip": DEFAULT_SKIP if parameters.wire_skip is None else parameters.wire_skip,
             "num_threads": parameters.num_threads,
             "memory_limit_mb": parameters.memory_limit_mb,
             "scan_points": parameters.scan_points,
@@ -233,6 +239,8 @@ def validate_wire_reconstruction_inputs(ctx):
         "depth_end",
         "depth_resolution",
         "percent_brightest",
+        "frame_skip",
+        "wire_skip",
         "outputFolder",
         "root_path",
         "IDnumber",  # Replaced scanNumber with IDnumber
@@ -342,7 +350,14 @@ def validate_wire_reconstruction_inputs(ctx):
             continue
         # Check 1: Is it missing/empty?
         is_missing = False
-        if field_name in ["depth_start", "depth_end", "depth_resolution", "percent_brightest"]:
+        if field_name in [
+            "depth_start",
+            "depth_end",
+            "depth_resolution",
+            "percent_brightest",
+            "frame_skip",
+            "wire_skip",
+        ]:
             # Numeric fields: check for None or empty string (0 is valid)
             if field_value is None or field_value == "":
                 is_missing = True
@@ -688,6 +703,31 @@ def validate_wire_reconstruction_inputs(ctx):
                     custom_message="Intensity Percentile must be between 0 and 100",
                 )
 
+        # 7. Validate the skips; a nondefault value changes the depth assigned to each frame.
+        for skip_name, display_name in (("frame_skip", "Frame Skip"), ("wire_skip", "Wire Skip")):
+            skip_val = validate_field(skip_name, converter=safe_int, display_name=display_name)
+            if skip_val is None:
+                continue
+            if skip_val < 0:
+                add_validation_message(
+                    validation_result,
+                    "errors",
+                    skip_name,
+                    input_prefix,
+                    custom_message=f"{display_name} must be a non-negative integer",
+                )
+            elif skip_val != DEFAULT_SKIP:
+                add_validation_message(
+                    validation_result,
+                    "warnings",
+                    skip_name,
+                    input_prefix,
+                    custom_message=(
+                        f"{display_name} differs from the reconstructN_cpu value ({DEFAULT_SKIP}); "
+                        "it changes which wire positions are paired with each frame"
+                    ),
+                )
+
     # Add successes for fields that passed all validations
     # Only add to successes if the field has neither errors nor warnings
     for field_name in all_field_ids:
@@ -710,6 +750,8 @@ def validate_wire_reconstruction_inputs(ctx):
     State("depth_end", "value"),
     State("depth_resolution", "value"),
     State("percent_brightest", "value"),
+    State("frame_skip", "value"),
+    State("wire_skip", "value"),
     State("outputFolder", "value"),
     State("root_path", "value"),
     State("IDnumber", "value"),
@@ -735,6 +777,8 @@ def validate_inputs(
     depth_end,
     depth_resolution,
     percent_brightest,
+    frame_skip,
+    wire_skip,
     outputFolder,
     root_path,
     IDnumber,
@@ -770,6 +814,8 @@ def validate_inputs(
     State("depth_start", "value"),
     State("depth_end", "value"),
     State("depth_resolution", "value"),
+    State("frame_skip", "value"),
+    State("wire_skip", "value"),
     # Files
     State("scanPoints", "value"),
     State("data_path", "value"),
@@ -799,6 +845,8 @@ def submit_parameters(
     depth_start,
     depth_end,
     depth_resolution,
+    frame_skip,
+    wire_skip,
     scanPoints,
     data_path,
     filenamePrefix,
@@ -856,6 +904,8 @@ def submit_parameters(
         depth_starts = parse_parameter(depth_start, num_inputs)
         depth_ends = parse_parameter(depth_end, num_inputs)
         depth_resolutions = parse_parameter(depth_resolution, num_inputs)
+        frame_skips = parse_parameter(frame_skip, num_inputs)
+        wire_skips = parse_parameter(wire_skip, num_inputs)
         scan_points = parse_parameter(scanPoints, num_inputs)
         data_paths = parse_parameter(data_path, num_inputs)
         filename_prefixes = parse_parameter(filenamePrefix, num_inputs)
@@ -881,6 +931,8 @@ def submit_parameters(
                 depth_start=float(depth_starts[index]),
                 depth_end=float(depth_ends[index]),
                 depth_resolution=float(depth_resolutions[index]),
+                frame_skip=int(frame_skips[index]),
+                wire_skip=int(wire_skips[index]),
                 num_threads=int(DEFAULT_VARIABLES["num_threads"]),
                 memory_limit_mb=int(DEFAULT_VARIABLES["memory_limit_mb"]),
                 scan_points=str(scan_points[index]),
@@ -915,6 +967,8 @@ def submit_parameters(
     Output("depth_resolution", "value"),
     Output("wire_edges", "value"),
     Output("percent_brightest", "value"),
+    Output("frame_skip", "value"),
+    Output("wire_skip", "value"),
     Input("wirerecon-set-default-parameters-btn", "n_clicks"),
     prevent_initial_call=True,
 )
@@ -927,6 +981,8 @@ def set_wire_recon_defaults(n_clicks):
         WIRERECON_DEFAULTS.get("depth_resolution"),
         WIRERECON_DEFAULTS.get("wire_edges"),
         WIRERECON_DEFAULTS.get("percent_brightest"),
+        WIRERECON_DEFAULTS.get("frame_skip", DEFAULT_SKIP),
+        WIRERECON_DEFAULTS.get("wire_skip", DEFAULT_SKIP),
     )
 
 

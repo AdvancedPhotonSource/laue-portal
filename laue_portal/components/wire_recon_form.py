@@ -10,6 +10,7 @@ from laue_portal.components.form_layout import (
     section_card,
     section_sidebar,
 )
+from laue_portal.workflows.reconstruction import DEFAULT_SKIP
 
 WIRE_RECON_SECTIONS = [
     (
@@ -111,6 +112,8 @@ def build_wire_recon_form(readonly=False, show_actions=True):
                             disabled=readonly,
                         ),
                         form_field("Intensity Percentile", "percent_brightest", readonly=readonly),
+                        form_field("Frame Skip [slices]", "frame_skip", readonly=readonly),
+                        form_field("Wire Skip [entries]", "wire_skip", readonly=readonly),
                     ],
                 ),
                 accent="purple",
@@ -192,6 +195,9 @@ def set_wire_recon_form_props(wirerecon, read_only=False):
     set_props("depth_start", {"value": parameters.depth_start, "readonly": read_only})
     set_props("depth_end", {"value": parameters.depth_end, "readonly": read_only})
     set_props("depth_resolution", {"value": parameters.depth_resolution, "readonly": read_only})
+    for name in ("frame_skip", "wire_skip"):
+        value = getattr(parameters, name)
+        set_props(name, {"value": DEFAULT_SKIP if value is None else value, "readonly": read_only})
 
     set_props("scanPoints", {"value": parameters.scan_points, "readonly": read_only})
     set_props(

@@ -427,6 +427,6 @@ def test_cached_catalog_still_rejects_mismatched_point_metadata(scan, tmp_path):
     view.stored_frame(artifact, "wire_1", 0)  # cache the original catalog
     point_path = ScanReader(artifact.path).point_path("wire_1")
     with h5py.File(point_path, "r+") as point:
-        point["/entry1/reconstruction/point/manifest_index"][()] = 42
+        point["/entry1/reconstruction/manifest_index"][...] = 42
     with pytest.raises(view.ViewError, match="as the catalog describes it"):
         view.stored_frame(artifact, "wire_1", 1)

@@ -21,6 +21,10 @@ from laue_portal.workflows.files import (
 )
 from laue_portal.workflows.run_records import new_job, publish_run_inputs, request_document
 
+# Leading stored slices (frame_skip) and wire-vector entries (wire_skip) that
+# reconstruction skips: MULTI_IMAGE_SKIP and MULTI_IMAGE_SKIPV of reconstructN_cpu.
+DEFAULT_SKIP = 1
+
 
 @dataclass(frozen=True)
 class WireReconstructionRequest:
@@ -40,6 +44,8 @@ class WireReconstructionRequest:
     memory_limit_mb: int
     scan_points: str
     verbose: int
+    frame_skip: int = DEFAULT_SKIP
+    wire_skip: int = DEFAULT_SKIP
     author: str | None = None
     notes: str | None = None
     algorithm_version: str | None = None
@@ -119,6 +125,8 @@ def create_reconstruction(
                 depth_start=request.depth_start,
                 depth_end=request.depth_end,
                 depth_resolution=request.depth_resolution,
+                frame_skip=request.frame_skip,
+                wire_skip=request.wire_skip,
                 num_threads=request.num_threads,
                 memory_limit_mb=request.memory_limit_mb,
                 scan_points=request.scan_points,

@@ -31,6 +31,8 @@ REQUIRED_FIELD_IDS = {
     "depth_resolution",
     "wire_edges",
     "percent_brightest",
+    "frame_skip",
+    "wire_skip",
     "notes",
 }
 
