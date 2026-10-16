@@ -1,0 +1,62 @@
+# Copy outside the checkout and replace the example values before enabling.
+# These are literal examples; YAML does not expand environment variables.
+enabled: false
+experiment_directory: /path/to/experiment
+poll_seconds: 10
+submission_directory: /path/to/experiment/analysis/submissions
+state_directory: /path/to/launcher/state/bdp
+
+auth_profile: personal
+# Used only for the beamline profile. Reference the existing file; never copy it.
+credentials_file: /path/to/existing/credentials.sh
+
+dm:
+  # null on the API host; otherwise user@api-bridge.example.invalid.
+  ssh_host: null
+  setup_file: /path/to/dm/setup.sh
+  owner: WORKFLOW_OWNER
+  user_account: null  # Defaults to owner.
+  workflow: laue-portal-bdp
+  cancel_workflow: laue-portal-bdp-cancel
+  timeout_seconds: 30
+  # Local launcher settings on the workflow host. SSH is an optional fallback.
+  launcher_ssh_host: null
+  launcher_python: /path/to/launcher/envs/laue-portal/bin/python
+  launcher_code: /path/to/launcher/src
+  launcher_config: /path/to/launcher/config/bdp.yaml
+
+storage:
+  aps:
+    collection_id: 00000000-0000-0000-0000-000000000001
+    filesystem_root: /path/to/local-data
+    collection_root: /
+  eagle:
+    collection_id: 00000000-0000-0000-0000-000000000002
+    filesystem_root: /path/to/remote-data
+    collection_root: /
+
+targets:
+  crux:
+    enabled: false
+    compute_endpoint: 00000000-0000-0000-0000-000000000003
+    workspace: /path/to/remote-data/workspace
+    analysis_python: /path/to/compute/envs/analysis/bin/python
+    code_directory: /path/to/compute/src
+    module_commands: []
+    pbs: {account: PROJECT_ACCOUNT, queue: BATCH_QUEUE, nodes: 4, walltime: '01:00:00'}
+    execution:
+      workers: 32
+      max_in_flight: 256
+      reconstruction_workers: 32
+      threads_per_worker: 4
+      indexing_ranks_per_node: 4
+      indexing_threads_per_worker: 1
+      memory_limit_mb: 8192
+  aps:
+    enabled: false
+    submit_host: user@scheduler.example.invalid
+    analysis_python: /path/to/local-compute/envs/analysis/bin/python
+    code_directory: /path/to/local-compute/src
+    module_commands: []
+    pbs: {account: null, queue: BATCH_QUEUE, nodes: 1, cpus: 32, walltime: '01:00:00'}
+    execution: {workers: 32, max_in_flight: 256, reconstruction_workers: 4, threads_per_worker: 4}

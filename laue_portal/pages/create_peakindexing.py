@@ -13,7 +13,9 @@ from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
+from laue_portal.components.execution_target import execution_target
 from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
+from laue_portal.components.runtime_estimate import register_runtime_estimate
 from laue_portal.components.validation_alerts import (
     apply_validation_highlights,
     update_validation_alerts,
@@ -32,6 +34,7 @@ from laue_portal.pages.callback_registrars import (
     register_find_indices_callback,
     register_update_path_fields_callback,
 )
+from laue_portal.processing.bdp.settings import require_backend
 from laue_portal.processing.queue.enqueue import enqueue_indexing
 from laue_portal.services.validation import (
     PEAKINDEX_FIELD_IDS,
@@ -201,6 +204,7 @@ CATALOG_DEFAULTS = {
 }
 
 dash.register_page(__name__)
+register_runtime_estimate("indexing")
 
 layout = dbc.Container(
     [
@@ -240,6 +244,7 @@ layout = dbc.Container(
                         html.Div(
                             className="lp-form-actions",
                             children=[
+                                execution_target("indexing"),
                                 dbc.Button(
                                     [html.I(className="bi bi-check2-circle me-1"), "Validate"],
                                     id="peakindex-validate-btn",
@@ -446,6 +451,7 @@ def validate_inputs(
     State("crystFile", "value"),
     State("depth", "value"),
     State("outputXML", "value"),
+    State("indexing-execution-target", "value"),
     running=[
         (Output("submit_peakindexing", "disabled"), True, False),
         (
@@ -488,9 +494,15 @@ def submit_parameters(
     crystal_file,
     depth,
     outputXML,
+    backend="local",
 ):
     """Create and enqueue each pooled LaueGo indexing run independently."""
 
+    try:
+        require_backend(backend)
+    except ValueError as error:
+        set_props("alert-submit", {"is_open": True, "children": str(error), "color": "danger"})
+        return
     ctx = dash.callback_context
     validation_result = validate_peakindexing_inputs(ctx)
     apply_validation_highlights(validation_result)
@@ -577,6 +589,7 @@ def submit_parameters(
             if mask_file is not None and str(mask_file).strip().lower() in ("", "none"):
                 mask_file = None
             request = LaueGoIndexingRequest(
+                backend=backend,
                 scan_number=identity.scan_number,
                 reconstruction_id=identity.reconstruction_id,
                 input_path=effective_data_path(fields["data_path"][index], root_path),
@@ -831,9 +844,9 @@ def load_scan_data_from_url(href):
                     if scan_number is not None and metadata is None:
                         raise ValueError(f"Scan SN{scan_number} was not found")
                     if metadata is not None:
-                        if metadata.source_energy is not None:
-                            form_data.index_kev_max_calc = metadata.source_energy
-                            form_data.index_kev_max_test = metadata.source_energy
+                        # A raw header's nominal beam energy is not an indexing
+                        # cutoff for a white-beam Laue exposure. Keep the configured
+                        # cutoffs (or the explicitly selected indexing run's values).
                         if metadata.source_energy_unit:
                             form_data.energy_unit = metadata.source_energy_unit
 

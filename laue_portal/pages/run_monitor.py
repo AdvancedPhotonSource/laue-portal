@@ -186,6 +186,11 @@ def calculate_duration_display(start_time, finish_time, current_time):
 
 PROGRESS_FIELDS = ["n_inputs", "n_succeeded", "n_failed", "n_not_run", "n_processed", "n_pending"]
 HIDDEN_FIELDS = [
+    "backend",
+    "submission_id",
+    "external_id",
+    "external_state",
+    "external_url",
     "row_type",
     "priority",
     "computer_name",
@@ -260,6 +265,9 @@ def _job_rows(criterion=None) -> list[dict]:
     rows = []
     for _, job in jobs.iterrows():
         row = job.to_dict()
+        row["execution"] = (
+            f"{row.get('backend')} via DM" if row.get("backend") not in (None, "local") else row.get("computer_name")
+        )
         row["row_type"] = "job"
         row["duration_display"] = calculate_duration_display(
             row.get("start_time"), row.get("finish_time"), current_time

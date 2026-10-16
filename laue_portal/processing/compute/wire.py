@@ -23,6 +23,7 @@ from lauelab.reconstruct import InvalidScanFile, PointOutcome, reconstruct_scan,
 
 from laue_portal.processing.compute.contract import RunHooks, RunOutcome, RunRequest, register_compute_function
 from laue_portal.processing.compute.lauego import _library_provenance
+from laue_portal.workflows.constants import DEFAULT_SKIP
 from laue_portal.workflows.manifest import (
     CATEGORY_CANCELLED,
     RECONSTRUCTION_DIRECTORY,
@@ -30,7 +31,6 @@ from laue_portal.workflows.manifest import (
     ManifestEntry,
     reconstruction_catalog_path,
 )
-from laue_portal.workflows.reconstruction import DEFAULT_SKIP
 
 WIRE_KIND = "wire_reconstruction"
 DETECTOR_INDEX = 0

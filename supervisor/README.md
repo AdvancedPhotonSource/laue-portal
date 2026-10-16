@@ -1,144 +1,69 @@
-# Supervisor Configuration for Laue Portal
+# Portal services
 
-This directory contains the supervisor configuration for managing Laue Portal services.
-
-## Overview
-
-Supervisor manages three services:
-- **dash**: The Dash web application (port 2052)
-- **redis**: Redis server for job queuing (optional)
-- **rq_worker**: Background job processor
+Supervisor manages the Dash server, optional Redis server, and one RQ worker.
+The optional `bdp_poller` reconciles DM jobs and publishes validated returns;
+it is disabled by default. Web host/port and processing limits come from the
+portal configuration. Keep `DASH_CONFIG.debug: false` for deployed servers.
 
 ## Setup
 
-1. Configure supervisor for your environment:
-   
-   Using a conda environment name:
-   ```bash
-   ./supervisor/setup_supervisor.sh laue-portal-conda-env
-   ```
-   
-   Using a custom conda environment path:
-   ```bash
-   ./supervisor/setup_supervisor.sh /net/s34data/export/s34data1/LauePortal/envs/lau_portal
-   ```
-   
-   To use system Redis instead of supervisor-managed Redis:
-   ```bash
-   ./supervisor/setup_supervisor.sh <conda_env_name_or_path> --no-redis
-   ```
-
-2. Start all services:
-   ```bash
-   ./supervisor/start_supervisor.sh
-   ```
-
-## Management Commands
+Install Supervisor (included in `deploy/requirements-aps.txt`). Pass an environment
+name or path; its `bin/` directory must contain Python and, for managed Redis,
+`redis-server`. Use `--no-redis` when Redis is provided separately.
 
 ```bash
-# Check status of all services
-./supervisor/manage_supervisor.sh status
-
-# Control all services
-./supervisor/manage_supervisor.sh start all
-./supervisor/manage_supervisor.sh stop all
-./supervisor/manage_supervisor.sh restart all
-
-# Control individual services
-./supervisor/manage_supervisor.sh start dash
-./supervisor/manage_supervisor.sh stop redis
-./supervisor/manage_supervisor.sh restart rq_worker
-
-# View logs
-./supervisor/manage_supervisor.sh tail -f dash
-./supervisor/manage_supervisor.sh tail -100 rq_worker
-
-# Stop supervisor daemon
-./supervisor/manage_supervisor.sh shutdown
-```
-
-## File Structure
-
-```
-supervisor/
-├── README.md                    # This file
-├── supervisord.conf.template    # Template for supervisor config
-├── supervisord.conf            # Generated config (git-ignored)
-├── .gitignore                  # Ignores generated files
-├── setup_supervisor.sh         # Configure supervisor
-├── start_supervisor.sh         # Start supervisor daemon
-├── manage_supervisor.sh        # Control services
-├── cleanup_supervisor.sh       # Clean up processes/files
-├── logs/                       # Service logs (git-ignored)
-│   ├── supervisord.log         # Supervisor daemon log
-│   ├── dash.log               # Dash application log
-│   ├── redis.log              # Redis server log
-│   └── rq_worker_*.log        # Worker logs
-└── redis_data/                # Redis persistence (git-ignored)
-```
-
-## Configuration Details
-
-### Service Priorities
-- Redis: 100 (starts first)
-- Dash: 200 (starts after Redis)
-- RQ Worker: 300 (starts last)
-
-### Logging
-- All services use combined stdout/stderr logging
-- Log rotation: 10MB max size, 5 backups
-- Logs are stored in `supervisor/logs/`
-
-### Process Management
-- All services auto-start and auto-restart on failure
-- Services are grouped as "laue-portal" for easy management
-- RQ worker starts with 1 process. One queued item is one whole run and the run
-  itself uses bounded compute processes (`RUN_EXECUTION.workers` in config.yaml),
-  so keep one worker per host unless the host is provisioned for more.
-- Stopping the worker asks the running run to stop cooperatively: it stops
-  admitting inputs, drains work in flight, keeps completed results, and records
-  the run as interrupted. `stopwaitsecs` in the template must be at least
-  `RUN_EXECUTION.shutdown_grace_seconds`. A second stop signal (or a kill after
-  `stopwaitsecs`) is RQ's cold shutdown, which kills the run's whole process
-  group; the next worker start reconciles the run as interrupted from its stale
-  heartbeat. Interrupted runs are never resumed or re-enqueued.
-- The whole-run wall-clock limit is `RUN_EXECUTION.job_timeout_seconds`; there
-  is no per-chunk timeout any more.
-- Never run old per-chunk workers and whole-run workers against the same Redis
-  or database. Before starting the new worker for the first time, run
-  `python scripts/cutover_check.py` (see `dev_docs/CUTOVER_RUNBOOK.md`); it
-  refuses when an old worker, a per-chunk queue entry, or a pre-compaction
-  database is present. Whole-run workers are named `laue-run-<host>-<pid>`.
-
-## Troubleshooting
-
-### Service won't start
-1. Check logs: `./supervisor/manage_supervisor.sh tail -100 <service_name>`
-2. Verify conda environment exists and has required packages
-3. For Redis issues, check if port 6379 is already in use
-
-### Supervisor won't start
-1. If supervisor is in an inconsistent state, use: `./supervisor/cleanup_supervisor.sh`
-2. Verify supervisor is installed: `pip install supervisor`
-3. Check the log file: `tail -50 supervisor/logs/supervisord.log`
-
-### "Supervisor already running but socket missing" error
-This happens when supervisor crashed or was killed improperly. To fix:
-```bash
-./supervisor/cleanup_supervisor.sh
+./supervisor/setup_supervisor.sh /path/to/environment
+export LAUE_PORTAL_CONFIG=/path/to/config/portal.yaml
 ./supervisor/start_supervisor.sh
 ```
 
-### Permission issues
-Ensure the current user has write permissions to:
-- `supervisor/logs/`
-- `supervisor/redis_data/` (if using supervisor-managed Redis)
+Configuration is generated from `supervisord.conf.template` and
+`redis.conf.template`. Generated config, sockets, PID files, and logs stay local.
+The daemon inherits the selected configuration. See [deployment](../deploy/README.md)
+for database cutover, DM registration, and Globus authorization before enabling
+remote execution.
 
-## Scripts
+## Management
 
-All scripts are located in the `supervisor/` directory:
+```bash
+./supervisor/manage_supervisor.sh status
+./supervisor/manage_supervisor.sh restart 'laue-portal:dash'
+./supervisor/manage_supervisor.sh restart 'laue-portal:rq_worker_00'
+./supervisor/manage_supervisor.sh stop 'laue-portal:*'
+./supervisor/manage_supervisor.sh start 'laue-portal:*'
+./supervisor/manage_supervisor.sh tail -f 'laue-portal:rq_worker_00'
+# Enable only after completing DM/Globus setup:
+./supervisor/manage_supervisor.sh start bdp_poller
+./supervisor/manage_supervisor.sh shutdown
+```
 
-- **setup_supervisor.sh** - Configure supervisor for your environment
-- **start_supervisor.sh** - Start the supervisor daemon
-- **manage_supervisor.sh** - Control services (start/stop/restart/status)
-- **cleanup_supervisor.sh** - Clean up stale processes and files
+`bdp_poller` is outside the `laue-portal` group. Supervisor's `start all` also
+starts disabled programs, so use the group command for portal-only operation.
+
+## Worker lifecycle and storage
+
+One queue item is a complete run. Keep one worker per host unless resources
+support concurrent runs; `RUN_EXECUTION` bounds each run's child processes and
+wall-clock lifetime. Whole-run worker names begin with `laue-run-`.
+
+Before switching from older workers, run `python scripts/cutover_check.py`.
+Old per-input workers, incompatible queue entries, and unmigrated databases must
+be resolved first. Never mix worker generations against the same Redis/database.
+
+The first stop signal drains work in flight, keeps completed output, and records
+the run as interrupted. `stopwaitsecs` must cover
+`RUN_EXECUTION.shutdown_grace_seconds`. A second signal or forced timeout kills
+the run's process group; the next worker reconciles stale runs without resuming
+or re-enqueuing them. Wait for shutdown before restarting a named worker.
+
+Keep SQLite and Redis persistence on the host's local disk. Service logs use
+`supervisor/logs/`, with 10 MiB files and five backups; the Supervisor daemon log
+uses its own limits. Keep the configured log and Redis directories writable.
+
+## Troubleshooting
+
+Check `manage_supervisor.sh status` and the affected service's log first. Confirm
+the environment binaries, selected configuration, filesystem permissions, and
+Redis address. If the daemon is gone but left stale control files, use
+`cleanup_supervisor.sh` before `start_supervisor.sh`; inspect active jobs before
+stopping or cleaning up any running service.

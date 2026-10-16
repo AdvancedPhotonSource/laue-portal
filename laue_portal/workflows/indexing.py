@@ -72,6 +72,7 @@ class LaueGoIndexingRequest:
     author: str | None = None
     notes: str | None = None
     algorithm_version: str | None = None
+    backend: str = "local"
     computer_name: str = "example_computer"
     priority: int = 0
     submitted_at: datetime = field(default_factory=datetime.now)
@@ -167,6 +168,7 @@ def create_indexing(
 
             job = new_job(
                 computer_name=request.computer_name,
+                backend=request.backend,
                 priority=request.priority,
                 submitted_at=request.submitted_at,
                 n_inputs=len(inputs),

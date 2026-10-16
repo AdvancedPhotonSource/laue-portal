@@ -5,7 +5,7 @@ db_file: Laue_Records.db
 DEFAULT_VARIABLES:
   author: ""
   notes: ""
-  root_path: /net/s34data/export/s34data1/LauePortal/portal_workspace/
+  root_path: /path/to/experiment
   num_threads: 35
   memory_limit_mb: 50000
   verbose: 1
@@ -46,7 +46,7 @@ RUN_EXECUTION:
 DASH_CONFIG:
   host: localhost
   port: 2082
-  debug: true
+  debug: false
 
 # Peak indexing default parameters
 PEAKINDEX_DEFAULTS:
@@ -90,8 +90,8 @@ PEAKINDEX_DEFAULTS:
   # File paths (relative to root_path)
   outputFolder: "analysis/scan_%d/index_%d"
   outputXML: "output.xml"   
-  geoFile: "tests/data/geo/geoN_2022-03-29_14-15-05.xml"
-  crystFile: "tests/data/crystal/Al.xtal"
+  geoFile: "config/geometry.xml"
+  crystFile: "config/crystal.xml"
   maskFile: "None"
   
   # Other
@@ -101,7 +101,7 @@ PEAKINDEX_DEFAULTS:
 # Wire reconstruction default parameters
 WIRERECON_DEFAULTS:
   # Recon constraints
-  geoFile: "Run1/geofiles/geoN_2023-04-06_03-07-11_cor6.xml"
+  geoFile: "config/geometry.xml"
   percent_brightest: 100
   wire_edges: "leading"
 
@@ -149,3 +149,8 @@ MOTOR_GROUPS:
     - 34ide:540:c0:out2
     - 34ide:540:c0:out3
     - 34ide:float6
+
+# DM integration is opt-in. Keep its storage/launcher configuration separate.
+BDP:
+  enabled: false
+  settings_file: /path/to/portal/config/bdp.yaml

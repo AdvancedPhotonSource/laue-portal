@@ -213,7 +213,7 @@ def active_run_rows(now=None):
                 display = f"Reconstruction R{job.reconstruction_run.id}"
             else:
                 display = "Job"
-            stale = progress.status == 1 and (age is None or age > stale_after)
+            stale = progress.backend in (None, "local") and progress.status == 1 and (age is None or age > stale_after)
             rows.append(
                 {
                     "job_id": job.job_id,

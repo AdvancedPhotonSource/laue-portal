@@ -341,7 +341,16 @@ def progress_content(details: run_summary.RunDetails, *, now: datetime | None = 
     )
 
     notes = []
-    if progress.status == JobStatus.RUNNING:
+    if progress.backend not in (None, "local"):
+        notes.append(
+            html.Span(
+                f"{progress.backend.upper()} via DM: {progress.external_state or 'pending'}. ", className="text-muted"
+            )
+        )
+        if progress.external_url:
+            notes.append(html.A("Globus run", href=progress.external_url, target="_blank", rel="noopener noreferrer"))
+        notes.append(html.Span(" Progress counters update after results return. ", className="text-muted"))
+    if progress.status == JobStatus.RUNNING and progress.backend in (None, "local"):
         age = heartbeat_age_seconds(progress, now=now)
         if age is None:
             notes.append(html.Span("No heartbeat recorded yet.", className="text-muted"))

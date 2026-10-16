@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
+from laue_portal.components.execution_target import execution_target
+from laue_portal.components.runtime_estimate import register_runtime_estimate
 from laue_portal.components.validation_alerts import (
     apply_validation_highlights,
     update_validation_alerts,
@@ -33,6 +35,7 @@ from laue_portal.pages.callback_registrars import (
     register_load_file_indices_callback,
     register_update_path_fields_callback,
 )
+from laue_portal.processing.bdp.settings import require_backend
 from laue_portal.processing.queue.enqueue import enqueue_reconstruction
 from laue_portal.services.validation import (
     add_validation_message,
@@ -151,6 +154,7 @@ CATALOG_DEFAULTS = {
 }
 
 dash.register_page(__name__)
+register_runtime_estimate("reconstruction")
 
 layout = dbc.Container(
     [
@@ -184,6 +188,7 @@ layout = dbc.Container(
                         html.Div(
                             className="lp-form-actions",
                             children=[
+                                execution_target("reconstruction"),
                                 dbc.Button(
                                     [html.I(className="bi bi-check2-circle me-1"), "Validate"],
                                     id="wirerecon-validate-btn",
@@ -822,6 +827,7 @@ def validate_inputs(
     State("filenamePrefix", "value"),
     # Output
     State("outputFolder", "value"),
+    State("reconstruction-execution-target", "value"),
     running=[
         (Output("submit_wire", "disabled"), True, False),
         (
@@ -851,9 +857,15 @@ def submit_parameters(
     data_path,
     filenamePrefix,
     output_folder,
+    backend="local",
 ):
     """Create and enqueue each pooled wire reconstruction independently."""
 
+    try:
+        require_backend(backend)
+    except ValueError as error:
+        set_props("alert-submit", {"is_open": True, "children": str(error), "color": "danger"})
+        return
     ctx = dash.callback_context
     validation_result = validate_wire_reconstruction_inputs(ctx)
     apply_validation_highlights(validation_result)
@@ -921,6 +933,7 @@ def submit_parameters(
         try:
             prefixes = [value.strip() for value in str(filename_prefixes[index]).split(",") if value.strip()]
             request = WireReconstructionRequest(
+                backend=backend,
                 scan_number=identity.scan_number,
                 input_path=resolve_path_with_root(data_paths[index], root_path),
                 output_path_template=resolve_path_with_root(output_templates[index], root_path),
@@ -1149,6 +1162,10 @@ def load_scan_data_from_url(href):
         message += f" Could not load: {'; '.join(failures)}"
     set_props("alert-scan-loaded", {"is_open": True, "children": message, "color": color})
 
-    if any(reconstruction_id is not None for reconstruction_id in reconstruction_ids):
+    if any(reconstruction_id is not None for reconstruction_id in reconstruction_ids) or any(
+        str(row.scan_points or "").strip() for row in form_rows
+    ):
+        # Automatic discovery fills an empty selection; it must not expand a
+        # configured subset (for example a one-point rehearsal) to the whole scan.
         return dash.no_update
     return datetime.datetime.now().isoformat()

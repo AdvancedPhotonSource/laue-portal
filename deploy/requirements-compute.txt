@@ -1,0 +1,5 @@
+# Runtime for the standalone runner; no Dash, SQLite, Redis, or Globus service needed.
+lauelab @ git+https://github.com/AdvancedPhotonSource/lauelab.git@cd9318b93136f85a3ead8ddd0d15028ce16b2452
+PyYAML==6.0.3
+psutil==7.2.2
+mpi4py==4.1.1

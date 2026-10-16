@@ -1,0 +1,36 @@
+/* Keep processing estimates with the execution choices in the form header. */
+.lp-execution-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: .65rem;
+  margin-right: .5rem;
+}
+.lp-execution-selector > label { margin: 0; white-space: nowrap; }
+.lp-execution-options {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: .9rem;
+}
+.lp-execution-options .form-check {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  min-height: 0;
+  margin: 0;
+  padding-left: 0;
+}
+.lp-execution-options .form-check-input {
+  float: none;
+  flex-shrink: 0;
+  margin: 0;
+}
+.lp-execution-options .form-check-label {
+  font-size: .875rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@media (max-width: 576px) {
+  .lp-form-actions { align-items: center; }
+  .lp-execution-selector { flex-basis: 100%; margin: 0 0 .25rem; }
+}

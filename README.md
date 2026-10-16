@@ -1,76 +1,56 @@
 # Laue Portal
 
-A web-based platform for managing Laue X-ray diffraction data processing workflows at APS beamline 34-ID-E. Currently under construction!
+A Dash interface for managing Laue diffraction scans, wire reconstruction,
+indexing, and visualization at APS beamline 34-ID-E.
 
 ![Laue Portal](images/temp_splash.png)
 
-## Overview
+## Setup
 
-Laue Portal provides a Dash-based interface for processing and analyzing depth resolved X-ray diffraction data. It manages the workflow from scan metadata collection through peak indexing and 3D reconstruction.
+Use Python 3.12. Building the pinned lauelab dependency requires a C compiler
+with OpenMP, CMake >= 3.24, GSL 2.8, HDF5 1.14, zlib, Ninja, and patchelf.
+The [CI configuration](.github/workflows/python-tests.yml) shows the conda-forge
+build environment. Redis is required for local processing.
 
-### Prerequisites
-- Python 3.11+
-- Redis server
-- SQLite
-
-### Setup
-
-1. Clone the repository:
 ```bash
 git clone https://github.com/Linked-Liszt/laue-portal.git
 cd laue-portal
+python -m pip install -r requirements.txt
+cp config.yaml.template config.yaml
 ```
 
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-3. Configure the application by editing `config.py`:
-   - `db_file`: Database path (default: `Laue_Records.db`)
-   - `REDIS_CONFIG`: Redis connection settings
-   - `DASH_CONFIG`: Web server host/port (default: `localhost:2092`)
-   - `DEFAULT_VARIABLES`: Processing parameters and workspace paths
-
-## Usage
-
-### Start the Web Application Without Processing
+Edit `config.yaml`: set `db_file`, the experiment root and output paths,
+`REDIS_CONFIG`, and `DASH_CONFIG`. Use `LAUE_PORTAL_CONFIG` to select an external
+configuration file. Keep `DASH_CONFIG.debug: false` for deployed servers.
 
 ```bash
 python lau_dash.py
 ```
 
-### Production Deployment with Supervisor
+Local processing also needs an RQ worker. [Supervisor](supervisor/README.md)
+manages the web server, Redis, and worker. Optional DM/Globus execution and its
+separate deployment requirements are described in [deploy/README.md](deploy/README.md).
+
+## Code layout
+
+- `laue_portal/pages/` and `components/`: Dash pages and forms.
+- `laue_portal/workflows/`: requests, manifests, run records, and lifecycle.
+- `laue_portal/processing/`: local workers, compute adapters, and remote runners.
+- `laue_portal/processing/bdp/`: DM, Globus, PBS, and returned-result publication.
+- `deploy/`: remote runtime requirements, deployment templates, and endpoint tools.
+- `supervisor/`: service configuration and management scripts.
+
+## Tests
 
 ```bash
-cd supervisor
-./setup_supervisor.sh <conda_env_name_or_path>
-./start_supervisor.sh
+python -m pytest tests/
+# Include optional workflow tests, as CI does:
+python -m pip install -r deploy/requirements-workflows.txt
+python -m pytest tests/ workflow_tests/
+ruff check .
+ruff format --check .
 ```
 
-See `supervisor/README.md` for detailed management commands.
-
-## Project Structure
-
-```
-laue-portal/
-├── lau_dash.py              # Main Dash application
-├── config.py                # Configuration settings
-├── laue_portal/
-│   ├── components/          # UI components and forms
-│   ├── database/            # SQLAlchemy models and utilities
-│   ├── pages/               # Page layouts and callbacks
-│   ├── processing/          # RQ workers and Redis utilities
-│   └── recon/               # Reconstruction analysis tools
-├── polaris_workflow/        # HPC workflow integration (Gladier/funcX)
-├── supervisor/              # Production deployment scripts
-└── tests/                   # Test suite
-```
-
-## Development
-
-### Running Tests
-
-```bash
-pytest tests/
-```
+The workflow tests use fixtures and mocks without contacting live DM/Globus
+services or submitting PBS jobs. Runtime configuration, credentials, databases,
+and generated state stay outside Git.

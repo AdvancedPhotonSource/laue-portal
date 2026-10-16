@@ -36,8 +36,13 @@ class RunPublicationError(RuntimeError):
     """Raised when a run's manifest or request could not be published; the job is marked Failed."""
 
 
-def new_job(*, computer_name: str, priority: int, submitted_at: datetime, n_inputs: int) -> db_schema.Job:
+def new_job(
+    *, computer_name: str, priority: int, submitted_at: datetime, n_inputs: int, backend: str = "local"
+) -> db_schema.Job:
+    if backend not in {"local", "aps", "crux"}:
+        raise ValueError(f"Unknown execution backend: {backend}")
     job = db_schema.Job(
+        backend=backend,
         computer_name=computer_name,
         status=int(execution.JobStatus.QUEUED),
         priority=priority,

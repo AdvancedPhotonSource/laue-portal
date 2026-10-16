@@ -4,6 +4,7 @@ Reads configuration from config.yaml file in the project root.
 If config.yaml doesn't exist, it will be created from config.yaml.template.
 """
 
+import os
 import shutil
 from pathlib import Path
 
@@ -11,7 +12,7 @@ import yaml
 
 # Get the project root directory (parent of laue_portal)
 PROJECT_ROOT = Path(__file__).parent.parent
-CONFIG_FILE = PROJECT_ROOT / "config.yaml"
+CONFIG_FILE = Path(os.environ.get("LAUE_PORTAL_CONFIG", PROJECT_ROOT / "config.yaml")).expanduser()
 CONFIG_TEMPLATE = PROJECT_ROOT / "config.yaml.template"
 
 
@@ -20,6 +21,8 @@ def _ensure_config_exists():
     Ensure config.yaml exists. If not, copy from config.yaml.template.
     """
     if not CONFIG_FILE.exists():
+        if os.environ.get("LAUE_PORTAL_CONFIG"):
+            raise FileNotFoundError(f"Configured portal settings do not exist: {CONFIG_FILE}")
         if CONFIG_TEMPLATE.exists():
             shutil.copy(CONFIG_TEMPLATE, CONFIG_FILE)
             print(f"NOTE: Created {CONFIG_FILE} from {CONFIG_TEMPLATE}")
@@ -57,3 +60,5 @@ PEAKINDEX_DEFAULTS = _config.get("PEAKINDEX_DEFAULTS", {})
 WIRERECON_DEFAULTS = _config.get("WIRERECON_DEFAULTS", {})
 SCAN_LOG_BROWSER = _config.get("SCAN_LOG_BROWSER", {})
 RUN_EXECUTION = _config.get("RUN_EXECUTION", {})
+
+BDP = _config.get("BDP", {})

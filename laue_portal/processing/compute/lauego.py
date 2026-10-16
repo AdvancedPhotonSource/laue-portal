@@ -187,8 +187,8 @@ class _AdmittedEntries:
         self.admitted: dict[int, ManifestEntry] = {}
 
     def __iter__(self):
-        for entry in self._entries:
-            self.admitted[entry.index] = entry
+        for input_index, entry in enumerate(self._entries):
+            self.admitted[input_index] = entry
             depth = entry.depth if entry.depth is not None else self._depth_override
             frame = (
                 entry.source if entry.point_id is None else ScanFrame(entry.source, entry.point_id, entry.depth_index)
@@ -270,8 +270,8 @@ def compute_lauego_indexing(request: RunRequest, entries: Iterable[ManifestEntry
                 warnings.append(f"XML output could not be closed: {error}")
 
     if stopped:
-        for index, entry in admitted.admitted.items():
-            if index not in seen:
+        for entry in admitted.admitted.values():
+            if entry.index not in seen:
                 hooks.record_failure(
                     FailureRecord.not_run(
                         entry, category=CATEGORY_CANCELLED, message="run stopped before this input started"

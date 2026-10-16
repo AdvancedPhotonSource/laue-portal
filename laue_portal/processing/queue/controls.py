@@ -56,6 +56,14 @@ def cancel_run(job_id: int, *, engine: Engine | None = None) -> dict[str, Any]:
                 )
                 return result
             execution.request_cancellation(job, reason="user")
+            if job.backend not in (None, "local"):
+                result.update(
+                    success=True,
+                    state="requested",
+                    n_pending=job.n_inputs - job.n_succeeded - job.n_failed,
+                    message="Cancellation requested; DM will stop the remote work and return diagnostics",
+                )
+                return result
             queue_job_id = job.queue_job_id
             if job.status == JobStatus.QUEUED:
                 entry = _fetch_queue_entry(queue_job_id)
@@ -104,6 +112,9 @@ def move_run_to_front(job_id: int, *, engine: Engine | None = None) -> dict[str,
                 result["message"] = (
                     f"Job {job_id} is {STATUS_MAPPING.get(job.status, job.status)} ({job.phase}); nothing to move"
                 )
+                return result
+            if job.backend not in (None, "local"):
+                result["message"] = "DM jobs are ordered by the remote scheduler"
                 return result
             queue_job_id = job.queue_job_id
         entry = _fetch_queue_entry(queue_job_id)
