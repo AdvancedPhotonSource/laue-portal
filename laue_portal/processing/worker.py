@@ -74,6 +74,9 @@ def queue_entry_exists(queue_job_id: str) -> bool:
 
 
 def reconcile_on_startup() -> list[int]:
+    from laue_portal.processing.live_queue import reconcile_live
+
+    reconcile_live(session_utils.get_engine(), queue_entry_exists=queue_entry_exists)
     reconciled = reconcile_interrupted_runs(
         session_utils.get_engine(),
         stale_after_seconds=RUN_POLICY.stale_heartbeat_seconds,

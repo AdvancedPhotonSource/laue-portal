@@ -77,6 +77,20 @@ def _wire_request(input_path, output_template, **overrides):
     return reconstruction_workflow.WireReconstructionRequest(**values)
 
 
+def test_batch_reconstruction_still_requires_a_point_selection(tmp_path):
+    request = _wire_request(tmp_path / "raw", tmp_path / "rec_%d", scan_points=None)
+    assert request.scan_point_values == ()
+    with pytest.raises(WorkflowValidationError, match="Batch reconstruction requires scan points"):
+        reconstruction_workflow.create_reconstruction(request)
+
+
+def test_batch_indexing_still_requires_a_point_selection(tmp_path):
+    request = _indexing_request(tmp_path / "raw", tmp_path / "index_%d", scan_points=None)
+    assert request.scan_point_values == ()
+    with pytest.raises(WorkflowValidationError, match="Batch indexing requires scan points"):
+        indexing_workflow.create_indexing(request)
+
+
 def _indexing_request(input_path, output_template, **overrides):
     values = {
         "scan_number": 1,

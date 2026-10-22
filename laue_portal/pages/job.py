@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
+from laue_portal.processing.bdp.monitor import PHASE_LABELS, age_seconds
 from laue_portal.processing.queue.controls import cancel_run
 from laue_portal.processing.queue.core import RUN_POLICY
 from laue_portal.services import run_summary
@@ -86,7 +87,6 @@ layout = html.Div(
                                                     id="refresh-job-btn",
                                                     color="success",
                                                     size="sm",
-                                                    className="me-2",
                                                 ),
                                                 dbc.Button(
                                                     "Stop Run",
@@ -96,7 +96,7 @@ layout = html.Div(
                                                     disabled=True,
                                                 ),
                                             ],
-                                            className="d-flex justify-content-end",
+                                            className="d-flex justify-content-end align-items-center flex-wrap gap-2",
                                         ),
                                         width=True,
                                     ),
@@ -115,6 +115,7 @@ layout = html.Div(
                                                 _field("Status", "Status_print"),
                                                 _field("Priority", "Priority_print"),
                                                 _field("Computer", "Computer_print"),
+                                                html.Div(id="job-globus-link"),
                                             ],
                                             width=6,
                                         ),
@@ -214,7 +215,7 @@ layout = html.Div(
                 dbc.ModalBody(
                     [
                         html.P("Stop this run?"),
-                        html.P(STOP_EXPLANATION, className="small text-muted"),
+                        html.P(STOP_EXPLANATION, id="stop-run-explanation", className="small text-muted"),
                     ]
                 ),
                 dbc.ModalFooter(
@@ -280,6 +281,22 @@ def duration_text(job, *, now: datetime | None = None) -> str:
 def status_badge(progress):
     """Status badge plus the finer execution phase when it says more than the status."""
 
+    observation = progress.remote_observation
+    if progress.backend == "crux" and progress.is_active and observation and observation.get("phase") in PHASE_LABELS:
+        phase = observation["phase"]
+        detail = observation.get("detail", "")
+        pbs_id = observation.get("pbs", {}).get("job_id")
+        if pbs_id:
+            detail += f" · PBS {pbs_id.split('.')[0]}"
+        age = age_seconds(observation.get("observed_at"))
+        if observation.get("stale") or age is None or age > 90:
+            detail += " · status delayed"
+        return html.Span(
+            [
+                dbc.Badge(PHASE_LABELS[phase], color="warning" if phase == "queued" else "info"),
+                html.Small(" " + detail, className="text-muted ms-2"),
+            ]
+        )
     badge = dbc.Badge(progress.status_name, color=STATUS_COLORS.get(progress.status, "secondary"))
     phase = progress.phase
     if phase and phase not in (progress.status_name.lower(), None):
@@ -341,15 +358,6 @@ def progress_content(details: run_summary.RunDetails, *, now: datetime | None = 
     )
 
     notes = []
-    if progress.backend not in (None, "local"):
-        notes.append(
-            html.Span(
-                f"{progress.backend.upper()} via DM: {progress.external_state or 'pending'}. ", className="text-muted"
-            )
-        )
-        if progress.external_url:
-            notes.append(html.A("Globus run", href=progress.external_url, target="_blank", rel="noopener noreferrer"))
-        notes.append(html.Span(" Progress counters update after results return. ", className="text-muted"))
     if progress.status == JobStatus.RUNNING and progress.backend in (None, "local"):
         age = heartbeat_age_seconds(progress, now=now)
         if age is None:
@@ -371,13 +379,6 @@ def progress_content(details: run_summary.RunDetails, *, now: datetime | None = 
                 f" Stop requested at {_format_time(progress.cancel_requested_at)}: the run finishes work in flight "
                 "and keeps completed results.",
                 className="text-warning",
-            )
-        )
-    if progress.is_terminal:
-        notes.append(
-            html.Span(
-                f"Processed {progress.n_processed} of {progress.n_inputs} input(s): {progress.counter_summary()}.",
-                className="text-muted",
             )
         )
 
@@ -431,7 +432,7 @@ def configuration_content(details: run_summary.RunDetails):
     heading = []
     if details.display_id:
         heading.append(html.Strong(details.display_id))
-    if details.kind:
+    elif details.kind:
         heading.append(html.Span(f" {details.kind.replace('_', ' ')}", className="text-muted"))
     if heading:
         sections.append(html.P(heading, className="mb-2"))
@@ -643,6 +644,27 @@ class _Snapshot:
         self.__dict__.update(values)
 
 
+def globus_link(progress):
+    """Only ALCF jobs have a Globus flow to open."""
+
+    if progress.backend != "crux" or not progress.external_url:
+        return None
+    path = urllib.parse.urlparse(progress.external_url).path.strip("/").split("/")
+    label = path[1] if len(path) == 2 and path[0] == "runs" else "View run"
+    return html.P(
+        [
+            html.Strong("Globus: "),
+            html.A(
+                label,
+                href=progress.external_url,
+                target="_blank",
+                rel="noopener noreferrer",
+                style={"overflowWrap": "anywhere"},
+            ),
+        ]
+    )
+
+
 def _live_outputs(snapshot, details, *, now=None):
     progress = details.progress
     return (
@@ -653,6 +675,7 @@ def _live_outputs(snapshot, details, *, now=None):
         not progress.is_active,
         progress_content(details, now=now),
         not progress.is_active,  # interval disabled once terminal
+        globus_link(progress),
     )
 
 
@@ -676,6 +699,7 @@ def _live_outputs(snapshot, details, *, now=None):
     Output("run-configuration-content", "children"),
     Output("job-refresh-interval", "disabled"),
     Output("job-failures-offset", "data"),
+    Output("job-globus-link", "children"),
     Input("url-job-page", "href"),
     prevent_initial_call=True,
 )
@@ -684,11 +708,27 @@ def load_job_data(href):
         raise PreventUpdate
     job_id = _job_id_from_href(href)
     if job_id is None:
-        return (_header(None, []), "—", "—", "—", "—", "—", "—", "—", "", True, "", "", True, 0)
+        return (_header(None, []), "—", "—", "—", "—", "—", "—", "—", "", True, "", "", True, 0, None)
     try:
         job, details = _load(job_id)
     except Exception as error:  # the page must render whatever went wrong
-        return (_header(job_id, []), "Error", "—", "—", "—", "—", "—", "—", f"Error: {error}", True, "", "", True, 0)
+        return (
+            _header(job_id, []),
+            "Error",
+            "—",
+            "—",
+            "—",
+            "—",
+            "—",
+            "—",
+            f"Error: {error}",
+            True,
+            "",
+            "",
+            True,
+            0,
+            None,
+        )
     if job is None:
         return (
             _header(job_id, []),
@@ -705,9 +745,10 @@ def load_job_data(href):
             "",
             True,
             0,
+            None,
         )
     snapshot, links = job
-    status, finish_time, duration, messages, cancel_disabled, progress, interval_disabled = _live_outputs(
+    status, finish_time, duration, messages, cancel_disabled, progress, interval_disabled, flow_link = _live_outputs(
         snapshot, details
     )
     return (
@@ -725,6 +766,7 @@ def load_job_data(href):
         configuration_content(details),
         interval_disabled,
         0,
+        flow_link,
     )
 
 
@@ -736,6 +778,7 @@ def load_job_data(href):
     Output("cancel-job-btn", "disabled", allow_duplicate=True),
     Output("run-progress-content", "children", allow_duplicate=True),
     Output("job-refresh-interval", "disabled", allow_duplicate=True),
+    Output("job-globus-link", "children", allow_duplicate=True),
     Input("job-refresh-interval", "n_intervals"),
     State("url-job-page", "href"),
     running=[(Output("job-refresh-interval", "disabled"), True, False)],
@@ -810,12 +853,27 @@ def refresh_job_data(n_clicks, current_href):
 
 @callback(
     Output("cancel-job-confirm-modal", "is_open", allow_duplicate=True),
+    Output("stop-run-explanation", "children"),
     Input("cancel-job-btn", "n_clicks"),
+    State("url-job-page", "href"),
     prevent_initial_call=True,
 )
-def open_cancel_confirmation(n_clicks):
+def open_cancel_confirmation(n_clicks, href):
     if n_clicks:
-        return True
+        from laue_portal.workflows.live import live_for_job
+
+        job_id = _job_id_from_href(href) if href else None
+        live = live_for_job(job_id) if job_id is not None else None
+        if live is not None:
+            message = (
+                "This live run is interrupted. Stop ends the session and keeps its published results; "
+                "pending points will not be processed."
+                if live.state == "recovery"
+                else "Stop accepting new arrivals, finish all accepted reconstruction and indexing work, "
+                "and publish the final results. Points that have not arrived will not be processed."
+            )
+            return True, message
+        return True, STOP_EXPLANATION
     raise PreventUpdate
 
 

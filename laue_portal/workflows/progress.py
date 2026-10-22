@@ -31,6 +31,7 @@ class RunProgress:
     backend: str | None = None
     external_state: str | None = None
     external_url: str | None = None
+    remote_observation: dict | None = None
     queue_job_id: str | None = None
     failure_report_path: str | None = None
     messages: str | None = None
@@ -101,6 +102,7 @@ class RunProgress:
             backend=job.backend,
             external_state=job.external_state,
             external_url=job.external_url,
+            remote_observation=job.remote_observation,
             queue_job_id=job.queue_job_id,
             failure_report_path=job.failure_report_path,
             messages=job.messages,

@@ -21,5 +21,5 @@ def execution_target(kind):
         ],
         id=f"{kind}-execution-selector",
         className="lp-execution-selector",
-        title="Estimates exclude queue wait. ALCF includes round-trip transfer.",
+        title="ALCF includes round-trip transfer and a 15m overhead allowance.",
     )

@@ -6,6 +6,7 @@ DEFAULT_VARIABLES:
   author: ""
   notes: ""
   root_path: /path/to/experiment
+  computer_name: APS
   num_threads: 35
   memory_limit_mb: 50000
   verbose: 1
@@ -43,6 +44,18 @@ RUN_EXECUTION:
   shutdown_grace_seconds: 600
   workers: 4
   reconstruction_workers: 1
+
+# Optional live arrival source. DM acquisition is managed independently; Start
+# and Stop on the Live page only control scientific processing. Authentication
+# stays in the existing DM setup/login file, outside the repository.
+LIVE:
+  dm:
+    enabled: false
+    setup_file: /path/to/dm.setup.sh
+    timeout_seconds: 15
+    poll_seconds: 2
+  defaults: {}
+
 DASH_CONFIG:
   host: localhost
   port: 2082

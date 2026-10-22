@@ -1,0 +1,7 @@
+# Install as the independent endpoint's user_config_template.yaml.j2.
+engine:
+  type: ThreadPoolEngine
+  max_workers: 1
+heartbeat_period: 30
+idle_heartbeats_soft: 10
+idle_heartbeats_hard: 120

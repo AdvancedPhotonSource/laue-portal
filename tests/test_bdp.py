@@ -22,7 +22,7 @@ from laue_portal.database import db_schema
 from laue_portal.processing import runner
 from laue_portal.processing.bdp import backend, plan, poller
 from laue_portal.processing.bdp.pbs import build_script
-from laue_portal.processing.bdp.settings import collection_path
+from laue_portal.processing.bdp.settings import collection_path, execution_computer
 from laue_portal.processing.queue import controls, lifecycle
 from laue_portal.workflows import indexing
 from laue_portal.workflows.execution import ExecutionStateError, JobStatus, RunPhase
@@ -50,6 +50,24 @@ class FakeDM:
 
     def find(self, submission_id):
         return [self.record]
+
+
+@pytest.mark.parametrize("backend,label", [("local", "APS"), ("aps", "APS"), ("crux", "ALCF")])
+def test_execution_computer_defaults_are_generic(backend, label, monkeypatch):
+    from laue_portal import config
+
+    monkeypatch.setattr(config, "DEFAULT_VARIABLES", {})
+    assert execution_computer(backend, settings={}) == label
+
+
+def test_execution_computer_uses_private_config_without_network_calls(monkeypatch):
+    from laue_portal import config
+
+    monkeypatch.setattr(config, "DEFAULT_VARIABLES", {"computer_name": "local-worker"})
+    settings = {"targets": {"aps": {"computer_name": "aps-worker"}, "crux": {"computer_name": "remote-worker"}}}
+    assert execution_computer("local", settings=settings) == "local-worker"
+    assert execution_computer("aps", settings=settings) == "aps-worker"
+    assert execution_computer("crux", settings=settings) == "remote-worker"
 
 
 @pytest.fixture

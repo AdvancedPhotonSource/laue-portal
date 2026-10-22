@@ -42,6 +42,17 @@ def cancel_run(job_id: int, *, engine: Engine | None = None) -> dict[str, Any]:
     """
 
     engine = engine or session_utils.get_engine()
+    from laue_portal.workflows.live import live_for_job, request_action
+
+    live = live_for_job(job_id, engine=engine)
+    if live is not None:
+        request_action(live.id, "stop", engine=engine)
+        return {
+            "success": True,
+            "state": "requested",
+            "message": "Live Stop requested; accepted work will finish and results will be kept",
+            "n_pending": 0,
+        }
     result: dict[str, Any] = {"success": False, "state": "error", "message": "", "n_pending": 0}
     try:
         with Session(engine) as session, session.begin():

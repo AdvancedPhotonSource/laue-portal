@@ -88,8 +88,69 @@ def monitor(plan, settings):
     state = Path(settings["state_directory"]) / f"{plan['submission_id']}.json"
     data = json.loads(state.read_text())
     if data.get("flow_id"):
-        record = _client(settings).get_status(data["flow_id"])
+        from laue_portal.processing.bdp.monitor import (
+            compute_client,
+            derive_remote_phase,
+            flow_observation,
+            refresh_observer,
+        )
+
+        try:
+            client = _client(settings)
+            record = client.get_status(data["flow_id"])
+        except Exception:
+            # Preserve monitoring while an already submitted PBS job may run.
+            data["observation"] = {
+                **data.get("observation", {}),
+                "submission_id": plan["submission_id"],
+                "phase": data.get("observation", {}).get("phase", "queued"),
+                "detail": "Workflow status unavailable",
+                "stale": True,
+            }
+            write_json_file(state, data, overwrite=True)
+            return data
         data["status"] = record["status"]
+        flow = flow_observation(record)
+        if not flow and record["status"] in {"ACTIVE", "RUNNING"}:
+            try:
+                entries = client.flows_manager.flows_client.get_run_logs(data["flow_id"], reverse_order=True, limit=10)[
+                    "entries"
+                ]
+            except Exception:
+                entries = []
+                flow = {"state": data.get("observation", {}).get("flow_state")}
+            for entry in entries:
+                if entry.get("code") == "ActionStarted":
+                    flow = {"state": entry.get("details", {}).get("state_name")}
+                    break
+        observer = settings.get("targets", {}).get("crux", {}).get("observer", {})
+        pbs_finished = data.get("observer_result", {}).get("pbs", {}).get("status") == "F"
+        if (flow.get("state") == "RunPbsJob" and not pbs_finished and observer.get("endpoint_id")) or data.get(
+            "observer_task_id"
+        ):
+            try:
+                refresh_observer(plan, data, settings, compute_client(client))
+            except Exception:
+                # Authentication/network problems collecting optional observations
+                # must not abort DM's scientific monitoring stage.
+                data["observer_error"] = "Status unavailable"
+        previous = data.get("observation")
+        data["observation"] = derive_remote_phase(
+            flow,
+            data.get("observer_result"),
+            previous=previous,
+            stale_seconds=observer.get("stale_after_seconds", 90),
+        )
+        data["observation"]["submission_id"] = plan["submission_id"]
+        data["observation"]["flow_run_id"] = data["flow_id"]
+        if data.get("observer_error") and flow.get("state") == "RunPbsJob":
+            data["observation"]["stale"] = True
+        if (
+            not previous
+            or previous.get("phase") != data["observation"]["phase"]
+            or previous.get("detail") != data["observation"]["detail"]
+        ):
+            data["observation_history"] = [*data.get("observation_history", []), data["observation"]][-64:]
     elif data.get("pbs_id"):
         import shlex
 
@@ -144,10 +205,16 @@ def cancel(plan, settings):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
-    parser.add_argument("action", choices=["submit", "monitor", "check", "cancel", "auth"])
+    parser.add_argument("action", choices=["submit", "monitor", "check", "cancel", "auth", "auth-observer"])
     parser.add_argument("submission_id", nargs="?")
     args = parser.parse_args()
     settings = load_settings(args.config)
+    if args.action == "auth-observer":
+        from laue_portal.processing.bdp.auth import authorize_observer
+
+        result = authorize_observer(_client(settings))
+        print(f"Observer function ID: {result['observer_function_id']}")
+        return 0
     if args.action == "auth":
         from laue_portal.processing.bdp.auth import authorize
 
@@ -167,6 +234,8 @@ def main():
         return 0 if json.loads(summary_path.read_text())["status"] == "Finished" else 1
     data = {"submit": submit, "monitor": monitor, "cancel": cancel}[args.action](plan, settings)
     print(f"Status: {data['status']}")
+    if data.get("observation"):
+        print("Observation: " + json.dumps(data["observation"], separators=(",", ":")))
     if data.get("flow_id"):
         print(f"Flow Action ID: {data['flow_id']}")
         print(f"URL: {data['url']}")

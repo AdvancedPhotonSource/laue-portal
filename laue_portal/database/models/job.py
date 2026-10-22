@@ -9,7 +9,7 @@ queries never join per-frame rows.
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Integer, String
+from sqlalchemy import JSON, CheckConstraint, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from laue_portal.database.base import Base
@@ -51,6 +51,7 @@ class Job(Base):
     external_id: Mapped[str | None] = mapped_column(String, nullable=True)
     external_state: Mapped[str | None] = mapped_column(String, nullable=True)
     external_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    remote_observation: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # Run counters. Processed work is n_succeeded + n_failed; n_not_run is work
     # that was never attempted (cancelled, interrupted, or skipped) and is fixed

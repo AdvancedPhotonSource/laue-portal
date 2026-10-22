@@ -41,6 +41,9 @@ Copy `config.yaml.template` and `deploy/bdp.yaml.template` to private files and 
 
 - Portal database, experiment root, output templates, Redis, and web settings.
   Keep SQLite and Redis persistence on local SSD and Dash debug mode disabled.
+- `DEFAULT_VARIABLES.computer_name` for the local job display name and optional
+  `targets.<backend>.computer_name` overrides for remote targets. Defaults are
+  generic APS/ALCF labels; deployment hostnames belong in private configuration.
 - `BDP.enabled` and `BDP.settings_file` in the portal configuration; enabled
   execution targets in the BDP configuration.
 - DM owner, workflow names, setup script, and launcher source/Python/config paths.
@@ -129,6 +132,28 @@ python deploy/globus/endpoint_smoke.py "$COMPUTE_ENDPOINT_ID" --workspace "$COMP
 ```
 
 ## Execution and state
+
+Optional ALCF monitoring uses a separate login-node Compute endpoint with a
+reserved lightweight worker. Install the observer user-config/environment
+templates from `deploy/globus/` into that endpoint's private configuration and
+set its allowed run root. Register the function with `deploy/dm-stage.sh
+auth-observer`, then put its function ID and independent endpoint ID under
+`targets.crux.observer` in private BDP settings. This command does not change
+the scientific Flow. The observer identity must read that account's run files
+and PBS records; keep it separate from the long PBS submission worker.
+
+Re-render/register the DM workflow so its monitor captures `remoteObservation`.
+Each scientific submission has one DM job. DM repeats the short monitor command
+every 10 seconds and captures its printed observation as a job output variable.
+The portal poller reads that field through the existing DM API; it does not need
+Globus credentials, a proxy, or direct access to ALCF. Monitor task IDs and the
+latest observations remain with the launcher's existing per-submission state.
+Upgrade existing databases with the migration tool before deploying the new
+nullable `job.remote_observation` column. DM submits/collects one read-only
+Compute probe per active job around every 30 seconds; no extra Flows, PBS jobs,
+or Transfer tasks are created. The portal displays Uplink, Queued, Running, and
+Downlink, including publication. Delayed observations do not fail scientific
+jobs. Final status still depends on validation of returned results.
 
 Each run uses checksummed input batches, one PBS job, and one result transfer.
 Compact manifests and at most 100 files per batch bound Flows state. Node count,

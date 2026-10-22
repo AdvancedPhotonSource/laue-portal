@@ -32,6 +32,7 @@ navbar = dbc.Navbar(
                         dbc.NavItem(dbc.NavLink("Reconstructions", href="/reconstructions", active="exact")),
                         dbc.NavItem(dbc.NavLink("Indexations", href="/peakindexings", active="exact")),
                         dbc.NavItem(dbc.NavLink("Run Monitor", href="/run-monitor", active="exact")),
+                        dbc.NavItem(dbc.NavLink("Live", href="/live", active="exact")),
                         dbc.DropdownMenu(
                             label="Menu",
                             nav=True,
@@ -56,6 +57,7 @@ navbar = dbc.Navbar(
         fluid=True,
     ),
     className="py-2",
+    expand="lg",
     color="primary",
     dark=True,
 )

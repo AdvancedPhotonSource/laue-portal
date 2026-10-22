@@ -79,6 +79,7 @@ def run_pbs_job(*, job_directory, script, fallback_summary, cancel_file, **unuse
     import re
     import subprocess
     import time
+    from datetime import datetime, timezone
 
     root = pathlib.Path(job_directory)
     output = pathlib.Path(fallback_summary["output_directory"])
@@ -89,13 +90,19 @@ def run_pbs_job(*, job_directory, script, fallback_summary, cancel_file, **unuse
     job_id = None
     last_status = None
     submitting = False
+    receipt = {"function_started_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
 
     def save(path, document):
+        if path == state_path:
+            receipt.update(document)
+            receipt["observed_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            document = receipt
         partial = path.with_name(path.name + ".tmp")
         partial.write_text(json.dumps(document))
         partial.replace(path)
 
     try:
+        save(state_path, {"status": "submitting"})
         with open(script_path, "x", encoding="utf-8") as handle:
             handle.write(script)
         submitting = True
@@ -110,7 +117,14 @@ def run_pbs_job(*, job_directory, script, fallback_summary, cancel_file, **unuse
         job_id = response.stdout.strip()
         if not re.fullmatch(r"[0-9]+(?:\.[A-Za-z0-9_.-]+)?", job_id):
             raise ValueError("PBS returned an invalid job ID")
-        save(state_path, {"job_id": job_id, "status": "submitted"})
+        save(
+            state_path,
+            {
+                "job_id": job_id,
+                "status": "submitted",
+                "submitted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            },
+        )
         cancel_sent = False
         deadline = time.monotonic() + 48 * 3600
         while time.monotonic() < deadline:

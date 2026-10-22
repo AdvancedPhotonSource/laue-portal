@@ -1,0 +1,3 @@
+# Copy outside Git and replace the example root. Each child must be a run UUID.
+LAUE_BDP_OBSERVER_ROOT: /path/to/workspace/runs
+LAUE_PBS_BIN: /opt/pbs/bin

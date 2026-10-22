@@ -601,3 +601,38 @@ def test_upgrade_relaxes_peak_limit_preserving_values_and_source(tmp_path):
     with sqlite3.connect(compact) as connection:
         assert required_nullable_columns(connection) == ["lauego_indexing_parameters.max_number"]
         assert connection.execute("SELECT * FROM lauego_indexing_parameters").fetchall() == before
+
+
+def test_upgrade_allows_indexing_only_live_sessions_preserving_existing_runs(tmp_path):
+    from sqlalchemy.dialects import sqlite as sqlite_dialect
+    from sqlalchemy.schema import CreateTable
+
+    from laue_portal.database.models.live import LiveSession
+    from scripts.workflow_migration import required_nullable_columns
+
+    legacy, source, destination = (tmp_path / name for name in ("legacy.db", "source.db", "upgraded.db"))
+    _create_legacy_database(legacy)
+    migrate_database(legacy, source)
+    metadata = MetaData()
+    for source_table in LiveSession.metadata.tables.values():
+        source_table.to_metadata(metadata)
+    table = metadata.tables["live_session"]
+    table.c.reconstruction_id.nullable = table.c.reconstruction_job_id.nullable = False
+    with sqlite3.connect(source) as connection:
+        connection.execute(str(CreateTable(table).compile(dialect=sqlite_dialect.dialect())))
+        run, job = connection.execute("SELECT id,job_id FROM reconstruction_run LIMIT 1").fetchone()
+        connection.execute(
+            "INSERT INTO live_session (id,reconstruction_id,reconstruction_job_id,state,control_directory,recipe,revision,created_at) VALUES (1,?,?,'finished','/test/live','{}',2,'2026-10-20')",
+            (run, job),
+        )
+        before = connection.execute("SELECT * FROM live_session").fetchall()
+    report = migrate_database(source, destination)
+    assert set(report.relaxed_columns) == {"live_session.reconstruction_id", "live_session.reconstruction_job_id"}
+    with sqlite3.connect(destination) as connection:
+        assert required_nullable_columns(connection) == []
+        assert connection.execute("SELECT * FROM live_session").fetchall() == before
+        connection.execute("UPDATE live_session SET reconstruction_id=NULL,reconstruction_job_id=NULL")
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    with sqlite3.connect(source) as connection:
+        assert len(required_nullable_columns(connection)) == 2
+        assert connection.execute("SELECT * FROM live_session").fetchall() == before

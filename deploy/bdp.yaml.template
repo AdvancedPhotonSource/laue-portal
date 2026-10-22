@@ -38,7 +38,14 @@ storage:
 targets:
   crux:
     enabled: false
+    computer_name: ALCF
     compute_endpoint: 00000000-0000-0000-0000-000000000003
+    # Optional independent login-node observer. Leave disabled until registered.
+    observer:
+      endpoint_id: null
+      function_id: null
+      interval_seconds: 30
+      stale_after_seconds: 90
     workspace: /path/to/remote-data/workspace
     analysis_python: /path/to/compute/envs/analysis/bin/python
     code_directory: /path/to/compute/src
@@ -54,6 +61,7 @@ targets:
       memory_limit_mb: 8192
   aps:
     enabled: false
+    computer_name: APS
     submit_host: user@scheduler.example.invalid
     analysis_python: /path/to/local-compute/envs/analysis/bin/python
     code_directory: /path/to/local-compute/src

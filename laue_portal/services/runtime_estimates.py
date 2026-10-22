@@ -43,15 +43,8 @@ class RuntimeEstimate:
 class TransferEstimate:
     input_bytes: float
     output_bytes: float
-    bytes_per_second: float
-
-    @property
-    def input_seconds(self):
-        return self.input_bytes / self.bytes_per_second
-
-    @property
-    def output_seconds(self):
-        return self.output_bytes / self.bytes_per_second
+    input_seconds: float
+    output_seconds: float
 
     @property
     def seconds(self):
@@ -59,25 +52,21 @@ class TransferEstimate:
 
 
 def estimate_transfers(kind, selection):
-    """Project both directions from profiling sizes; never stat or read the data files."""
+    """Scale each direction's measured flow time, including transfer orchestration."""
     reference = measured_profiles()["transfer"]
-    reconstructed_frame_bytes = (
-        reference["estimated_reconstruction_bytes"] / reference["reference_reconstructed_frames"]
-    )
+    measured = reference[kind]
     if kind == "reconstruction":
-        input_bytes = selection.points * reference["measured_input_bytes"] / reference["reference_points"]
-        output_bytes = selection.frames * reconstructed_frame_bytes
+        input_scale = selection.points / reference["reference_points"]
     else:
         # A depth subset still stages the entire point file containing those depths.
         frames = selection.staged_frames if selection.staged_frames is not None else selection.frames
-        input_bytes = frames * reconstructed_frame_bytes
-        output_bytes = (
-            selection.frames
-            * reference["measured_indexing_result_bytes"]
-            / reference["measured_indexing_result_frames"]
-        )
+        input_scale = frames / reference["reference_reconstructed_frames"]
+    output_scale = selection.frames / reference["reference_reconstructed_frames"]
     return TransferEstimate(
-        input_bytes, output_bytes, reference["measured_input_bytes"] / reference["measured_seconds"]
+        input_bytes=measured["input_bytes"] * input_scale,
+        output_bytes=measured["output_bytes"] * output_scale,
+        input_seconds=max(measured["input_seconds"] * input_scale, measured["minimum_input_seconds"]),
+        output_seconds=max(measured["output_seconds"] * output_scale, measured["minimum_output_seconds"]),
     )
 
 
@@ -213,12 +202,16 @@ def estimate_runtime(kind, backend, fields, *, policy):
     pooled = {key: parse_parameter(value, n_runs) for key, value in fields.items()}
     selections, seconds = [], 0.0
     rate = profile["count"] / profile["seconds"]
+    workers = int(policy.get("reconstruction_workers" if kind == "reconstruction" else "workers") or 1)
+    if workers != profile["workers"]:
+        rate *= workers / profile["workers"]
+        notes.append("Runtime scales the nearest measured worker pool to the configured worker count.")
     for index in range(n_runs):
         current = {key: values[index] for key, values in pooled.items()}
         selection = count_selection(kind, current)
         units = selection.points if kind == "reconstruction" else selection.frames
         # A batch smaller than its worker pool still needs one wave of work.
-        wave = profile["workers"] * profile.get("nodes", 1) * profile.get("ranks_per_node", 1)
+        wave = workers * profile.get("nodes", 1) * profile.get("ranks_per_node", 1)
         duration = max(units, wave) / rate
         if kind == "reconstruction":
             duration *= selection.depths / measured_profiles()["reference"]["depths_per_point"]

@@ -193,6 +193,10 @@ def reconcile_interrupted_runs(
             select(db_schema.Job).where(db_schema.Job.status.in_((int(JobStatus.QUEUED), int(JobStatus.RUNNING))))
         ).all()
         for job in candidates:
+            from laue_portal.workflows.live import live_for_job
+
+            if live_for_job(job.job_id, engine=engine) is not None:
+                continue  # Live controllers recover through their own checkpoint/receipt ledger.
             if job.backend not in (None, "local"):
                 continue  # The DM poller reconciles remote runs.
             reason = None

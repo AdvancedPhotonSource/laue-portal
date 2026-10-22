@@ -11,13 +11,25 @@
     "depth_resolution": 1
   },
   "transfer": {
-    "measured_input_bytes": 3530000000000,
-    "measured_seconds": 771,
     "reference_points": 825,
     "reference_reconstructed_frames": 99825,
-    "estimated_reconstruction_bytes": 1000000000000,
-    "measured_indexing_result_bytes": 4772096,
-    "measured_indexing_result_frames": 3872
+    "reconstruction": {
+      "input_bytes": 3529561450706,
+      "input_seconds": 941.172,
+      "output_bytes": 921070099039,
+      "output_seconds": 291.678,
+      "minimum_input_seconds": 31.575,
+      "minimum_output_seconds": 14.678
+    },
+    "indexing": {
+      "input_bytes": 921101263976,
+      "input_seconds": 468.087,
+      "output_bytes": 627512316,
+      "output_seconds": 34.277,
+      "minimum_input_seconds": 25.121,
+      "minimum_output_seconds": 21.277
+    },
+    "basis": "Completed portal transfers, including verification and flow orchestration; compute handoff excluded."
   },
   "profiles": [
     {
@@ -182,7 +194,8 @@
       "ranks_per_node": 1,
       "max_in_flight": 256,
       "count": 825,
-      "seconds": 469.9872094090024
+      "seconds": 732.0,
+      "basis": "Completed full portal scan, including scientific output validation."
     },
     {
       "backend": "crux",
@@ -193,7 +206,8 @@
       "ranks_per_node": 4,
       "max_in_flight": 256,
       "count": 99825,
-      "seconds": 301.7694371940015
+      "seconds": 385.0,
+      "basis": "Completed full portal scan, including scientific output validation."
     }
   ]
 }

@@ -28,6 +28,23 @@ elif operation == 'get':
         result = api.getProcessingJobRecord(args['id'])
 elif operation == 'find':
     result = api.listProcessingJobRecords(queryDict={'submissionId': args['submission_id']}, limit=10)
+elif operation in ('daqs', 'daq', 'arrival_files'):
+    from dm.daq_web_service.api.experimentDaqApi import ExperimentDaqApi
+    daq_api = ExperimentDaqApi()
+    if operation == 'daqs':
+        result = daq_api.listDaqs('any')
+    elif operation == 'daq':
+        result = daq_api.getDaqInfo(args['id'])
+    else:
+        from dm.cat_web_service.api.fileCatApi import FileCatApi
+        daq = daq_api.getDaqInfo(args['id'])
+        files = FileCatApi().getExperimentFiles(
+            args['experiment'], queryDict=args['query'], skip=args['skip'],
+            limit=args['limit'], keyList=[
+                'experimentFilePath', 'storageFilePath', 'fileSize',
+                'fileProcessingTime', 'daqId', 'experimentName',
+            ])
+        result = {'daq_status': daq.get('status'), 'files': files}
 else:
     raise ValueError('Unsupported operation')
 def serialize(value):
@@ -80,6 +97,22 @@ class DMClient:
 
     def find(self, submission_id):
         return self._call("find", submission_id=submission_id)
+
+    def daqs(self):
+        return self._call("daqs")
+
+    def daq(self, identifier):
+        return self._call("daq", id=identifier)
+
+    def arrival_files(self, binding, query, *, skip=0, limit=250):
+        return self._call(
+            "arrival_files",
+            id=binding["daq_id"],
+            experiment=binding["experiment"],
+            query=query,
+            skip=skip,
+            limit=limit,
+        )
 
     def cancel(self, submission_id):
         """Request cancellation on the DM VM without a portal-to-workflow-host SSH key."""

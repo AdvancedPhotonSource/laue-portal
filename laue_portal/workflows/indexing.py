@@ -42,7 +42,7 @@ class LaueGoIndexingRequest:
     max_number: int | None
     min_separation: int
     peak_shape: str
-    scan_points: str
+    scan_points: str | None  # None is an open-ended live acquisition.
     depth_range: str | None
     detector_crop_x1: int
     detector_crop_x2: int
@@ -80,7 +80,9 @@ class LaueGoIndexingRequest:
     depth_values: tuple[int, ...] | None = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        scan_points, scan_point_values = normalize_integer_range(self.scan_points, "scan points")
+        scan_points, scan_point_values = (
+            (None, ()) if self.scan_points is None else normalize_integer_range(self.scan_points, "scan points")
+        )
         depth_range, depth_values = normalize_optional_integer_range(self.depth_range, "depth range")
         computer_name = str(self.computer_name).strip()
         geometry_file = os.path.normpath(os.fspath(self.geometry_file))
@@ -135,6 +137,8 @@ def create_indexing(
     manifest digest, and input count, without creating a database row per input.
     """
 
+    if request.scan_points is None:
+        raise WorkflowValidationError("Batch indexing requires scan points")
     # Filtering is disabled for new runs, including reruns of historical settings.
     request = replace(request, cosmic_filter=False)
     inputs = resolve_request_inputs(

@@ -886,9 +886,10 @@ def _compact_copy(
         connection.execute("BEGIN IMMEDIATE")
         _rebuild_table(connection, Job.__table__)
         _add_missing_columns(connection, IndexingRun.__table__)
-        if required_nullable_columns(connection):
+        relaxed = required_nullable_columns(connection)
+        if relaxed:
             for table in _orm_tables():
-                if table.name == "lauego_indexing_parameters":
+                if any(name.startswith(table.name + ".") for name in relaxed):
                     _rebuild_table(connection, table, force=True)
 
         run_directories = {
@@ -1057,7 +1058,7 @@ def _compact_copy(
 
 
 # Tables this migration owns; scan metadata, catalog, and calibration tables are outside its scope.
-_WORKFLOW_TABLES = _UNIFIED_TABLES | {"lauego_indexing_parameters", "wire_reconstruction_parameters"}
+_WORKFLOW_TABLES = _UNIFIED_TABLES | {"lauego_indexing_parameters", "wire_reconstruction_parameters", "live_session"}
 
 
 def _orm_tables():
@@ -1082,10 +1083,15 @@ def missing_columns(connection: sqlite3.Connection) -> list[str]:
 
 def required_nullable_columns(connection: sqlite3.Connection) -> list[str]:
     """Known constraints that must be relaxed to accept the current form contract."""
+    nullable = {
+        "lauego_indexing_parameters": {"max_number"},
+        "live_session": {"reconstruction_id", "reconstruction_job_id"},
+    }
     return [
-        "lauego_indexing_parameters.max_number"
-        for row in connection.execute('PRAGMA table_info("lauego_indexing_parameters")')
-        if row[1] == "max_number" and row[3]
+        f"{table}.{row[1]}"
+        for table, columns in nullable.items()
+        for row in connection.execute(f'PRAGMA table_info("{table}")')
+        if row[1] in columns and row[3]
     ]
 
 
@@ -1126,7 +1132,7 @@ def _upgrade_copy(database_path: Path) -> tuple[list[str], list[str], list[str]]
                             f"Cannot add NOT NULL column {table.name}.{column.name} by upgrade; a new compaction stage is needed"
                         )
                 _add_missing_columns(connection, table)
-                if relaxed and table.name == "lauego_indexing_parameters":
+                if any(name.startswith(table.name + ".") for name in relaxed):
                     _rebuild_table(connection, table, force=True)
         remaining = missing_columns(connection)
         if remaining:

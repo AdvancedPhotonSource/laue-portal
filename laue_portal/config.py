@@ -62,3 +62,4 @@ SCAN_LOG_BROWSER = _config.get("SCAN_LOG_BROWSER", {})
 RUN_EXECUTION = _config.get("RUN_EXECUTION", {})
 
 BDP = _config.get("BDP", {})
+LIVE = _config.get("LIVE", {})

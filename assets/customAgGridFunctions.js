@@ -182,8 +182,8 @@ dagcomponentfuncs.StatusRenderer = function (props) {
     );
 };
 
-// Run progress renderer: stored run counters as text and a segmented bar.
-// processed = succeeded + failed; pending inputs are striped while the run is active.
+// Keep progress on one line so it fits the run monitor's fixed-height rows.
+// processed = succeeded + failed.
 dagcomponentfuncs.RunProgressRenderer = function (props) {
     const data = props.data || {};
     const total = data.n_inputs || 0;
@@ -195,41 +195,17 @@ dagcomponentfuncs.RunProgressRenderer = function (props) {
     const succeeded = data.n_succeeded || 0;
     const failed = data.n_failed || 0;
     const notRun = data.n_not_run || 0;
-    const pending = Math.max(total - succeeded - failed - notRun, 0);
     const processed = succeeded + failed;
-    const active = data.status === 0 || data.status === 1;
-
-    const segments = [];
-    const segment = (key, className, count, label) => {
-        if (count > 0) {
-            segments.push(
-                React.createElement('div', {
-                    key: key,
-                    className: 'progress-bar ' + className,
-                    style: { width: `${(count / total) * 100}%` },
-                    title: `${count} ${label}`
-                })
-            );
-        }
-    };
-    segment('succeeded', 'bg-success', succeeded, 'succeeded');
-    segment('failed', 'bg-danger', failed, 'failed');
-    segment('not_run', 'bg-secondary', notRun, 'not run');
-    segment(
-        'pending',
-        active && data.status === 1 ? 'bg-warning progress-bar-striped progress-bar-animated' : 'bg-warning',
-        pending,
-        active ? 'pending' : 'unaccounted'
-    );
 
     let text = `${processed}/${total} processed`;
     if (failed > 0) text += `, ${failed} failed`;
     if (notRun > 0) text += `, ${notRun} not run`;
 
-    return React.createElement('div', { style: { width: '100%' }, title: text }, [
-        React.createElement('div', { key: 'text', className: 'text-center small mb-1' }, text),
-        React.createElement('div', { key: 'progress', className: 'progress', style: { height: '20px' } }, segments)
-    ]);
+    return React.createElement(
+        'div',
+        { className: 'text-center small', style: { width: '100%' }, title: text },
+        text
+    );
 };
 
 // Scan import status renderer for bulk upload page

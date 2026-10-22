@@ -18,7 +18,8 @@
       "repeatUntil": "\"$remoteStatus\" in (\"SUCCEEDED\", \"FAILED\", \"CANCELLED\")",
       "maxRepeats": 17280,
       "outputVariableRegexList": [
-        "Status: (?P<remoteStatus>.*)"
+        "Status: (?P<remoteStatus>.*)",
+        "Observation: (?P<remoteObservation>.*)"
       ]
     },
     "03-CHECK": {

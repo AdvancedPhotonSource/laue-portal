@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from laue_portal.database import db_schema, session_utils
 from laue_portal.processing.bdp.dm import DMClient, launcher_command
+from laue_portal.processing.bdp.monitor import PHASE_LABELS, age_seconds, utc_now
 from laue_portal.processing.bdp.settings import child_path, map_path, portal_settings
 from laue_portal.workflows import execution
 from laue_portal.workflows.execution import JobStatus, RunPhase
@@ -34,6 +35,32 @@ def _read(path):
     if path.stat().st_size > 16 * 1024 * 1024:
         raise ValueError(f"Control document is too large: {path}")
     return json.loads(path.read_text())
+
+
+def _remote_observation(record, job):
+    """Ignore malformed monitoring data without affecting scientific reconciliation."""
+    value = record.get("remoteObservation")
+    if not value or job.backend != "crux":
+        return None
+    try:
+        if isinstance(value, str):
+            if len(value) > 16384:
+                return None
+            value = json.loads(value)
+        if not isinstance(value, dict) or len(json.dumps(value)) > 16384:
+            return None
+        if value.get("phase") not in PHASE_LABELS or value.get("submission_id") != job.submission_id:
+            return None
+        timestamp = value.get("observed_at")
+        if age_seconds(timestamp) is None:
+            return None
+        previous = job.remote_observation or {}
+        if previous.get("observed_at", "") > timestamp:
+            return None
+        return value
+    except (TypeError, ValueError):
+        logger.warning("Ignoring invalid remote observation for job %s", job.job_id)
+        return None
 
 
 def request_cancellation(job, settings, client):
@@ -276,6 +303,12 @@ def poll_once(*, engine=None, settings=None, client=None):
                 external_id = records[0]["id"]
             record = client.get(external_id)
             state = str(record["status"]).lower()
+            observation = _remote_observation(record, job)
+            if observation:
+                with Session(engine) as session, session.begin():
+                    current = session.get(db_schema.Job, job.job_id)
+                    if not execution.is_terminal(current):
+                        current.remote_observation = observation
             if (
                 job.cancel_requested_at
                 and state not in {"done", "failed", "aborted"}
@@ -286,6 +319,18 @@ def poll_once(*, engine=None, settings=None, client=None):
             if state in {"done", "failed", "aborted"}:
                 incoming = Path(plan.get("incoming_directory", plan["output_directory"]))
                 if (incoming / "run.json").exists():
+                    if job.backend == "crux":
+                        with Session(engine) as session, session.begin():
+                            current = session.get(db_schema.Job, job.job_id)
+                            if not execution.is_terminal(current):
+                                current.remote_observation = {
+                                    **(current.remote_observation or {}),
+                                    "phase": "downlink",
+                                    "detail": "Publishing results",
+                                    "stale": False,
+                                    "observed_at": utc_now(),
+                                    "submission_id": job.submission_id,
+                                }
                     summary = publish_returned(plan)
                 elif state == "done":
                     raise ValueError("DM completed without returning a run summary")

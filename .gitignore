@@ -147,6 +147,7 @@ sandbox/
 *.db
 *.db-shm
 *.db-wal
+*.db-journal
 
 # Working env
 laue-portal-env
@@ -202,6 +203,7 @@ assets/*
 !assets/04-form-layout.js
 !assets/runtime_estimate.css
 !assets/05-peakindex-viz.css
+!assets/06-live.css
 !assets/06-plotly-cursor-readout.js
 !assets/accordion.css
 !assets/favicon.ico

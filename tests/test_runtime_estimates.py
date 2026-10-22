@@ -82,26 +82,44 @@ def test_four_node_estimates_use_the_measured_full_scan_layout():
     index = estimates.estimate_runtime(
         "indexing", "crux", selection(filenamePrefix="wire_%d_%d.h5", depthRange="0-120"), policy=policy
     )
-    assert recon.seconds == pytest.approx(469.987, abs=0.001)
-    assert index.seconds == pytest.approx(301.769, abs=0.001)
+    assert recon.seconds == pytest.approx(732)
+    assert index.seconds == pytest.approx(385)
     assert recon.profile["nodes"] == index.profile["nodes"] == 4
     assert index.profile["ranks_per_node"] == 4
 
 
-def test_bidirectional_transfer_projection_uses_the_confirmed_rate():
+def test_bidirectional_transfer_projection_uses_measured_flow_times_for_each_direction():
     reconstruction = estimates.estimate_runtime("reconstruction", "crux", selection(), policy=CRUX)
     transfer = estimates.estimate_transfers("reconstruction", reconstruction.selection)
-    assert transfer.input_bytes == pytest.approx(3.53e12)
-    assert transfer.output_bytes == pytest.approx(1e12)
-    assert transfer.input_seconds == pytest.approx(771)
-    assert transfer.seconds / 60 == pytest.approx(16.4902266)
+    assert transfer.input_bytes == pytest.approx(3529561450706)
+    assert transfer.output_bytes == pytest.approx(921070099039)
+    assert transfer.input_seconds == pytest.approx(941.172)
+    assert transfer.output_seconds == pytest.approx(291.678)
+    assert transfer.seconds == pytest.approx(1232.85)
     indexing = estimates.estimate_runtime(
         "indexing", "crux", selection(filenamePrefix="wire_%d_%d.h5", depthRange="0-120"), policy=CRUX
     )
     transfer = estimates.estimate_transfers("indexing", indexing.selection)
-    assert transfer.input_bytes == pytest.approx(1e12)
-    assert 0 < transfer.output_bytes < 2e8
-    assert transfer.output_seconds < 1
+    assert transfer.input_bytes == pytest.approx(921101263976)
+    assert transfer.output_bytes == pytest.approx(627512316)
+    assert transfer.input_seconds == pytest.approx(468.087)
+    assert transfer.output_seconds == pytest.approx(34.277)
+
+
+def test_aps_projection_scales_four_measured_workers_to_three_eight_thread_workers():
+    estimate = estimates.estimate_runtime(
+        "reconstruction", "local", selection(), policy={**APS, "reconstruction_workers": 3}
+    )
+    assert estimate.profile["workers"] == 4 and estimate.profile["threads"] == 8
+    assert estimate.seconds / 60 == pytest.approx(196.241754249, abs=0.001)
+    assert any("scales the nearest measured worker pool" in note for note in estimate.notes)
+
+
+def test_small_transfers_keep_a_minimum_orchestration_cost():
+    estimate = estimates.estimate_runtime("reconstruction", "crux", selection(scanPoints="1"), policy=CRUX)
+    transfer = estimates.estimate_transfers("reconstruction", estimate.selection)
+    assert transfer.input_seconds == pytest.approx(31.575)
+    assert transfer.output_seconds == pytest.approx(14.678)
 
 
 def test_catalog_counts_depths_without_opening_point_files_and_reuses_snapshot(tmp_path, monkeypatch):

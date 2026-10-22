@@ -64,6 +64,19 @@ def available_backends(settings=None):
     return options
 
 
+def execution_computer(backend, settings=None):
+    """Use private display names without embedding deployment hostnames in source."""
+    from laue_portal.config import DEFAULT_VARIABLES
+
+    default = DEFAULT_VARIABLES.get("computer_name") if backend in {"local", "aps"} else None
+    if backend == "local":
+        value = default
+    else:
+        value = portal_settings(settings).get("targets", {}).get(backend, {}).get("computer_name") or default
+    fallback = {"local": "APS", "aps": "APS", "crux": "ALCF"}.get(backend, backend)
+    return str(value or "").strip() or fallback
+
+
 def require_backend(name, settings=None):
     if name not in {item["value"] for item in available_backends(settings)}:
         raise ValueError(f"Execution target {name!r} is not enabled")

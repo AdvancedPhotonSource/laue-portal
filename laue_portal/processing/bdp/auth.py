@@ -66,3 +66,10 @@ def authorize(client, settings):
     # A newly registered flow can require a second consent for its own scope.
     client.login()
     return {"flow_id": client.get_flow_id(), "function_ids": function_ids}
+
+
+def authorize_observer(client):
+    """Register the independent read-only function without changing the Flow."""
+    from laue_portal.processing.bdp.monitor import compute_client, read_run_status
+
+    return {"observer_function_id": str(compute_client(client).register_function(read_run_status))}

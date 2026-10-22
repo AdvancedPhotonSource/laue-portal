@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -82,6 +83,68 @@ def _trigger(prop_id):
     )
 
 
+@pytest.mark.parametrize(
+    "phase,label", [("uplink", "Uplink"), ("queued", "Queued"), ("running", "Running"), ("downlink", "Downlink")]
+)
+def test_alcf_phase_display_and_stale_observations(phase, label):
+    from laue_portal.processing.bdp.monitor import utc_now
+    from laue_portal.workflows.progress import RunProgress
+
+    progress = RunProgress(
+        job_id=1,
+        status=int(JobStatus.RUNNING),
+        phase="running",
+        n_inputs=2,
+        n_succeeded=0,
+        n_failed=0,
+        n_not_run=0,
+        backend="crux",
+        remote_observation={
+            "phase": phase,
+            "detail": "Test detail",
+            "observed_at": utc_now(),
+            "pbs": {"job_id": "123.server"},
+        },
+    )
+    text = _text(job_page.status_badge(progress))
+    assert label in text and "PBS 123" in text and "status delayed" not in text
+    progress.remote_observation["stale"] = True
+    assert "status delayed" in _text(job_page.status_badge(progress))
+
+
+@pytest.mark.parametrize("backend", [None, "local", "aps", "crux"])
+@pytest.mark.parametrize(
+    "url,label",
+    [("https://app.globus.org/runs/test-run", "test-run"), ("https://app.globus.org/", "View run")],
+)
+def test_globus_link_is_only_shown_for_alcf_and_updates_when_flow_starts(engine, tmp_path, backend, url, label):
+    run = publish_wire_run(engine, tmp_path, count=1)
+    with Session(engine) as session, session.begin():
+        job = session.get(db_schema.Job, run.job_id)
+        job.backend = backend
+
+    assert job_page.load_job_data(_href(run.job_id))[14] is None
+
+    with Session(engine) as session, session.begin():
+        session.get(db_schema.Job, run.job_id).external_url = url
+
+    for field in (
+        job_page.load_job_data(_href(run.job_id))[14],
+        job_page.refresh_live_fields(1, _href(run.job_id))[7],
+    ):
+        if backend == "crux":
+            link = field.children[1]
+            assert link.href == url
+            assert link.target == "_blank" and link.rel == "noopener noreferrer"
+            assert _text(field) == f"Globus: {label}"
+        else:
+            assert field is None
+
+    # Navigating away or loading an unknown job clears the previous run's link.
+    assert job_page.load_job_data("http://localhost/job")[14] is None
+    assert job_page.load_job_data(_href(999))[14] is None
+
+
 def test_finished_run_with_failures_shows_counters_configuration_and_a_failure_page(
     engine, tmp_path, monkeypatch, compute
 ):
@@ -92,7 +155,8 @@ def test_finished_run_with_failures_shows_counters_configuration_and_a_failure_p
     outputs = job_page.load_job_data(_href(run.job_id))
 
     header, status, priority, computer, submit, start, finish, duration, messages, stop_disabled = outputs[:10]
-    progress, configuration, interval_disabled, offset = outputs[10:]
+    progress, configuration, interval_disabled, offset, flow_link = outputs[10:]
+    assert flow_link is None
     assert f"Job ID: {run.job_id}" in _texts(header) and f"Reconstruction R{run.id}" in " ".join(_texts(header))
     assert "Failed" in _texts(status)  # incomplete: one input failed
     assert stop_disabled is True and interval_disabled is True and offset == 0
@@ -101,7 +165,7 @@ def test_finished_run_with_failures_shows_counters_configuration_and_a_failure_p
 
     progress_text = " ".join(_texts(progress))
     assert "3 succeeded" in progress_text and "1 failed" in progress_text
-    assert "Processed 4 of 4" in progress_text
+    assert "Processed 4 of 4" not in progress_text
 
     configuration_text = " ".join(_texts(configuration))
     assert "Submitted request" in configuration_text and "wire edges" in configuration_text
@@ -192,7 +256,7 @@ def test_running_job_keeps_the_live_interval_and_reports_heartbeat_and_stop_requ
     assert "5 pending" not in progress_text or "pending" in progress_text
 
     live = job_page.refresh_live_fields(1, _href(run.job_id))
-    assert len(live) == 7 and live[6] is False
+    assert len(live) == 8 and live[6] is False
 
     with Session(engine) as session, session.begin():
         job = session.get(db_schema.Job, run.job_id)
@@ -292,6 +356,17 @@ def test_stop_run_uses_the_run_control_and_reloads(engine, tmp_path, monkeypatch
 def test_no_page_text_mentions_subjobs():
     source = open(job_page.__file__, encoding="utf-8").read().lower()
     assert "subjob" not in source
+
+
+@pytest.mark.parametrize(
+    "state,expected", [(None, "Cancelled"), ("running", "all accepted"), ("recovery", "interrupted")]
+)
+def test_stop_confirmation_explains_the_selected_run(state, expected, monkeypatch):
+    from laue_portal.workflows import live
+
+    monkeypatch.setattr(live, "live_for_job", lambda _: SimpleNamespace(state=state) if state else None)
+    opened, message = job_page.open_cancel_confirmation(1, _href(21))
+    assert opened and expected in message
 
 
 def test_an_incomplete_reconstruction_points_to_its_published_file():

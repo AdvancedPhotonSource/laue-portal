@@ -42,7 +42,7 @@ class WireReconstructionRequest:
     depth_resolution: float
     num_threads: int
     memory_limit_mb: int
-    scan_points: str
+    scan_points: str | None  # None is an open-ended live acquisition.
     verbose: int
     frame_skip: int = DEFAULT_SKIP
     wire_skip: int = DEFAULT_SKIP
@@ -56,7 +56,9 @@ class WireReconstructionRequest:
     scan_point_values: tuple[int, ...] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        scan_points, scan_point_values = normalize_integer_range(self.scan_points, "scan points")
+        scan_points, scan_point_values = (
+            (None, ()) if self.scan_points is None else normalize_integer_range(self.scan_points, "scan points")
+        )
         computer_name = str(self.computer_name).strip()
         geometry_file = os.path.normpath(os.fspath(self.geometry_file))
         if not computer_name:
@@ -83,6 +85,8 @@ def create_reconstruction(
 ) -> db_schema.ReconstructionRun:
     """Resolve files, create the run and its job atomically, then publish the manifest."""
 
+    if request.scan_points is None:
+        raise WorkflowValidationError("Batch reconstruction requires scan points")
     inputs = resolve_inputs(
         request.input_path,
         request.filename_prefixes,
