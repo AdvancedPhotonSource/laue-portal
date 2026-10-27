@@ -168,6 +168,12 @@ round-trip transfer while excluding queue wait.
 
 Run directories retain manifests, summaries, rank records, and scheduler logs.
 Returned paths are translated to the originating storage before publication.
+After a completed Globus return, the DM permissions stage calls
+`FileDsApi.restorePermissions` on exactly `incoming/<submission_id>` within the
+run. This restores the experiment's managed ownership and ACL write access for
+the beamline account; it does not set that account as the file owner. The call
+uses the existing DM setup/login and `dm.permissions_timeout_seconds` (default
+300). Re-render and update the registered workflow when adding this stage.
 The portal shows workflow state and scientific counters after return. Cancellation
 delivers a marker to the scheduler monitor, which requests `qdel`; uncertain
 submissions are reconciled without automatic resubmission.

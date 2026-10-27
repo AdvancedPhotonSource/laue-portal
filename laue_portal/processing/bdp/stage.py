@@ -8,9 +8,11 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from uuid import UUID
 
+from laue_portal.processing.bdp.dm import DMClient
 from laue_portal.processing.bdp.plan import submission_path
-from laue_portal.processing.bdp.settings import load_settings
+from laue_portal.processing.bdp.settings import child_path, load_settings
 from laue_portal.workflows.manifest import write_json_file
 
 
@@ -167,6 +169,23 @@ def monitor(plan, settings):
     return data
 
 
+def restore_permissions(plan, settings):
+    """Restore DM access only on this submission's completed return directory."""
+    identifier = str(UUID(plan["submission_id"]))
+    state = json.loads((Path(settings["state_directory"]) / f"{identifier}.json").read_text())
+    if plan["backend"] != "crux" or state["status"] != "SUCCEEDED":
+        raise ValueError("Permissions require a completed Globus workflow")
+    experiment = Path(settings["experiment_directory"]).resolve(strict=True)
+    run = child_path(experiment / "analysis", plan["run_directory"])
+    incoming = child_path(run, plan["incoming_directory"])
+    if incoming != run / "incoming" / identifier or not incoming.is_dir():
+        raise ValueError("Permissions must target this submission's incoming directory")
+    dm = settings["dm"]
+    client = DMClient({**dm, "timeout_seconds": dm.get("permissions_timeout_seconds", 300)})
+    client.restore_permissions(experiment.name, incoming.relative_to(experiment).as_posix())
+    return {"status": "PERMISSIONS_RESTORED"}
+
+
 def cancel(plan, settings):
     if plan["backend"] == "crux":
         import globus_sdk
@@ -205,7 +224,9 @@ def cancel(plan, settings):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
-    parser.add_argument("action", choices=["submit", "monitor", "check", "cancel", "auth", "auth-observer"])
+    parser.add_argument(
+        "action", choices=["submit", "monitor", "permissions", "check", "cancel", "auth", "auth-observer"]
+    )
     parser.add_argument("submission_id", nargs="?")
     args = parser.parse_args()
     settings = load_settings(args.config)
@@ -232,7 +253,9 @@ def main():
             return 1
         summary_path = Path(plan.get("incoming_directory", plan["output_directory"])) / "run.json"
         return 0 if json.loads(summary_path.read_text())["status"] == "Finished" else 1
-    data = {"submit": submit, "monitor": monitor, "cancel": cancel}[args.action](plan, settings)
+    data = {"submit": submit, "monitor": monitor, "permissions": restore_permissions, "cancel": cancel}[args.action](
+        plan, settings
+    )
     print(f"Status: {data['status']}")
     if data.get("observation"):
         print("Observation: " + json.dumps(data["observation"], separators=(",", ":")))

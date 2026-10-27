@@ -220,7 +220,8 @@ def _no_validation_errors():
     return {"errors": {}, "warnings": {}, "successes": {}}
 
 
-def test_wire_submission_passes_a_request_to_the_workflow_service(empty_test_database, tmp_path):
+@pytest.mark.parametrize("enqueue_fails", [False, True])
+def test_wire_submission_passes_a_request_to_the_workflow_service(empty_test_database, tmp_path, enqueue_fails):
     engine, _ = empty_test_database
     created_run = SimpleNamespace(id=41)
     callback_context = SimpleNamespace(states={"data_path.value": str(tmp_path)})
@@ -236,8 +237,12 @@ def test_wire_submission_passes_a_request_to_the_workflow_service(empty_test_dat
         patch.object(create_wire_reconstruction, "update_validation_alerts"),
         patch.object(create_wire_reconstruction.session_utils, "get_engine", return_value=engine),
         patch.object(create_wire_reconstruction, "create_reconstruction", return_value=created_run) as create,
-        patch.object(create_wire_reconstruction, "enqueue_reconstruction") as enqueue,
-        patch.object(create_wire_reconstruction, "set_props"),
+        patch.object(
+            create_wire_reconstruction,
+            "enqueue_reconstruction",
+            side_effect=RuntimeError("queue unavailable") if enqueue_fails else None,
+        ) as enqueue,
+        patch.object(create_wire_reconstruction, "set_props") as props,
     ):
         create_wire_reconstruction.submit_parameters(
             1,
@@ -265,6 +270,12 @@ def test_wire_submission_passes_a_request_to_the_workflow_service(empty_test_dat
     assert request.output_path_template.endswith("analysis/scan_12/rec_%d/data")
     assert (request.frame_skip, request.wire_skip) == (2, 0)
     enqueue.assert_called_once_with(41)
+    navigation = [call for call in props.call_args_list if call.args[0] == "url-create-wirerecon"]
+    assert bool(navigation) is not enqueue_fails
+    if navigation:
+        assert navigation[0].args[1] == {"href": "/wire_reconstruction?reconstruction_id=41"}
+    else:
+        assert "queue unavailable" in props.call_args.args[1]["children"]
 
 
 def test_wire_validation_rejects_negative_skips_and_warns_on_nondefault_skips(empty_test_database):
@@ -281,7 +292,8 @@ def test_wire_validation_rejects_negative_skips_and_warns_on_nondefault_skips(em
     ]
 
 
-def test_index_submission_uses_one_reconstruction_id(empty_test_database, tmp_path):
+@pytest.mark.parametrize("enqueue_fails", [False, True])
+def test_index_submission_uses_one_reconstruction_id(empty_test_database, tmp_path, enqueue_fails):
     engine, _ = empty_test_database
     reconstruction_id = _add_wire_reconstruction(engine)
     created_run = SimpleNamespace(id=52)
@@ -298,8 +310,12 @@ def test_index_submission_uses_one_reconstruction_id(empty_test_database, tmp_pa
         patch.object(create_peakindexing, "update_validation_alerts"),
         patch.object(create_peakindexing.session_utils, "get_engine", return_value=engine),
         patch.object(create_peakindexing, "create_indexing", return_value=created_run) as create,
-        patch.object(create_peakindexing, "enqueue_indexing") as enqueue,
-        patch.object(create_peakindexing, "set_props"),
+        patch.object(
+            create_peakindexing,
+            "enqueue_indexing",
+            side_effect=RuntimeError("queue unavailable") if enqueue_fails else None,
+        ) as enqueue,
+        patch.object(create_peakindexing, "set_props") as props,
     ):
         create_peakindexing.submit_parameters(
             1,
@@ -340,3 +356,9 @@ def test_index_submission_uses_one_reconstruction_id(empty_test_database, tmp_pa
     assert request.filename_prefixes == ("image_%d.h5",)
     assert request.min_size == 1.13  # not truncated
     enqueue.assert_called_once_with(52)
+    navigation = [call for call in props.call_args_list if call.args[0] == "url-create-peakindexing"]
+    assert bool(navigation) is not enqueue_fails
+    if navigation:
+        assert navigation[0].args[1] == {"href": "/peakindexing?indexing_id=52"}
+    else:
+        assert "queue unavailable" in props.call_args.args[1]["children"]

@@ -182,6 +182,18 @@ dagcomponentfuncs.StatusRenderer = function (props) {
     );
 };
 
+dagcomponentfuncs.RunStatusRenderer = function (props) {
+    const data = props.data || {};
+    if (!data.status_color) {
+        return dagcomponentfuncs.StatusRenderer({ ...props, value: data.status });
+    }
+    return React.createElement(
+        window.dash_bootstrap_components.Badge,
+        { color: data.status_color, title: data.status_detail },
+        props.value
+    );
+};
+
 // Keep progress on one line so it fits the run monitor's fixed-height rows.
 // processed = succeeded + failed.
 dagcomponentfuncs.RunProgressRenderer = function (props) {

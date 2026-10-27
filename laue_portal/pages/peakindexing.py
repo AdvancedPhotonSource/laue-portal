@@ -491,7 +491,7 @@ _viz_tabs = dbc.Tabs(
                                                 min=1,
                                                 max=75,
                                                 step=1,
-                                                value=40,
+                                                value=10,
                                                 debounce=True,
                                                 className="form-control",
                                             ),
@@ -670,7 +670,7 @@ _viz_tabs = dbc.Tabs(
                                                 min=1,
                                                 max=75,
                                                 step=1,
-                                                value=12,
+                                                value=6,
                                                 debounce=True,
                                                 className="form-control",
                                             ),
@@ -1469,7 +1469,7 @@ def update_orientation_map(
     } and not map_adapter.is_scalar_mode(effective_color):
         raise PreventUpdate
 
-    marker_size = max(1, int(input_size or 40))
+    marker_size = max(1, int(input_size or 10))
     is_3d_view = str(view_mode).lower() == "3d"
     if is_3d_view:
         axes = (x_axis_3d or "X", y_axis_3d or "Y", z_axis or "Z")
@@ -1673,7 +1673,7 @@ def update_pole_figure(
     rad_col_style = {"display": "flex", "alignItems": "center"}
     if color_scheme != "hsv_position":
         rad_col_style["display"] = "none"
-    marker_size = max(1, int(input_size or 12))
+    marker_size = max(1, int(input_size or 6))
 
     try:
         dataset = _dataset(source)

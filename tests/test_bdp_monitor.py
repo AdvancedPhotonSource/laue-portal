@@ -211,7 +211,8 @@ def test_dm_monitor_persists_one_probe_and_reports_results_across_invocations(tm
     assert "observer_task_id" not in json.loads(state.read_text())
 
 
-def test_dm_output_regex_captures_monitor_snapshot(tmp_path, monkeypatch, capsys):
+@pytest.mark.parametrize("needs_login", [False, True])
+def test_dm_output_regex_captures_monitor_snapshot(tmp_path, monkeypatch, capsys, needs_login):
     import re
     from pathlib import Path
 
@@ -226,8 +227,11 @@ def test_dm_output_regex_captures_monitor_snapshot(tmp_path, monkeypatch, capsys
     )
     client = Mock()
     client.get_status.return_value = {
-        "status": "ACTIVE",
-        "details": {"action_statuses": [{"state_name": "InputTransfer", "status": "ACTIVE"}]},
+        "status": "INACTIVE" if needs_login else "ACTIVE",
+        "details": {
+            "action_statuses": [{"state_name": "InputTransfer", "status": "INACTIVE" if needs_login else "ACTIVE"}],
+            **({"authorization_parameters": {"session_required_mfa": True}} if needs_login else {}),
+        },
     }
     monkeypatch.setattr(stage, "_client", lambda _: client)
     monkeypatch.setattr(stage, "load_settings", lambda _: settings)
@@ -240,8 +244,8 @@ def test_dm_output_regex_captures_monitor_snapshot(tmp_path, monkeypatch, capsys
     fields = {}
     for expression in definition["outputVariableRegexList"]:
         fields.update(re.search(expression, output).groupdict())
-    assert fields["remoteStatus"] == "ACTIVE"
-    assert json.loads(fields["remoteObservation"])["phase"] == "uplink"
+    assert fields["remoteStatus"] == ("INACTIVE" if needs_login else "ACTIVE")
+    assert json.loads(fields["remoteObservation"])["phase"] == ("login_required" if needs_login else "uplink")
 
 
 def test_one_probe_is_persisted_across_ticks_and_result_is_identity_checked():
@@ -292,7 +296,8 @@ def test_unavailable_probe_does_not_accumulate_tasks_or_erase_latest_observation
     assert "observer_task_id" not in state and state["observer_result"] == previous
 
 
-def test_poller_caches_valid_observation_without_publishing_counters(remote_run):  # noqa: F811
+@pytest.mark.parametrize("phase", ["running", "login_required"])
+def test_poller_caches_valid_observation_without_publishing_counters(remote_run, phase):  # noqa: F811
     from laue_portal.processing.bdp import backend
 
     engine, run, settings = remote_run
@@ -301,7 +306,7 @@ def test_poller_caches_valid_observation_without_publishing_counters(remote_run)
     job = load_job(engine, run.job_id)
     observation = {
         "submission_id": job.submission_id,
-        "phase": "running",
+        "phase": phase,
         "detail": "Processing",
         "observed_at": monitor.utc_now(),
         "remote_progress": {"n_succeeded": 1},
@@ -316,3 +321,46 @@ def test_poller_caches_valid_observation_without_publishing_counters(remote_run)
     assert load_job(engine, run.job_id).remote_observation == observation
     with Session(engine) as session:
         assert session.get(db_schema.Job, run.job_id).status == 1
+
+
+@pytest.mark.parametrize("location", ["run", "action"])
+@pytest.mark.parametrize("state", ["InputTransfer", "RunPbsJob", "ResultTransfer"])
+def test_auth_pause_is_bounded_and_clears_on_resume(location, state):
+    challenge = {
+        "authorization_parameters": {
+            "session_required_single_domain": ["example.org"],
+            "session_message": "Session reauthentication required (Globus Transfer)",
+        }
+    }
+    action = {"state_name": state, "status": "INACTIVE", "details": challenge if location == "action" else {}}
+    record = {
+        "status": "INACTIVE",
+        "details": {"action_statuses": [action], **(challenge if location == "run" else {})},
+    }
+    flow = monitor.flow_observation(record)
+    result = monitor.derive_remote_phase(flow, None)
+    assert result["phase"] == "login_required"
+    assert "Sign in to Globus" in result["detail"]
+    assert "authorization_parameters" not in json.dumps(flow)
+    assert "example.org" not in json.dumps(result)
+    assert len(json.dumps(result)) < 500
+
+    # Fresh ACTIVE responses must override an old auth challenge, even while
+    # waiting for the next observer receipt during RunPbsJob.
+    record["status"] = "ACTIVE"
+    action["status"] = "ACTIVE"
+    resumed = monitor.derive_remote_phase(monitor.flow_observation(record), None, previous=result)
+    expected = {"InputTransfer": "uplink", "RunPbsJob": "queued", "ResultTransfer": "downlink"}
+    assert resumed["phase"] == expected[state]
+    assert "Sign in" not in resumed["detail"]
+
+
+def test_auth_pause_without_action_and_non_auth_inactive_run():
+    record = {
+        "status": "INACTIVE",
+        "details": {"state_name": "InputTransfer", "authorization_parameters": {"required_scopes": ["scope"]}},
+    }
+    result = monitor.derive_remote_phase(monitor.flow_observation(record), None)
+    assert result["phase"] == "login_required" and result["flow_state"] == "InputTransfer"
+    record["details"] = {"code": "PermissionDenied", "description": "Access denied"}
+    assert not monitor.flow_observation(record).get("login_required")

@@ -1,6 +1,6 @@
 {
   "name": "{{WORKFLOW_NAME}}",
-  "description": "Laue Portal: DM submission, scheduler/Globus monitoring, and result validation",
+  "description": "Laue Portal: DM submission, scheduler/Globus monitoring, returned-file permissions, and result validation",
   "owner": "{{OWNER}}",
   "userAccount": "{{USER_ACCOUNT}}",
   "stages": {
@@ -22,7 +22,11 @@
         "Observation: (?P<remoteObservation>.*)"
       ]
     },
-    "03-CHECK": {
+    "03-PERMISSIONS": {
+      "runIf": "\"$analysisMachine\" == \"crux\" and \"$remoteStatus\" == \"SUCCEEDED\"",
+      "command": "{{STAGE_COMMAND}} permissions $submissionId"
+    },
+    "04-CHECK": {
       "command": "{{STAGE_COMMAND}} check $submissionId"
     }
   }

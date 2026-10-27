@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
-from laue_portal.processing.bdp.monitor import PHASE_LABELS, age_seconds
+from laue_portal.processing.bdp.monitor import remote_status
 from laue_portal.processing.queue.controls import cancel_run
 from laue_portal.processing.queue.core import RUN_POLICY
 from laue_portal.services import run_summary
@@ -281,20 +281,12 @@ def duration_text(job, *, now: datetime | None = None) -> str:
 def status_badge(progress):
     """Status badge plus the finer execution phase when it says more than the status."""
 
-    observation = progress.remote_observation
-    if progress.backend == "crux" and progress.is_active and observation and observation.get("phase") in PHASE_LABELS:
-        phase = observation["phase"]
-        detail = observation.get("detail", "")
-        pbs_id = observation.get("pbs", {}).get("job_id")
-        if pbs_id:
-            detail += f" · PBS {pbs_id.split('.')[0]}"
-        age = age_seconds(observation.get("observed_at"))
-        if observation.get("stale") or age is None or age > 90:
-            detail += " · status delayed"
+    remote = remote_status(progress.backend, progress.is_active, progress.remote_observation)
+    if remote:
         return html.Span(
             [
-                dbc.Badge(PHASE_LABELS[phase], color="warning" if phase == "queued" else "info"),
-                html.Small(" " + detail, className="text-muted ms-2"),
+                dbc.Badge(remote["label"], color=remote["color"]),
+                html.Small(" " + remote["detail"], className="text-muted ms-2"),
             ]
         )
     badge = dbc.Badge(progress.status_name, color=STATUS_COLORS.get(progress.status, "secondary"))

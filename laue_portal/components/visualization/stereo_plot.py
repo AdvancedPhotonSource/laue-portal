@@ -22,7 +22,7 @@ def build_pole_figure(
     color: str = "hsv_position",
     radius_deg: float = 22.5,
     center=(0.0, 0.0),
-    marker_size: int = 7,
+    marker_size: int = 6,
 ) -> tuple[go.Figure, PoleFigureData]:
     pole_data = prepare_pole_figure(
         dataset,

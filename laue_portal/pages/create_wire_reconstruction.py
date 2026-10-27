@@ -132,7 +132,7 @@ layout = dbc.Container(
             className="lp-form-page",
             children=[
                 navbar.navbar,
-                dcc.Location(id="url-create-wirerecon", refresh=False),
+                dcc.Location(id="url-create-wirerecon", refresh="callback-nav"),
                 dbc.Alert(
                     "Hello! I am an alert",
                     id="alert-submit",
@@ -943,6 +943,11 @@ def submit_parameters(
         color = "danger"
 
     set_props("alert-submit", {"is_open": True, "children": message, "color": color})
+    if submitted and not failures:
+        href = (
+            f"/wire_reconstruction?reconstruction_id={submitted[0][1:]}" if len(submitted) == 1 else "/reconstructions"
+        )
+        set_props("url-create-wirerecon", {"href": href})
 
 
 @dash.callback(

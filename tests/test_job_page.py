@@ -84,7 +84,14 @@ def _trigger(prop_id):
 
 
 @pytest.mark.parametrize(
-    "phase,label", [("uplink", "Uplink"), ("queued", "Queued"), ("running", "Running"), ("downlink", "Downlink")]
+    "phase,label",
+    [
+        ("uplink", "Uplink"),
+        ("queued", "Queued"),
+        ("running", "Running"),
+        ("downlink", "Downlink"),
+        ("login_required", "Login needed"),
+    ],
 )
 def test_alcf_phase_display_and_stale_observations(phase, label):
     from laue_portal.processing.bdp.monitor import utc_now

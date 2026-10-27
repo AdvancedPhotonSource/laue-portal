@@ -6,9 +6,16 @@ Scientific completion and publication remain the existing poller's responsibilit
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
-PHASE_LABELS = {"uplink": "Uplink", "queued": "Queued", "running": "Running", "downlink": "Downlink"}
+PHASE_LABELS = {
+    "uplink": "Uplink",
+    "queued": "Queued",
+    "running": "Running",
+    "downlink": "Downlink",
+    "login_required": "Login needed",
+}
 
 
 def utc_now():
@@ -25,6 +32,32 @@ def age_seconds(value, now=None):
         return max(0, ((now or datetime.now(timezone.utc)) - parsed).total_seconds())
     except (TypeError, ValueError):
         return None
+
+
+def remote_status(backend, is_active, observation, *, now=None):
+    """Shared job-page and table presentation; terminal job status takes priority."""
+    if backend != "crux" or not is_active:
+        return None
+    if isinstance(observation, str):
+        try:
+            observation = json.loads(observation)
+        except ValueError:
+            return None
+    if not isinstance(observation, dict) or observation.get("phase") not in PHASE_LABELS:
+        return None
+    phase = observation["phase"]
+    detail = observation.get("detail", "")
+    pbs_id = observation.get("pbs", {}).get("job_id")
+    if pbs_id:
+        detail += f" · PBS {pbs_id.split('.')[0]}"
+    age = age_seconds(observation.get("observed_at"), now)
+    if observation.get("stale") or age is None or age > 90:
+        detail += " · status delayed"
+    return {
+        "label": PHASE_LABELS[phase],
+        "detail": detail,
+        "color": "warning" if phase in {"queued", "login_required"} else "info",
+    }
 
 
 def read_run_status(submission_id):
@@ -169,25 +202,37 @@ def refresh_observer(plan, state, settings, client, *, now=None):
 
 def flow_observation(record):
     """Extract bounded fields from the Flow's current action statuses."""
-    actions = record.get("details", {}).get("action_statuses", [])
+    flow_details = record.get("details", {})
+    actions = flow_details.get("action_statuses", [])
+    # Session/consent challenges can appear on either the run or its action.
+    # Retain only the flag, never authorization parameters or token material.
+    login_required = record.get("status") == "INACTIVE" and any(
+        details.get("authorization_parameters")
+        for details in [flow_details, *(action.get("details", {}) for action in actions)]
+    )
+    result = {"login_required": True} if login_required else {}
     for action in reversed(actions):
         if action.get("state_name") in {"InputTransfer", "RunPbsJob", "ResultTransfer"}:
-            result = {"state": action["state_name"], "action_status": action.get("status")}
+            result.update(state=action["state_name"], action_status=action.get("status"))
             details = action.get("details", {})
             for key in ("task_id", "bytes_transferred", "files_transferred", "total_estimated_bytes"):
                 if key in details:
                     result[key] = details[key]
             return result
+    if login_required:
+        return {**result, "state": flow_details.get("state_name")}
     if record.get("status") == "SUCCEEDED":
         return {"state": "ResultTransfer", "action_status": "SUCCEEDED"}
     return {}
 
 
 def derive_remote_phase(flow, observation, *, previous=None, now=None, stale_seconds=90):
-    """Four display phases, independent of the job's authoritative lifecycle."""
+    """Execution phases and auth pauses, independent of the authoritative lifecycle."""
     now = now or datetime.now(timezone.utc)
     state = flow.get("state")
     previous = previous or {}
+    if previous.get("phase") == "login_required" and not flow.get("login_required"):
+        previous = {}  # A resumed run must not inherit the previous login pause.
     result = {
         "phase": previous.get("phase", "queued"),
         "detail": "Awaiting workflow",
@@ -231,6 +276,9 @@ def derive_remote_phase(flow, observation, *, previous=None, now=None, stale_sec
                 result["detail"] = "Submitting to PBS"
             if observation.get("progress"):
                 result["remote_progress"] = observation["progress"]
+    if flow.get("login_required"):
+        result.update(phase="login_required", detail="Sign in to Globus and resume this run")
+        result.pop("stale", None)
     result["flow_state"] = state
     for key in ("task_id", "bytes_transferred", "files_transferred", "total_estimated_bytes"):
         if key in flow:

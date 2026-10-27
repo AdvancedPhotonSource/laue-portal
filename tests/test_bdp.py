@@ -471,7 +471,7 @@ def test_dm_submission_uses_one_frozen_shared_file_without_remote_file_iteration
     assert args["filePath"] == "/experiment/analysis/run/request.json"
 
 
-@pytest.mark.parametrize("operation", ["submit", "get", "find"])
+@pytest.mark.parametrize("operation", ["submit", "get", "find", "restore_permissions"])
 def test_dm_bridge_preserves_processing_job_objects_as_structured_json(operation, monkeypatch, capsys):
     from laue_portal.processing.bdp.dm import _API_SCRIPT
 
@@ -481,14 +481,18 @@ def test_dm_bridge_preserves_processing_job_objects_as_structured_json(operation
     api.startProcessingJob.return_value = job
     api.getProcessingJobById.return_value = job
     api.listProcessingJobRecords.return_value = [job]
-    for name in ("dm", "dm.proc_web_service", "dm.proc_web_service.api"):
+    api.restorePermissions.return_value = job
+    for name in ("dm", "dm.proc_web_service", "dm.proc_web_service.api", "dm.ds_web_service", "dm.ds_web_service.api"):
         monkeypatch.setitem(sys.modules, name, SimpleNamespace())
     monkeypatch.setitem(
         sys.modules, "dm.proc_web_service.api.workflowProcApi", SimpleNamespace(WorkflowProcApi=lambda: api)
     )
+    monkeypatch.setitem(sys.modules, "dm.ds_web_service.api.fileDsApi", SimpleNamespace(FileDsApi=lambda: api))
     arguments = {
         "owner": "test-user",
         "workflow": "laue",
+        "experiment": "test-experiment",
+        "relative_path": "analysis/run/incoming/submission-1",
         "arguments": {},
         "id": "dm-1",
         "submission_id": "submission-1",
@@ -496,3 +500,7 @@ def test_dm_bridge_preserves_processing_job_objects_as_structured_json(operation
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({"operation": operation, "args": arguments})))
     exec(_API_SCRIPT, {})
     assert json.loads(capsys.readouterr().out) == ([record] if operation == "find" else record)
+    if operation == "restore_permissions":
+        api.restorePermissions.assert_called_once_with(
+            experimentPath=arguments["relative_path"], experimentName=arguments["experiment"]
+        )

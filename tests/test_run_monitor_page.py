@@ -14,6 +14,7 @@ import lau_dash  # noqa: F401  instantiates the Dash app so page modules can reg
 from laue_portal.components import live_rows
 from laue_portal.database import db_schema
 from laue_portal.pages import peakindexings, reconstructions, run_monitor
+from laue_portal.processing.bdp.monitor import PHASE_LABELS, utc_now
 from laue_portal.workflows import execution
 from laue_portal.workflows.execution import JobStatus
 from tests.conftest import create_test_indexing_run, create_test_lauego_parameters
@@ -49,12 +50,61 @@ def test_rows_carry_run_counters_and_the_progress_column_uses_the_run_renderer(e
     row = rows[0]
     assert (row["n_inputs"], row["n_succeeded"], row["n_failed"], row["n_not_run"]) == (5, 2, 1, 0)
     assert (row["n_processed"], row["n_pending"]) == (3, 2)
+    assert row["reconstruction_method"] == "wire"  # hidden, but needed for the detail link
     assert row["duration_display"].endswith("(running)")
     progress = next(column for column in columns if column["headerName"] == "Run Progress")
     assert progress["cellRenderer"] == "RunProgressRenderer" and progress["field"] == "n_processed"
     fields = {column.get("field") for column in columns}
     assert "SubJobs Progress" not in {column["headerName"] for column in columns}
-    assert fields.isdisjoint({"manifest_path", "queue_job_id", "failure_report_path", "heartbeat_at"})
+    assert fields.isdisjoint(
+        {
+            "manifest_path",
+            "queue_job_id",
+            "failure_report_path",
+            "heartbeat_at",
+            "remote_observation",
+            "reconstruction_method",
+            "aperture",
+        }
+    )
+
+
+@pytest.mark.parametrize("phase,label", PHASE_LABELS.items())
+def test_remote_status_matches_job_page_and_terminal_state_takes_priority(engine, tmp_path, phase, label):
+    from laue_portal.pages import job as job_page
+    from laue_portal.workflows.progress import RunProgress
+
+    run = publish_wire_run(engine, tmp_path, count=2)
+    _start(engine, run.job_id)
+    with Session(engine) as session, session.begin():
+        job = session.get(db_schema.Job, run.job_id)
+        job.backend = "crux"
+        job.computer_name = "remote-computer"
+        job.remote_observation = {"phase": phase, "detail": "Test detail", "observed_at": utc_now()}
+        assert label in _text(job_page.status_badge(RunProgress.from_job(job)))
+
+    columns, rows, state = run_monitor.get_jobs("/run-monitor")
+    row = rows[0]
+    assert row["status_display"] == label and row["status"] == JobStatus.RUNNING
+    assert row["execution"] == "remote-computer" and "via DM" not in row["execution"]
+    assert "remote_observation" not in row
+    status = next(column for column in columns if column["headerName"] == "Status")
+    assert status["field"] == "status_display" and status["cellRenderer"] == "RunStatusRenderer"
+
+    _finish(engine, run.job_id)
+    transaction, _ = run_monitor.refresh_jobs(1, None, state, "/run-monitor")
+    assert transaction["update"][0]["status_display"] == "Finished"
+    assert transaction["update"][0]["status_color"] is None
+    with Session(engine) as session:
+        job = session.get(db_schema.Job, run.job_id)
+        assert label not in _text(job_page.status_badge(RunProgress.from_job(job))) or label == "Finished"
+
+
+def test_local_execution_label_is_the_stored_computer(engine, tmp_path):
+    run = publish_wire_run(engine, tmp_path)
+    with Session(engine) as session, session.begin():
+        session.get(db_schema.Job, run.job_id).computer_name = "local-computer"
+    assert run_monitor._job_rows()[0]["execution"] == "local-computer"
 
 
 def test_refresh_sends_only_active_or_newly_finalized_rows_and_adds_new_runs(engine, tmp_path, monkeypatch):

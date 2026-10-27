@@ -28,6 +28,10 @@ elif operation == 'get':
         result = api.getProcessingJobRecord(args['id'])
 elif operation == 'find':
     result = api.listProcessingJobRecords(queryDict={'submissionId': args['submission_id']}, limit=10)
+elif operation == 'restore_permissions':
+    from dm.ds_web_service.api.fileDsApi import FileDsApi
+    result = FileDsApi().restorePermissions(
+        experimentPath=args['relative_path'], experimentName=args['experiment'])
 elif operation in ('daqs', 'daq', 'arrival_files'):
     from dm.daq_web_service.api.experimentDaqApi import ExperimentDaqApi
     daq_api = ExperimentDaqApi()
@@ -65,7 +69,9 @@ class DMClient:
         command = (
             f"source {shlex.quote(self.settings['setup_file'])} >/dev/null; exec python -c {shlex.quote(_API_SCRIPT)}"
         )
-        argv = shell_command(command, self.settings.get("ssh_host"))
+        # The setup file supplies the DM environment. Interactive login profiles
+        # can print banners or load incompatible modules into this JSON channel.
+        argv = shell_command(command, self.settings.get("ssh_host"), login=False)
         result = subprocess.run(
             argv,
             input=json.dumps({"operation": operation, "args": args}),
@@ -97,6 +103,9 @@ class DMClient:
 
     def find(self, submission_id):
         return self._call("find", submission_id=submission_id)
+
+    def restore_permissions(self, experiment, relative_path):
+        return self._call("restore_permissions", experiment=experiment, relative_path=relative_path)
 
     def daqs(self):
         return self._call("daqs")

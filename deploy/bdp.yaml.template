@@ -19,6 +19,7 @@ dm:
   workflow: laue-portal-bdp
   cancel_workflow: laue-portal-bdp-cancel
   timeout_seconds: 30
+  permissions_timeout_seconds: 300  # Recursive storage-service metadata updates.
   # Local launcher settings on the workflow host. SSH is an optional fallback.
   launcher_ssh_host: null
   launcher_python: /path/to/launcher/envs/laue-portal/bin/python

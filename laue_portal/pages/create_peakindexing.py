@@ -159,7 +159,7 @@ layout = dbc.Container(
             className="lp-form-page",
             children=[
                 navbar.navbar,
-                dcc.Location(id="url-create-peakindexing", refresh=False),
+                dcc.Location(id="url-create-peakindexing", refresh="callback-nav"),
                 dbc.Alert(
                     "Hello! I am an alert",
                     id="alert-upload",
@@ -604,6 +604,9 @@ def submit_parameters(
         message = f"Submission failed: {'; '.join(failures)}"
         color = "danger"
     set_props("alert-submit", {"is_open": True, "children": message, "color": color})
+    if submitted and not failures:
+        href = f"/peakindexing?indexing_id={submitted[0][1:]}" if len(submitted) == 1 else "/peakindexings"
+        set_props("url-create-peakindexing", {"href": href})
 
 
 @dash.callback(

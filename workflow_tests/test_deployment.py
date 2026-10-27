@@ -44,7 +44,10 @@ def site(tmp_path):
     }
 
 
-def test_rendered_workflow_executes_wrapper_with_quoted_site_paths(tmp_path):
+@pytest.mark.parametrize(
+    "stage_key,action", [("01-SUBMIT", "submit"), ("03-PERMISSIONS", "permissions"), ("04-CHECK", "check")]
+)
+def test_rendered_workflow_executes_wrapper_with_quoted_site_paths(tmp_path, stage_key, action):
     settings = site(tmp_path)
     output = tmp_path / "private definitions"
     files = tool("render-workflows.py")["render_workflows"](settings, output)
@@ -54,11 +57,22 @@ def test_rendered_workflow_executes_wrapper_with_quoted_site_paths(tmp_path):
     cancel = json.loads((output / "workflow-bdp-cancel.json").read_text())
     assert (main["name"], main["owner"], main["userAccount"]) == ("test-analysis", "test-owner", "test-executor")
     assert cancel["name"] == "test-cancel"
+    assert list(main["stages"]) == ["01-SUBMIT", "02-MONITOR", "03-PERMISSIONS", "04-CHECK"]
+    condition = main["stages"]["03-PERMISSIONS"]["runIf"]
+    for backend, status, expected in [
+        ("crux", "SUCCEEDED", True),
+        ("aps", "SUCCEEDED", False),
+        ("crux", "FAILED", False),
+    ]:
+        assert (
+            eval(condition.replace("$analysisMachine", backend).replace("$remoteStatus", status), {"__builtins__": {}})
+            is expected
+        )
     assert "$cancelSubmissionId" in cancel["stages"]["01-CANCEL"]["command"]
     receipt = tmp_path / "receipt.json"
     identifier = "00000000-0000-0000-0000-000000000001"
     subprocess.run(
-        ["bash", "-c", main["stages"]["01-SUBMIT"]["command"]],
+        ["bash", "-c", main["stages"][stage_key]["command"]],
         env={**os.environ, "submissionId": identifier, "RECEIPT": str(receipt)},
         check=True,
         capture_output=True,
@@ -71,7 +85,7 @@ def test_rendered_workflow_executes_wrapper_with_quoted_site_paths(tmp_path):
         "laue_portal.processing.bdp.stage",
         "--config",
         settings["dm"]["launcher_config"],
-        "submit",
+        action,
         identifier,
     ]
 
