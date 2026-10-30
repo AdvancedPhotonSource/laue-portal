@@ -163,6 +163,8 @@ def execution_rows(details: RunDetails) -> list[tuple[str, str]]:
     rows: list[tuple[str, str]] = []
     provenance = summary.get("provenance") or {}
     for key, value in provenance.items():
+        if key == "engine" and isinstance(value, str):
+            value = value.partition(" (")[0]
         rows.append((key.replace("_", " "), _format_value(value)))
     policy = summary.get("policy") or {}
     for key, value in policy.items():

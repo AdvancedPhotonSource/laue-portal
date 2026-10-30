@@ -1,0 +1,4 @@
+# The task worker submits/monitors PBS jobs; analysis never runs in this worker.
+display_name: Laue PBS submission
+amqp_port: 443
+public: false

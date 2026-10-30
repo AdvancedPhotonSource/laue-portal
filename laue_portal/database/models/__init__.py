@@ -9,6 +9,7 @@ from .calib import Calib
 from .catalog import Catalog
 from .indexing_run import IndexingRun, LaueGoIndexingParameters
 from .job import Job
+from .live import LiveCheckpoint, LivePoint, LiveSession
 from .metadata import Metadata
 from .reconstruction_run import ReconstructionRun, WireReconstructionParameters
 from .scan import Scan
@@ -19,6 +20,9 @@ __all__ = [
     "Scan",
     "Catalog",
     "Job",
+    "LiveSession",
+    "LivePoint",
+    "LiveCheckpoint",
     "ReconstructionRun",
     "WireReconstructionParameters",
     "IndexingRun",

@@ -7,15 +7,18 @@ import pandas as pd
 from dash import Input, Output, State, dcc, html
 from dash.exceptions import PreventUpdate
 from sqlalchemy import func
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session
 
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
 from laue_portal.components import live_rows
+from laue_portal.processing.bdp.monitor import remote_status
+from laue_portal.processing.bdp.settings import execution_computer
 from laue_portal.processing.queue.controls import cancel_run, move_run_to_front
 from laue_portal.processing.queue.core import STATUS_REVERSE_MAPPING
-from laue_portal.workflows.progress import active_or_changed_since, derived_progress_columns
+from laue_portal.workflows.execution import STATUS_NAMES
+from laue_portal.workflows.progress import ACTIVE_STATUSES, active_or_changed_since, derived_progress_columns
 
 dash.register_page(__name__)
 
@@ -156,6 +159,7 @@ CUSTOM_HEADER_NAMES = {
     "submit_time": "Date",
     "duration_display": "Duration",
     "author": "Author",
+    "status_display": "Status",
 }
 
 
@@ -186,6 +190,17 @@ def calculate_duration_display(start_time, finish_time, current_time):
 
 PROGRESS_FIELDS = ["n_inputs", "n_succeeded", "n_failed", "n_not_run", "n_processed", "n_pending"]
 HIDDEN_FIELDS = [
+    "status",
+    "status_color",
+    "status_detail",
+    "remote_observation",
+    "reconstruction_method",
+    "aperture",
+    "backend",
+    "submission_id",
+    "external_id",
+    "external_state",
+    "external_url",
     "row_type",
     "priority",
     "computer_name",
@@ -215,26 +230,18 @@ def _job_rows(criterion=None) -> list[dict]:
     """
 
     with Session(session_utils.get_engine()) as session:
-        catalog_calib = aliased(db_schema.Catalog)
-        catalog_reconstruction = aliased(db_schema.Catalog)
-        catalog_indexing = aliased(db_schema.Catalog)
-
         query = (
             session.query(
                 db_schema.Job,
                 *derived_progress_columns(),
                 *REFERENCE_COLS,
+                # Needed by reconstruction links, but not displayed as a column.
                 db_schema.ReconstructionRun.method.label("reconstruction_method"),
                 func.coalesce(
                     db_schema.Calib.scanNumber,
                     db_schema.ReconstructionRun.scan_number,
                     db_schema.IndexingRun.scan_number,
                 ).label("scan_number"),
-                func.coalesce(
-                    catalog_calib.aperture,
-                    catalog_reconstruction.aperture,
-                    catalog_indexing.aperture,
-                ).label("aperture"),
                 func.coalesce(
                     db_schema.Calib.author,
                     db_schema.ReconstructionRun.author,
@@ -244,12 +251,6 @@ def _job_rows(criterion=None) -> list[dict]:
             .outerjoin(db_schema.Calib, db_schema.Job.job_id == db_schema.Calib.job_id)
             .outerjoin(db_schema.ReconstructionRun, db_schema.Job.job_id == db_schema.ReconstructionRun.job_id)
             .outerjoin(db_schema.IndexingRun, db_schema.Job.job_id == db_schema.IndexingRun.job_id)
-            .outerjoin(catalog_calib, db_schema.Calib.scanNumber == catalog_calib.scanNumber)
-            .outerjoin(
-                catalog_reconstruction,
-                db_schema.ReconstructionRun.scan_number == catalog_reconstruction.scanNumber,
-            )
-            .outerjoin(catalog_indexing, db_schema.IndexingRun.scan_number == catalog_indexing.scanNumber)
         )
         if criterion is not None:
             query = query.filter(criterion)
@@ -260,6 +261,16 @@ def _job_rows(criterion=None) -> list[dict]:
     rows = []
     for _, job in jobs.iterrows():
         row = job.to_dict()
+        computer = row.get("computer_name")
+        row["execution"] = (
+            computer if pd.notna(computer) and computer else execution_computer(row.get("backend") or "local")
+        )
+        remote = remote_status(
+            row.get("backend"), row["status"] in ACTIVE_STATUSES, row.pop("remote_observation", None)
+        )
+        row["status_display"] = remote["label"] if remote else STATUS_NAMES.get(row["status"], "Unknown")
+        row["status_color"] = remote["color"] if remote else None
+        row["status_detail"] = remote["detail"] if remote else ""
         row["row_type"] = "job"
         row["duration_display"] = calculate_duration_display(
             row.get("start_time"), row.get("finish_time"), current_time
@@ -270,6 +281,11 @@ def _job_rows(criterion=None) -> list[dict]:
 
 def _column_defs(all_columns: list[str]) -> list[dict]:
     """AG Grid column definitions for the run table."""
+
+    all_columns = list(all_columns)
+    if "status" in all_columns and "status_display" in all_columns:
+        all_columns.remove("status_display")
+        all_columns[all_columns.index("status")] = "status_display"
 
     cols = [
         {
@@ -312,8 +328,9 @@ def _column_defs(all_columns: list[str]) -> list[dict]:
             col_def["cellRenderer"] = "ScanLinkRenderer"
         elif field_key in ["submit_time", "start_time", "finish_time"]:
             col_def["cellRenderer"] = "DateFormatter"
-        elif field_key == "status":
-            col_def["cellRenderer"] = "StatusRenderer"
+        elif field_key == "status_display":
+            col_def["cellRenderer"] = "RunStatusRenderer"
+            col_def["tooltipField"] = "status_detail"
         cols.append(col_def)
 
     job_reference_col = {
@@ -377,7 +394,7 @@ def _get_jobs():
     """Full load: column definitions and every run row."""
 
     rows = _job_rows()
-    columns = list(rows[0].keys()) if rows else ["job_id", "status", "start_time", "n_inputs"]
+    columns = list(rows[0].keys()) if rows else ["job_id", "status_display", "start_time", "n_inputs"]
     return _column_defs(columns), rows
 
 

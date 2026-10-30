@@ -491,7 +491,7 @@ _viz_tabs = dbc.Tabs(
                                                 min=1,
                                                 max=75,
                                                 step=1,
-                                                value=40,
+                                                value=10,
                                                 debounce=True,
                                                 className="form-control",
                                             ),
@@ -670,7 +670,7 @@ _viz_tabs = dbc.Tabs(
                                                 min=1,
                                                 max=75,
                                                 step=1,
-                                                value=12,
+                                                value=6,
                                                 debounce=True,
                                                 className="form-control",
                                             ),
@@ -995,6 +995,8 @@ layout = html.Div(
     [
         navbar.navbar,
         dcc.Location(id="url-peakindexing-page", refresh=False),
+        dcc.Interval(id="peakindexing-live-poll", interval=3000),
+        dcc.Store(id="peakindexing-live-revision"),
         # Identity of the result artifact shown (path and kind); datasets stay in the server cache.
         dcc.Store(id="peakindexing-source"),
         # Store DB/config roots used to resolve detector image files.
@@ -1084,16 +1086,35 @@ def _source_for(resolution, parameters):
     Output("peakindexing-source", "data"),
     Output("peakindexing-path-context", "data"),
     Output("peakindexing-artifacts", "data"),
+    Output("peakindexing-live-revision", "data"),
     Input("url-peakindexing-page", "href"),
+    Input("peakindexing-live-poll", "n_intervals"),
+    State("peakindexing-live-revision", "data"),
     prevent_initial_call=True,
 )
+def refresh_peakindexing_data(href, tick=0, current_revision=None):
+    from laue_portal.services.live_views import publication
+
+    if not href:
+        raise PreventUpdate
+    identity = urllib.parse.parse_qs(urllib.parse.urlparse(href).query).get("indexing_id", [None])[0]
+    try:
+        live = publication(int(identity), "indexing") if identity else None
+    except ValueError:
+        live = None
+    revision = {"id": identity, "revision": live["revision"] if live else None}
+    if tick and current_revision == revision:
+        raise PreventUpdate
+    header, source, context, artifacts = load_peakindexing_data(href)
+    if source is not None and live:
+        source["live_revision"] = live["revision"]
+    return header, source, context, artifacts, revision
+
+
 def load_peakindexing_data(href):
     if not href:
         raise PreventUpdate
-
-    parsed_url = urllib.parse.urlparse(href)
-    query_params = urllib.parse.parse_qs(parsed_url.query)
-
+    query_params = urllib.parse.parse_qs(urllib.parse.urlparse(href).query)
     indexing_id_str = query_params.get("indexing_id", [None])[0]
 
     root_path = DEFAULT_VARIABLES.get("root_path", "")
@@ -1448,7 +1469,7 @@ def update_orientation_map(
     } and not map_adapter.is_scalar_mode(effective_color):
         raise PreventUpdate
 
-    marker_size = max(1, int(input_size or 40))
+    marker_size = max(1, int(input_size or 10))
     is_3d_view = str(view_mode).lower() == "3d"
     if is_3d_view:
         axes = (x_axis_3d or "X", y_axis_3d or "Y", z_axis or "Z")
@@ -1652,7 +1673,7 @@ def update_pole_figure(
     rad_col_style = {"display": "flex", "alignItems": "center"}
     if color_scheme != "hsv_position":
         rad_col_style["display"] = "none"
-    marker_size = max(1, int(input_size or 12))
+    marker_size = max(1, int(input_size or 6))
 
     try:
         dataset = _dataset(source)
@@ -2037,9 +2058,10 @@ def _detector_frame(dataset, scope, step_value):
     Output("detector-step-range-text", "children"),
     Input("peakindexing-source", "data"),
     Input(SCOPE_STORE_ID, "data"),
+    State("detector-step-select", "value"),
     prevent_initial_call=True,
 )
-def populate_detector_step_input(source, scope):
+def populate_detector_step_input(source, scope, current=None):
     """Bounds for the step input; the first eligible frame with an indexed pattern is preselected."""
 
     if not source:
@@ -2054,6 +2076,8 @@ def populate_detector_step_input(source, scope):
         return 0, 0, None, "No steps match the data scope"
     with_patterns = [position for position in eligible if (dataset.pattern_frame_indices == position).any()]
     default_value = int(with_patterns[0] if with_patterns else eligible[0])
+    if current is not None and current in eligible:
+        default_value = current
     step_min, step_max = int(eligible[0]), int(eligible[-1])
     return step_min, step_max, default_value, f"Eligible steps: {len(eligible)} ({step_min} to {step_max})"
 

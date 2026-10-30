@@ -1,0 +1,8 @@
+# Globus/Gladier dependencies; requirements-aps.txt adds these to the portal environment.
+# This file can also be used alone for a lightweight DM workflow launcher.
+# Use Python 3.12, matching the configured Compute endpoint.
+gladier==0.11.0
+gladier-tools==0.5.4
+globus-compute-sdk==4.19.0
+globus-sdk==4.9.1
+PyYAML==6.0.2

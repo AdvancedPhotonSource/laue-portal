@@ -1,0 +1,33 @@
+{
+  "name": "{{WORKFLOW_NAME}}",
+  "description": "Laue Portal: DM submission, scheduler/Globus monitoring, returned-file permissions, and result validation",
+  "owner": "{{OWNER}}",
+  "userAccount": "{{USER_ACCOUNT}}",
+  "stages": {
+    "01-SUBMIT": {
+      "command": "{{STAGE_COMMAND}} submit $submissionId",
+      "outputVariableRegexList": [
+        "Status: (?P<remoteStatus>.*)",
+        "Flow Action ID: (?P<flowID>.*)",
+        "URL: (?P<url>.*)"
+      ]
+    },
+    "02-MONITOR": {
+      "command": "{{STAGE_COMMAND}} monitor $submissionId",
+      "repeatPeriod": 10,
+      "repeatUntil": "\"$remoteStatus\" in (\"SUCCEEDED\", \"FAILED\", \"CANCELLED\")",
+      "maxRepeats": 17280,
+      "outputVariableRegexList": [
+        "Status: (?P<remoteStatus>.*)",
+        "Observation: (?P<remoteObservation>.*)"
+      ]
+    },
+    "03-PERMISSIONS": {
+      "runIf": "\"$analysisMachine\" == \"crux\" and \"$remoteStatus\" == \"SUCCEEDED\"",
+      "command": "{{STAGE_COMMAND}} permissions $submissionId"
+    },
+    "04-CHECK": {
+      "command": "{{STAGE_COMMAND}} check $submissionId"
+    }
+  }
+}

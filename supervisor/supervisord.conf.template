@@ -68,6 +68,20 @@ process_name=%(program_name)s_%(process_num)02d
 stopsignal=TERM
 stopwaitsecs=600
 
+# Enable after BDP is configured and the database copy is upgraded.
+[program:bdp_poller]
+command={{PYTHON_BIN}} -m laue_portal.processing.bdp.poller
+directory={{PROJECT_DIR}}
+autostart=false
+autorestart=unexpected
+redirect_stderr=true
+stdout_logfile=%(here)s/logs/%(program_name)s.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+stopsignal=TERM
+stopwaitsecs=70
+priority=310
+
 # Group all Laue Portal services
 [group:laue-portal]
 programs=dash,redis,rq_worker

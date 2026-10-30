@@ -9,6 +9,10 @@ from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, joinedload
 
 from laue_portal.database import db_schema, session_utils
+
+# Leading stored slices (frame_skip) and wire-vector entries (wire_skip) that
+# reconstruction skips: MULTI_IMAGE_SKIP and MULTI_IMAGE_SKIPV of reconstructN_cpu.
+from laue_portal.workflows.constants import DEFAULT_SKIP
 from laue_portal.workflows.files import (
     ProgressCallback,
     WorkflowValidationError,
@@ -20,10 +24,6 @@ from laue_portal.workflows.files import (
     resolve_inputs,
 )
 from laue_portal.workflows.run_records import new_job, publish_run_inputs, request_document
-
-# Leading stored slices (frame_skip) and wire-vector entries (wire_skip) that
-# reconstruction skips: MULTI_IMAGE_SKIP and MULTI_IMAGE_SKIPV of reconstructN_cpu.
-DEFAULT_SKIP = 1
 
 
 @dataclass(frozen=True)
@@ -42,20 +42,23 @@ class WireReconstructionRequest:
     depth_resolution: float
     num_threads: int
     memory_limit_mb: int
-    scan_points: str
+    scan_points: str | None  # None is an open-ended live acquisition.
     verbose: int
     frame_skip: int = DEFAULT_SKIP
     wire_skip: int = DEFAULT_SKIP
     author: str | None = None
     notes: str | None = None
     algorithm_version: str | None = None
+    backend: str = "local"
     computer_name: str = "example_computer"
     priority: int = 0
     submitted_at: datetime = field(default_factory=datetime.now)
     scan_point_values: tuple[int, ...] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        scan_points, scan_point_values = normalize_integer_range(self.scan_points, "scan points")
+        scan_points, scan_point_values = (
+            (None, ()) if self.scan_points is None else normalize_integer_range(self.scan_points, "scan points")
+        )
         computer_name = str(self.computer_name).strip()
         geometry_file = os.path.normpath(os.fspath(self.geometry_file))
         if not computer_name:
@@ -82,6 +85,8 @@ def create_reconstruction(
 ) -> db_schema.ReconstructionRun:
     """Resolve files, create the run and its job atomically, then publish the manifest."""
 
+    if request.scan_points is None:
+        raise WorkflowValidationError("Batch reconstruction requires scan points")
     inputs = resolve_inputs(
         request.input_path,
         request.filename_prefixes,
@@ -95,6 +100,7 @@ def create_reconstruction(
         with session.begin():
             job = new_job(
                 computer_name=request.computer_name,
+                backend=request.backend,
                 priority=request.priority,
                 submitted_at=request.submitted_at,
                 n_inputs=len(inputs),

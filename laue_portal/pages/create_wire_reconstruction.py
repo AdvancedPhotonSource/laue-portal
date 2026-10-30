@@ -2,7 +2,6 @@ import datetime
 import logging
 import os
 import urllib.parse
-from types import SimpleNamespace
 
 import dash
 import dash_bootstrap_components as dbc
@@ -13,6 +12,9 @@ from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
+from laue_portal.components.execution_target import execution_target
+from laue_portal.components.request_defaults import create_default_wirerecon
+from laue_portal.components.runtime_estimate import register_runtime_estimate
 from laue_portal.components.validation_alerts import (
     apply_validation_highlights,
     update_validation_alerts,
@@ -33,6 +35,7 @@ from laue_portal.pages.callback_registrars import (
     register_load_file_indices_callback,
     register_update_path_fields_callback,
 )
+from laue_portal.processing.bdp.settings import execution_computer, require_backend
 from laue_portal.processing.queue.enqueue import enqueue_reconstruction
 from laue_portal.services.validation import (
     add_validation_message,
@@ -85,36 +88,6 @@ def build_output_folder_template(scan_num_int, data_path, reconstruction_id_int=
     return os.path.join(*path_parts)
 
 
-def create_default_wirerecon(overrides=None):
-    """Return form data using the canonical reconstruction field names."""
-    defaults = {
-        "id": None,
-        "scan_number": None,
-        "root_path": DEFAULT_VARIABLES.get("root_path", ""),
-        "data_path": "",
-        "input_path": "",
-        "filename_prefixes": [],
-        "author": DEFAULT_VARIABLES.get("author", ""),
-        "notes": DEFAULT_VARIABLES.get("notes", ""),
-        "geometry_file": WIRERECON_DEFAULTS.get("geoFile"),
-        "percent_brightest": WIRERECON_DEFAULTS.get("percent_brightest"),
-        "wire_edges": WIRERECON_DEFAULTS.get("wire_edges"),
-        "depth_start": WIRERECON_DEFAULTS.get("depth_start"),
-        "depth_end": WIRERECON_DEFAULTS.get("depth_end"),
-        "depth_resolution": WIRERECON_DEFAULTS.get("depth_resolution"),
-        "frame_skip": WIRERECON_DEFAULTS.get("frame_skip", DEFAULT_SKIP),
-        "wire_skip": WIRERECON_DEFAULTS.get("wire_skip", DEFAULT_SKIP),
-        "num_threads": DEFAULT_VARIABLES.get("num_threads"),
-        "memory_limit_mb": DEFAULT_VARIABLES.get("memory_limit_mb"),
-        "scan_points": WIRERECON_DEFAULTS.get("scanPoints", ""),
-        "output_path_template": build_output_folder_template(None, None),
-        "verbose": DEFAULT_VARIABLES.get("verbose"),
-    }
-    if overrides:
-        defaults.update(overrides)
-    return SimpleNamespace(**defaults)
-
-
 def _copy_reconstruction_for_form(run, root_path):
     parameters = run.wire_parameters
     if parameters is None:
@@ -151,6 +124,7 @@ CATALOG_DEFAULTS = {
 }
 
 dash.register_page(__name__)
+register_runtime_estimate("reconstruction")
 
 layout = dbc.Container(
     [
@@ -158,7 +132,7 @@ layout = dbc.Container(
             className="lp-form-page",
             children=[
                 navbar.navbar,
-                dcc.Location(id="url-create-wirerecon", refresh=False),
+                dcc.Location(id="url-create-wirerecon", refresh="callback-nav"),
                 dbc.Alert(
                     "Hello! I am an alert",
                     id="alert-submit",
@@ -184,6 +158,7 @@ layout = dbc.Container(
                         html.Div(
                             className="lp-form-actions",
                             children=[
+                                execution_target("reconstruction"),
                                 dbc.Button(
                                     [html.I(className="bi bi-check2-circle me-1"), "Validate"],
                                     id="wirerecon-validate-btn",
@@ -822,6 +797,7 @@ def validate_inputs(
     State("filenamePrefix", "value"),
     # Output
     State("outputFolder", "value"),
+    State("reconstruction-execution-target", "value"),
     running=[
         (Output("submit_wire", "disabled"), True, False),
         (
@@ -851,9 +827,15 @@ def submit_parameters(
     data_path,
     filenamePrefix,
     output_folder,
+    backend="local",
 ):
     """Create and enqueue each pooled wire reconstruction independently."""
 
+    try:
+        require_backend(backend)
+    except ValueError as error:
+        set_props("alert-submit", {"is_open": True, "children": str(error), "color": "danger"})
+        return
     ctx = dash.callback_context
     validation_result = validate_wire_reconstruction_inputs(ctx)
     apply_validation_highlights(validation_result)
@@ -921,6 +903,8 @@ def submit_parameters(
         try:
             prefixes = [value.strip() for value in str(filename_prefixes[index]).split(",") if value.strip()]
             request = WireReconstructionRequest(
+                backend=backend,
+                computer_name=execution_computer(backend),
                 scan_number=identity.scan_number,
                 input_path=resolve_path_with_root(data_paths[index], root_path),
                 output_path_template=resolve_path_with_root(output_templates[index], root_path),
@@ -959,6 +943,11 @@ def submit_parameters(
         color = "danger"
 
     set_props("alert-submit", {"is_open": True, "children": message, "color": color})
+    if submitted and not failures:
+        href = (
+            f"/wire_reconstruction?reconstruction_id={submitted[0][1:]}" if len(submitted) == 1 else "/reconstructions"
+        )
+        set_props("url-create-wirerecon", {"href": href})
 
 
 @dash.callback(
@@ -1149,6 +1138,10 @@ def load_scan_data_from_url(href):
         message += f" Could not load: {'; '.join(failures)}"
     set_props("alert-scan-loaded", {"is_open": True, "children": message, "color": color})
 
-    if any(reconstruction_id is not None for reconstruction_id in reconstruction_ids):
+    if any(reconstruction_id is not None for reconstruction_id in reconstruction_ids) or any(
+        str(row.scan_points or "").strip() for row in form_rows
+    ):
+        # Automatic discovery fills an empty selection; it must not expand a
+        # configured subset (for example a one-point rehearsal) to the whole scan.
         return dash.no_update
     return datetime.datetime.now().isoformat()

@@ -27,6 +27,18 @@ def enqueue_run(job_id: int, *, at_front: bool = False, engine: Engine | None = 
     """
 
     engine = engine or session_utils.get_engine()
+    from laue_portal.workflows.live import live_for_job
+
+    if live_for_job(job_id, engine=engine) is not None:
+        raise ValueError("Live jobs are controlled from the Live page")
+    with Session(engine) as session:
+        job = session.get(db_schema.Job, job_id)
+        if job is not None and job.backend not in (None, "local"):
+            if at_front:
+                raise ValueError("DM jobs cannot be moved ahead of scheduler jobs")
+            from laue_portal.processing.bdp.backend import submit_run
+
+            return submit_run(job_id, engine=engine)
     queue_id = run_queue_id(job_id)
     with Session(engine) as session, session.begin():
         job = session.get(db_schema.Job, job_id)

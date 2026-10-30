@@ -147,6 +147,7 @@ sandbox/
 *.db
 *.db-shm
 *.db-wal
+*.db-journal
 
 # Working env
 laue-portal-env
@@ -173,6 +174,25 @@ modified/
 
 # Config
 config.yaml
+bdp.yaml
+
+# Rendered site configuration (canonical copies belong outside the checkout)
+/deploy/workflow-bdp.json
+/deploy/workflow-bdp-cancel.json
+/deploy/globus/endpoint.env.sh
+/scripts/polaris_workflow/
+
+# DM/Globus authentication and generated runtime state
+/state/
+.globus/
+.globus_compute/
+.funcx/
+.globus_credentials.sh
+.globus_credentials.*
+gladier-*.cfg*
+.env.*
+!.env.example
+!.env.template
 
 # External hosted resources
 assets/*
@@ -181,7 +201,9 @@ assets/*
 !assets/04-detail-page.css
 !assets/04-form-layout.css
 !assets/04-form-layout.js
+!assets/runtime_estimate.css
 !assets/05-peakindex-viz.css
+!assets/06-live.css
 !assets/06-plotly-cursor-readout.js
 !assets/accordion.css
 !assets/favicon.ico

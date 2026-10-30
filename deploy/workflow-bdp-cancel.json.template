@@ -1,0 +1,11 @@
+{
+  "name": "{{WORKFLOW_NAME}}",
+  "description": "Deliver a Laue cancellation request from the DM VM",
+  "owner": "{{OWNER}}",
+  "userAccount": "{{USER_ACCOUNT}}",
+  "stages": {
+    "01-CANCEL": {
+      "command": "{{STAGE_COMMAND}} cancel $cancelSubmissionId"
+    }
+  }
+}

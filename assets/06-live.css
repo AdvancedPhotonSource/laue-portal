@@ -1,0 +1,156 @@
+/* Live controls share the form cards' spacing and typography. */
+
+.lp-live-content {
+  display: flow-root;
+}
+
+.lp-live-header .lp-form-card-head {
+  flex-wrap: wrap;
+  padding-block: 1rem;
+}
+
+.lp-live-header--ready .lp-form-card-head {
+  border-bottom: 0;
+}
+
+.lp-live-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: .25rem .85rem;
+}
+
+.lp-live-phase {
+  font-size: .8rem;
+  color: var(--lp-slate-90);
+}
+
+.lp-live-header--active .lp-live-phase {
+  color: var(--lp-teal);
+  font-weight: 700;
+}
+
+.lp-live-header h2 {
+  margin: 0;
+  font-family: Lato, sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--lp-slate);
+}
+
+.lp-live-header .lp-form-card-actions .btn {
+  box-shadow: none;
+}
+
+.lp-live-status {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  font-size: .85rem;
+  color: var(--lp-text);
+}
+
+.lp-live-overview,
+.lp-live-counters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .4rem 1.25rem;
+}
+
+.lp-live-overview {
+  gap: .65rem 2rem;
+}
+
+.lp-live-run-link {
+  display: flex;
+  align-items: baseline;
+  gap: .65rem;
+}
+
+.lp-live-run-link a {
+  text-decoration: none;
+}
+
+.lp-live-run-link a:hover {
+  text-decoration: underline;
+}
+
+.lp-live-run-name {
+  font-size: .95rem;
+  font-weight: 700;
+  color: var(--lp-teal);
+}
+
+.lp-live-job-link {
+  padding-left: .65rem;
+  border-left: 1px solid var(--lp-fog);
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--lp-slate-90);
+}
+
+.lp-live-counters {
+  font-size: .8rem;
+  color: var(--lp-slate-90);
+}
+
+.lp-live-counters span {
+  white-space: nowrap;
+}
+
+.lp-live-published {
+  margin-left: auto;
+  font-size: .75rem;
+  color: var(--lp-slate-90);
+}
+
+.lp-live-status .alert {
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+}
+
+.lp-live-message {
+  margin: 1rem 1.5rem;
+}
+
+.lp-live-daq-details {
+  font-size: .8rem;
+  color: var(--lp-slate-90);
+  overflow-wrap: anywhere;
+}
+
+.lp-live-daq-details code {
+  color: inherit;
+  font-size: inherit;
+}
+
+.lp-live-daq-details:empty,
+#live-daq-error:empty {
+  display: none;
+}
+
+.lp-live-parameter-section {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--lp-fog);
+}
+
+.lp-live-parameter-section h4 {
+  margin: 0 0 .85rem;
+  font-family: Lato, sans-serif;
+  font-size: .9rem;
+  font-weight: 700;
+  color: var(--lp-slate);
+}
+
+@media (max-width: 768px) {
+  .lp-live-published {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .lp-live-message {
+    margin-inline: .75rem;
+  }
+}

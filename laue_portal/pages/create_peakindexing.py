@@ -2,7 +2,6 @@ import datetime
 import logging
 import os
 import urllib.parse
-from types import SimpleNamespace
 
 import dash
 import dash_bootstrap_components as dbc
@@ -13,7 +12,10 @@ from sqlalchemy.orm import Session
 import laue_portal.components.navbar as navbar
 import laue_portal.database.db_schema as db_schema
 import laue_portal.database.session_utils as session_utils
+from laue_portal.components.execution_target import execution_target
 from laue_portal.components.peakindex_form import peakindex_form, set_peakindex_form_props
+from laue_portal.components.request_defaults import create_default_peakindex
+from laue_portal.components.runtime_estimate import register_runtime_estimate
 from laue_portal.components.validation_alerts import (
     apply_validation_highlights,
     update_validation_alerts,
@@ -32,6 +34,7 @@ from laue_portal.pages.callback_registrars import (
     register_find_indices_callback,
     register_update_path_fields_callback,
 )
+from laue_portal.processing.bdp.settings import execution_computer, require_backend
 from laue_portal.processing.queue.enqueue import enqueue_indexing
 from laue_portal.services.validation import (
     PEAKINDEX_FIELD_IDS,
@@ -80,59 +83,6 @@ def build_output_folder_template(scan_num_int, data_path, reconstruction_id_int=
     path_parts.append("index_%d")
 
     return os.path.join(*path_parts)
-
-
-def create_default_peakindex(overrides=None):
-    """Return form data using canonical indexing field names."""
-    defaults = {
-        "id": None,
-        "scan_number": None,
-        "reconstruction_id": None,
-        "root_path": DEFAULT_VARIABLES.get("root_path", ""),
-        "data_path": "",
-        "input_path": "",
-        "filename_prefixes": [],
-        "author": DEFAULT_VARIABLES.get("author", ""),
-        "notes": DEFAULT_VARIABLES.get("notes", ""),
-        "threshold": PEAKINDEX_DEFAULTS.get("threshold"),
-        "threshold_ratio": PEAKINDEX_DEFAULTS.get("thresholdRatio"),
-        "max_rfactor": PEAKINDEX_DEFAULTS.get("maxRfactor"),
-        "box_size": PEAKINDEX_DEFAULTS.get("boxsize"),
-        "max_number": PEAKINDEX_DEFAULTS.get("max_number"),
-        "min_separation": PEAKINDEX_DEFAULTS.get("min_separation"),
-        "peak_shape": PEAKINDEX_DEFAULTS.get("peakShape"),
-        "min_size": PEAKINDEX_DEFAULTS.get("min_size"),
-        "max_peaks": PEAKINDEX_DEFAULTS.get("max_peaks"),
-        "smooth": PEAKINDEX_DEFAULTS.get("smooth"),
-        "cosmic_filter": False,
-        "mask_file": PEAKINDEX_DEFAULTS.get("maskFile"),
-        "index_kev_max_calc": PEAKINDEX_DEFAULTS.get("indexKeVmaxCalc"),
-        "index_kev_max_test": PEAKINDEX_DEFAULTS.get("indexKeVmaxTest"),
-        "index_angle_tolerance": PEAKINDEX_DEFAULTS.get("indexAngleTolerance"),
-        "index_h": PEAKINDEX_DEFAULTS.get("indexH"),
-        "index_k": PEAKINDEX_DEFAULTS.get("indexK"),
-        "index_l": PEAKINDEX_DEFAULTS.get("indexL"),
-        "index_cone": PEAKINDEX_DEFAULTS.get("indexCone"),
-        "detector_crop_x1": PEAKINDEX_DEFAULTS.get("detectorCropX1"),
-        "detector_crop_x2": PEAKINDEX_DEFAULTS.get("detectorCropX2"),
-        "detector_crop_y1": PEAKINDEX_DEFAULTS.get("detectorCropY1"),
-        "detector_crop_y2": PEAKINDEX_DEFAULTS.get("detectorCropY2"),
-        "energy_unit": PEAKINDEX_DEFAULTS.get("energyUnit"),
-        "exposure_unit": PEAKINDEX_DEFAULTS.get("exposureUnit"),
-        "reciprocal_lattice_unit": PEAKINDEX_DEFAULTS.get("recipLatticeUnit"),
-        "lattice_parameters_unit": PEAKINDEX_DEFAULTS.get("latticeParametersUnit"),
-        "output_path_template": build_output_folder_template(None, None),
-        "output_xml": PEAKINDEX_DEFAULTS.get("outputXML", "output.xml"),
-        "geometry_file": PEAKINDEX_DEFAULTS.get("geoFile"),
-        "crystal_file": PEAKINDEX_DEFAULTS.get("crystFile"),
-        "beamline": PEAKINDEX_DEFAULTS.get("beamline"),
-        "depth": PEAKINDEX_DEFAULTS.get("depth"),
-        "scan_points": PEAKINDEX_DEFAULTS.get("scanPoints", ""),
-        "depth_range": PEAKINDEX_DEFAULTS.get("depthRange", ""),
-    }
-    if overrides:
-        defaults.update(overrides)
-    return SimpleNamespace(**defaults)
 
 
 def _copy_indexing_for_form(run, root_path):
@@ -201,6 +151,7 @@ CATALOG_DEFAULTS = {
 }
 
 dash.register_page(__name__)
+register_runtime_estimate("indexing")
 
 layout = dbc.Container(
     [
@@ -208,7 +159,7 @@ layout = dbc.Container(
             className="lp-form-page",
             children=[
                 navbar.navbar,
-                dcc.Location(id="url-create-peakindexing", refresh=False),
+                dcc.Location(id="url-create-peakindexing", refresh="callback-nav"),
                 dbc.Alert(
                     "Hello! I am an alert",
                     id="alert-upload",
@@ -240,6 +191,7 @@ layout = dbc.Container(
                         html.Div(
                             className="lp-form-actions",
                             children=[
+                                execution_target("indexing"),
                                 dbc.Button(
                                     [html.I(className="bi bi-check2-circle me-1"), "Validate"],
                                     id="peakindex-validate-btn",
@@ -446,6 +398,7 @@ def validate_inputs(
     State("crystFile", "value"),
     State("depth", "value"),
     State("outputXML", "value"),
+    State("indexing-execution-target", "value"),
     running=[
         (Output("submit_peakindexing", "disabled"), True, False),
         (
@@ -488,9 +441,15 @@ def submit_parameters(
     crystal_file,
     depth,
     outputXML,
+    backend="local",
 ):
     """Create and enqueue each pooled LaueGo indexing run independently."""
 
+    try:
+        require_backend(backend)
+    except ValueError as error:
+        set_props("alert-submit", {"is_open": True, "children": str(error), "color": "danger"})
+        return
     ctx = dash.callback_context
     validation_result = validate_peakindexing_inputs(ctx)
     apply_validation_highlights(validation_result)
@@ -577,6 +536,8 @@ def submit_parameters(
             if mask_file is not None and str(mask_file).strip().lower() in ("", "none"):
                 mask_file = None
             request = LaueGoIndexingRequest(
+                backend=backend,
+                computer_name=execution_computer(backend),
                 scan_number=identity.scan_number,
                 reconstruction_id=identity.reconstruction_id,
                 input_path=effective_data_path(fields["data_path"][index], root_path),
@@ -643,6 +604,9 @@ def submit_parameters(
         message = f"Submission failed: {'; '.join(failures)}"
         color = "danger"
     set_props("alert-submit", {"is_open": True, "children": message, "color": color})
+    if submitted and not failures:
+        href = f"/peakindexing?indexing_id={submitted[0][1:]}" if len(submitted) == 1 else "/peakindexings"
+        set_props("url-create-peakindexing", {"href": href})
 
 
 @dash.callback(
@@ -831,9 +795,9 @@ def load_scan_data_from_url(href):
                     if scan_number is not None and metadata is None:
                         raise ValueError(f"Scan SN{scan_number} was not found")
                     if metadata is not None:
-                        if metadata.source_energy is not None:
-                            form_data.index_kev_max_calc = metadata.source_energy
-                            form_data.index_kev_max_test = metadata.source_energy
+                        # A raw header's nominal beam energy is not an indexing
+                        # cutoff for a white-beam Laue exposure. Keep the configured
+                        # cutoffs (or the explicitly selected indexing run's values).
                         if metadata.source_energy_unit:
                             form_data.energy_unit = metadata.source_energy_unit
 

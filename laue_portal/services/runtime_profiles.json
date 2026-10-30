@@ -1,0 +1,213 @@
+{
+  "reference": {
+    "image_shape": [
+      2048,
+      2048
+    ],
+    "raw_frames_per_point": 510,
+    "depths_per_point": 121,
+    "depth_start": -30,
+    "depth_end": 90,
+    "depth_resolution": 1
+  },
+  "transfer": {
+    "reference_points": 825,
+    "reference_reconstructed_frames": 99825,
+    "reconstruction": {
+      "input_bytes": 3529561450706,
+      "input_seconds": 941.172,
+      "output_bytes": 921070099039,
+      "output_seconds": 291.678,
+      "minimum_input_seconds": 31.575,
+      "minimum_output_seconds": 14.678
+    },
+    "indexing": {
+      "input_bytes": 921101263976,
+      "input_seconds": 468.087,
+      "output_bytes": 627512316,
+      "output_seconds": 34.277,
+      "minimum_input_seconds": 25.121,
+      "minimum_output_seconds": 21.277
+    },
+    "basis": "Completed portal transfers, including verification and flow orchestration; compute handoff excluded."
+  },
+  "profiles": [
+    {
+      "backend": "aps",
+      "kind": "indexing",
+      "workers": 1,
+      "threads": 1,
+      "count": 248,
+      "seconds": 324.21549294143915
+    },
+    {
+      "backend": "aps",
+      "kind": "indexing",
+      "workers": 16,
+      "threads": 1,
+      "count": 248,
+      "seconds": 31.524213053286076
+    },
+    {
+      "backend": "aps",
+      "kind": "indexing",
+      "workers": 4,
+      "threads": 1,
+      "count": 248,
+      "seconds": 85.23267334327102
+    },
+    {
+      "backend": "aps",
+      "kind": "indexing",
+      "workers": 8,
+      "threads": 1,
+      "count": 248,
+      "seconds": 51.36274717375636
+    },
+    {
+      "backend": "aps",
+      "kind": "indexing",
+      "workers": 24,
+      "threads": 1,
+      "count": 968,
+      "seconds": 69.51480680331588
+    },
+    {
+      "backend": "aps",
+      "kind": "indexing",
+      "workers": 32,
+      "threads": 1,
+      "count": 968,
+      "seconds": 58.435780711472034
+    },
+    {
+      "backend": "aps",
+      "kind": "indexing",
+      "workers": 32,
+      "threads": 1,
+      "count": 968,
+      "seconds": 53.319182962179184,
+      "max_in_flight": 256
+    },
+    {
+      "backend": "aps",
+      "kind": "reconstruction",
+      "workers": 1,
+      "threads": 8,
+      "count": 1,
+      "seconds": 26.087551906704903
+    },
+    {
+      "backend": "aps",
+      "kind": "reconstruction",
+      "workers": 4,
+      "threads": 8,
+      "count": 32,
+      "seconds": 342.5310619622469
+    },
+    {
+      "backend": "crux",
+      "kind": "indexing",
+      "workers": 32,
+      "threads": 1,
+      "count": 968,
+      "seconds": 51.39217666699551
+    },
+    {
+      "backend": "crux",
+      "kind": "indexing",
+      "workers": 64,
+      "threads": 1,
+      "count": 968,
+      "seconds": 29.289487369009294
+    },
+    {
+      "backend": "crux",
+      "kind": "indexing",
+      "workers": 128,
+      "threads": 1,
+      "count": 968,
+      "seconds": 26.30587540299166
+    },
+    {
+      "backend": "crux",
+      "kind": "reconstruction",
+      "workers": 4,
+      "threads": 8,
+      "count": 32,
+      "seconds": 257.4454281819053
+    },
+    {
+      "backend": "crux",
+      "kind": "reconstruction",
+      "workers": 8,
+      "threads": 8,
+      "count": 32,
+      "seconds": 178.70476219709963
+    },
+    {
+      "backend": "crux",
+      "kind": "reconstruction",
+      "workers": 8,
+      "threads": 16,
+      "count": 32,
+      "seconds": 140.37079525890294
+    },
+    {
+      "backend": "crux",
+      "kind": "reconstruction",
+      "workers": 16,
+      "threads": 8,
+      "count": 32,
+      "seconds": 87.71558850992005
+    },
+    {
+      "backend": "crux",
+      "kind": "reconstruction",
+      "workers": 32,
+      "threads": 4,
+      "count": 32,
+      "seconds": 76.40893988101743
+    },
+    {
+      "backend": "crux",
+      "kind": "reconstruction",
+      "workers": 32,
+      "threads": 1,
+      "count": 32,
+      "seconds": 135.43936079309788
+    },
+    {
+      "backend": "crux",
+      "kind": "reconstruction",
+      "workers": 32,
+      "threads": 8,
+      "count": 32,
+      "seconds": 82.65203211212065
+    },
+    {
+      "backend": "crux",
+      "kind": "reconstruction",
+      "workers": 32,
+      "threads": 4,
+      "nodes": 4,
+      "ranks_per_node": 1,
+      "max_in_flight": 256,
+      "count": 825,
+      "seconds": 732.0,
+      "basis": "Completed full portal scan, including scientific output validation."
+    },
+    {
+      "backend": "crux",
+      "kind": "indexing",
+      "workers": 32,
+      "threads": 1,
+      "nodes": 4,
+      "ranks_per_node": 4,
+      "max_in_flight": 256,
+      "count": 99825,
+      "seconds": 385.0,
+      "basis": "Completed full portal scan, including scientific output validation."
+    }
+  ]
+}

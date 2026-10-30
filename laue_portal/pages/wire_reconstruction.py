@@ -238,6 +238,7 @@ layout = html.Div(
     [
         navbar.navbar,
         dcc.Location(id="url-wire-recon-page", refresh=False),
+        dcc.Interval(id="wr-live-poll", interval=3000),
         dcc.Store(id="wr-run"),
         dcc.Store(id="wr-artifact"),
         dcc.Store(id="wr-point"),
@@ -261,6 +262,7 @@ layout = html.Div(
                     className="ms-auto py-0",
                     title="Read the reconstruction catalog again to show points completed since",
                 ),
+                dbc.Checkbox(id="wr-follow-live", label="Follow newest point", value=False),
             ],
         ),
         dbc.Tabs(
@@ -384,21 +386,31 @@ POINT_STATUS_MESSAGES = {
     Output("wr-artifact", "data"),
     Input("wr-run", "data"),
     Input("wr-refresh", "n_clicks"),
+    Input("wr-live-poll", "n_intervals"),
+    State("wr-artifact", "data"),
 )
-def locate_run_output(run, n_clicks):
+def locate_run_output(run, n_clicks, tick=0, current=None):
     """Check for output when the page opens or Refresh is pressed."""
 
     if not run:
         return None
+    from laue_portal.services.live_views import publication
+
+    live = publication(run["reconstruction_id"], "reconstruction")
+    revision = live["revision"] if live else None
+    metadata = {"live_revision": revision} if live else {}
+    if current is not None and current.get("read", 0) == (n_clicks or 0):
+        if live is None or current.get("live_revision") == revision:
+            raise PreventUpdate
     artifact = view.locate_artifact(run["directory"])
     if artifact is not None:
-        return {**artifact.to_store(), "read": n_clicks or 0}
+        return {**artifact.to_store(), "read": n_clicks or 0, **metadata}
     reconstruction = get_reconstruction(run["reconstruction_id"])
     waiting = reconstruction is not None and reconstruction.job is not None and not is_terminal(reconstruction.job)
-    return {"kind": None, "waiting": waiting, "read": n_clicks or 0}
+    return {"kind": None, "waiting": waiting, "read": n_clicks or 0, **metadata}
 
 
-def _catalog_message(artifact, run_status):
+def _catalog_message(artifact, run_status, live=False):
     read_at = datetime.now().strftime("%H:%M:%S")
     if artifact.kind != view.KIND_SCAN:
         return (
@@ -407,7 +419,11 @@ def _catalog_message(artifact, run_status):
         )
     message = f"Scan catalog {artifact.path}: run {run_status}, read at {read_at}."
     if run_status == "running":
-        message += " Points appear here a few seconds after they complete; press Refresh to see new points."
+        message += (
+            " Live results refresh automatically."
+            if live
+            else " Points appear here a few seconds after they complete; press Refresh to see new points."
+        )
     return message
 
 
@@ -417,8 +433,9 @@ def _catalog_message(artifact, run_status):
     Output("wr-point", "data"),
     Input("wr-artifact", "data"),
     State("wr-point", "data"),
+    State("wr-follow-live", "value"),
 )
-def load_points(artifact_data, current):
+def load_points(artifact_data, current, follow=False):
     """Refresh the point table, preserving the selection when it is still available."""
 
     artifact = view.Artifact.from_store(artifact_data)
@@ -435,14 +452,16 @@ def load_points(artifact_data, current):
         return dash.no_update, f"Could not read the reconstruction: {error}", dash.no_update
     rows = table.rows
     complete = [row["point_id"] for row in rows if row["status"] == "complete"]
-    if current in complete:
+    if follow and complete and current != complete[-1]:
+        selected = complete[-1]
+    elif current in complete:
         selected = dash.no_update  # keep the current figures
     else:
         selected = complete[0] if complete else None
     for row in rows:
         position = row.pop("sample_position_um")
         row["sample_position_um"] = ", ".join(f"{value:.1f}" for value in position) if position else ""
-    return rows, _catalog_message(artifact, table.run_status), selected
+    return rows, _catalog_message(artifact, table.run_status, "live_revision" in artifact_data), selected
 
 
 @callback(

@@ -1,0 +1,5 @@
+# Unified APS runtime for the portal host and DM workflow launcher.
+# Install the same tested build on each host; credentials and state stay external.
+-r ../requirements.txt
+-r requirements-workflows.txt
+supervisor==4.3.0
